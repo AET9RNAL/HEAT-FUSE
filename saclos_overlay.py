@@ -58,6 +58,9 @@ class SACLOSOverlay:
         self.tracking_active = False
         self.calibrated_x = None
         self.calibrated_y = None
+        # Thread-local position tracking (listener thread only)
+        self.tracking_win_x = None
+        self.tracking_win_y = None
 
         # Image paths for config persistence
         self.image_path = None
