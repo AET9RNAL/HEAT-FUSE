@@ -759,6 +759,10 @@ class SACLOSOverlay:
         with self.position_lock:
             self.position_queue.clear()
 
+        # Reset thread-local position tracking
+        self.tracking_win_x = None
+        self.tracking_win_y = None
+
         # Swap back to normal image
         if self.img_normal and self.img_id:
             self.canvas.itemconfig(self.img_id, image=self.img_normal)
@@ -809,6 +813,9 @@ class SACLOSOverlay:
             # First event after lock — store position, emit no delta
             self.last_mouse_x = x
             self.last_mouse_y = y
+            # Initialize thread-local position tracking
+            self.tracking_win_x = self.win_x
+            self.tracking_win_y = self.win_y
             return
 
         dx = x - self.last_mouse_x
@@ -817,8 +824,9 @@ class SACLOSOverlay:
         self.last_mouse_y = y
 
         # Calculate new position with counter-translation
-        new_x = self.win_x - dx
-        new_y = self.win_y - dy
+        # Use thread-local position to avoid race conditions with main thread
+        new_x = self.tracking_win_x - dx
+        new_y = self.tracking_win_y - dy
 
         # Clamp to bounding box relative to origin (origin = box center, not top-left)
         # We want to keep the overlay center within margin distance from origin
@@ -832,6 +840,10 @@ class SACLOSOverlay:
 
             new_x = max(min_x, min(new_x, max_x))
             new_y = max(min_y, min(new_y, max_y))
+
+        # Update thread-local position for next delta calculation
+        self.tracking_win_x = new_x
+        self.tracking_win_y = new_y
 
         # Queue the position update for main thread to process
         # No Tkinter calls from this thread - this is thread-safe
