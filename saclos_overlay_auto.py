@@ -18,6 +18,7 @@ Requirements:
 
 import os
 import json
+import math
 import tkinter as tk
 from tkinter import filedialog, messagebox
 from collections import deque
@@ -80,6 +81,40 @@ class SACLOSOverlay:
 
         # Cached window handle for fast positioning
         self.hwnd = None
+
+        # Auto-correction state
+        self.correction_active = False
+        self.correction_waypoints = []  # List of (x, y, timestamp_ms)
+        self.correction_waypoint_index = 0
+        self.correction_start_time = 0
+        self.correction_interrupted = threading.Event()
+
+        # Synthetic mouse injection
+        self.mouse_controller = None  # pynput Controller for mouse injection
+        self.correction_thread = None
+        self.correction_lock = threading.Lock()
+
+        # Auto-correction configuration (tunable parameters)
+        self.correction_enabled = True
+        self.target_range_m = 200.0  # Range to target in meters (user-configured)
+        self.correction_min_threshold_px = 5.0  # Minimum displacement to trigger correction
+
+        # Physics parameters (missile ballistics)
+        self.missile_v0 = 14.7  # Muzzle velocity m/s
+        self.missile_accel = 307.2  # Acceleration m/s²
+        self.missile_max_speed = 1116.0  # Terminal speed m/s
+        self.missile_max_turn_rate = None  # Unknown - to be tuned
+
+        # Algorithm parameters (lead calculation - see GUIDANCE_ALGORITHM_SPEC.md)
+        self.lead_alpha = 1.0  # Distance exponent in lead formula
+        self.lead_beta = 0.5  # Angle influence on magnitude
+        self.lead_gamma = 0.3  # Range influence on magnitude
+        self.urgency_k = 2.0  # Urgency scaling factor
+        self.base_engagement_delay_s = 0.05  # Base delay before starting
+        self.base_duration_ms = 300.0  # Base correction duration
+
+        # Global speed multiplier
+        self.correction_speed_multiplier = 1.0
 
         # Window style
         self.root.attributes("-topmost", True)
@@ -182,7 +217,19 @@ class SACLOSOverlay:
             "margin_y": self.margin_y,
             "image_path": self.image_path,
             "tracking_image_path": self.tracking_image_path,
-            "tracking_key_name": self.tracking_key_name
+            "tracking_key_name": self.tracking_key_name,
+            # Auto-correction settings
+            "correction_enabled": self.correction_enabled,
+            "target_range_m": self.target_range_m,
+            "correction_min_threshold_px": self.correction_min_threshold_px,
+            "correction_speed_multiplier": self.correction_speed_multiplier,
+            # Algorithm parameters
+            "lead_alpha": self.lead_alpha,
+            "lead_beta": self.lead_beta,
+            "lead_gamma": self.lead_gamma,
+            "urgency_k": self.urgency_k,
+            "base_engagement_delay_s": self.base_engagement_delay_s,
+            "base_duration_ms": self.base_duration_ms,
         }
         try:
             config_path = self._get_config_path()
@@ -221,6 +268,19 @@ class SACLOSOverlay:
             # Restore tracking key configuration
             self.tracking_key_name = config.get("tracking_key_name", "Space")
             self._update_tracking_key_from_name()
+
+            # Load auto-correction settings
+            self.correction_enabled = config.get("correction_enabled", True)
+            self.target_range_m = config.get("target_range_m", 200.0)
+            self.correction_min_threshold_px = config.get("correction_min_threshold_px", 5.0)
+            self.correction_speed_multiplier = config.get("correction_speed_multiplier", 1.0)
+            # Algorithm parameters
+            self.lead_alpha = config.get("lead_alpha", 1.0)
+            self.lead_beta = config.get("lead_beta", 0.5)
+            self.lead_gamma = config.get("lead_gamma", 0.3)
+            self.urgency_k = config.get("urgency_k", 2.0)
+            self.base_engagement_delay_s = config.get("base_engagement_delay_s", 0.05)
+            self.base_duration_ms = config.get("base_duration_ms", 300.0)
 
             # Apply calibrated position if we have it
             if self.calibrated_x is not None and self.calibrated_y is not None:
@@ -723,6 +783,11 @@ class SACLOSOverlay:
         if self.state != "locked" or self.tracking_active:
             return
 
+        # Cancel any active correction before starting new tracking
+        if self.correction_active:
+            self.correction_interrupted.set()
+            self._cleanup_correction()
+
         # Prevent starting new tracking if listener already exists
         if self.mouse_listener is not None:
             return
@@ -798,14 +863,386 @@ class SACLOSOverlay:
         if self.img_normal and self.img_id:
             self.canvas.itemconfig(self.img_id, image=self.img_normal)
 
-        # Reset overlay to calibrated position
+        # Calculate displacement from current overlay position to origin
+        current_center_x = self.win_x + self.img_w / 2
+        current_center_y = self.win_y + self.img_h / 2
+        target_center_x = self.origin_x
+        target_center_y = self.origin_y
+
+        displacement_x = target_center_x - current_center_x
+        displacement_y = target_center_y - current_center_y
+        distance_px = math.sqrt(displacement_x**2 + displacement_y**2)
+
+        # Only trigger correction if displacement exceeds threshold
+        if self.correction_enabled and distance_px > self.correction_min_threshold_px:
+            angle_rad = math.atan2(displacement_y, displacement_x)
+
+            # Start auto-correction after engagement delay
+            # This will generate mouse movements to guide missile from x to o
+            self.root.after(0, lambda: self._start_auto_correction(distance_px, angle_rad))
+        else:
+            # No correction needed or disabled - reset immediately
+            self._reset_to_calibrated_position()
+        # Status bar remains hidden (we're still in locked mode)
+
+    def _calculate_correction_params(self, distance_px, angle_rad):
+        """
+        Calculate physics-based correction parameters using continuous functions.
+
+        Based on GUIDANCE_ALGORITHM_SPEC.md - generates lead point t, not direct aim at o.
+
+        Args:
+            distance_px: Displacement distance (d) in pixels
+            angle_rad: Displacement angle (n) in radians
+
+        Returns:
+            dict: {
+                'lead_distance_px': d' (overcompensated distance),
+                'lead_angle_rad': n' (angle with lead offset),
+                'engagement_delay_s': s (when to start),
+                'duration_ms': total correction time,
+                'speed_factor': how aggressively to move,
+                'aggression': bezier curve sharpness
+            }
+        """
+        # Normalize inputs to [0, 1]
+        max_displacement_px = math.sqrt(self.margin_x**2 + self.margin_y**2)
+        d_norm = min(distance_px / max_displacement_px, 1.0)
+        n_norm = abs(angle_rad) / (math.pi / 2)  # 0 at horizontal, 1 at vertical
+        r_norm = min(self.target_range_m / 500.0, 1.0)  # Normalize range, max 500m
+
+        # Urgency factor: combines displacement and angle
+        # Higher urgency = more immediate, aggressive correction
+        urgency = d_norm * (1 + n_norm)
+
+        # === LEAD FACTOR (Overcompensation) ===
+        # How much to overshoot target to create intercept trajectory
+        # Increases with: distance, angle, urgency
+        # Decreases with: range (more time available)
+        lead_factor = (
+            self.lead_alpha * d_norm +           # Distance contribution
+            self.lead_beta * n_norm +             # Angle contribution
+            self.lead_gamma * (urgency / (r_norm + 0.1))  # Urgency/range ratio
+        )
+        lead_factor = min(lead_factor, 2.0)  # Cap at 200% overcompensation
+
+        # === LEAD DISTANCE (d') ===
+        # Magnitude of mouse movement - typically LARGER than displacement
+        # This creates the overcompensation needed for intercept
+        lead_distance_px = distance_px * (1 + lead_factor)
+
+        # === LEAD ANGLE (n') ===
+        # Direction of mouse movement
+        # angle_rad points from overlay position TO origin
+        # This is the direction the OVERLAY needs to move
+        # Counter-translation: when mouse moves by +Δ, overlay moves by -Δ
+        # So to make overlay move in direction θ, mouse must move in direction θ
+        # (the negative cancels out in the coordinate transformation)
+        # Testing showed +π was inverted, so we use the angle as-is
+        lead_angle_rad = angle_rad  # Direct angle (tested correct)
+        # TODO: Add angular lead offset δ based on trajectory prediction
+
+        # === ENGAGEMENT DELAY (s) ===
+        # Time to wait before starting correction
+        # Approaches 0 as d→0 (immediate when close)
+        # Approaches 0 as urgency→large (immediate when urgent)
+        engagement_delay_s = self.base_engagement_delay_s * d_norm / (1 + self.urgency_k * urgency)
+        engagement_delay_s = max(0.0, engagement_delay_s)  # Never negative
+
+        # === SPEED FACTOR ===
+        # How fast to execute movement (higher = faster)
+        speed_factor = 1.0 + urgency
+        speed_factor *= self.correction_speed_multiplier  # Apply global multiplier
+
+        # === DURATION ===
+        # Total time for correction movement
+        # Inversely proportional to speed/urgency
+        duration_ms = self.base_duration_ms / speed_factor
+        duration_ms = max(100.0, min(duration_ms, 1000.0))  # Clamp [100ms, 1000ms]
+
+        # === AGGRESSION ===
+        # Bezier curve sharpness (0 = linear, 1 = very curved)
+        aggression = min(0.9, urgency)
+
+        return {
+            'lead_distance_px': lead_distance_px,
+            'lead_angle_rad': lead_angle_rad,
+            'engagement_delay_s': engagement_delay_s,
+            'duration_ms': duration_ms,
+            'speed_factor': speed_factor,
+            'aggression': aggression,
+            # Store original for debugging
+            'original_distance_px': distance_px,
+            'original_angle_rad': angle_rad,
+            'lead_factor': lead_factor,
+            'urgency': urgency,
+        }
+
+    def _generate_bezier_waypoints(self, start_x, start_y, end_x, end_y, params):
+        """
+        Generate cubic bezier curve waypoints for smooth mouse movement.
+
+        Args:
+            start_x, start_y: Starting mouse position
+            end_x, end_y: Target mouse position (creates lead point for missile)
+            params: Correction parameters from _calculate_correction_params
+
+        Returns:
+            List of (x, y, timestamp_ms) waypoints
+        """
+        duration_ms = params['duration_ms']
+        aggression = params['aggression']
+
+        # Calculate control points for cubic bezier
+        # Higher aggression = more pronounced curve
+        dx = end_x - start_x
+        dy = end_y - start_y
+
+        # Control point 1: offset from start
+        cp1_x = start_x + dx * (0.25 + aggression * 0.1)
+        cp1_y = start_y + dy * (0.1 + aggression * 0.2)
+
+        # Control point 2: offset from end
+        cp2_x = end_x - dx * (0.1 + aggression * 0.2)
+        cp2_y = end_y - dy * (0.25 + aggression * 0.1)
+
+        # Generate waypoints along curve
+        waypoints = []
+        steps = max(20, int(duration_ms / 10))  # ~10ms per step minimum
+
+        for i in range(steps + 1):
+            t = i / steps
+
+            # Smoothstep easing: smooth acceleration and deceleration
+            t_eased = t * t * (3 - 2 * t)
+
+            # Cubic bezier formula: B(t) = (1-t)³P₀ + 3(1-t)²tP₁ + 3(1-t)t²P₂ + t³P₃
+            u = 1 - t_eased
+            x = (u**3 * start_x +
+                 3 * u**2 * t_eased * cp1_x +
+                 3 * u * t_eased**2 * cp2_x +
+                 t_eased**3 * end_x)
+            y = (u**3 * start_y +
+                 3 * u**2 * t_eased * cp1_y +
+                 3 * u * t_eased**2 * cp2_y +
+                 t_eased**3 * end_y)
+
+            timestamp_ms = i * duration_ms / steps
+            waypoints.append((x, y, timestamp_ms))
+
+        return waypoints
+
+    def _start_auto_correction(self, distance_px, angle_rad):
+        """
+        Start auto-correction: generate mouse movements to guide missile from x to o.
+
+        This calculates lead point t and generates smooth mouse movements that will
+        create the crosshair motion needed for missile intercept.
+
+        Args:
+            distance_px: Current displacement distance (d)
+            angle_rad: Current displacement angle (n)
+        """
+        if self.correction_active:
+            return  # Already correcting
+
+        # Calculate correction parameters (includes lead calculation)
+        params = self._calculate_correction_params(distance_px, angle_rad)
+
+        # Get current mouse position
+        if not PYNPUT_OK:
+            print("Warning: pynput not available, cannot perform auto-correction")
+            self._reset_to_calibrated_position()
+            return
+
+        try:
+            self.mouse_controller = pynmouse.Controller()
+            current_mouse_x, current_mouse_y = self.mouse_controller.position
+        except Exception as e:
+            print(f"Warning: Could not get mouse position: {e}")
+            self._reset_to_calibrated_position()
+            return
+
+        # Calculate target mouse position using lead parameters
+        # lead_distance_px and lead_angle_rad define vector y (from x to lead point t)
+        # This is in screen coordinate system, relative to current mouse position
+
+        # Convert polar (lead_distance, lead_angle) to Cartesian (mouse_dx, mouse_dy)
+        # The lead angle is in overlay coordinate system, need to apply to mouse
+        mouse_dx = params['lead_distance_px'] * math.cos(params['lead_angle_rad'])
+        mouse_dy = params['lead_distance_px'] * math.sin(params['lead_angle_rad'])
+
+        # Calculate target mouse position
+        # Note: This moves the mouse, which will counter-translate the overlay
+        # The overlay movement changes crosshair position, which guides the missile
+        target_mouse_x = current_mouse_x + mouse_dx
+        target_mouse_y = current_mouse_y + mouse_dy
+
+        # Generate smooth bezier path from current to target mouse position
+        waypoints = self._generate_bezier_waypoints(
+            current_mouse_x, current_mouse_y,
+            target_mouse_x, target_mouse_y,
+            params
+        )
+
+        # Store waypoints and start correction
+        self.correction_waypoints = waypoints
+        self.correction_waypoint_index = 0
+        self.correction_active = True
+        self.correction_interrupted.clear()
+        self.correction_start_time = time.perf_counter()
+
+        # Debug output
+        print(f"Auto-correction started:")
+        print(f"  Displacement: {distance_px:.1f}px at {math.degrees(angle_rad):.1f}°")
+        print(f"  Lead: {params['lead_distance_px']:.1f}px (factor: {params['lead_factor']:.2f})")
+        print(f"  Duration: {params['duration_ms']:.0f}ms, urgency: {params['urgency']:.2f}")
+        print(f"  Mouse: ({current_mouse_x}, {current_mouse_y}) → ({target_mouse_x:.0f}, {target_mouse_y:.0f})")
+        print(f"  Waypoints: {len(waypoints)}")
+
+        # Schedule correction animation to start after engagement delay
+        delay_ms = int(params['engagement_delay_s'] * 1000)
+        self.root.after(delay_ms, self._correction_animation_step)
+
+    def _correction_animation_step(self):
+        """
+        Execute one step of correction animation.
+
+        Runs in main thread, moves mouse along waypoint path.
+        User manual movements are ADDED to this, not interrupted.
+        """
+        # Check if correction was cancelled
+        if not self.correction_active or self.correction_interrupted.is_set():
+            self._cleanup_correction()
+            return
+
+        # Check if we've finished all waypoints
+        if self.correction_waypoint_index >= len(self.correction_waypoints):
+            print(f"Auto-correction complete (took {time.perf_counter() - self.correction_start_time:.2f}s)")
+            # Move overlay back to calibrated position
+            # (missile should be approaching target at this point)
+            self._reset_to_calibrated_position()
+            self._cleanup_correction()
+            return
+
+        # Get current waypoint
+        target_x, target_y, timestamp_ms = self.correction_waypoints[self.correction_waypoint_index]
+
+        # Calculate relative movement from previous waypoint (or current position)
+        if self.correction_waypoint_index == 0:
+            # First waypoint - get current actual mouse position
+            try:
+                current_x, current_y = self.mouse_controller.position
+            except:
+                current_x, current_y = target_x, target_y
+        else:
+            # Use previous waypoint
+            current_x, current_y, _ = self.correction_waypoints[self.correction_waypoint_index - 1]
+
+        # Calculate delta for relative movement
+        delta_x = int(target_x - current_x)
+        delta_y = int(target_y - current_y)
+
+        # Use Windows SendInput for relative mouse movement (better game compatibility)
+        # This bypasses some game input filtering that blocks absolute positioning
+        try:
+            self._inject_mouse_movement(delta_x, delta_y)
+        except Exception as e:
+            print(f"Warning: Could not move mouse: {e}")
+            self._cleanup_correction()
+            return
+
+        # Move to next waypoint
+        self.correction_waypoint_index += 1
+
+        # Calculate delay to next waypoint
+        if self.correction_waypoint_index < len(self.correction_waypoints):
+            next_timestamp_ms = self.correction_waypoints[self.correction_waypoint_index][2]
+            delay_ms = max(1, int(next_timestamp_ms - timestamp_ms))
+        else:
+            delay_ms = 1
+
+        # Schedule next step
+        self.root.after(delay_ms, self._correction_animation_step)
+
+    def _inject_mouse_movement(self, dx, dy):
+        """
+        Inject relative mouse movement using Windows SendInput API.
+
+        Uses MOUSEEVENTF_MOVE for relative movement, which has better
+        compatibility with games using Raw Input.
+
+        Args:
+            dx: Relative X movement in pixels
+            dy: Relative Y movement in pixels
+        """
+        try:
+            import ctypes
+            from ctypes import wintypes
+
+            # Define Windows input structures
+            class MOUSEINPUT(ctypes.Structure):
+                _fields_ = [
+                    ('dx', wintypes.LONG),
+                    ('dy', wintypes.LONG),
+                    ('mouseData', wintypes.DWORD),
+                    ('dwFlags', wintypes.DWORD),
+                    ('time', wintypes.DWORD),
+                    ('dwExtraInfo', ctypes.POINTER(wintypes.ULONG))
+                ]
+
+            class INPUT(ctypes.Structure):
+                class _INPUT(ctypes.Union):
+                    _fields_ = [('mi', MOUSEINPUT)]
+                _anonymous_ = ('_input',)
+                _fields_ = [
+                    ('type', wintypes.DWORD),
+                    ('_input', _INPUT)
+                ]
+
+            # Constants
+            INPUT_MOUSE = 0
+            MOUSEEVENTF_MOVE = 0x0001
+
+            # Create input structure
+            extra = ctypes.c_ulong(0)
+            ii_ = INPUT()
+            ii_.type = INPUT_MOUSE
+            ii_.mi = MOUSEINPUT(dx, dy, 0, MOUSEEVENTF_MOVE, 0, ctypes.pointer(extra))
+
+            # Send the input
+            ctypes.windll.user32.SendInput(1, ctypes.pointer(ii_), ctypes.sizeof(ii_))
+
+        except Exception as e:
+            print(f"Warning: Failed to inject mouse movement via SendInput: {e}")
+            # Fallback to pynput if SendInput fails
+            try:
+                current_x, current_y = self.mouse_controller.position
+                self.mouse_controller.position = (current_x + dx, current_y + dy)
+            except:
+                pass
+
+    def _cleanup_correction(self):
+        """Clean up correction state."""
+        self.correction_active = False
+        self.correction_waypoints = []
+        self.correction_waypoint_index = 0
+        self.correction_interrupted.clear()
+        self.mouse_controller = None
+
+    def _reset_to_calibrated_position(self):
+        """Reset overlay to calibrated position."""
         self.win_x = self.calibrated_x
         self.win_y = self.calibrated_y
         self._apply_geometry()
-        # Status bar remains hidden (we're still in locked mode)
 
     def _exit_to_calibrate(self):
         """Exit locked mode and return to calibrate mode."""
+        # Cancel any active correction
+        if self.correction_active:
+            self.correction_interrupted.set()
+            self._cleanup_correction()
+
         self.state = "calibrate"
         self.tracking_active = False
 
@@ -1053,12 +1490,26 @@ def main():
                         help="Optional separate image for tracking mode (if not specified, uses main image)")
     parser.add_argument("--setup-tracking-key", action="store_true",
                         help="Prompt to reconfigure the tracking key")
+    parser.add_argument("--range", type=float, default=200.0,
+                        help="Range to target in meters (default: 200)")
+    parser.add_argument("--disable-correction", action="store_true",
+                        help="Disable auto-correction on tracking key release")
+    parser.add_argument("--correction-speed", type=float, default=1.0,
+                        help="Correction speed multiplier (default: 1.0)")
     args = parser.parse_args()
 
     root = tk.Tk()
     app = SACLOSOverlay(root, image_path=args.image,
                         tracking_image_path=args.tracking_image,
                         margin_x=args.margins[0], margin_y=args.margins[1])
+
+    # Apply command-line overrides for auto-correction
+    if hasattr(args, 'range'):
+        app.target_range_m = args.range
+    if hasattr(args, 'disable_correction') and args.disable_correction:
+        app.correction_enabled = False
+    if hasattr(args, 'correction_speed'):
+        app.correction_speed_multiplier = args.correction_speed
 
     # Force tracking key setup if requested
     if args.setup_tracking_key:

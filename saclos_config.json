@@ -7,5 +7,15 @@
   "margin_y": 2000.0,
   "image_path": "C:/Users/maksg/Desktop/Ballistic Drop Compensator-01.png",
   "tracking_image_path": "C:/Users/maksg/Desktop/Ballistic Drop Compensator-02.png",
-  "tracking_key_name": "Q"
+  "tracking_key_name": "Q",
+  "correction_enabled": true,
+  "target_range_m": 200.0,
+  "correction_min_threshold_px": 5.0,
+  "correction_speed_multiplier": 1.0,
+  "lead_alpha": 1.0,
+  "lead_beta": 0.5,
+  "lead_gamma": 0.3,
+  "urgency_k": 2.0,
+  "base_engagement_delay_s": 0.05,
+  "base_duration_ms": 300.0
 }
