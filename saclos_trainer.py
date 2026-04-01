@@ -55,19 +55,54 @@ class CorrectionLearner:
         self.samples = []
         self._load()
 
-    # ---- persistence ----
+    # ---- persistence (JSONL — one JSON object per line, append-only) ----
 
     def _load(self):
         try:
             with open(self.data_file, 'r') as f:
-                data = json.load(f)
-                self.samples = data.get('samples', [])
-        except (FileNotFoundError, json.JSONDecodeError):
+                content = f.read().strip()
+                if not content:
+                    # Empty file
+                    self.samples = []
+                    return
+                
+                try:
+                    # Try to parse the entire file as a single JSON entity
+                    data = json.loads(content)
+                    if isinstance(data, dict) and 'samples' in data:
+                        self.samples = data['samples']
+                        self._rewrite_jsonl()
+                        return
+                    elif isinstance(data, list):
+                        self.samples = data
+                        self._rewrite_jsonl()
+                        return
+                    elif isinstance(data, dict):
+                         # Just one JSON object (i.e. single line JSONL file parsed as monolithic)
+                         self.samples = [data]
+                         return
+                except json.JSONDecodeError:
+                    # Failed single parse -> must be multi-line JSONL
+                    pass
+
+                self.samples = []
+                for line in content.split('\n'):
+                    line = line.strip()
+                    if line:
+                        self.samples.append(json.loads(line))
+        except FileNotFoundError:
             self.samples = []
 
-    def _save(self):
+    def _rewrite_jsonl(self):
+        """Rewrite entire file as JSONL (used only for migration or --reset)."""
         with open(self.data_file, 'w') as f:
-            json.dump({'samples': self.samples}, f, indent=1)
+            for sample in self.samples:
+                f.write(json.dumps(sample, separators=(',', ':')) + '\n')
+
+    def _save_append(self, sample):
+        """Append a single sample as one JSONL line — O(1) regardless of file size."""
+        with open(self.data_file, 'a') as f:
+            f.write(json.dumps(sample, separators=(',', ':')) + '\n')
 
     # ---- recording ----
 
@@ -103,7 +138,7 @@ class CorrectionLearner:
                 sample['miss_magnitude'] = miss_magnitude
 
         self.samples.append(sample)
-        self._save()
+        self._save_append(sample)
         return len(self.samples)
 
     # ---- helpers ----
@@ -379,6 +414,8 @@ class TrainingOverlay(SACLOSOverlay):
         self._train_range          = None
         self._train_deltas         = []     # [{'t': float, 'dx': int, 'dy': int}, ...]
         self._train_start_time     = None
+        self._train_last_x         = None   # Per-event delta tracking for trajectory recording
+        self._train_last_y         = None
 
         # Post-cycle labelling (two-step state machine)
         # States: None -> 'outcome' -> 'timing' -> 'magnitude' -> None
@@ -418,6 +455,8 @@ class TrainingOverlay(SACLOSOverlay):
         self._train_lmb_detected = False
         self._train_deltas       = []
         self._train_start_time   = None
+        self._train_last_x       = None
+        self._train_last_y       = None
         self._label_state        = None
 
         super()._start_tracking()
@@ -462,6 +501,8 @@ class TrainingOverlay(SACLOSOverlay):
         self._train_recording    = True
         self._train_start_time   = time.perf_counter()
         self._train_deltas       = []
+        self._train_last_x       = None
+        self._train_last_y       = None
 
         print(f"  LMB!  d={self._train_disp_px:.1f}px  "
               f"n={math.degrees(self._train_disp_angle):.1f}\u00b0  "
@@ -470,11 +511,14 @@ class TrainingOverlay(SACLOSOverlay):
 
     def _on_mouse_move(self, x, y):
         """Override: also accumulate timestamped raw deltas when recording."""
-        if self._train_recording and self.last_mouse_x is not None:
-            raw_dx = x - self.last_mouse_x
-            raw_dy = y - self.last_mouse_y
-            t = time.perf_counter() - self._train_start_time
-            self._train_deltas.append({'t': round(t, 4), 'dx': raw_dx, 'dy': raw_dy})
+        if self._train_recording:
+            if self._train_last_x is not None:
+                raw_dx = x - self._train_last_x
+                raw_dy = y - self._train_last_y
+                t = time.perf_counter() - self._train_start_time
+                self._train_deltas.append({'t': round(t, 4), 'dx': raw_dx, 'dy': raw_dy})
+            self._train_last_x = x
+            self._train_last_y = y
 
         super()._on_mouse_move(x, y)
 
@@ -524,6 +568,8 @@ class TrainingOverlay(SACLOSOverlay):
         self._train_lmb_detected = False
         self._train_deltas       = []
         self._train_start_time   = None
+        self._train_last_x       = None
+        self._train_last_y       = None
 
         # Parent handles listener shutdown + overlay reset.
         # correction_enabled=False ensures no auto-correction fires.

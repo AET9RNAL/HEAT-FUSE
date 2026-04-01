@@ -27,7 +27,7 @@ import time
 import traceback
 
 try:
-    from PIL import Image, ImageTk
+    from PIL import Image, ImageTk, ImageGrab, ImageChops
     PIL_OK = True
 except ImportError:
     PIL_OK = False
@@ -37,6 +37,12 @@ try:
     PYNPUT_OK = True
 except ImportError:
     PYNPUT_OK = False
+
+try:
+    import pytesseract
+    TESSERACT_OK = True
+except ImportError:
+    TESSERACT_OK = False
 
 # ---------------------------------------------------------------------------
 #  SendInput infrastructure  (defined once at module level, reused every call)
@@ -100,8 +106,6 @@ class SACLOSOverlay:
 
         # State: "calibrate" -> "adjust_bounds" -> "locked"
         self.state = "calibrate"
-        self.last_mouse_x = None
-        self.last_mouse_y = None
         self.mouse_listener = None
         self.kbd_listener = None
 
@@ -119,6 +123,11 @@ class SACLOSOverlay:
         self.tracking_win_x = None
         self.tracking_win_y = None
         self.last_update_time = 0  # Timestamp of last position queue update
+        # Absolute-displacement anchors (set once per tracking session)
+        self.mouse_start_x = None
+        self.mouse_start_y = None
+        self.win_start_x = None
+        self.win_start_y = None
 
         # Image paths for config persistence
         self.image_path = None
@@ -913,9 +922,6 @@ class SACLOSOverlay:
         self.tracking_active = False
         # Save config with calibrated settings
         self._save_config()
-        # Null out last position
-        self.last_mouse_x = None
-        self.last_mouse_y = None
         # Hide boundary box and corner handles
         if self.boundary_box_id:
             self.canvas.delete(self.boundary_box_id)
@@ -943,15 +949,22 @@ class SACLOSOverlay:
         if self.mouse_listener is not None:
             return
 
+        # ALWAYS reset to calibrated position before starting fresh tracking.
+        # This prevents accumulated drift from interrupted corrections,
+        # position queue timing, or any other edge case.
+        self._reset_to_calibrated_position()
+
         self.tracking_active = True
         # Hide status bar during tracking (do this before image swap to minimize visual changes)
         self.bar.pack_forget()
         # Swap to tracking image
         if self.img_tracking and self.img_id:
             self.canvas.itemconfig(self.img_id, image=self.img_tracking)
-        # Reset mouse position baseline for clean counter-translation start
-        self.last_mouse_x = None
-        self.last_mouse_y = None
+        # Reset absolute-displacement anchors (set by first _on_mouse_move)
+        self.mouse_start_x = None
+        self.mouse_start_y = None
+        self.win_start_x = None
+        self.win_start_y = None
         # Clear position queue
         with self.position_lock:
             self.position_queue.clear()
@@ -1005,16 +1018,29 @@ class SACLOSOverlay:
         with self.position_lock:
             self.position_queue.clear()
 
+        # Capture the accurate final position from the listener thread
+        # BEFORE clearing tracking state.  tracking_win_x/y holds the true
+        # accumulated position; win_x/y may be stale if the main-thread
+        # queue processor lagged behind the listener.
+        final_x = self.tracking_win_x if self.tracking_win_x is not None else self.win_x
+        final_y = self.tracking_win_y if self.tracking_win_y is not None else self.win_y
+        self.win_x = final_x
+        self.win_y = final_y
+
         # Reset thread-local position tracking
         self.tracking_win_x = None
         self.tracking_win_y = None
         self.last_update_time = 0
+        self.mouse_start_x = None
+        self.mouse_start_y = None
+        self.win_start_x = None
+        self.win_start_y = None
 
         # Swap back to normal image
         if self.img_normal and self.img_id:
             self.canvas.itemconfig(self.img_id, image=self.img_normal)
 
-        # Calculate displacement from current overlay position to origin
+        # Calculate displacement from accurate final position to origin
         current_center_x = self.win_x + self.img_w / 2
         current_center_y = self.win_y + self.img_h / 2
         target_center_x = self.origin_x
@@ -1596,9 +1622,15 @@ class SACLOSOverlay:
                 pass
             self.mouse_listener = None
 
-        # Clear position queue
+        # Clear position queue and tracking state
         with self.position_lock:
             self.position_queue.clear()
+        self.tracking_win_x = None
+        self.tracking_win_y = None
+        self.mouse_start_x = None
+        self.mouse_start_y = None
+        self.win_start_x = None
+        self.win_start_y = None
 
         self._set_clickthrough(False)
         bar_h = 28
@@ -1612,44 +1644,29 @@ class SACLOSOverlay:
         self._draw_boundary_box()
 
     def _on_mouse_move(self, x, y):
-        """Handle mouse movement (called from pynput listener thread)."""
-        if self.last_mouse_x is None:
-            # First event after lock — store position, emit no delta
-            self.last_mouse_x = x
-            self.last_mouse_y = y
-            # Initialize thread-local position tracking
-            self.tracking_win_x = self.win_x
-            self.tracking_win_y = self.win_y
+        """Handle mouse movement (called from pynput listener thread).
+
+        Uses absolute displacement from anchors instead of incremental deltas.
+        Position is always: win_start - (mouse_current - mouse_start).
+        This eliminates accumulated error from long chains of small deltas.
+        """
+        if self.mouse_start_x is None:
+            # First event — record anchors, emit no movement
+            self.mouse_start_x = x
+            self.mouse_start_y = y
+            self.win_start_x = self.win_x
+            self.win_start_y = self.win_y
+            self.tracking_win_x = self.win_start_x
+            self.tracking_win_y = self.win_start_y
             return
 
-        dx = x - self.last_mouse_x
-        dy = y - self.last_mouse_y
-        self.last_mouse_x = x
-        self.last_mouse_y = y
+        # Absolute displacement: each event is computed fresh from anchors.
+        # No chain of incremental updates — immune to per-event rounding.
+        new_x = self.win_start_x - (x - self.mouse_start_x)
+        new_y = self.win_start_y - (y - self.mouse_start_y)
 
-        # Calculate new position with counter-translation
-        # Use thread-local position to avoid race conditions with main thread
-        new_x = self.tracking_win_x - dx
-        new_y = self.tracking_win_y - dy
-
-        # Update thread-local position BEFORE clamping for next delta calculation
-        # This prevents accumulated error when hitting boundaries
         self.tracking_win_x = new_x
         self.tracking_win_y = new_y
-
-        # Clamp to bounding box relative to origin (origin = box center, not top-left)
-        # We want to keep the overlay center within margin distance from origin
-        # Only clamp the displayed position, not the tracking position
-        if self.origin_x is not None and self.origin_y is not None:
-            # Calculate bounds for overlay top-left corner
-            # such that overlay center stays within the bounding box
-            min_x = self.origin_x - self.margin_x - self.img_w / 2
-            max_x = self.origin_x + self.margin_x - self.img_w / 2
-            min_y = self.origin_y - self.margin_y - self.img_h / 2
-            max_y = self.origin_y + self.margin_y - self.img_h / 2
-
-            new_x = max(min_x, min(new_x, max_x))
-            new_y = max(min_y, min(new_y, max_y))
 
         # Throttle queue updates to ~1000Hz max (1ms between updates)
         # Matches high polling rate mice while preventing excessive overhead
@@ -1659,7 +1676,7 @@ class SACLOSOverlay:
         self.last_update_time = current_time
 
         # Queue the position update for main thread to process
-        # No Tkinter calls from this thread - this is thread-safe
+        # No Tkinter calls from this thread — this is thread-safe
         with self.position_lock:
             self.position_queue.clear()  # Remove old position
             self.position_queue.append((new_x, new_y))  # Add new position
