@@ -1266,30 +1266,14 @@ class SACLOSOverlay:
         self._ml_awaiting_label = False
         self._ml_last_context = None
 
-        # Get current mouse position
-        if not PYNPUT_OK:
-            print("Warning: pynput not available, cannot perform auto-correction")
-            self._reset_to_calibrated_position()
-            return
-
-        try:
-            self.mouse_controller = pynmouse.Controller()
-            current_mouse_x, current_mouse_y = self.mouse_controller.position
-        except Exception as e:
-            print(f"Warning: Could not get mouse position: {e}")
-            self._reset_to_calibrated_position()
-            return
-
-        # ---- Try ML prediction first ----
-        ml_used = False
+        # ---- ML prediction (always used when data exists) ----
         if self.ml_enabled and self.learner is not None:
             try:
                 ml_trajectory, confidence = self.learner.predict(
                     distance_px, angle_rad, self.target_range_m
                 )
-                if confidence >= self.ml_confidence_threshold and ml_trajectory is not None:
-                    ml_used = True
 
+                if ml_trajectory is not None:
                     total_dx = sum(p['dx'] for p in ml_trajectory)
                     total_dy = sum(p['dy'] for p in ml_trajectory)
                     duration = ml_trajectory[-1]['t'] if ml_trajectory else 0
@@ -1300,12 +1284,11 @@ class SACLOSOverlay:
                     print(f"  Range: {self.target_range_m:.0f}m")
                     print(f"  ML trajectory: {len(ml_trajectory)} points, "
                           f"dx={total_dx:.0f} dy={total_dy:.0f} dur={duration:.2f}s")
-                    print(f"  ML confidence: {confidence:.2f}  "
-                          f"(threshold: {self.ml_confidence_threshold:.2f})")
+                    print(f"  ML confidence: {confidence:.2f}")
                     print(f"  Training data: {stats['total']} samples "
                           f"({stats['hits']} hits, {stats['misses']} misses)")
 
-                    # Store context for online learning
+                    # Store context for online learning (every prediction gets labeled)
                     self._ml_last_context = {
                         'displacement_px': distance_px,
                         'angle_rad': angle_rad,
@@ -1326,59 +1309,64 @@ class SACLOSOverlay:
                     return  # Done — trajectory thread handles everything
 
                 else:
-                    if ml_trajectory is None:
-                        print(f"  ML: insufficient data, falling back to formula")
-                    else:
-                        print(f"  ML: confidence {confidence:.2f} below threshold "
-                              f"{self.ml_confidence_threshold:.2f}, falling back to formula")
+                    print(f"  ML: insufficient hit data (<3 hits), cannot predict")
+                    print(f"  Run saclos_trainer.py to collect training data.")
+                    self._reset_to_calibrated_position()
+                    return
+
             except Exception as e:
                 print(f"  ML prediction error: {e}")
                 traceback.print_exc()
+                self._reset_to_calibrated_position()
+                return
 
-        # ---- Formula fallback ----
-        params = self._calculate_correction_params(distance_px, angle_rad)
+        # ---- No ML mode — do nothing (formula deprecated) ----
+        print("  No correction mode active. Use --ml flag with training data.")
+        self._reset_to_calibrated_position()
 
-        mouse_dx = params['lead_distance_px'] * math.cos(params['lead_angle_rad'])
-        mouse_dy = params['lead_distance_px'] * math.sin(params['lead_angle_rad'])
-
-        target_mouse_x = current_mouse_x + mouse_dx
-        target_mouse_y = current_mouse_y + mouse_dy
-
-        waypoints = self._generate_bezier_waypoints(
-            current_mouse_x, current_mouse_y,
-            target_mouse_x, target_mouse_y,
-            params
-        )
-
-        engagement_delay_s = params['engagement_delay_s']
-
-        print(f"Auto-correction started [FORMULA mode]:")
-        print(f"  Displacement v: {distance_px:.1f}px at {math.degrees(angle_rad):.1f}°")
-        print(f"  Range: {self.target_range_m:.0f}m → proximity: {params['range_proximity']:.2f}x")
-        print(f"  Lead y: {params['lead_distance_px']:.1f}px at {math.degrees(params['lead_angle_rad']):.1f}° (base: {params['base_lead']:.2f}, factor: {params['lead_factor']:.2f})")
-        print(f"  Direction check: v={math.degrees(angle_rad):.1f}°, y={math.degrees(params['lead_angle_rad']):.1f}° (should be ~180° apart)")
-        in_instant = params['angular_distance_deg'] <= self.turret_instant_follow_deg
-        print(f"  Angular: {params['angular_distance_deg']:.2f}° traverse needed {'(INSTANT FOLLOW)' if in_instant else ''}")
-        print(f"  Traverse: {self.turret_instant_follow_deg:.0f}° instant window, {self.turret_traverse_speed_deg_s:.1f}°/s beyond → min duration: {params['min_duration_ms']:.0f}ms")
-        print(f"  Duration: {params['duration_ms']:.0f}ms (urgency: {params['urgency']:.2f})")
-        print(f"  Mouse sensitivity: {self.mouse_sensitivity_scale:.1f}x")
-        print(f"  Mouse: ({current_mouse_x}, {current_mouse_y}) → ({target_mouse_x:.0f}, {target_mouse_y:.0f})")
-        print(f"  Mouse delta: ({mouse_dx:.0f}, {mouse_dy:.0f})")
-        print(f"  Pre-correction delay: {self.pre_correction_delay_ms}ms, engagement delay: {params['engagement_delay_s']*1000:.0f}ms")
-
-        # ---- Store waypoints and start formula correction ----
-        self.correction_waypoints = waypoints
-        self.correction_waypoint_index = 0
-        self.correction_active = True
-        self.correction_interrupted.clear()
-        self.correction_start_time = time.perf_counter()
-
-        self.correction_thread = threading.Thread(
-            target=self._correction_thread_func,
-            args=(engagement_delay_s,),
-            daemon=True
-        )
-        self.correction_thread.start()
+        # # ---- Formula fallback (DEPRECATED — kept for reference) ----
+        # params = self._calculate_correction_params(distance_px, angle_rad)
+        #
+        # mouse_dx = params['lead_distance_px'] * math.cos(params['lead_angle_rad'])
+        # mouse_dy = params['lead_distance_px'] * math.sin(params['lead_angle_rad'])
+        #
+        # target_mouse_x = current_mouse_x + mouse_dx
+        # target_mouse_y = current_mouse_y + mouse_dy
+        #
+        # waypoints = self._generate_bezier_waypoints(
+        #     current_mouse_x, current_mouse_y,
+        #     target_mouse_x, target_mouse_y,
+        #     params
+        # )
+        #
+        # engagement_delay_s = params['engagement_delay_s']
+        #
+        # print(f"Auto-correction started [FORMULA mode]:")
+        # print(f"  Displacement v: {distance_px:.1f}px at {math.degrees(angle_rad):.1f}°")
+        # print(f"  Range: {self.target_range_m:.0f}m → proximity: {params['range_proximity']:.2f}x")
+        # print(f"  Lead y: {params['lead_distance_px']:.1f}px at {math.degrees(params['lead_angle_rad']):.1f}° (base: {params['base_lead']:.2f}, factor: {params['lead_factor']:.2f})")
+        # print(f"  Direction check: v={math.degrees(angle_rad):.1f}°, y={math.degrees(params['lead_angle_rad']):.1f}° (should be ~180° apart)")
+        # in_instant = params['angular_distance_deg'] <= self.turret_instant_follow_deg
+        # print(f"  Angular: {params['angular_distance_deg']:.2f}° traverse needed {'(INSTANT FOLLOW)' if in_instant else ''}")
+        # print(f"  Traverse: {self.turret_instant_follow_deg:.0f}° instant window, {self.turret_traverse_speed_deg_s:.1f}°/s beyond → min duration: {params['min_duration_ms']:.0f}ms")
+        # print(f"  Duration: {params['duration_ms']:.0f}ms (urgency: {params['urgency']:.2f})")
+        # print(f"  Mouse sensitivity: {self.mouse_sensitivity_scale:.1f}x")
+        # print(f"  Mouse: ({current_mouse_x}, {current_mouse_y}) → ({target_mouse_x:.0f}, {target_mouse_y:.0f})")
+        # print(f"  Mouse delta: ({mouse_dx:.0f}, {mouse_dy:.0f})")
+        # print(f"  Pre-correction delay: {self.pre_correction_delay_ms}ms, engagement delay: {params['engagement_delay_s']*1000:.0f}ms")
+        #
+        # self.correction_waypoints = waypoints
+        # self.correction_waypoint_index = 0
+        # self.correction_active = True
+        # self.correction_interrupted.clear()
+        # self.correction_start_time = time.perf_counter()
+        #
+        # self.correction_thread = threading.Thread(
+        #     target=self._correction_thread_func,
+        #     args=(engagement_delay_s,),
+        #     daemon=True
+        # )
+        # self.correction_thread.start()
 
     def _ml_trajectory_thread_func(self, trajectory):
         """

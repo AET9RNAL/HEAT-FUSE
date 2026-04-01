@@ -30,6 +30,7 @@ import math
 import time
 import argparse
 import threading
+import random
 import tkinter as tk
 
 try:
@@ -239,27 +240,49 @@ class CorrectionLearner:
                         blended[j]['dy'] += nudge_dy / n_pts
 
         # ============================================================
-        #  3.  Miss-penalized confidence
+        #  3.  Exploration perturbation in high-miss zones
+        # ============================================================
+        # When misses outnumber hits nearby, the deterministic nudge
+        # alone may not be enough — the model keeps retrying similar
+        # trajectories.  Add a random perturbation so each attempt
+        # explores a slightly different correction, giving the label
+        # loop a chance to discover what works.
+        nearby_hits_count = sum(1 for d, _ in hit_dists if d < MISS_RADIUS)
+        nearby_miss_count = len(nearby_misses)
+
+        if nearby_miss_count > nearby_hits_count and n_pts > 0:
+            # Exploration intensity scales with miss dominance (0→1)
+            miss_ratio = nearby_miss_count / (nearby_miss_count + nearby_hits_count + EPS)
+            # Base magnitude: 15% of total predicted correction length
+            pred_total_dx = sum(p['dx'] for p in blended)
+            pred_total_dy = sum(p['dy'] for p in blended)
+            pred_len = math.sqrt(pred_total_dx**2 + pred_total_dy**2) + EPS
+            explore_mag = pred_len * 0.15 * miss_ratio
+
+            # Random direction (uniform angle)
+            theta = random.uniform(0, 2 * math.pi)
+            explore_dx = explore_mag * math.cos(theta)
+            explore_dy = explore_mag * math.sin(theta)
+
+            for j in range(n_pts):
+                blended[j]['dx'] += explore_dx / n_pts
+                blended[j]['dy'] += explore_dy / n_pts
+
+        # ============================================================
+        #  4.  Confidence  (informational — no longer gates prediction)
         # ============================================================
         best_hit_dist = hit_dists[0][0]
 
-        # Sample density factor (unchanged)
-        sample_factor = min(1.0, len(hits) / 20.0)
-
-        # Proximity factor (unchanged)
+        sample_factor    = min(1.0, len(hits) / 20.0)
         proximity_factor = max(0.0, 1.0 - best_hit_dist * 2.0)
 
-        # NEW: miss penalty — if nearest miss is closer than nearest hit,
-        # confidence drops significantly.
         miss_penalty = 1.0
         if miss_dists:
             nearest_miss_dist = miss_dists[0][0]
             if nearest_miss_dist < best_hit_dist:
-                # Miss is closer → big penalty (0.2–0.5 range)
                 miss_penalty = 0.2 + 0.3 * (nearest_miss_dist / (best_hit_dist + EPS))
                 miss_penalty = min(miss_penalty, 1.0)
             elif nearest_miss_dist < MISS_RADIUS:
-                # Miss is nearby but further than nearest hit → mild penalty
                 miss_penalty = 0.7 + 0.3 * (nearest_miss_dist / MISS_RADIUS)
 
         confidence = sample_factor * proximity_factor * miss_penalty
