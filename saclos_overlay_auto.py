@@ -221,6 +221,30 @@ class SACLOSOverlay:
         self.RF_RANGE_MAX = 600.0
         self.RF_COLOR = "#77ffaa"
 
+        # OCR range reader state
+        self.ocr_enabled = False            # Whether OCR auto-range is active
+        self.ocr_region = None              # Screen bbox [x1, y1, x2, y2] or None
+        self.ocr_poll_interval_ms = 350     # Polling interval in ms
+        self.ocr_thread = None              # Background OCR thread
+        self.ocr_stop_event = threading.Event()
+        self.ocr_last_range = None          # Last successfully read range value
+        self.ocr_pending_range = None       # Thread-safe pending value
+        self.ocr_paused = False             # Paused while manual rangefinder is open
+        self.ocr_update_timer = None        # Main-thread timer ID
+
+        # OCR region setup window state
+        self.ocr_setup_win = None
+        self.ocr_setup_visible = False
+        self.OCR_SETUP_W = 120              # Default region width
+        self.OCR_SETUP_H = 40              # Default region height
+
+        # OCR range display window state
+        self.ocr_display_win = None
+        self.ocr_display_label = None
+        self.ocr_display_pos = None         # Screen position [x, y] or None
+        self.ocr_display_visible = False
+        self.ocr_display_hwnd = None
+
         # Window style
         self.root.attributes("-topmost", True)
         self.root.attributes("-transparentcolor", "#000001")
@@ -300,6 +324,12 @@ class SACLOSOverlay:
         # Create range finder window (hidden until Ctrl+R)
         self._create_rangefinder_window()
 
+        # Create OCR region setup window (hidden until T in adjust_bounds)
+        self._create_ocr_setup_window()
+
+        # Create OCR range display window (hidden until locked with OCR active)
+        self._create_ocr_display_window()
+
         # Load config if exists (must be after all initialization)
         self._load_config()
 
@@ -348,6 +378,10 @@ class SACLOSOverlay:
             "ml_enabled": self.ml_enabled,
             "ml_confidence_threshold": self.ml_confidence_threshold,
             "ml_online_learning": getattr(self, 'ml_online_learning', True),
+            # OCR range reader
+            "ocr_region": self.ocr_region,
+            "ocr_enabled": self.ocr_enabled,
+            "ocr_poll_interval_ms": self.ocr_poll_interval_ms,
         }
         try:
             config_path = self._get_config_path()
@@ -423,6 +457,14 @@ class SACLOSOverlay:
                 except Exception as e:
                     print(f"  ML load failed: {e}")
                     self.ml_enabled = False
+
+            # OCR range reader
+            self.ocr_region = config.get("ocr_region", None)
+            self.ocr_enabled = config.get("ocr_enabled", False)
+            self.ocr_poll_interval_ms = config.get("ocr_poll_interval_ms", 350)
+            if self.ocr_region and not TESSERACT_OK:
+                print("  Warning: OCR region configured but pytesseract not installed")
+                self.ocr_enabled = False
 
             # Apply calibrated position if we have it
             if self.calibrated_x is not None and self.calibrated_y is not None:
@@ -901,13 +943,16 @@ class SACLOSOverlay:
         bar_h = 28
         self.root.geometry(f"{self.img_w}x{self.img_h + bar_h}")
         self.status_lbl.config(
-            text="ADJUST BOUNDS  |  Drag corners=resize, center=move  |  Ctrl+L=confirm",
+            text="ADJUST BOUNDS  |  Drag corners=resize  |  T=OCR region  |  Ctrl+L=confirm",
             fg="#ff9900"
         )
         if not self.bar.winfo_ismapped():
             self.bar.pack(side=tk.BOTTOM, fill=tk.X)
         # Redraw boundary box with corner handles
         self._draw_boundary_box()
+        # Show OCR region if previously configured
+        if self.ocr_region and TESSERACT_OK:
+            self._show_ocr_setup()
 
     def _enter_locked(self):
         """Enter locked mode - overlay static, hold Space to track."""
@@ -934,6 +979,12 @@ class SACLOSOverlay:
         self.root.geometry(f"{self.img_w}x{self.img_h}")
         self._set_clickthrough(True)
         # DO NOT start mouse listener yet - only when tracking key is pressed
+        # Hide OCR setup window and start OCR thread if configured
+        if self.ocr_setup_visible:
+            self._hide_ocr_setup()
+        if self.ocr_enabled and self.ocr_region and TESSERACT_OK:
+            self._start_ocr_thread()
+            self._start_ocr_update_timer()
 
     def _start_tracking(self):
         """Start counter-translation tracking (Space pressed)."""
@@ -1605,6 +1656,12 @@ class SACLOSOverlay:
         if self.rf_visible:
             self._hide_rangefinder()
 
+        # Stop OCR thread and timer
+        self._stop_ocr_thread()
+        if self.ocr_update_timer is not None:
+            self.root.after_cancel(self.ocr_update_timer)
+            self.ocr_update_timer = None
+
         self.state = "calibrate"
         self.tracking_active = False
 
@@ -1791,6 +1848,11 @@ class SACLOSOverlay:
                     if self.state == "locked" and not self.tracking_active and not self.ctrl_pressed:
                         self.root.after(0, self._show_rangefinder)
 
+                # T key: toggle OCR region setup in adjust_bounds
+                if char and char.lower() == 't' and not self.ctrl_pressed:
+                    if self.state == "adjust_bounds":
+                        self.root.after(0, self._toggle_ocr_setup)
+
                 # Check for CTRL+key combinations
                 if self.ctrl_pressed:
                     if char and char.lower() == 'l':
@@ -1972,6 +2034,7 @@ class SACLOSOverlay:
             return
 
         self.rf_visible = True
+        self.ocr_paused = True  # Pause OCR while manually adjusting range
 
         # Position: centered on the overlay center
         if self.calibrated_x is not None:
@@ -2013,6 +2076,7 @@ class SACLOSOverlay:
             return
 
         self.rf_visible = False
+        self.ocr_paused = False  # Resume OCR after manual adjustment
 
         # Stop mouse listener
         if self.rf_mouse_listener:
@@ -2101,6 +2165,354 @@ class SACLOSOverlay:
         except Exception:
             pass
 
+    # ------------------------------------------- OCR range reader
+
+    def _create_ocr_setup_window(self):
+        """Create the OCR region selector Toplevel (hidden until T in adjust_bounds)."""
+        self.ocr_setup_win = tk.Toplevel(self.root)
+        self.ocr_setup_win.title("SACLOS OCR Region")
+        self.ocr_setup_win.overrideredirect(True)
+        self.ocr_setup_win.attributes("-topmost", True)
+        self.ocr_setup_win.configure(bg="#000001")
+        self.ocr_setup_win.attributes("-transparentcolor", "#000001")
+
+        self.ocr_setup_canvas = tk.Canvas(
+            self.ocr_setup_win,
+            width=self.OCR_SETUP_W, height=self.OCR_SETUP_H,
+            bg="#000001", highlightthickness=0
+        )
+        self.ocr_setup_canvas.pack(fill=tk.BOTH, expand=True)
+        self._draw_ocr_setup_border()
+
+        # Left-drag to move, right-drag to resize
+        self.ocr_setup_canvas.bind("<ButtonPress-1>", self._ocr_setup_drag_start)
+        self.ocr_setup_canvas.bind("<B1-Motion>", self._ocr_setup_drag_move)
+        self.ocr_setup_canvas.bind("<ButtonPress-3>", self._ocr_setup_resize_start)
+        self.ocr_setup_canvas.bind("<B3-Motion>", self._ocr_setup_resize_move)
+
+        self.ocr_setup_win.withdraw()
+
+    def _draw_ocr_setup_border(self):
+        """Draw a visible border on the OCR setup window."""
+        c = self.ocr_setup_canvas
+        c.delete("all")
+        w = self.OCR_SETUP_W
+        h = self.OCR_SETUP_H
+        c.create_rectangle(2, 2, w - 2, h - 2,
+                           outline="#00ffff", width=2, dash=(4, 3))
+        c.create_text(w // 2, h // 2, text="OCR",
+                      fill="#00ffff", font=("Courier", 9), anchor=tk.CENTER)
+
+    def _show_ocr_setup(self):
+        """Show OCR region selector during adjust_bounds."""
+        if self.ocr_setup_visible:
+            return
+        self.ocr_setup_visible = True
+
+        # Restore saved region or default to below screen center
+        if self.ocr_region:
+            x, y = self.ocr_region[0], self.ocr_region[1]
+            self.OCR_SETUP_W = self.ocr_region[2] - self.ocr_region[0]
+            self.OCR_SETUP_H = self.ocr_region[3] - self.ocr_region[1]
+        else:
+            sw = self.root.winfo_screenwidth()
+            sh = self.root.winfo_screenheight()
+            x = sw // 2 - self.OCR_SETUP_W // 2
+            y = sh // 2 + 100
+
+        self.ocr_setup_win.geometry(
+            f"{self.OCR_SETUP_W}x{self.OCR_SETUP_H}+{x}+{y}")
+        self.ocr_setup_canvas.config(
+            width=self.OCR_SETUP_W, height=self.OCR_SETUP_H)
+        self._draw_ocr_setup_border()
+        self.ocr_setup_win.deiconify()
+        self.ocr_setup_win.attributes("-topmost", True)
+        # Also show the range display position window
+        self._show_ocr_display_setup()
+
+    def _hide_ocr_setup(self):
+        """Hide OCR region selector and capture the screen coordinates."""
+        if not self.ocr_setup_visible:
+            return
+        self.ocr_setup_visible = False
+
+        x = self.ocr_setup_win.winfo_x()
+        y = self.ocr_setup_win.winfo_y()
+        w = self.OCR_SETUP_W
+        h = self.OCR_SETUP_H
+        self.ocr_region = [x, y, x + w, y + h]
+        self.ocr_enabled = True
+
+        self.ocr_setup_win.withdraw()
+        self._hide_ocr_display_setup()
+        print(f"OCR region set: {self.ocr_region}")
+        if self.ocr_display_pos:
+            print(f"OCR display pos: {self.ocr_display_pos}")
+
+    def _toggle_ocr_setup(self):
+        """Toggle OCR region setup window visibility."""
+        if not TESSERACT_OK:
+            print("OCR unavailable: pip install pytesseract  "
+                  "(+ Tesseract binary on PATH)")
+            return
+        if self.ocr_setup_visible:
+            self._hide_ocr_setup()
+        else:
+            self._show_ocr_setup()
+
+    def _ocr_setup_drag_start(self, event):
+        self._ocr_drag_ox = event.x_root - self.ocr_setup_win.winfo_x()
+        self._ocr_drag_oy = event.y_root - self.ocr_setup_win.winfo_y()
+
+    def _ocr_setup_drag_move(self, event):
+        nx = event.x_root - self._ocr_drag_ox
+        ny = event.y_root - self._ocr_drag_oy
+        self.ocr_setup_win.geometry(
+            f"{self.OCR_SETUP_W}x{self.OCR_SETUP_H}+{nx}+{ny}")
+
+    def _ocr_setup_resize_start(self, event):
+        self._ocr_resize_ox = event.x_root
+        self._ocr_resize_oy = event.y_root
+        self._ocr_resize_w0 = self.OCR_SETUP_W
+        self._ocr_resize_h0 = self.OCR_SETUP_H
+
+    def _ocr_setup_resize_move(self, event):
+        dw = event.x_root - self._ocr_resize_ox
+        dh = event.y_root - self._ocr_resize_oy
+        self.OCR_SETUP_W = max(40, self._ocr_resize_w0 + dw)
+        self.OCR_SETUP_H = max(20, self._ocr_resize_h0 + dh)
+        x = self.ocr_setup_win.winfo_x()
+        y = self.ocr_setup_win.winfo_y()
+        self.ocr_setup_win.geometry(
+            f"{self.OCR_SETUP_W}x{self.OCR_SETUP_H}+{x}+{y}")
+        self.ocr_setup_canvas.config(
+            width=self.OCR_SETUP_W, height=self.OCR_SETUP_H)
+        self._draw_ocr_setup_border()
+
+    # --- OCR range display window ---
+
+    def _create_ocr_display_window(self):
+        """Create the range display Toplevel (shows current range value on screen)."""
+        self.ocr_display_win = tk.Toplevel(self.root)
+        self.ocr_display_win.title("SACLOS OCR Display")
+        self.ocr_display_win.overrideredirect(True)
+        self.ocr_display_win.attributes("-topmost", True)
+        self.ocr_display_win.configure(bg="#000001")
+        self.ocr_display_win.attributes("-transparentcolor", "#000001")
+
+        self.ocr_display_label = tk.Label(
+            self.ocr_display_win,
+            text="--- m",
+            fg="#00ff00", bg="#111111",
+            font=("Courier", 14, "bold"),
+            padx=6, pady=2
+        )
+        self.ocr_display_label.pack()
+
+        # Drag binding (active during setup only)
+        self.ocr_display_label.bind("<ButtonPress-1>", self._ocr_display_drag_start)
+        self.ocr_display_label.bind("<B1-Motion>", self._ocr_display_drag_move)
+
+        self.ocr_display_win.withdraw()
+
+    def _ocr_display_drag_start(self, event):
+        self._ocr_disp_ox = event.x_root - self.ocr_display_win.winfo_x()
+        self._ocr_disp_oy = event.y_root - self.ocr_display_win.winfo_y()
+
+    def _ocr_display_drag_move(self, event):
+        nx = event.x_root - self._ocr_disp_ox
+        ny = event.y_root - self._ocr_disp_oy
+        self.ocr_display_win.geometry(f"+{nx}+{ny}")
+
+    def _show_ocr_display_setup(self):
+        """Show range display window in setup mode (draggable, visible border)."""
+        if self.ocr_display_pos:
+            x, y = self.ocr_display_pos
+        else:
+            sw = self.root.winfo_screenwidth()
+            sh = self.root.winfo_screenheight()
+            x = sw // 2 + 150
+            y = sh // 2 + 100
+
+        self.ocr_display_label.config(
+            text=f"{int(self.target_range_m)} m",
+            bg="#111111"
+        )
+        self.ocr_display_win.geometry(f"+{x}+{y}")
+        self.ocr_display_win.deiconify()
+        self.ocr_display_win.attributes("-topmost", True)
+        # Disable click-through during setup so user can drag it
+        self._set_ocr_display_clickthrough(False)
+
+    def _hide_ocr_display_setup(self):
+        """Capture display position and hide (called when leaving adjust_bounds)."""
+        x = self.ocr_display_win.winfo_x()
+        y = self.ocr_display_win.winfo_y()
+        self.ocr_display_pos = [x, y]
+        self.ocr_display_win.withdraw()
+
+    def _show_ocr_display(self):
+        """Show range display in locked mode (click-through, live updates)."""
+        if self.ocr_display_visible:
+            return
+        if not self.ocr_display_pos:
+            return
+
+        self.ocr_display_visible = True
+        x, y = self.ocr_display_pos
+        self.ocr_display_label.config(
+            text=f"{int(self.target_range_m)} m",
+            bg="#111111"
+        )
+        self.ocr_display_win.geometry(f"+{x}+{y}")
+        self.ocr_display_win.deiconify()
+        self.ocr_display_win.attributes("-topmost", True)
+        self._set_ocr_display_clickthrough(True)
+
+    def _hide_ocr_display(self):
+        """Hide range display."""
+        if not self.ocr_display_visible:
+            return
+        self.ocr_display_visible = False
+        self.ocr_display_win.withdraw()
+
+    def _update_ocr_display(self, range_m):
+        """Update the displayed range value."""
+        if self.ocr_display_visible and self.ocr_display_label:
+            self.ocr_display_label.config(text=f"{int(range_m)} m")
+
+    def _set_ocr_display_clickthrough(self, enable):
+        """Set click-through for the range display window."""
+        try:
+            import ctypes
+            if self.ocr_display_hwnd is None:
+                self.ocr_display_hwnd = ctypes.windll.user32.FindWindowW(
+                    None, "SACLOS OCR Display")
+            if not self.ocr_display_hwnd:
+                return
+            GWL_EXSTYLE = -20
+            WS_EX_LAYERED = 0x00080000
+            WS_EX_TRANSPARENT = 0x00000020
+            style = ctypes.windll.user32.GetWindowLongW(
+                self.ocr_display_hwnd, GWL_EXSTYLE)
+            if enable:
+                style |= (WS_EX_LAYERED | WS_EX_TRANSPARENT)
+            else:
+                style &= ~WS_EX_TRANSPARENT
+            ctypes.windll.user32.SetWindowLongW(
+                self.ocr_display_hwnd, GWL_EXSTYLE, style)
+        except Exception:
+            pass
+
+    # --- OCR capture + preprocessing ---
+
+    def _ocr_capture_range(self):
+        """Capture screen region and OCR the range value. Returns float or None.
+
+        Runs in background thread -- no Tkinter calls.
+        """
+        if not self.ocr_region or not PIL_OK:
+            return None
+
+        try:
+            img = ImageGrab.grab(bbox=tuple(self.ocr_region))
+
+            # Green channel isolation: keep bright green text, suppress background
+            r, g, b = img.split()
+            g_thresh = g.point(lambda p: 255 if p > 150 else 0)
+            r_suppress = r.point(lambda p: 0 if p > 120 else 255)
+            b_suppress = b.point(lambda p: 0 if p > 120 else 255)
+
+            mask = ImageChops.multiply(g_thresh, r_suppress)
+            mask = ImageChops.multiply(mask, b_suppress)
+
+            # Invert: Tesseract prefers dark text on light background
+            mask = mask.point(lambda p: 255 - p)
+
+            # Scale up 3x for better OCR accuracy on small text
+            w, h = mask.size
+            mask = mask.resize((w * 3, h * 3), Image.NEAREST)
+
+            text = pytesseract.image_to_string(
+                mask,
+                config='--psm 7 --oem 3 -c tessedit_char_whitelist=0123456789m '
+            )
+
+            import re
+            match = re.search(r'(\d+)', text.strip())
+            if match:
+                val = float(match.group(1))
+                if 50 <= val <= 5000:
+                    return val
+
+            return None
+        except Exception:
+            return None
+
+    # --- OCR polling thread ---
+
+    def _start_ocr_thread(self):
+        """Start background OCR polling thread."""
+        if self.ocr_thread and self.ocr_thread.is_alive():
+            return
+
+        self.ocr_stop_event.clear()
+        self.ocr_thread = threading.Thread(
+            target=self._ocr_thread_func, daemon=True)
+        self.ocr_thread.start()
+        print(f"OCR started (interval={self.ocr_poll_interval_ms}ms, "
+              f"region={self.ocr_region})")
+
+    def _stop_ocr_thread(self):
+        """Stop background OCR polling thread."""
+        if self.ocr_thread:
+            self.ocr_stop_event.set()
+            try:
+                self.ocr_thread.join(timeout=1.0)
+            except Exception:
+                pass
+            self.ocr_thread = None
+
+    def _ocr_thread_func(self):
+        """OCR polling loop (runs in background thread)."""
+        interval_s = self.ocr_poll_interval_ms / 1000.0
+
+        while not self.ocr_stop_event.is_set():
+            if not self.ocr_paused:
+                val = self._ocr_capture_range()
+                if val is not None:
+                    with self.position_lock:
+                        self.ocr_pending_range = val
+                        self.ocr_last_range = val
+
+            self.ocr_stop_event.wait(timeout=interval_s)
+
+    # --- OCR main-thread consumer ---
+
+    def _start_ocr_update_timer(self):
+        """Start main-thread timer to consume OCR results."""
+        self._process_ocr_updates()
+
+    def _process_ocr_updates(self):
+        """Check for OCR range updates (runs in main thread)."""
+        if self.state != "locked":
+            self.ocr_update_timer = None
+            return
+
+        new_range = None
+        with self.position_lock:
+            if self.ocr_pending_range is not None:
+                new_range = self.ocr_pending_range
+                self.ocr_pending_range = None
+
+        if new_range is not None and abs(new_range - self.target_range_m) > 0.5:
+            old_range = self.target_range_m
+            self.target_range_m = new_range
+            self._update_ocr_display(new_range)
+            print(f"OCR range: {int(old_range)}m -> {int(new_range)}m")
+
+        self.ocr_update_timer = self.root.after(200, self._process_ocr_updates)
+
     # ------------------------------------------- Windows click-through
 
     def _set_clickthrough(self, enable):
@@ -2164,6 +2576,14 @@ class SACLOSOverlay:
         # Destroy range finder window
         if hasattr(self, 'rf_win'):
             self.rf_win.destroy()
+
+        # Stop OCR thread and timer
+        self._stop_ocr_thread()
+        if self.ocr_update_timer is not None:
+            self.root.after_cancel(self.ocr_update_timer)
+            self.ocr_update_timer = None
+        if hasattr(self, 'ocr_setup_win') and self.ocr_setup_win:
+            self.ocr_setup_win.destroy()
 
         # Restore default Windows timer resolution
         _disable_hires_timer()
