@@ -38,6 +38,60 @@ try:
 except ImportError:
     PYNPUT_OK = False
 
+# ---------------------------------------------------------------------------
+#  SendInput infrastructure  (defined once at module level, reused every call)
+# ---------------------------------------------------------------------------
+import ctypes
+import ctypes.wintypes as _wt
+
+class _MOUSEINPUT(ctypes.Structure):
+    _fields_ = [
+        ('dx',          _wt.LONG),
+        ('dy',          _wt.LONG),
+        ('mouseData',   _wt.DWORD),
+        ('dwFlags',     _wt.DWORD),
+        ('time',        _wt.DWORD),
+        ('dwExtraInfo', ctypes.c_size_t),   # ULONG_PTR — must be 0
+    ]
+
+class _INPUT(ctypes.Structure):
+    class _U(ctypes.Union):
+        _fields_ = [('mi', _MOUSEINPUT)]
+    _anonymous_ = ('_u',)
+    _fields_ = [
+        ('type', _wt.DWORD),
+        ('_u',   _U),
+    ]
+
+_INPUT_MOUSE          = 0
+_MOUSEEVENTF_MOVE     = 0x0001
+_MOUSEEVENTF_LEFTDOWN = 0x0002
+_MOUSEEVENTF_LEFTUP   = 0x0004
+
+_SendInput = ctypes.windll.user32.SendInput
+_SendInput.restype = ctypes.c_uint
+
+# High-resolution timer  (1 ms instead of default ~15.6 ms)
+_timer_active = False
+def _enable_hires_timer():
+    global _timer_active
+    if not _timer_active:
+        ctypes.windll.winmm.timeBeginPeriod(1)
+        _timer_active = True
+
+def _disable_hires_timer():
+    global _timer_active
+    if _timer_active:
+        ctypes.windll.winmm.timeEndPeriod(1)
+        _timer_active = False
+
+def _is_admin():
+    """Return True if the process is running with administrator privileges."""
+    try:
+        return ctypes.windll.shell32.IsUserAnAdmin() != 0
+    except Exception:
+        return False
+
 
 class SACLOSOverlay:
     def __init__(self, root, image_path=None, tracking_image_path=None, margin_x=200, margin_y=200):
@@ -1472,111 +1526,31 @@ class SACLOSOverlay:
             self._ml_last_context = None
 
     def _inject_mouse_movement(self, dx, dy):
-        """
-        Inject relative mouse movement using Windows SendInput API.
-
-        Uses MOUSEEVENTF_MOVE for relative movement, which has better
-        compatibility with games using Raw Input.
-
-        Args:
-            dx: Relative X movement in pixels
-            dy: Relative Y movement in pixels
-        """
-        try:
-            import ctypes
-            from ctypes import wintypes
-
-            # Define Windows input structures
-            class MOUSEINPUT(ctypes.Structure):
-                _fields_ = [
-                    ('dx', wintypes.LONG),
-                    ('dy', wintypes.LONG),
-                    ('mouseData', wintypes.DWORD),
-                    ('dwFlags', wintypes.DWORD),
-                    ('time', wintypes.DWORD),
-                    ('dwExtraInfo', ctypes.POINTER(wintypes.ULONG))
-                ]
-
-            class INPUT(ctypes.Structure):
-                class _INPUT(ctypes.Union):
-                    _fields_ = [('mi', MOUSEINPUT)]
-                _anonymous_ = ('_input',)
-                _fields_ = [
-                    ('type', wintypes.DWORD),
-                    ('_input', _INPUT)
-                ]
-
-            # Constants
-            INPUT_MOUSE = 0
-            MOUSEEVENTF_MOVE = 0x0001
-
-            # Create input structure
-            extra = ctypes.c_ulong(0)
-            ii_ = INPUT()
-            ii_.type = INPUT_MOUSE
-            ii_.mi = MOUSEINPUT(dx, dy, 0, MOUSEEVENTF_MOVE, 0, ctypes.pointer(extra))
-
-            # Send the input
-            ctypes.windll.user32.SendInput(1, ctypes.pointer(ii_), ctypes.sizeof(ii_))
-
-        except Exception as e:
-            print(f"Warning: Failed to inject mouse movement via SendInput: {e}")
-            # Fallback to pynput if SendInput fails
-            try:
-                current_x, current_y = self.mouse_controller.position
-                self.mouse_controller.position = (current_x + dx, current_y + dy)
-            except:
-                pass
+        """Inject relative mouse movement via SendInput (module-level structs)."""
+        _enable_hires_timer()
+        inp = _INPUT()
+        inp.type = _INPUT_MOUSE
+        inp.mi = _MOUSEINPUT(dx, dy, 0, _MOUSEEVENTF_MOVE, 0, 0)
+        _SendInput(1, ctypes.pointer(inp), ctypes.sizeof(_INPUT))
 
     def _inject_mouse_click(self):
-        """Inject a left mouse button click (down + up) via SendInput."""
-        try:
-            import ctypes
-            from ctypes import wintypes
+        """Inject a left mouse button click (down + up) via SendInput.
 
-            class MOUSEINPUT(ctypes.Structure):
-                _fields_ = [
-                    ('dx', wintypes.LONG),
-                    ('dy', wintypes.LONG),
-                    ('mouseData', wintypes.DWORD),
-                    ('dwFlags', wintypes.DWORD),
-                    ('time', wintypes.DWORD),
-                    ('dwExtraInfo', ctypes.POINTER(wintypes.ULONG))
-                ]
-
-            class INPUT(ctypes.Structure):
-                class _INPUT(ctypes.Union):
-                    _fields_ = [('mi', MOUSEINPUT)]
-                _anonymous_ = ('_input',)
-                _fields_ = [
-                    ('type', wintypes.DWORD),
-                    ('_input', _INPUT)
-                ]
-
-            INPUT_MOUSE = 0
-            MOUSEEVENTF_LEFTDOWN = 0x0002
-            MOUSEEVENTF_LEFTUP = 0x0004
-
-            extra = ctypes.c_ulong(0)
-
-            # Mouse down
-            down = INPUT()
-            down.type = INPUT_MOUSE
-            down.mi = MOUSEINPUT(0, 0, 0, MOUSEEVENTF_LEFTDOWN, 0, ctypes.pointer(extra))
-            ctypes.windll.user32.SendInput(1, ctypes.pointer(down), ctypes.sizeof(INPUT))
-
-            # Hold the click for 20ms to ensure the game engine's input loop registers it
-            import time
-            time.sleep(0.05)
-
-            # Mouse up
-            up = INPUT()
-            up.type = INPUT_MOUSE
-            up.mi = MOUSEINPUT(0, 0, 0, MOUSEEVENTF_LEFTUP, 0, ctypes.pointer(extra))
-            ctypes.windll.user32.SendInput(1, ctypes.pointer(up), ctypes.sizeof(INPUT))
-
-        except Exception as e:
-            print(f"Warning: Failed to inject mouse click: {e}")
+        Down and up are sent as a single atomic SendInput(2,...) call so the
+        game cannot process other events between them, then we sleep 60 ms
+        to let the game engine register the full click before any follow-up
+        mouse movement begins.
+        """
+        _enable_hires_timer()
+        events = (_INPUT * 2)()
+        events[0].type = _INPUT_MOUSE
+        events[0].mi = _MOUSEINPUT(0, 0, 0, _MOUSEEVENTF_LEFTDOWN, 0, 0)
+        events[1].type = _INPUT_MOUSE
+        events[1].mi = _MOUSEINPUT(0, 0, 0, _MOUSEEVENTF_LEFTUP, 0, 0)
+        _SendInput(2, ctypes.pointer(events[0]), ctypes.sizeof(_INPUT))
+        # Give the game engine time to process the click before we start
+        # injecting mouse movement (missile guidance mode transition).
+        time.sleep(0.06)
 
     def _cleanup_correction(self):
         """Clean up correction state."""
@@ -2141,6 +2115,9 @@ class SACLOSOverlay:
         if hasattr(self, 'rf_win'):
             self.rf_win.destroy()
 
+        # Restore default Windows timer resolution
+        _disable_hires_timer()
+
         self.root.destroy()
 
 
@@ -2177,6 +2154,18 @@ def main():
     parser.add_argument("--ml-confidence", type=float, default=0.3,
                         help="Minimum ML confidence threshold to use prediction (default: 0.3)")
     args = parser.parse_args()
+
+    # --- Admin elevation check ---
+    if not _is_admin():
+        print()
+        print("=" * 60)
+        print("  WARNING: Not running as Administrator!")
+        print("  Windows UIPI will silently block SendInput events")
+        print("  targeting elevated (admin) windows like fullscreen games.")
+        print("  If mouse clicks / movements are ignored in-game,")
+        print("  re-launch this script with 'Run as administrator'.")
+        print("=" * 60)
+        print()
 
     root = tk.Tk()
     app = SACLOSOverlay(root, image_path=args.image,
