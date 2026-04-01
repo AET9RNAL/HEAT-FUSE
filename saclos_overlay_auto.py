@@ -1018,9 +1018,9 @@ class SACLOSOverlay:
         # === LEAD DISTANCE (d') ===
         # CRITICAL: Cap the overshoot based on range. 
         # Large initial displacements should NOT result in linearly unbounded overshoots!
-        # This keeps the total movement fast and prevents over-correction.
-        # At 70m -> ~74px max overshoot. At 350m -> ~130px.
-        max_overshoot_px = 60.0 + (self.target_range_m / 100.0) * 20.0
+        # This keeps the total movement bounded and prevents over-correction (missile diving).
+        # At 80m -> 72px max overshoot. At 400m -> 120px.
+        max_overshoot_px = 60.0 + (self.target_range_m / 100.0) * 15.0
         
         overshoot_px = min(overshoot_px, max_overshoot_px)
         
@@ -1039,10 +1039,17 @@ class SACLOSOverlay:
 
         # === ENGAGEMENT DELAY (s) ===
         # Time to wait before starting correction
-        # Approaches 0 as d→0 (immediate when close)
-        # Approaches 0 as urgency→large (immediate when urgent)
-        engagement_delay_s = self.base_engagement_delay_s * d_norm / (1 + self.urgency_k * urgency)
-        engagement_delay_s = max(0.0, engagement_delay_s)  # Never negative
+        # Base delay scales proportionally with range (r_norm)
+        # e.g., 400m -> high delay (let it fly straight for a bit). 80m -> low delay.
+        base_range_delay_s = self.base_engagement_delay_s * r_norm
+        
+        # Modulate dynamically by d and n (via urgency)
+        # If the launch displacement/angle is severely bad, we reduce the delay
+        # to force a faster intercept, counter-acting the range safety.
+        engagement_delay_s = base_range_delay_s / (1.0 + self.urgency_k * urgency)
+        
+        # Apply a tiny, safe lower-bound limit
+        engagement_delay_s = max(0.01, engagement_delay_s)  # Minimum 10ms safety
 
         # === SPEED FACTOR ===
         # How fast to execute movement (higher = faster)
@@ -1253,10 +1260,9 @@ class SACLOSOverlay:
         # This replaces the user needing to manually click before releasing the key
         self._inject_mouse_click()
 
-        # Pre-correction delay (allow game to process click before moving)
-        # Prevents initial movement from being dropped during the 'fire weapon' frame
-        if hasattr(self, 'pre_correction_delay_ms') and self.pre_correction_delay_ms > 0:
-            time.sleep(self.pre_correction_delay_ms / 1000.0)
+        # Legacy pre_correction_delay_ms was removed here.
+        # We now rely entirely on the dynamically calculated engagement_delay_s 
+        # to dictate the physical timing of the control surfaces.
 
         # Wait for engagement delay
         if engagement_delay_s > 0:
