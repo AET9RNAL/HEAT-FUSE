@@ -98,6 +98,17 @@ class SACLOSOverlay:
         self.correction_enabled = True
         self.target_range_m = 200.0  # Range to target in meters (user-configured)
         self.correction_min_threshold_px = 5.0  # Minimum displacement to trigger correction
+        self.pre_correction_delay_ms = 150  # Delay before starting correction (lets clicks complete)
+
+        # Turret/vehicle traverse limits (critical for realistic guidance)
+        self.turret_traverse_speed_deg_s = 51.3  # Maximum turret rotation speed in degrees/second
+        self.pixels_per_degree = 10.0  # Pixel-to-angular conversion factor (user-tunable)
+
+        # Mouse sensitivity scaling
+        # CRITICAL: SendInput "mickeys" ≠ screen pixels
+        # This factor converts overlay pixels → SendInput units
+        # Must be calibrated: if correction moves cursor HALF the expected distance, set to 2.0
+        self.mouse_sensitivity_scale = 1.0  # Multiplier applied to all injected mouse deltas
 
         # Physics parameters (missile ballistics)
         self.missile_v0 = 14.7  # Muzzle velocity m/s
@@ -115,6 +126,26 @@ class SACLOSOverlay:
 
         # Global speed multiplier
         self.correction_speed_multiplier = 1.0
+
+        # Range finder state
+        self.rf_key = None          # pynput key object for range finder toggle
+        self.rf_key_name = "r"      # Display name for range finder key (default: R)
+        self.rf_visible = False
+        self.rf_pending_range = None
+        self.rf_mouse_listener = None
+        self.rf_update_timer = None
+        self.rf_mouse_y_anchor = None
+        self.rf_range_anchor = None
+        self.rf_hwnd = None
+
+        # Range finder constants
+        self.RF_WIDTH = 80
+        self.RF_HEIGHT = 300
+        self.RF_SCALE_TOP = 30      # Canvas Y for 600m (top)
+        self.RF_SCALE_BOTTOM = 280  # Canvas Y for 70m (bottom)
+        self.RF_RANGE_MIN = 70.0
+        self.RF_RANGE_MAX = 600.0
+        self.RF_COLOR = "#77ffaa"
 
         # Window style
         self.root.attributes("-topmost", True)
@@ -192,6 +223,9 @@ class SACLOSOverlay:
         # Global keyboard via pynput (works when game has focus)
         self._start_kbd_listener()
 
+        # Create range finder window (hidden until Ctrl+R)
+        self._create_rangefinder_window()
+
         # Load config if exists (must be after all initialization)
         self._load_config()
 
@@ -218,11 +252,16 @@ class SACLOSOverlay:
             "image_path": self.image_path,
             "tracking_image_path": self.tracking_image_path,
             "tracking_key_name": self.tracking_key_name,
+            "rf_key_name": self.rf_key_name,
             # Auto-correction settings
             "correction_enabled": self.correction_enabled,
             "target_range_m": self.target_range_m,
             "correction_min_threshold_px": self.correction_min_threshold_px,
             "correction_speed_multiplier": self.correction_speed_multiplier,
+            "pre_correction_delay_ms": self.pre_correction_delay_ms,
+            "turret_traverse_speed_deg_s": self.turret_traverse_speed_deg_s,
+            "pixels_per_degree": self.pixels_per_degree,
+            "mouse_sensitivity_scale": self.mouse_sensitivity_scale,
             # Algorithm parameters
             "lead_alpha": self.lead_alpha,
             "lead_beta": self.lead_beta,
@@ -269,11 +308,19 @@ class SACLOSOverlay:
             self.tracking_key_name = config.get("tracking_key_name", "Space")
             self._update_tracking_key_from_name()
 
+            # Load range finder key
+            self.rf_key_name = config.get("rf_key_name", "r")
+            self._update_rf_key_from_name()
+
             # Load auto-correction settings
             self.correction_enabled = config.get("correction_enabled", True)
             self.target_range_m = config.get("target_range_m", 200.0)
             self.correction_min_threshold_px = config.get("correction_min_threshold_px", 5.0)
             self.correction_speed_multiplier = config.get("correction_speed_multiplier", 1.0)
+            self.pre_correction_delay_ms = config.get("pre_correction_delay_ms", 150)
+            self.turret_traverse_speed_deg_s = config.get("turret_traverse_speed_deg_s", 51.3)
+            self.pixels_per_degree = config.get("pixels_per_degree", 10.0)
+            self.mouse_sensitivity_scale = config.get("mouse_sensitivity_scale", 1.0)
             # Algorithm parameters
             self.lead_alpha = config.get("lead_alpha", 1.0)
             self.lead_beta = config.get("lead_beta", 0.5)
@@ -315,6 +362,24 @@ class SACLOSOverlay:
         else:
             # It's a character key - store as lowercase for comparison
             self.tracking_key = self.tracking_key_name.lower()
+
+    def _update_rf_key_from_name(self):
+        """Convert range finder key name to pynput key object."""
+        if not PYNPUT_OK:
+            return
+
+        key_map = {
+            "Space": pynkeyboard.Key.space,
+            "Shift": pynkeyboard.Key.shift,
+            "Alt": pynkeyboard.Key.alt,
+            "Tab": pynkeyboard.Key.tab,
+            "CapsLock": pynkeyboard.Key.caps_lock,
+        }
+
+        if self.rf_key_name in key_map:
+            self.rf_key = key_map[self.rf_key_name]
+        else:
+            self.rf_key = self.rf_key_name.lower()
 
     def _prompt_for_tracking_key(self):
         """Prompt user to press a key to set as tracking key."""
@@ -877,8 +942,9 @@ class SACLOSOverlay:
         if self.correction_enabled and distance_px > self.correction_min_threshold_px:
             angle_rad = math.atan2(displacement_y, displacement_x)
 
-            # Start auto-correction after engagement delay
-            # This will generate mouse movements to guide missile from x to o
+            # Start auto-correction immediately
+            # Mouse injection runs in a background thread via SendInput,
+            # which is immune to user clicks blocking Tkinter's event loop
             self.root.after(0, lambda: self._start_auto_correction(distance_px, angle_rad))
         else:
             # No correction needed or disabled - reset immediately
@@ -915,31 +981,39 @@ class SACLOSOverlay:
         # Higher urgency = more immediate, aggressive correction
         urgency = d_norm * (1 + n_norm)
 
+        # === RANGE PROXIMITY ===
+        # CRITICAL: Close range = missile arrives quickly = less time to correct
+        # This is the dominant factor in determining overcompensation
+        # At 70m:  1/(0.14+0.05) = 5.3x  (very aggressive - missile arrives in ~0.5s)
+        # At 200m: 1/(0.40+0.05) = 2.2x  (moderate)
+        # At 500m: 1/(1.00+0.05) = 0.95x (gentle - missile has ~2-3s)
+        range_proximity = 1.0 / (r_norm + 0.05)
+
         # === LEAD FACTOR (Overcompensation) ===
         # How much to overshoot target to create intercept trajectory
-        # Increases with: distance, angle, urgency
-        # Decreases with: range (more time available)
-        lead_factor = (
+        # Base factors from displacement and angle
+        base_lead = (
             self.lead_alpha * d_norm +           # Distance contribution
             self.lead_beta * n_norm +             # Angle contribution
-            self.lead_gamma * (urgency / (r_norm + 0.1))  # Urgency/range ratio
+            self.lead_gamma * urgency             # Urgency contribution
         )
-        lead_factor = min(lead_factor, 2.0)  # Cap at 200% overcompensation
+        # Scale by range proximity: close range multiplies overcompensation dramatically
+        lead_factor = base_lead * range_proximity
+        lead_factor = max(lead_factor, 0.5)  # Minimum 50% overcompensation
+        lead_factor = min(lead_factor, 6.0)  # Cap at 600% for extreme cases
 
         # === LEAD DISTANCE (d') ===
         # Magnitude of mouse movement - typically LARGER than displacement
-        # This creates the overcompensation needed for intercept
-        lead_distance_px = distance_px * (1 + lead_factor)
+        # Apply mouse sensitivity scale to convert overlay pixels → SendInput units
+        lead_distance_px = distance_px * (1 + lead_factor) * self.mouse_sensitivity_scale
 
         # === LEAD ANGLE (n') ===
         # Direction of mouse movement
-        # angle_rad points from overlay position TO origin
-        # This is the direction the OVERLAY needs to move
-        # Counter-translation: when mouse moves by +Δ, overlay moves by -Δ
-        # So to make overlay move in direction θ, mouse must move in direction θ
-        # (the negative cancels out in the coordinate transformation)
-        # Testing showed +π was inverted, so we use the angle as-is
-        lead_angle_rad = angle_rad  # Direct angle (tested correct)
+        # angle_rad points from overlay position TO origin (direction of displacement v)
+        # But y must have OPPOSITE direction to v (to correct the displacement)
+        # When overlay is displaced RIGHT of origin, we need to move mouse LEFT
+        # to bring the crosshair back (and guide missile back to target)
+        lead_angle_rad = angle_rad + math.pi  # Opposite direction to displacement
         # TODO: Add angular lead offset δ based on trajectory prediction
 
         # === ENGAGEMENT DELAY (s) ===
@@ -958,7 +1032,23 @@ class SACLOSOverlay:
         # Total time for correction movement
         # Inversely proportional to speed/urgency
         duration_ms = self.base_duration_ms / speed_factor
-        duration_ms = max(100.0, min(duration_ms, 1000.0))  # Clamp [100ms, 1000ms]
+
+        # === TURRET TRAVERSE LIMIT ===
+        # CRITICAL: Turret has maximum angular velocity (e.g., 51.3°/s)
+        # Calculate minimum time needed to traverse the angular distance
+        # Convert pixel distance to angular distance
+        angular_distance_deg = lead_distance_px / self.pixels_per_degree
+        # Minimum time required given traverse speed limit (convert to ms)
+        min_duration_ms = (angular_distance_deg / self.turret_traverse_speed_deg_s) * 1000.0
+        # Add 20% safety margin to account for acceleration/deceleration
+        min_duration_ms *= 1.2
+
+        # Duration must be AT LEAST the minimum needed for turret to traverse
+        # Otherwise turret can't keep up and guidance fails
+        duration_ms = max(duration_ms, min_duration_ms)
+
+        # Still apply upper bound to prevent extremely slow corrections
+        duration_ms = min(duration_ms, 3000.0)  # Max 3 seconds
 
         # === AGGRESSION ===
         # Bezier curve sharpness (0 = linear, 1 = very curved)
@@ -974,8 +1064,12 @@ class SACLOSOverlay:
             # Store original for debugging
             'original_distance_px': distance_px,
             'original_angle_rad': angle_rad,
+            'base_lead': base_lead,
             'lead_factor': lead_factor,
+            'range_proximity': range_proximity,
             'urgency': urgency,
+            'min_duration_ms': min_duration_ms,
+            'angular_distance_deg': angular_distance_deg,
         }
 
     def _generate_bezier_waypoints(self, start_x, start_y, end_x, end_y, params):
@@ -1094,76 +1188,92 @@ class SACLOSOverlay:
 
         # Debug output
         print(f"Auto-correction started:")
-        print(f"  Displacement: {distance_px:.1f}px at {math.degrees(angle_rad):.1f}°")
-        print(f"  Lead: {params['lead_distance_px']:.1f}px (factor: {params['lead_factor']:.2f})")
-        print(f"  Duration: {params['duration_ms']:.0f}ms, urgency: {params['urgency']:.2f}")
+        print(f"  Displacement v: {distance_px:.1f}px at {math.degrees(angle_rad):.1f}°")
+        print(f"  Range: {self.target_range_m:.0f}m → proximity: {params['range_proximity']:.2f}x")
+        print(f"  Lead y: {params['lead_distance_px']:.1f}px at {math.degrees(params['lead_angle_rad']):.1f}° (base: {params['base_lead']:.2f}, factor: {params['lead_factor']:.2f})")
+        print(f"  Direction check: v={math.degrees(angle_rad):.1f}°, y={math.degrees(params['lead_angle_rad']):.1f}° (should be ~180° apart)")
+        print(f"  Angular: {params['angular_distance_deg']:.2f}° traverse needed")
+        print(f"  Traverse limit: {self.turret_traverse_speed_deg_s:.1f}°/s → min duration: {params['min_duration_ms']:.0f}ms")
+        print(f"  Duration: {params['duration_ms']:.0f}ms (urgency: {params['urgency']:.2f})")
+        print(f"  Mouse sensitivity: {self.mouse_sensitivity_scale:.1f}x")
         print(f"  Mouse: ({current_mouse_x}, {current_mouse_y}) → ({target_mouse_x:.0f}, {target_mouse_y:.0f})")
-        print(f"  Waypoints: {len(waypoints)}")
+        print(f"  Mouse delta: ({mouse_dx:.0f}, {mouse_dy:.0f})")
+        print(f"  Pre-correction delay: {self.pre_correction_delay_ms}ms, engagement delay: {params['engagement_delay_s']*1000:.0f}ms")
 
-        # Schedule correction animation to start after engagement delay
-        delay_ms = int(params['engagement_delay_s'] * 1000)
-        self.root.after(delay_ms, self._correction_animation_step)
+        # Run correction in a dedicated background thread
+        # CRITICAL: Using a thread instead of self.root.after() because:
+        # Tkinter's event loop is single-threaded - user clicks preempt/block
+        # the after() callbacks, halting the mouse interpolation.
+        # A background thread with time.sleep() is immune to user input events.
+        engagement_delay_s = params['engagement_delay_s']
+        self.correction_thread = threading.Thread(
+            target=self._correction_thread_func,
+            args=(engagement_delay_s,),
+            daemon=True
+        )
+        self.correction_thread.start()
 
-    def _correction_animation_step(self):
+    def _correction_thread_func(self, engagement_delay_s):
         """
-        Execute one step of correction animation.
+        Execute correction animation in a background thread.
 
-        Runs in main thread, moves mouse along waypoint path.
-        User manual movements are ADDED to this, not interrupted.
+        Uses time.sleep() for timing instead of Tkinter's after(),
+        making it immune to user clicks/input blocking the event loop.
+        SendInput calls from this thread are still processed by the OS.
         """
-        # Check if correction was cancelled
-        if not self.correction_active or self.correction_interrupted.is_set():
-            self._cleanup_correction()
-            return
+        # Simulate LMB click FIRST (fires the missile in-game)
+        # This replaces the user needing to manually click before releasing the key
+        self._inject_mouse_click()
 
-        # Check if we've finished all waypoints
-        if self.correction_waypoint_index >= len(self.correction_waypoints):
-            print(f"Auto-correction complete (took {time.perf_counter() - self.correction_start_time:.2f}s)")
-            # Move overlay back to calibrated position
-            # (missile should be approaching target at this point)
-            self._reset_to_calibrated_position()
-            self._cleanup_correction()
-            return
+        # Wait for engagement delay
+        if engagement_delay_s > 0:
+            time.sleep(engagement_delay_s)
 
-        # Get current waypoint
-        target_x, target_y, timestamp_ms = self.correction_waypoints[self.correction_waypoint_index]
+        waypoints = self.correction_waypoints
+        start_time = time.perf_counter()
 
-        # Calculate relative movement from previous waypoint (or current position)
-        if self.correction_waypoint_index == 0:
-            # First waypoint - get current actual mouse position
+        for i in range(len(waypoints)):
+            # Check if correction was cancelled
+            if not self.correction_active or self.correction_interrupted.is_set():
+                break
+
+            target_x, target_y, timestamp_ms = waypoints[i]
+
+            # Calculate relative delta from previous waypoint
+            if i == 0:
+                try:
+                    current_x, current_y = pynmouse.Controller().position
+                except Exception:
+                    current_x, current_y = target_x, target_y
+            else:
+                current_x, current_y, _ = waypoints[i - 1]
+
+            delta_x = int(target_x - current_x)
+            delta_y = int(target_y - current_y)
+
+            # Inject mouse movement via SendInput (kernel-level, unaffected by clicks)
             try:
-                current_x, current_y = self.mouse_controller.position
-            except:
-                current_x, current_y = target_x, target_y
-        else:
-            # Use previous waypoint
-            current_x, current_y, _ = self.correction_waypoints[self.correction_waypoint_index - 1]
+                self._inject_mouse_movement(delta_x, delta_y)
+            except Exception as e:
+                print(f"Warning: Could not move mouse: {e}")
+                break
 
-        # Calculate delta for relative movement
-        delta_x = int(target_x - current_x)
-        delta_y = int(target_y - current_y)
+            # Sleep until next waypoint timestamp
+            if i + 1 < len(waypoints):
+                next_timestamp_ms = waypoints[i + 1][2]
+                sleep_s = (next_timestamp_ms - timestamp_ms) / 1000.0
+                if sleep_s > 0:
+                    time.sleep(sleep_s)
 
-        # Use Windows SendInput for relative mouse movement (better game compatibility)
-        # This bypasses some game input filtering that blocks absolute positioning
-        try:
-            self._inject_mouse_movement(delta_x, delta_y)
-        except Exception as e:
-            print(f"Warning: Could not move mouse: {e}")
-            self._cleanup_correction()
-            return
+        # Correction complete - schedule cleanup on main thread
+        elapsed = time.perf_counter() - start_time
+        print(f"Auto-correction complete (took {elapsed:.2f}s)")
+        self.root.after(0, self._finish_correction)
 
-        # Move to next waypoint
-        self.correction_waypoint_index += 1
-
-        # Calculate delay to next waypoint
-        if self.correction_waypoint_index < len(self.correction_waypoints):
-            next_timestamp_ms = self.correction_waypoints[self.correction_waypoint_index][2]
-            delay_ms = max(1, int(next_timestamp_ms - timestamp_ms))
-        else:
-            delay_ms = 1
-
-        # Schedule next step
-        self.root.after(delay_ms, self._correction_animation_step)
+    def _finish_correction(self):
+        """Called on main thread after correction thread completes."""
+        self._reset_to_calibrated_position()
+        self._cleanup_correction()
 
     def _inject_mouse_movement(self, dx, dy):
         """
@@ -1222,6 +1332,54 @@ class SACLOSOverlay:
             except:
                 pass
 
+    def _inject_mouse_click(self):
+        """Inject a left mouse button click (down + up) via SendInput."""
+        try:
+            import ctypes
+            from ctypes import wintypes
+
+            class MOUSEINPUT(ctypes.Structure):
+                _fields_ = [
+                    ('dx', wintypes.LONG),
+                    ('dy', wintypes.LONG),
+                    ('mouseData', wintypes.DWORD),
+                    ('dwFlags', wintypes.DWORD),
+                    ('time', wintypes.DWORD),
+                    ('dwExtraInfo', ctypes.POINTER(wintypes.ULONG))
+                ]
+
+            class INPUT(ctypes.Structure):
+                class _INPUT(ctypes.Union):
+                    _fields_ = [('mi', MOUSEINPUT)]
+                _anonymous_ = ('_input',)
+                _fields_ = [
+                    ('type', wintypes.DWORD),
+                    ('_input', _INPUT)
+                ]
+
+            INPUT_MOUSE = 0
+            MOUSEEVENTF_LEFTDOWN = 0x0002
+            MOUSEEVENTF_LEFTUP = 0x0004
+
+            extra = ctypes.c_ulong(0)
+
+            # Mouse down
+            down = INPUT()
+            down.type = INPUT_MOUSE
+            down.mi = MOUSEINPUT(0, 0, 0, MOUSEEVENTF_LEFTDOWN, 0, ctypes.pointer(extra))
+
+            # Mouse up
+            up = INPUT()
+            up.type = INPUT_MOUSE
+            up.mi = MOUSEINPUT(0, 0, 0, MOUSEEVENTF_LEFTUP, 0, ctypes.pointer(extra))
+
+            # Send both as a single batch (down then up)
+            inputs = (INPUT * 2)(down, up)
+            ctypes.windll.user32.SendInput(2, ctypes.pointer(inputs[0]), ctypes.sizeof(INPUT))
+
+        except Exception as e:
+            print(f"Warning: Failed to inject mouse click: {e}")
+
     def _cleanup_correction(self):
         """Clean up correction state."""
         self.correction_active = False
@@ -1242,6 +1400,10 @@ class SACLOSOverlay:
         if self.correction_active:
             self.correction_interrupted.set()
             self._cleanup_correction()
+
+        # Hide range finder if visible
+        if self.rf_visible:
+            self._hide_rangefinder()
 
         self.state = "calibrate"
         self.tracking_active = False
@@ -1377,6 +1539,23 @@ class SACLOSOverlay:
                 elif hasattr(key, 'name'):
                     char = key.name
 
+                # Check for range finder keybind (standalone, no Ctrl needed)
+                is_rf_key = False
+                if self.rf_key is not None:
+                    if isinstance(self.rf_key, str):
+                        if char and char.lower() == self.rf_key.lower():
+                            is_rf_key = True
+                    else:
+                        if key == self.rf_key:
+                            is_rf_key = True
+                elif char and char.lower() == self.rf_key_name.lower():
+                    # Default: match by name before explicit key is set
+                    is_rf_key = True
+
+                if is_rf_key:
+                    if self.state == "locked" and not self.tracking_active and not self.ctrl_pressed:
+                        self.root.after(0, self._show_rangefinder)
+
                 # Check for CTRL+key combinations
                 if self.ctrl_pressed:
                     if char and char.lower() == 'l':
@@ -1396,6 +1575,31 @@ class SACLOSOverlay:
                 if key in (pynkeyboard.Key.ctrl_l, pynkeyboard.Key.ctrl_r, pynkeyboard.Key.ctrl):
                     self.ctrl_pressed = False
                     return
+
+                # Check range finder key release → hide range finder
+                if self.rf_visible:
+                    is_rf_release = False
+                    if self.rf_key is not None:
+                        if isinstance(self.rf_key, str):
+                            r_char = None
+                            if hasattr(key, 'char'):
+                                r_char = key.char
+                            if r_char and r_char.lower() == self.rf_key.lower():
+                                is_rf_release = True
+                        else:
+                            if key == self.rf_key:
+                                is_rf_release = True
+                    else:
+                        # Default: match by name
+                        r_char = None
+                        if hasattr(key, 'char'):
+                            r_char = key.char
+                        elif hasattr(key, 'name'):
+                            r_char = key.name
+                        if r_char and r_char.lower() == self.rf_key_name.lower():
+                            is_rf_release = True
+                    if is_rf_release:
+                        self.root.after(0, self._hide_rangefinder)
 
                 # Handle configured tracking key release
                 if self.tracking_key is not None:
@@ -1428,6 +1632,236 @@ class SACLOSOverlay:
         except Exception as e:
             print(f"Warning: Could not start global keyboard listener: {e}")
             print("Keyboard shortcuts will only work when overlay window has focus.")
+
+    # ------------------------------------------- Range Finder
+
+    def _create_rangefinder_window(self):
+        """Create the range finder Toplevel window (hidden until Ctrl+R)."""
+        self.rf_win = tk.Toplevel(self.root)
+        self.rf_win.title("SACLOS RangeFinder")
+        self.rf_win.overrideredirect(True)
+        self.rf_win.attributes("-topmost", True)
+        self.rf_win.attributes("-transparentcolor", "#000001")
+        self.rf_win.configure(bg="#000001")
+        self.rf_win.geometry(f"{self.RF_WIDTH}x{self.RF_HEIGHT}")
+        self.rf_win.withdraw()  # Hidden until Ctrl+R
+
+        self.rf_canvas = tk.Canvas(
+            self.rf_win, width=self.RF_WIDTH, height=self.RF_HEIGHT,
+            bg="#000001", highlightthickness=0
+        )
+        self.rf_canvas.pack()
+
+    def _range_to_canvas_y(self, range_m):
+        """Convert range in meters to range finder canvas Y coordinate."""
+        range_m = max(self.RF_RANGE_MIN, min(range_m, self.RF_RANGE_MAX))
+        # 600m = top (RF_SCALE_TOP), 70m = bottom (RF_SCALE_BOTTOM)
+        fraction = (self.RF_RANGE_MAX - range_m) / (self.RF_RANGE_MAX - self.RF_RANGE_MIN)
+        return self.RF_SCALE_TOP + fraction * (self.RF_SCALE_BOTTOM - self.RF_SCALE_TOP)
+
+    def _canvas_y_to_range(self, y):
+        """Convert range finder canvas Y coordinate to range in meters."""
+        y = max(self.RF_SCALE_TOP, min(y, self.RF_SCALE_BOTTOM))
+        fraction = (y - self.RF_SCALE_TOP) / (self.RF_SCALE_BOTTOM - self.RF_SCALE_TOP)
+        return self.RF_RANGE_MAX - fraction * (self.RF_RANGE_MAX - self.RF_RANGE_MIN)
+
+    def _draw_rangefinder(self):
+        """Draw all range finder canvas elements."""
+        c = self.rf_canvas
+        c.delete("all")
+
+        color = self.RF_COLOR
+        w = self.RF_WIDTH
+        top = self.RF_SCALE_TOP
+        bot = self.RF_SCALE_BOTTOM
+
+        # --- Range text label (white, above scale) ---
+        c.create_text(w // 2, 15, text=f"{int(self.target_range_m)}m",
+                      fill="#ffffff", font=("Courier", 11, "bold"), anchor=tk.CENTER,
+                      tags="rf_text")
+
+        # --- Outer corner brackets (L-shapes) ---
+        arm = 20
+        ox1, oy1, ox2, oy2 = 5, top, w - 5, bot
+        # Top-left
+        c.create_line(ox1, oy1, ox1 + arm, oy1, fill=color, width=2)
+        c.create_line(ox1, oy1, ox1, oy1 + arm, fill=color, width=2)
+        # Top-right
+        c.create_line(ox2 - arm, oy1, ox2, oy1, fill=color, width=2)
+        c.create_line(ox2, oy1, ox2, oy1 + arm, fill=color, width=2)
+        # Bottom-left
+        c.create_line(ox1, oy2 - arm, ox1, oy2, fill=color, width=2)
+        c.create_line(ox1, oy2, ox1 + arm, oy2, fill=color, width=2)
+        # Bottom-right
+        c.create_line(ox2, oy2 - arm, ox2, oy2, fill=color, width=2)
+        c.create_line(ox2 - arm, oy2, ox2, oy2, fill=color, width=2)
+
+        # --- Tick marks along left edge ---
+        for range_val in range(int(self.RF_RANGE_MIN), int(self.RF_RANGE_MAX) + 1, 50):
+            y = self._range_to_canvas_y(range_val)
+            if range_val in (70, 300, 600):
+                # Major tick - longer
+                c.create_line(0, y, 12, y, fill=color, width=2)
+            else:
+                # Minor tick
+                c.create_line(3, y, 8, y, fill=color, width=1)
+
+        # --- Movable notch (two dashes) ---
+        notch_y = self._range_to_canvas_y(self.target_range_m)
+        c.create_line(22, notch_y, 33, notch_y, fill=color, width=3, tags="rf_notch")
+        c.create_line(47, notch_y, 58, notch_y, fill=color, width=3, tags="rf_notch")
+
+    def _update_rangefinder_notch(self):
+        """Update just the notch position and text (fast partial redraw)."""
+        c = self.rf_canvas
+        c.delete("rf_notch")
+        c.delete("rf_text")
+
+        # Redraw text
+        c.create_text(self.RF_WIDTH // 2, 15,
+                      text=f"{int(self.target_range_m)}m",
+                      fill="#ffffff", font=("Courier", 11, "bold"),
+                      anchor=tk.CENTER, tags="rf_text")
+
+        # Redraw notch at new position
+        notch_y = self._range_to_canvas_y(self.target_range_m)
+        c.create_line(22, notch_y, 33, notch_y, fill=self.RF_COLOR, width=3, tags="rf_notch")
+        c.create_line(47, notch_y, 58, notch_y, fill=self.RF_COLOR, width=3, tags="rf_notch")
+
+    def _show_rangefinder(self):
+        """Show range finder and start mouse tracking for notch adjustment."""
+        if self.rf_visible or self.tracking_active:
+            return
+
+        self.rf_visible = True
+
+        # Position: centered on the overlay center
+        if self.calibrated_x is not None:
+            overlay_cx = self.calibrated_x + self.img_w / 2
+            overlay_cy = self.calibrated_y + self.img_h / 2
+        else:
+            overlay_cx = self.win_x + self.img_w / 2
+            overlay_cy = self.win_y + self.img_h / 2
+
+        rf_x = int(overlay_cx - self.RF_WIDTH / 2)
+        rf_y = int(overlay_cy - self.RF_HEIGHT / 2)
+
+        self.rf_win.geometry(f"{self.RF_WIDTH}x{self.RF_HEIGHT}+{rf_x}+{rf_y}")
+
+        # Draw with current target_range_m
+        self._draw_rangefinder()
+
+        # Show window
+        self.rf_win.deiconify()
+        self.rf_win.attributes("-topmost", True)
+
+        # Make click-through after window is visible
+        self.rf_win.after(50, lambda: self._set_rf_clickthrough(True))
+
+        # Anchor mouse position for delta-based tracking
+        self.rf_mouse_y_anchor = None  # Will be set on first mouse event
+        self.rf_range_anchor = self.target_range_m
+
+        # Start dedicated mouse listener for notch tracking
+        self.rf_mouse_listener = pynmouse.Listener(on_move=self._on_rf_mouse_move)
+        self.rf_mouse_listener.start()
+
+        # Start update timer (~60fps)
+        self.rf_update_timer = self.root.after(16, self._process_rf_updates)
+
+    def _hide_rangefinder(self):
+        """Hide range finder and commit the range value."""
+        if not self.rf_visible:
+            return
+
+        self.rf_visible = False
+
+        # Stop mouse listener
+        if self.rf_mouse_listener:
+            self.rf_mouse_listener.stop()
+            try:
+                self.rf_mouse_listener.join(timeout=0.5)
+            except Exception:
+                pass
+            self.rf_mouse_listener = None
+
+        # Cancel update timer
+        if self.rf_update_timer:
+            self.root.after_cancel(self.rf_update_timer)
+            self.rf_update_timer = None
+
+        # Hide window
+        self.rf_win.withdraw()
+
+        # target_range_m was updated continuously during dragging
+        self._save_config()
+        print(f"Range set to: {int(self.target_range_m)}m")
+
+    def _on_rf_mouse_move(self, x, y):
+        """Handle mouse movement for range finder notch (pynput listener thread)."""
+        if not self.rf_visible:
+            return
+
+        if self.rf_mouse_y_anchor is None:
+            # First event - anchor the starting mouse Y position
+            self.rf_mouse_y_anchor = y
+            self.rf_range_anchor = self.target_range_m
+            return
+
+        # Calculate delta from anchor
+        dy = y - self.rf_mouse_y_anchor
+
+        # Convert pixel delta to range delta
+        # Moving mouse UP (negative dy) = INCREASE range
+        # Scale height (250px) maps to range span (530m)
+        pixels_per_meter = (self.RF_SCALE_BOTTOM - self.RF_SCALE_TOP) / (self.RF_RANGE_MAX - self.RF_RANGE_MIN)
+        range_delta = -dy / pixels_per_meter  # Negate: mouse up = more range
+
+        new_range = self.rf_range_anchor + range_delta
+        new_range = max(self.RF_RANGE_MIN, min(new_range, self.RF_RANGE_MAX))
+
+        # Thread-safe update
+        with self.position_lock:
+            self.rf_pending_range = new_range
+
+    def _process_rf_updates(self):
+        """Process range finder updates in main thread (16ms timer)."""
+        if not self.rf_visible:
+            return
+
+        # Check for pending range update
+        new_range = None
+        with self.position_lock:
+            if self.rf_pending_range is not None:
+                new_range = self.rf_pending_range
+                self.rf_pending_range = None
+
+        if new_range is not None and abs(new_range - self.target_range_m) > 0.5:
+            self.target_range_m = new_range
+            self._update_rangefinder_notch()
+
+        # Schedule next update
+        self.rf_update_timer = self.root.after(16, self._process_rf_updates)
+
+    def _set_rf_clickthrough(self, enable):
+        """Set click-through for range finder window."""
+        try:
+            import ctypes
+            if self.rf_hwnd is None:
+                self.rf_hwnd = ctypes.windll.user32.FindWindowW(None, "SACLOS RangeFinder")
+            if not self.rf_hwnd:
+                return
+            GWL_EXSTYLE = -20
+            WS_EX_LAYERED = 0x00080000
+            WS_EX_TRANSPARENT = 0x00000020
+            style = ctypes.windll.user32.GetWindowLongW(self.rf_hwnd, GWL_EXSTYLE)
+            if enable:
+                style |= (WS_EX_LAYERED | WS_EX_TRANSPARENT)
+            else:
+                style &= ~WS_EX_TRANSPARENT
+            ctypes.windll.user32.SetWindowLongW(self.rf_hwnd, GWL_EXSTYLE, style)
+        except Exception:
+            pass
 
     # ------------------------------------------- Windows click-through
 
@@ -1476,6 +1910,23 @@ class SACLOSOverlay:
             except Exception:
                 pass
 
+        # Stop range finder mouse listener
+        if self.rf_mouse_listener:
+            self.rf_mouse_listener.stop()
+            try:
+                self.rf_mouse_listener.join(timeout=0.5)
+            except Exception:
+                pass
+
+        # Cancel range finder timer
+        if self.rf_update_timer:
+            self.root.after_cancel(self.rf_update_timer)
+            self.rf_update_timer = None
+
+        # Destroy range finder window
+        if hasattr(self, 'rf_win'):
+            self.rf_win.destroy()
+
         self.root.destroy()
 
 
@@ -1496,6 +1947,12 @@ def main():
                         help="Disable auto-correction on tracking key release")
     parser.add_argument("--correction-speed", type=float, default=1.0,
                         help="Correction speed multiplier (default: 1.0)")
+    parser.add_argument("--turret-speed", type=float, default=51.3,
+                        help="Turret traverse speed in degrees/second (default: 51.3)")
+    parser.add_argument("--pixels-per-degree", type=float, default=10.0,
+                        help="Pixel to degree conversion factor (default: 10.0, tune based on FOV)")
+    parser.add_argument("--mouse-scale", type=float, default=1.0,
+                        help="Mouse sensitivity scale: if correction moves cursor half expected distance, set to 2.0")
     args = parser.parse_args()
 
     root = tk.Tk()
@@ -1510,6 +1967,12 @@ def main():
         app.correction_enabled = False
     if hasattr(args, 'correction_speed'):
         app.correction_speed_multiplier = args.correction_speed
+    if hasattr(args, 'turret_speed'):
+        app.turret_traverse_speed_deg_s = args.turret_speed
+    if hasattr(args, 'pixels_per_degree'):
+        app.pixels_per_degree = args.pixels_per_degree
+    if hasattr(args, 'mouse_scale'):
+        app.mouse_sensitivity_scale = args.mouse_scale
 
     # Force tracking key setup if requested
     if args.setup_tracking_key:

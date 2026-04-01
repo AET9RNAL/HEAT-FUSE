@@ -1,0 +1,880 @@
+range in-game: 350
+range set: 350
+case 1:
+Auto-correction started:
+  Displacement v: 97.0px at -132.1°
+  Range: 352m → proximity: 1.33x
+  Lead y: 199.1px at 47.9° (base: 0.79, factor: 1.05)
+  Direction check: v=-132.1°, y=47.9° (should be ~180° apart)
+  Angular: 19.91° traverse needed
+  Traverse limit: 51.3°/s → min duration: 466ms
+  Duration: 466ms (urgency: 0.08)
+  Mouse sensitivity: 1.0x
+  Mouse: (1404, 777) → (1537, 925)
+  Mouse delta: (133, 148)
+  Pre-correction delay: 100ms, engagement delay: 1ms
+Auto-correction complete (took 0.52s)
+
+result: miss, correction started too soon, undershoot
+
+case2:
+Auto-correction started:
+  Displacement v: 258.7px at -125.7°
+  Range: 352m → proximity: 1.33x
+  Lead y: 552.2px at 54.3° (base: 0.86, factor: 1.13)
+  Direction check: v=-125.7°, y=54.3° (should be ~180° apart)
+  Angular: 55.22° traverse needed
+  Traverse limit: 51.3°/s → min duration: 1292ms
+  Duration: 1292ms (urgency: 0.22)
+  Mouse sensitivity: 1.0x
+  Mouse: (1091, 893) → (1413, 1341)
+  Mouse delta: (322, 448)
+  Pre-correction delay: 100ms, engagement delay: 3ms
+Auto-correction complete (took 1.41s)
+
+result: correction started too late, too slow response, overshoot
+
+case3:
+Auto-correction started:
+  Displacement v: 152.8px at -127.0°
+  Range: 352m → proximity: 1.33x
+  Lead y: 314.7px at 53.0° (base: 0.80, factor: 1.06)
+  Direction check: v=-127.0°, y=53.0° (should be ~180° apart)
+  Angular: 31.47° traverse needed
+  Traverse limit: 51.3°/s → min duration: 736ms
+  Duration: 736ms (urgency: 0.13)
+  Mouse sensitivity: 1.0x
+  Mouse: (1617, 957) → (1806, 1208)
+  Mouse delta: (189, 251)
+  Pre-correction delay: 100ms, engagement delay: 2ms
+Auto-correction complete (took 0.80s)
+
+result: premature correction, undershoot
+
+case4:
+Auto-correction started:
+  Displacement v: 149.3px at -176.5°
+  Range: 352m → proximity: 1.33x
+  Lead y: 363.2px at 3.5° (base: 1.08, factor: 1.43)
+  Direction check: v=-176.5°, y=3.5° (should be ~180° apart)
+  Angular: 36.32° traverse needed
+  Traverse limit: 51.3°/s → min duration: 850ms
+  Duration: 850ms (urgency: 0.16)
+  Mouse sensitivity: 1.0x
+  Mouse: (2224, 986) → (2587, 1008)
+  Mouse delta: (363, 22)
+  Pre-correction delay: 100ms, engagement delay: 2ms
+Auto-correction complete (took 0.93s)
+
+result:decent correction speed, miss
+
+case5:
+Auto-correction started:
+  Displacement v: 172.8px at -48.3°
+  Range: 352m → proximity: 1.33x
+  Lead y: 259.2px at 131.7° (base: 0.36, factor: 0.50)
+  Direction check: v=-48.3°, y=131.7° (should be ~180° apart)
+  Angular: 25.92° traverse needed
+  Traverse limit: 51.3°/s → min duration: 606ms
+  Duration: 606ms (urgency: 0.09)
+  Mouse sensitivity: 1.0x
+  Mouse: (1256, 841) → (1084, 1034)
+  Mouse delta: (-172, 193)
+  Pre-correction delay: 100ms, engagement delay: 3ms
+Auto-correction complete (took 0.68s)
+
+result: decent correction speed, miss
+
+range in-game: 155
+range set: 155
+
+case 1:
+Auto-correction started:
+  Displacement v: 89.9px at -48.2°
+  Range: 155m → proximity: 2.78x
+  Lead y: 168.5px at 131.8° (base: 0.31, factor: 0.87)
+  Direction check: v=-48.2°, y=131.8° (should be ~180° apart)
+  Angular: 16.85° traverse needed
+  Traverse limit: 51.3°/s → min duration: 394ms
+  Duration: 394ms (urgency: 0.05)
+  Mouse sensitivity: 1.0x
+  Mouse: (374, 975) → (262, 1100)
+  Mouse delta: (-112, 125)
+  Pre-correction delay: 100ms, engagement delay: 1ms
+Auto-correction complete (took 0.45s)
+
+result: premature correction, undershoot
+
+case2:
+Auto-correction started:
+  Displacement v: 59.2px at -94.8°
+  Range: 155m → proximity: 2.78x
+  Lead y: 151.5px at 85.2° (base: 0.56, factor: 1.56)
+  Direction check: v=-94.8°, y=85.2° (should be ~180° apart)
+  Angular: 15.15° traverse needed
+  Traverse limit: 51.3°/s → min duration: 354ms
+  Duration: 354ms (urgency: 0.04)
+  Mouse sensitivity: 1.0x
+  Mouse: (1670, 1370) → (1683, 1521)
+  Mouse delta: (13, 151)
+  Pre-correction delay: 100ms, engagement delay: 1ms
+Auto-correction complete (took 0.39s)
+
+result: premature correction, undershoot
+
+case3:
+Auto-correction started:
+  Displacement v: 100.2px at -4.0°
+  Range: 155m → proximity: 2.78x
+  Lead y: 150.4px at 176.0° (base: 0.07, factor: 0.50)
+  Direction check: v=-4.0°, y=176.0° (should be ~180° apart)
+  Angular: 15.04° traverse needed
+  Traverse limit: 51.3°/s → min duration: 352ms
+  Duration: 352ms (urgency: 0.04)
+  Mouse sensitivity: 1.0x
+  Mouse: (1235, 1117) → (1085, 1128)
+  Mouse delta: (-150, 11)
+  Pre-correction delay: 100ms, engagement delay: 2ms
+Auto-correction complete (took 0.40s)
+
+result: optimal correction, hit
+
+case4:
+Auto-correction started:
+  Displacement v: 70.2px at -131.0°
+  Range: 155m → proximity: 2.78x
+  Lead y: 220.6px at 49.0° (base: 0.77, factor: 2.14)
+  Direction check: v=-131.0°, y=49.0° (should be ~180° apart)
+  Angular: 22.06° traverse needed
+  Traverse limit: 51.3°/s → min duration: 516ms
+  Duration: 516ms (urgency: 0.06)
+  Mouse sensitivity: 1.0x
+  Mouse: (1218, 1353) → (1363, 1520)
+  Mouse delta: (145, 167)
+  Pre-correction delay: 100ms, engagement delay: 1ms
+Auto-correction complete (took 0.66s)
+
+result: close correction, close call
+
+case5:
+Auto-correction started:
+  Displacement v: 53.0px at -92.2°
+  Range: 155m → proximity: 2.78x
+  Lead y: 133.0px at 87.8° (base: 0.54, factor: 1.51)
+  Direction check: v=-92.2°, y=87.8° (should be ~180° apart)
+  Angular: 13.30° traverse needed
+  Traverse limit: 51.3°/s → min duration: 311ms
+  Duration: 311ms (urgency: 0.04)
+  Mouse sensitivity: 1.0x
+  Mouse: (1043, 877) → (1048, 1010)
+  Mouse delta: (5, 133)
+  Pre-correction delay: 100ms, engagement delay: 1ms
+Auto-correction complete (took 0.38s)
+
+result: decent correction, hit
+
+
+
+range in-game: 70
+range set: 70
+
+case 1:
+Auto-correction started:
+  Displacement v: 85.6px at -132.6°
+  Range: 155m → proximity: 2.78x
+  Lead y: 273.7px at 47.4° (base: 0.79, factor: 2.20)
+  Direction check: v=-132.6°, y=47.4° (should be ~180° apart)
+  Angular: 27.37° traverse needed
+  Traverse limit: 51.3°/s → min duration: 640ms
+  Duration: 640ms (urgency: 0.07)
+  Mouse sensitivity: 1.0x
+  Mouse: (2274, 1218) → (2459, 1419)
+  Mouse delta: (185, 201)
+  Pre-correction delay: 100ms, engagement delay: 1ms
+Auto-correction complete (took 0.70s)
+
+result: Correction: late engagement; Speed of correction: too slow; Target hit: NO
+
+case2:
+Auto-correction started:
+  Displacement v: 82.2px at -131.1°
+  Range: 155m → proximity: 2.78x
+  Lead y: 260.2px at 48.9° (base: 0.78, factor: 2.17)
+  Direction check: v=-131.1°, y=48.9° (should be ~180° apart)
+  Angular: 26.02° traverse needed
+  Traverse limit: 51.3°/s → min duration: 609ms
+  Duration: 609ms (urgency: 0.07)
+  Mouse sensitivity: 1.0x
+  Mouse: (1413, 869) → (1584, 1065)
+  Mouse delta: (171, 196)
+  Pre-correction delay: 100ms, engagement delay: 1ms
+Auto-correction complete (took 0.66s)
+
+result: Correction: optimal engagement; Speed of correction: optimal; Target hit: YES
+
+case3:
+Auto-correction started:
+  Displacement v: 118.6px at -143.2°
+  Range: 155m → proximity: 2.78x
+  Lead y: 405.6px at 36.8° (base: 0.87, factor: 2.42)
+  Direction check: v=-143.2°, y=36.8° (should be ~180° apart)
+  Angular: 40.56° traverse needed
+  Traverse limit: 51.3°/s → min duration: 949ms
+  Duration: 949ms (urgency: 0.11)
+  Mouse sensitivity: 1.0x
+  Mouse: (1589, 1195) → (1914, 1438)
+  Mouse delta: (325, 243)
+  Pre-correction delay: 100ms, engagement delay: 2ms
+Auto-correction complete (took 1.04s)
+
+result: Correction: late engagement; Speed of correction: too slow; Target hit: NO
+
+case4:
+Auto-correction started:
+  Displacement v: 66.5px at -173.1°
+  Range: 200m → proximity: 2.22x
+  Lead y: 215.1px at 6.9° (base: 1.01, factor: 2.23)
+  Direction check: v=-173.1°, y=6.9° (should be ~180° apart)
+  Angular: 21.51° traverse needed
+  Traverse limit: 51.3°/s → min duration: 503ms
+  Duration: 503ms (urgency: 0.07)
+  Mouse sensitivity: 1.0x
+  Mouse: (2192, 1417) → (2406, 1443)
+  Mouse delta: (214, 26)
+  Pre-correction delay: 100ms, engagement delay: 1ms
+Auto-correction complete (took 0.60s)
+
+result: Correction: optimal engagement; Speed of correction: too slow; Target hit: NO
+
+case5:
+Auto-correction started:
+  Displacement v: 93.4px at -167.0°
+  Range: 200m → proximity: 2.22x
+  Lead y: 298.7px at 13.0° (base: 0.99, factor: 2.20)
+  Direction check: v=-167.0°, y=13.0° (should be ~180° apart)
+  Angular: 29.87° traverse needed
+  Traverse limit: 51.3°/s → min duration: 699ms
+  Duration: 699ms (urgency: 0.09)
+  Mouse sensitivity: 1.0x
+  Mouse: (1627, 1276) → (1918, 1343)
+  Mouse delta: (291, 67)
+  Pre-correction delay: 100ms, engagement delay: 1ms
+Auto-correction complete (took 0.76s)
+
+result: Correction: correct engagement; Speed of correction: too slow; Target hit: NO
+
+case6:
+Auto-correction started:
+  Displacement v: 51.2px at -95.6°
+  Range: 200m → proximity: 2.22x
+  Lead y: 115.1px at 84.4° (base: 0.56, factor: 1.25)
+  Direction check: v=-95.6°, y=84.4° (should be ~180° apart)
+  Angular: 11.51° traverse needed
+  Traverse limit: 51.3°/s → min duration: 269ms
+  Duration: 289ms (urgency: 0.04)
+  Mouse sensitivity: 1.0x
+  Mouse: (2235, 1188) → (2246, 1303)
+  Mouse delta: (11, 115)
+  Pre-correction delay: 100ms, engagement delay: 1ms
+Auto-correction complete (took 0.31s)
+
+result: Correction: premature engagement; Speed of correction: optimal; Target hit: YES
+
+
+range in-game: 155
+range set: 155
+
+case 1:
+Auto-correction started:
+  Displacement v: 80.0px at -126.9°
+  Range: 158m → proximity: 2.74x
+  Lead y: 245.1px at 53.1° (base: 0.75, factor: 2.06)
+  Direction check: v=-126.9°, y=53.1° (should be ~180° apart)
+  Angular: 24.51° traverse needed
+  Traverse limit: 51.3°/s → min duration: 573ms
+  Duration: 573ms (urgency: 0.07)
+  Mouse sensitivity: 1.0x
+  Mouse: (1381, 1374) → (1528, 1570)
+  Mouse delta: (147, 196)
+  Pre-correction delay: 100ms, engagement delay: 1ms
+Auto-correction complete (took 0.63s)
+
+result: Correction: premature engagement; Speed of correction: too slow; Target hit: NO
+
+case2:
+Auto-correction started:
+  Displacement v: 135.1px at -26.4°
+  Range: 158m → proximity: 2.74x
+  Lead y: 213.8px at 153.6° (base: 0.21, factor: 0.58)
+  Direction check: v=-26.4°, y=153.6° (should be ~180° apart)
+  Angular: 21.38° traverse needed
+  Traverse limit: 51.3°/s → min duration: 500ms
+  Duration: 500ms (urgency: 0.06)
+  Mouse sensitivity: 1.0x
+  Mouse: (1138, 1355) → (946, 1450)
+  Mouse delta: (-192, 95)
+  Pre-correction delay: 100ms, engagement delay: 2ms
+Auto-correction complete (took 0.55s)
+
+result: Correction: correct engagement; Speed of correction: correct; Target hit: YES
+
+case3:
+Auto-correction started:
+  Displacement v: 138.1px at -82.9°
+  Range: 158m → proximity: 2.74x
+  Lead y: 341.3px at 97.1° (base: 0.54, factor: 1.47)
+  Direction check: v=-82.9°, y=97.1° (should be ~180° apart)
+  Angular: 34.13° traverse needed
+  Traverse limit: 51.3°/s → min duration: 798ms
+  Duration: 798ms (urgency: 0.09)
+  Mouse sensitivity: 1.0x
+  Mouse: (1213, 1169) → (1171, 1508)
+  Mouse delta: (-42, 339)
+  Pre-correction delay: 100ms, engagement delay: 2ms
+Auto-correction complete (took 0.87s)
+
+result: Correction: correct engagement; Speed of correction: correct; Target hit: YES
+
+case4:
+Auto-correction started:
+  Displacement v: 151.2px at -93.0°
+  Range: 158m → proximity: 2.74x
+  Lead y: 400.9px at 87.0° (base: 0.60, factor: 1.65)
+  Direction check: v=-93.0°, y=87.0° (should be ~180° apart)
+  Angular: 40.09° traverse needed
+  Traverse limit: 51.3°/s → min duration: 938ms
+  Duration: 938ms (urgency: 0.11)
+  Mouse sensitivity: 1.0x
+  Mouse: (1185, 1268) → (1206, 1668)
+  Mouse delta: (21, 400)
+  Pre-correction delay: 100ms, engagement delay: 2ms
+Auto-correction complete (took 1.03s)
+
+result: Correction: optimal engagement; Speed of correction: slow; Target hit: NO
+
+case5:
+Auto-correction started:
+  Displacement v: 128.1px at -88.2°
+  Range: 155m → proximity: 2.77x
+  Lead y: 327.5px at 91.8° (base: 0.56, factor: 1.56)
+  Direction check: v=-88.2°, y=91.8° (should be ~180° apart)
+  Angular: 32.75° traverse needed
+  Traverse limit: 51.3°/s → min duration: 766ms
+  Duration: 766ms (urgency: 0.09)
+  Mouse sensitivity: 1.0x
+  Mouse: (1429, 791) → (1419, 1118)
+  Mouse delta: (-10, 327)
+  Pre-correction delay: 100ms, engagement delay: 2ms
+Auto-correction complete (took 0.85s)
+
+result: Correction: optimal engagement; Speed of correction: slow; Total missile travel distance before impact: 214m; Nature: overshoot; Target hit: NO
+
+
+
+
+range in-game: 155
+range set: 155
+
+case 1:
+Auto-correction started:
+  Displacement v: 87.0px at -91.3°
+  Range: 155m → proximity: 2.77x
+  Lead y: 221.2px at 88.7° (base: 0.56, factor: 1.54)
+  Direction check: v=-91.3°, y=88.7° (should be ~180° apart)
+  Angular: 22.12° traverse needed
+  Traverse limit: 51.3°/s → min duration: 518ms
+  Duration: 518ms (urgency: 0.06)
+  Mouse sensitivity: 1.0x
+  Mouse: (1150, 705) → (1155, 926)
+  Mouse delta: (5, 221)
+  Pre-correction delay: 100ms, engagement delay: 1ms
+Auto-correction complete (took 0.56s)
+
+result: Correction: optimal engagement; Speed of correction: slow; Total missile travel distance before impact: 132m; Nature: undershoot; Target hit: NO
+
+case2:
+Auto-correction started:
+  Displacement v: 120.8px at -24.4°
+  Range: 155m → proximity: 2.77x
+  Lead y: 186.0px at 155.6° (base: 0.19, factor: 0.54)
+  Direction check: v=-24.4°, y=155.6° (should be ~180° apart)
+  Angular: 18.60° traverse needed
+  Traverse limit: 51.3°/s → min duration: 435ms
+  Duration: 435ms (urgency: 0.05)
+  Mouse sensitivity: 1.0x
+  Mouse: (1168, 1231) → (999, 1308)
+  Mouse delta: (-169, 77)
+  Pre-correction delay: 100ms, engagement delay: 2ms
+Auto-correction complete (took 0.47s)
+
+result: Correction: optimal engagement; Speed of correction: optimal; Total missile travel distance before impact: 155m; Nature: hit; Target hit: YES
+
+case3:
+Auto-correction started:
+  Displacement v: 86.0px at -109.7°
+  Range: 155m → proximity: 2.77x
+  Lead y: 243.4px at 70.3° (base: 0.66, factor: 1.83)
+  Direction check: v=-109.7°, y=70.3° (should be ~180° apart)
+  Angular: 24.34° traverse needed
+  Traverse limit: 51.3°/s → min duration: 569ms
+  Duration: 569ms (urgency: 0.07)
+  Mouse sensitivity: 1.0x
+  Mouse: (1266, 1287) → (1348, 1516)
+  Mouse delta: (82, 229)
+  Pre-correction delay: 100ms, engagement delay: 1ms
+Auto-correction complete (took 0.63s)
+
+result: Correction: premature engagement; Speed of correction: slow; Total missile travel distance before impact:137m; Nature:undershoot; Target hit: NO
+
+case4:
+Auto-correction started:
+  Displacement v: 179.1px at -88.1°
+  Range: 155m → proximity: 2.77x
+  Lead y: 472.0px at 91.9° (base: 0.59, factor: 1.64)
+  Direction check: v=-88.1°, y=91.9° (should be ~180° apart)
+  Angular: 47.20° traverse needed
+  Traverse limit: 51.3°/s → min duration: 1104ms
+  Duration: 1104ms (urgency: 0.13)
+  Mouse sensitivity: 1.0x
+  Mouse: (1332, 811) → (1316, 1283)
+  Mouse delta: (-16, 472)
+  Pre-correction delay: 100ms, engagement delay: 3ms
+Auto-correction complete (took 1.20s)
+
+result: Correction: late engagement; Speed of correction: slow; Total missile travel distance before impact:259m; Nature:overshoot; Target hit: NO
+
+case5:
+Auto-correction started:
+  Displacement v: 112.3px at -85.9°
+  Range: 155m → proximity: 2.77x
+  Lead y: 280.4px at 94.1° (base: 0.54, factor: 1.50)
+  Direction check: v=-85.9°, y=94.1° (should be ~180° apart)
+  Angular: 28.04° traverse needed
+  Traverse limit: 51.3°/s → min duration: 656ms
+  Duration: 656ms (urgency: 0.08)
+  Mouse sensitivity: 1.0x
+  Mouse: (1086, 1283) → (1066, 1563)
+  Mouse delta: (-20, 280)
+  Pre-correction delay: 100ms, engagement delay: 2ms
+Auto-correction complete (took 0.72s)
+
+result: Correction: late engagement; Speed of correction: slow; Total missile travel distance before impact:237m; Nature:overshoot; Target hit: NO; Vector y: too short
+
+
+
+range in-game: 70
+range set: 70
+
+case1:
+Auto-correction started:
+  Displacement v: 131.8px at -170.4°
+  Range: 70m → proximity: 5.26x
+  Lead y: 849.2px at 9.6° (base: 1.03, factor: 5.44)
+  Direction check: v=-170.4°, y=9.6° (should be ~180° apart)
+  Angular: 84.92° traverse needed
+  Traverse limit: 51.3°/s → min duration: 1986ms
+  Duration: 1986ms (urgency: 0.13)
+  Mouse sensitivity: 1.0x
+  Mouse: (1385, 805) → (2222, 947)
+  Mouse delta: (837, 142)
+  Pre-correction delay: 100ms, engagement delay: 2ms
+Auto-correction complete (took 2.17s)
+result: Correction: optimal engagement; Speed of correction: too slow; Total in-game missile travel distance before impact:120m; Nature:overshoot; Target hit: NO; Vector y: unknown
+
+case2:
+Auto-correction started:
+  Displacement v: 116.3px at -168.6°
+  Range: 70m → proximity: 5.26x
+  Lead y: 736.5px at 11.4° (base: 1.01, factor: 5.33)
+  Direction check: v=-168.6°, y=11.4° (should be ~180° apart)
+  Angular: 73.65° traverse needed
+  Traverse limit: 51.3°/s → min duration: 1723ms
+  Duration: 1723ms (urgency: 0.12)
+  Mouse sensitivity: 1.0x
+  Mouse: (1290, 1065) → (2012, 1211)
+  Mouse delta: (722, 146)
+  Pre-correction delay: 100ms, engagement delay: 2ms
+Auto-correction complete (took 1.87s)
+result: Correction: optimal engagement; Speed of correction: too slow; Total in-game missile travel distance before impact:140m; Nature:overshoot; Target hit: NO; Vector y: unknown
+
+case3:
+Auto-correction started:
+  Displacement v: 86.6px at 96.6°
+  Range: 70m → proximity: 5.26x
+  Lead y: 353.8px at 276.6° (base: 0.59, factor: 3.09)
+  Direction check: v=96.6°, y=276.6° (should be ~180° apart)
+  Angular: 35.38° traverse needed
+  Traverse limit: 51.3°/s → min duration: 828ms
+  Duration: 828ms (urgency: 0.06)
+  Mouse sensitivity: 1.0x
+  Mouse: (445, 1117) → (486, 766)
+  Mouse delta: (41, -351)
+  Pre-correction delay: 100ms, engagement delay: 1ms
+Auto-correction complete (took 0.90s)
+result: Correction: optimal engagement; Speed of correction: slow; Total in-game missile travel distance before impact:70m; Nature:hit; Target hit: YES; Vector y: long
+
+case4:
+Auto-correction started:
+  Displacement v: 67.4px at -96.0°
+  Range: 70m → proximity: 5.26x
+  Lead y: 270.1px at 84.0° (base: 0.57, factor: 3.01)
+  Direction check: v=-96.0°, y=84.0° (should be ~180° apart)
+  Angular: 27.01° traverse needed
+  Traverse limit: 51.3°/s → min duration: 632ms
+  Duration: 632ms (urgency: 0.05)
+  Mouse sensitivity: 1.0x
+  Mouse: (1211, 1243) → (1239, 1512)
+  Mouse delta: (28, 269)
+  Pre-correction delay: 100ms, engagement delay: 1ms
+Auto-correction complete (took 0.70s)
+result: Correction: optimal engagement; Speed of correction: slow; Total in-game missile travel distance before impact:70m; Nature:hit; Target hit: YES; Vector y: long
+
+case5:
+Auto-correction started:
+  Displacement v: 93.0px at 154.5°
+  Range: 70m → proximity: 5.26x
+  Lead y: 542.7px at 334.5° (base: 0.92, factor: 4.83)
+  Direction check: v=154.5°, y=334.5° (should be ~180° apart)
+  Angular: 54.27° traverse needed
+  Traverse limit: 51.3°/s → min duration: 1269ms
+  Duration: 1269ms (urgency: 0.09)
+  Mouse sensitivity: 1.0x
+  Mouse: (1150, 1083) → (1640, 850)
+  Mouse delta: (490, -233)
+  Pre-correction delay: 100ms, engagement delay: 1ms
+Auto-correction complete (took 1.40s)
+result: Correction: optimal engagement; Speed of correction: too slow; Total in-game missile travel distance before impact:68m; Nature:undershoot; Target hit: NO; Vector y: long
+
+case6:
+Auto-correction started:
+  Displacement v: 81.1px at -129.0°
+  Range: 70m → proximity: 5.26x
+  Lead y: 407.9px at 51.0° (base: 0.77, factor: 4.03)
+  Direction check: v=-129.0°, y=51.0° (should be ~180° apart)
+  Angular: 40.79° traverse needed
+  Traverse limit: 51.3°/s → min duration: 954ms
+  Duration: 954ms (urgency: 0.07)
+  Mouse sensitivity: 1.0x
+  Mouse: (1736, 670) → (1993, 987)
+  Mouse delta: (257, 317)
+  Pre-correction delay: 100ms, engagement delay: 1ms
+Auto-correction complete (took 1.04s)
+result: Correction: optimal engagement; Speed of correction: optimal; Total in-game missile travel distance before impact:70m; Nature:hit; Target hit: YES; Vector y: long
+
+case7:
+Auto-correction started:
+  Displacement v: 50.6px at -119.6°
+  Range: 70m → proximity: 5.26x
+  Lead y: 235.7px at 60.4° (base: 0.69, factor: 3.66)
+  Direction check: v=-119.6°, y=60.4° (should be ~180° apart)
+  Angular: 23.57° traverse needed
+  Traverse limit: 51.3°/s → min duration: 551ms
+  Duration: 551ms (urgency: 0.04)
+  Mouse sensitivity: 1.0x
+  Mouse: (1846, 1380) → (1962, 1585)
+  Mouse delta: (116, 205)
+  Pre-correction delay: 100ms, engagement delay: 1ms
+Auto-correction complete (took 0.71s)
+result: Correction: optimal engagement; Speed of correction: optimal; Total in-game missile travel distance before impact:70m; Nature:hit; Target hit: YES; Vector y: optimal
+
+
+range in-game: 155m
+range set: 70m
+
+case1:
+Auto-correction started:
+  Displacement v: 109.2px at -37.2°
+  Range: 70m → proximity: 5.26x
+  Lead y: 259.5px at 142.8° (base: 0.26, factor: 1.38)
+  Direction check: v=-37.2°, y=142.8° (should be ~180° apart)
+  Angular: 25.95° traverse needed
+  Traverse limit: 51.3°/s → min duration: 607ms
+  Duration: 607ms (urgency: 0.05)
+  Mouse sensitivity: 1.0x
+  Mouse: (239, 1365) → (32, 1522)
+  Mouse delta: (-207, 157)
+  Pre-correction delay: 100ms, engagement delay: 2ms
+Auto-correction complete (took 0.67s)
+result: Correction: premature engagement; Speed of correction: too slow; Total in-game missile travel distance before impact:145m; Nature:underestimation; Target hit: NO; Vector y: optimal
+
+case2:
+Auto-correction started:
+  Displacement v: 69.8px at -25.5°
+  Range: 70m → proximity: 5.26x
+  Lead y: 134.3px at 154.5° (base: 0.18, factor: 0.92)
+  Direction check: v=-25.5°, y=154.5° (should be ~180° apart)
+  Angular: 13.43° traverse needed
+  Traverse limit: 51.3°/s → min duration: 314ms
+  Duration: 314ms (urgency: 0.03)
+  Mouse sensitivity: 1.0x
+  Mouse: (1666, 974) → (1545, 1032)
+  Mouse delta: (-121, 58)
+  Pre-correction delay: 100ms, engagement delay: 1ms
+Auto-correction complete (took 0.34s)
+result: Correction: optimal engagement; Speed of correction: optimal; Total in-game missile travel distance before impact:155m; Nature:hit; Target hit: YES; Vector y: optimal, t(end of movement) at o
+
+case3:
+Auto-correction started:
+  Displacement v: 132.4px at -85.7°
+  Range: 70m → proximity: 5.26x
+  Lead y: 515.7px at 94.3° (base: 0.55, factor: 2.90)
+  Direction check: v=-85.7°, y=94.3° (should be ~180° apart)
+  Angular: 51.57° traverse needed
+  Traverse limit: 51.3°/s → min duration: 1206ms
+  Duration: 1206ms (urgency: 0.09)
+  Mouse sensitivity: 1.0x
+  Mouse: (282, 1306) → (243, 1820)
+  Mouse delta: (-39, 514)
+  Pre-correction delay: 100ms, engagement delay: 2ms
+Auto-correction complete (took 1.32s)
+result: Correction: optimal engagement; Speed of correction: too slow; Total in-game missile travel distance before impact:250m; Nature:overshoot; Target hit:NO; Vector y:long, past o;
+
+case4:
+Auto-correction started:
+  Displacement v: 87.0px at -127.5°
+  Range: 70m → proximity: 5.26x
+  Lead y: 435.7px at 52.5° (base: 0.76, factor: 4.01)
+  Direction check: v=-127.5°, y=52.5° (should be ~180° apart)
+  Angular: 43.57° traverse needed
+  Traverse limit: 51.3°/s → min duration: 1019ms
+  Duration: 1019ms (urgency: 0.07)
+  Mouse sensitivity: 1.0x
+  Mouse: (1415, 817) → (1680, 1163)
+  Mouse delta: (265, 346)
+  Pre-correction delay: 100ms, engagement delay: 1ms
+Auto-correction complete (took 1.11s)
+result: Correction: premature engagement; Speed of correction: slow; Total in-game missile travel distance before impact:125m; Nature:undershoot; Target hit:NO; Vector y:long, past o;
+
+case5:
+Auto-correction started:
+  Displacement v: 73.8px at -15.7°
+  Range: 70m → proximity: 5.26x
+  Lead y: 121.4px at 164.3° (base: 0.12, factor: 0.65)
+  Direction check: v=-15.7°, y=164.3° (should be ~180° apart)
+  Angular: 12.14° traverse needed
+  Traverse limit: 51.3°/s → min duration: 284ms
+  Duration: 291ms (urgency: 0.03)
+  Mouse sensitivity: 1.0x
+  Mouse: (1551, 645) → (1434, 678)
+  Mouse delta: (-117, 33)
+  Pre-correction delay: 100ms, engagement delay: 1ms
+Auto-correction complete (took 0.32s)
+result: Correction: optimal engagement; Speed of correction: fast; Total in-game missile travel distance before impact:NA; Nature:overshoot; Target hit:NO; Vector y:short, past o;
+
+
+
+
+
+
+range in-game: 350m
+range set: 600m
+
+case1:
+
+Auto-correction started:
+  Displacement v: 108.9px at -113.3°
+  Range: 600m → proximity: 0.95x
+  Lead y: 180.8px at 66.7° (base: 0.69, factor: 0.66)
+  Direction check: v=-113.3°, y=66.7° (should be ~180° apart)
+  Angular: 18.08° traverse needed
+  Traverse limit: 51.3°/s → min duration: 423ms
+  Duration: 423ms (urgency: 0.09)
+  Mouse sensitivity: 1.0x
+  Mouse: (1329, 859) → (1400, 1025)
+  Mouse delta: (71, 166)
+  Pre-correction delay: 100ms, engagement delay: 2ms
+Auto-correction complete (took 0.46s)
+Auto-correction complete (took 0.65s)
+
+result: Correction: premature engagement; Speed of correction: slow; Total in-game missile travel distance before impact:245m; Nature:undershoot; Target hit:NO; Vector y: past o;
+
+case2:
+Auto-correction started:
+  Displacement v: 119.0px at -90.0°
+  Range: 600m → proximity: 0.95x
+  Lead y: 183.3px at 90.0° (base: 0.57, factor: 0.54)
+  Direction check: v=-90.0°, y=90.0° (should be ~180° apart)
+  Angular: 18.33° traverse needed
+  Traverse limit: 51.3°/s → min duration: 429ms
+  Duration: 429ms (urgency: 0.08)
+  Mouse sensitivity: 1.0x
+  Mouse: (1346, 1219) → (1346, 1402)
+  Mouse delta: (0, 183)
+  Pre-correction delay: 100ms, engagement delay: 2ms
+Auto-correction complete (took 0.47s)
+result: Correction: premature engagement; Speed of correction: optimal; Total in-game missile travel distance before impact:NA; Nature:undershoot; Target hit:NO; Vector y:short;
+
+case3:
+Auto-correction started:
+  Displacement v: 145.9px at -146.7°
+  Range: 600m → proximity: 0.95x
+  Lead y: 272.0px at 33.3° (base: 0.91, factor: 0.86)
+  Direction check: v=-146.7°, y=33.3° (should be ~180° apart)
+  Angular: 27.20° traverse needed
+  Traverse limit: 51.3°/s → min duration: 636ms
+  Duration: 636ms (urgency: 0.14)
+  Mouse sensitivity: 1.0x
+  Mouse: (1334, 984) → (1561, 1133)
+  Mouse delta: (227, 149)
+  Pre-correction delay: 100ms, engagement delay: 2ms
+Auto-correction complete (took 0.71s)
+result: Correction: premature engagement; Speed of correction: fast; Total in-game missile travel distance before impact:313m; Nature:undershoot; Target hit:NO; Vector y:long, past o;
+
+case4:
+Auto-correction started:
+  Displacement v: 237.2px at -92.4°
+  Range: 600m → proximity: 0.95x
+  Lead y: 383.7px at 87.6° (base: 0.65, factor: 0.62)
+  Direction check: v=-92.4°, y=87.6° (should be ~180° apart)
+  Angular: 38.37° traverse needed
+  Traverse limit: 51.3°/s → min duration: 897ms
+  Duration: 897ms (urgency: 0.17)
+  Mouse sensitivity: 1.0x
+  Mouse: (1269, 910) → (1285, 1293)
+  Mouse delta: (16, 383)
+  Pre-correction delay: 100ms, engagement delay: 3ms
+Auto-correction complete (took 0.97s)
+result: Correction:optimal engagement; Speed of correction:moderate; Total in-game missile travel distance before impact:343m; Nature:undershoot; Target hit:NO; Vector y:long, past o;
+
+
+
+range in-game: 89m
+range set: 600m
+
+
+case1:
+Auto-correction started:
+  Displacement v: 103.5px at -138.9°
+  Range: 600m → proximity: 0.95x
+  Lead y: 185.9px at 41.1° (base: 0.84, factor: 0.80)
+  Direction check: v=-138.9°, y=41.1° (should be ~180° apart)
+  Angular: 18.59° traverse needed
+  Traverse limit: 51.3°/s → min duration: 435ms
+  Duration: 435ms (urgency: 0.09)
+  Mouse sensitivity: 1.0x
+  Mouse: (2181, 1307) → (2321, 1429)
+  Mouse delta: (140, 122)
+  Pre-correction delay: 100ms, engagement delay: 2ms
+Auto-correction complete (took 0.48s)
+result: Correction: optimal engagement; Speed of correction: fast; Total in-game missile travel distance before impact:89m; Nature:hit; Target hit:YES; Vector y:optimal, past o;
+
+
+case2:
+Auto-correction started:
+  Displacement v: 104.7px at -132.7°
+  Range: 600m → proximity: 0.95x
+  Lead y: 184.7px at 47.3° (base: 0.80, factor: 0.76)
+  Direction check: v=-132.7°, y=47.3° (should be ~180° apart)
+  Angular: 18.47° traverse needed
+  Traverse limit: 51.3°/s → min duration: 432ms
+  Duration: 432ms (urgency: 0.09)
+  Mouse sensitivity: 1.0x
+  Mouse: (1254, 977) → (1379, 1113)
+  Mouse delta: (125, 136)
+  Pre-correction delay: 100ms, engagement delay: 2ms
+Auto-correction complete (took 0.47s)
+result: Correction: optimal engagement; Speed of correction: fast; Total in-game missile travel distance before impact:89m; Nature:hit; Target hit:YES; Vector y:optimal, past o;
+
+
+case3:
+Auto-correction started:
+  Displacement v: 54.2px at -127.5°
+  Range: 600m → proximity: 0.95x
+  Lead y: 92.5px at 52.5° (base: 0.74, factor: 0.71)
+  Direction check: v=-127.5°, y=52.5° (should be ~180° apart)
+  Angular: 9.25° traverse needed
+  Traverse limit: 51.3°/s → min duration: 216ms
+  Duration: 287ms (urgency: 0.05)
+  Mouse sensitivity: 1.0x
+  Mouse: (644, 756) → (700, 829)
+  Mouse delta: (56, 73)
+  Pre-correction delay: 100ms, engagement delay: 1ms
+Auto-correction complete (took 0.31s)
+result: Correction: optimal engagement; Speed of correction: fast; Total in-game missile travel distance before impact:89m; Nature:hit; Target hit:YES; Vector y:optimal, past o;
+
+
+case4:
+Auto-correction started:
+  Displacement v: 114.4px at -175.5°
+  Range: 600m → proximity: 0.95x
+  Lead y: 228.8px at 4.5° (base: 1.05, factor: 1.00)
+  Direction check: v=-175.5°, y=4.5° (should be ~180° apart)
+  Angular: 22.88° traverse needed
+  Traverse limit: 51.3°/s → min duration: 535ms
+  Duration: 535ms (urgency: 0.12)
+  Mouse sensitivity: 1.0x
+  Mouse: (883, 985) → (1111, 1003)
+  Mouse delta: (228, 18)
+  Pre-correction delay: 100ms, engagement delay: 2ms
+Auto-correction complete (took 0.58s)
+result: Correction: optimal engagement; Speed of correction: moderate; Total in-game missile travel distance before impact:89m; Nature:hit; Target hit:YES; Vector y:long, past o;
+
+
+case5:
+Auto-correction started:
+  Displacement v: 110.4px at -137.2°
+  Range: 600m → proximity: 0.95x
+  Lead y: 197.7px at 42.8° (base: 0.83, factor: 0.79)
+  Direction check: v=-137.2°, y=42.8° (should be ~180° apart)
+  Angular: 19.77° traverse needed
+  Traverse limit: 51.3°/s → min duration: 463ms
+  Duration: 463ms (urgency: 0.10)
+  Mouse sensitivity: 1.0x
+  Mouse: (1189, 1019) → (1334, 1153)
+  Mouse delta: (145, 134)
+  Pre-correction delay: 100ms, engagement delay: 2ms
+Auto-correction complete (took 0.51s)
+result: Correction: optimal engagement; Speed of correction: moderate; Total in-game missile travel distance before impact:89m; Nature:hit; Target hit:YES; Vector y:optimal, past o;
+
+
+case6:
+Auto-correction started:
+  Displacement v: 117.0px at -67.4°
+  Range: 600m → proximity: 0.95x
+  Lead y: 175.5px at 112.6° (base: 0.44, factor: 0.50)
+  Direction check: v=-67.4°, y=112.6° (should be ~180° apart)
+  Angular: 17.55° traverse needed
+  Traverse limit: 51.3°/s → min duration: 411ms
+  Duration: 411ms (urgency: 0.07)
+  Mouse sensitivity: 1.0x
+  Mouse: (1125, 670) → (1058, 832)
+  Mouse delta: (-68, 162)
+  Pre-correction delay: 100ms, engagement delay: 2ms
+Auto-correction complete (took 0.45s)
+result: Correction: optimal engagement; Speed of correction: moderate; Total in-game missile travel distance before impact:89m; Nature:hit; Target hit:YES; Vector y:optimal, past o;
+
+
+
+
+
+
+
+###TEMPLATE###
+
+range in-game: 
+range set: 
+
+
+case1:
+
+result: Correction:; Speed of correction:; Total in-game missile travel distance before impact:; Nature:; Target hit:; Vector y:;
+
+
+case2:
+
+result: Correction:; Speed of correction:; Total in-game missile travel distance before impact:; Nature:; Target hit:; Vector y:;
+
+
+case3:
+
+result: Correction:; Speed of correction:; Total in-game missile travel distance before impact:; Nature:; Target hit:; Vector y:;
+
+
+case4:
+
+result: Correction:; Speed of correction:; Total in-game missile travel distance before impact:; Nature:; Target hit:; Vector y:;
+
+
+case5:
+
+result: Correction:; Speed of correction:; Total in-game missile travel distance before impact:; Nature:; Target hit:; Vector y:;
