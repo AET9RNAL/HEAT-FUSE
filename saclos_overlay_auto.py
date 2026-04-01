@@ -24,6 +24,7 @@ from tkinter import filedialog, messagebox
 from collections import deque
 import threading
 import time
+import traceback
 
 try:
     from PIL import Image, ImageTk
@@ -99,6 +100,14 @@ class SACLOSOverlay:
         self.target_range_m = 200.0  # Range to target in meters (user-configured)
         self.correction_min_threshold_px = 5.0  # Minimum displacement to trigger correction
         self.pre_correction_delay_ms = 150  # Delay before starting correction (lets clicks complete)
+
+        # ML-assisted correction
+        self.ml_enabled = False       # Set via --ml flag
+        self.ml_confidence_threshold = 0.3  # Minimum confidence to use ML prediction
+        self.ml_online_learning = True  # Save ML predictions that result in hits
+        self.learner = None           # CorrectionLearner instance (lazy-loaded)
+        self._ml_awaiting_label = False  # Online learning: waiting for HIT/DISCARD
+        self._ml_last_context = None    # Online learning: last prediction context
 
         # Turret/vehicle traverse limits (critical for realistic guidance)
         self.turret_traverse_speed_deg_s = 51.3  # Maximum turret rotation speed in degrees/second
@@ -271,6 +280,10 @@ class SACLOSOverlay:
             "urgency_k": self.urgency_k,
             "base_engagement_delay_s": self.base_engagement_delay_s,
             "base_duration_ms": self.base_duration_ms,
+            # ML settings
+            "ml_enabled": self.ml_enabled,
+            "ml_confidence_threshold": self.ml_confidence_threshold,
+            "ml_online_learning": getattr(self, 'ml_online_learning', True),
         }
         try:
             config_path = self._get_config_path()
@@ -331,6 +344,21 @@ class SACLOSOverlay:
             self.urgency_k = config.get("urgency_k", 2.0)
             self.base_engagement_delay_s = config.get("base_engagement_delay_s", 0.05)
             self.base_duration_ms = config.get("base_duration_ms", 300.0)
+
+            # ML settings
+            self.ml_enabled = config.get("ml_enabled", False)
+            self.ml_confidence_threshold = config.get("ml_confidence_threshold", 0.3)
+            self.ml_online_learning = config.get("ml_online_learning", True)
+            if self.ml_enabled and self.learner is None:
+                try:
+                    from saclos_trainer import CorrectionLearner
+                    self.learner = CorrectionLearner()
+                    stats = self.learner.get_stats()
+                    print(f"  ML loaded: {stats['total']} samples "
+                          f"({stats['hits']} hits, {stats['misses']} misses)")
+                except Exception as e:
+                    print(f"  ML load failed: {e}")
+                    self.ml_enabled = False
 
             # Apply calibrated position if we have it
             if self.calibrated_x is not None and self.calibrated_y is not None:
@@ -1167,6 +1195,10 @@ class SACLOSOverlay:
         This calculates lead point t and generates smooth mouse movements that will
         create the crosshair motion needed for missile intercept.
 
+        Supports two modes:
+        - Formula mode (default): Uses physics-based heuristic formula
+        - ML mode (--ml): Uses KNN regression on recorded human guidance data
+
         Args:
             distance_px: Current displacement distance (d)
             angle_rad: Current displacement angle (n)
@@ -1174,8 +1206,11 @@ class SACLOSOverlay:
         if self.correction_active:
             return  # Already correcting
 
-        # Calculate correction parameters (includes lead calculation)
-        params = self._calculate_correction_params(distance_px, angle_rad)
+        # Clear any stale online learning prompt (auto-discard if new cycle starts)
+        if getattr(self, '_ml_awaiting_label', False):
+            print("  DISCARDED  (new cycle started)")
+        self._ml_awaiting_label = False
+        self._ml_last_context = None
 
         # Get current mouse position
         if not PYNPUT_OK:
@@ -1191,37 +1226,79 @@ class SACLOSOverlay:
             self._reset_to_calibrated_position()
             return
 
-        # Calculate target mouse position using lead parameters
-        # lead_distance_px and lead_angle_rad define vector y (from x to lead point t)
-        # This is in screen coordinate system, relative to current mouse position
+        # ---- Try ML prediction first ----
+        ml_used = False
+        if self.ml_enabled and self.learner is not None:
+            try:
+                ml_trajectory, confidence = self.learner.predict(
+                    distance_px, angle_rad, self.target_range_m
+                )
+                if confidence >= self.ml_confidence_threshold and ml_trajectory is not None:
+                    ml_used = True
 
-        # Convert polar (lead_distance, lead_angle) to Cartesian (mouse_dx, mouse_dy)
-        # The lead angle is in overlay coordinate system, need to apply to mouse
+                    total_dx = sum(p['dx'] for p in ml_trajectory)
+                    total_dy = sum(p['dy'] for p in ml_trajectory)
+                    duration = ml_trajectory[-1]['t'] if ml_trajectory else 0
+
+                    stats = self.learner.get_stats()
+                    print(f"Auto-correction started [ML TRAJECTORY mode]:")
+                    print(f"  Displacement v: {distance_px:.1f}px at {math.degrees(angle_rad):.1f}°")
+                    print(f"  Range: {self.target_range_m:.0f}m")
+                    print(f"  ML trajectory: {len(ml_trajectory)} points, "
+                          f"dx={total_dx:.0f} dy={total_dy:.0f} dur={duration:.2f}s")
+                    print(f"  ML confidence: {confidence:.2f}  "
+                          f"(threshold: {self.ml_confidence_threshold:.2f})")
+                    print(f"  Training data: {stats['total']} samples "
+                          f"({stats['hits']} hits, {stats['misses']} misses)")
+
+                    # Store context for online learning
+                    self._ml_last_context = {
+                        'displacement_px': distance_px,
+                        'angle_rad': angle_rad,
+                        'range_m': self.target_range_m,
+                        'trajectory': ml_trajectory,
+                    }
+
+                    # Launch trajectory replay thread
+                    self.correction_active = True
+                    self.correction_interrupted.clear()
+                    self.correction_start_time = time.perf_counter()
+                    self.correction_thread = threading.Thread(
+                        target=self._ml_trajectory_thread_func,
+                        args=(ml_trajectory,),
+                        daemon=True
+                    )
+                    self.correction_thread.start()
+                    return  # Done — trajectory thread handles everything
+
+                else:
+                    if ml_trajectory is None:
+                        print(f"  ML: insufficient data, falling back to formula")
+                    else:
+                        print(f"  ML: confidence {confidence:.2f} below threshold "
+                              f"{self.ml_confidence_threshold:.2f}, falling back to formula")
+            except Exception as e:
+                print(f"  ML prediction error: {e}")
+                traceback.print_exc()
+
+        # ---- Formula fallback ----
+        params = self._calculate_correction_params(distance_px, angle_rad)
+
         mouse_dx = params['lead_distance_px'] * math.cos(params['lead_angle_rad'])
         mouse_dy = params['lead_distance_px'] * math.sin(params['lead_angle_rad'])
 
-        # Calculate target mouse position
-        # Note: This moves the mouse, which will counter-translate the overlay
-        # The overlay movement changes crosshair position, which guides the missile
         target_mouse_x = current_mouse_x + mouse_dx
         target_mouse_y = current_mouse_y + mouse_dy
 
-        # Generate smooth bezier path from current to target mouse position
         waypoints = self._generate_bezier_waypoints(
             current_mouse_x, current_mouse_y,
             target_mouse_x, target_mouse_y,
             params
         )
 
-        # Store waypoints and start correction
-        self.correction_waypoints = waypoints
-        self.correction_waypoint_index = 0
-        self.correction_active = True
-        self.correction_interrupted.clear()
-        self.correction_start_time = time.perf_counter()
+        engagement_delay_s = params['engagement_delay_s']
 
-        # Debug output
-        print(f"Auto-correction started:")
+        print(f"Auto-correction started [FORMULA mode]:")
         print(f"  Displacement v: {distance_px:.1f}px at {math.degrees(angle_rad):.1f}°")
         print(f"  Range: {self.target_range_m:.0f}m → proximity: {params['range_proximity']:.2f}x")
         print(f"  Lead y: {params['lead_distance_px']:.1f}px at {math.degrees(params['lead_angle_rad']):.1f}° (base: {params['base_lead']:.2f}, factor: {params['lead_factor']:.2f})")
@@ -1235,18 +1312,75 @@ class SACLOSOverlay:
         print(f"  Mouse delta: ({mouse_dx:.0f}, {mouse_dy:.0f})")
         print(f"  Pre-correction delay: {self.pre_correction_delay_ms}ms, engagement delay: {params['engagement_delay_s']*1000:.0f}ms")
 
-        # Run correction in a dedicated background thread
-        # CRITICAL: Using a thread instead of self.root.after() because:
-        # Tkinter's event loop is single-threaded - user clicks preempt/block
-        # the after() callbacks, halting the mouse interpolation.
-        # A background thread with time.sleep() is immune to user input events.
-        engagement_delay_s = params['engagement_delay_s']
+        # ---- Store waypoints and start formula correction ----
+        self.correction_waypoints = waypoints
+        self.correction_waypoint_index = 0
+        self.correction_active = True
+        self.correction_interrupted.clear()
+        self.correction_start_time = time.perf_counter()
+
         self.correction_thread = threading.Thread(
             target=self._correction_thread_func,
             args=(engagement_delay_s,),
             daemon=True
         )
         self.correction_thread.start()
+
+    def _ml_trajectory_thread_func(self, trajectory):
+        """
+        Replay a recorded human mouse trajectory with exact timing.
+
+        Each entry in trajectory is {'t': seconds, 'dx': pixels, 'dy': pixels}.
+        The timing preserves the original human dynamics — fast slews,
+        slow fine adjustments, pauses, etc.
+        """
+        # Fire LMB first (same as formula mode)
+        self._inject_mouse_click()
+
+        start_time = time.perf_counter()
+        cumulative_dx = 0.0
+        cumulative_dy = 0.0
+        injected_dx = 0
+        injected_dy = 0
+
+        for i, pt in enumerate(trajectory):
+            if not self.correction_active or self.correction_interrupted.is_set():
+                break
+
+            # Wait until this point's timestamp
+            target_time = start_time + pt['t']
+            now = time.perf_counter()
+            sleep_s = target_time - now
+            if sleep_s > 0.0005:  # Only sleep if > 0.5ms
+                time.sleep(sleep_s)
+
+            # Accumulate fractional deltas and inject integer steps
+            cumulative_dx += pt['dx']
+            cumulative_dy += pt['dy']
+            inject_x = int(round(cumulative_dx)) - injected_dx
+            inject_y = int(round(cumulative_dy)) - injected_dy
+
+            if inject_x != 0 or inject_y != 0:
+                try:
+                    self._inject_mouse_movement(inject_x, inject_y)
+                    injected_dx += inject_x
+                    injected_dy += inject_y
+                except Exception as e:
+                    print(f"Warning: mouse injection error: {e}")
+                    break
+
+        elapsed = time.perf_counter() - start_time
+        print(f"Auto-correction complete [ML] (took {elapsed:.2f}s, "
+              f"injected {injected_dx}dx {injected_dy}dy)")
+
+        # Online learning: prompt for HIT/DISCARD
+        if getattr(self, 'ml_online_learning', True) and hasattr(self, '_ml_last_context'):
+            ctx = self._ml_last_context
+            self._ml_awaiting_label = True
+            print()
+            print(f"  >>> Press  [1] HIT  /  [3] DISCARD  <<<")
+
+        self.root.after(0, self._finish_correction)
 
     def _correction_thread_func(self, engagement_delay_s):
         """
@@ -1313,6 +1447,29 @@ class SACLOSOverlay:
         """Called on main thread after correction thread completes."""
         self._reset_to_calibrated_position()
         self._cleanup_correction()
+
+    def _handle_ml_label_hit(self):
+        """Online learning: save the last ML prediction as a new HIT sample."""
+        ctx = getattr(self, '_ml_last_context', None)
+        if ctx is None or self.learner is None:
+            print("  Warning: no ML context to save")
+            return
+
+        try:
+            n = self.learner.add_sample(
+                ctx['displacement_px'],
+                ctx['angle_rad'],
+                ctx['range_m'],
+                ctx['trajectory'],
+                hit=True,
+            )
+            stats = self.learner.get_stats()
+            print(f"  Saved HIT  -  total {n} samples  "
+                  f"({stats['hits']} hits, {stats['misses']} misses)")
+        except Exception as e:
+            print(f"  Warning: failed to save ML sample: {e}")
+        finally:
+            self._ml_last_context = None
 
     def _inject_mouse_movement(self, dx, dy):
         """
@@ -1542,6 +1699,19 @@ class SACLOSOverlay:
 
         def on_press(key):
             try:
+                # Online learning label keys: [1] HIT, [3] DISCARD
+                if getattr(self, '_ml_awaiting_label', False):
+                    char_label = getattr(key, 'char', None)
+                    if char_label == '1':
+                        self._ml_awaiting_label = False
+                        self._handle_ml_label_hit()
+                        return
+                    elif char_label == '3':
+                        self._ml_awaiting_label = False
+                        self._ml_last_context = None
+                        print("  DISCARDED  (not saved)")
+                        return
+
                 # If waiting for tracking key setup, capture this key
                 if self.awaiting_tracking_key:
                     self.root.after(0, lambda k=key: self._set_tracking_key(k))
@@ -1999,6 +2169,13 @@ def main():
                         help="Pixel to degree conversion factor (default: 10.0, tune based on FOV)")
     parser.add_argument("--mouse-scale", type=float, default=1.0,
                         help="Mouse sensitivity scale: if correction moves cursor half expected distance, set to 2.0")
+    # ML mode
+    parser.add_argument("--ml", action="store_true",
+                        help="Enable ML-assisted correction using saclos_ml_data.json")
+    parser.add_argument("--ml-data", type=str, default="saclos_ml_data.json",
+                        help="Path to ML training data file (default: saclos_ml_data.json)")
+    parser.add_argument("--ml-confidence", type=float, default=0.3,
+                        help="Minimum ML confidence threshold to use prediction (default: 0.3)")
     args = parser.parse_args()
 
     root = tk.Tk()
@@ -2021,6 +2198,35 @@ def main():
         app.pixels_per_degree = args.pixels_per_degree
     if hasattr(args, 'mouse_scale'):
         app.mouse_sensitivity_scale = args.mouse_scale
+
+    # ML mode setup
+    if args.ml:
+        try:
+            from saclos_trainer import CorrectionLearner
+            app.ml_enabled = True
+            app.ml_confidence_threshold = args.ml_confidence
+            app.learner = CorrectionLearner(data_file=args.ml_data)
+            stats = app.learner.get_stats()
+            print()
+            print("=" * 44)
+            print("  ML-ASSISTED CORRECTION ENABLED")
+            print("=" * 44)
+            print(f"  Data file  : {args.ml_data}")
+            print(f"  Samples    : {stats['total']}  "
+                  f"({stats['hits']} hits, {stats['misses']} misses)")
+            print(f"  Confidence : ≥{args.ml_confidence:.0%} to use prediction")
+            if stats['hits'] < 3:
+                print(f"  ⚠ Need at least 3 hit samples for predictions!")
+                print(f"    Run saclos_trainer.py to collect training data.")
+            print("=" * 44)
+            print()
+        except ImportError:
+            print("ERROR: Cannot import saclos_trainer. Make sure saclos_trainer.py")
+            print("       is in the same directory as saclos_overlay_auto.py")
+            app.ml_enabled = False
+        except Exception as e:
+            print(f"ERROR loading ML data: {e}")
+            app.ml_enabled = False
 
     # Force tracking key setup if requested
     if args.setup_tracking_key:

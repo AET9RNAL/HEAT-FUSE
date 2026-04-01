@@ -46,7 +46,7 @@ from saclos_overlay_auto import SACLOSOverlay
 # ======================================================================
 
 class CorrectionLearner:
-    """Stores human-guided missile correction samples and predicts via KNN."""
+    """Stores human-guided missile correction trajectories and predicts via KNN."""
 
     def __init__(self, data_file='saclos_ml_data.json', k=5):
         self.data_file = data_file
@@ -66,20 +66,30 @@ class CorrectionLearner:
 
     def _save(self):
         with open(self.data_file, 'w') as f:
-            json.dump({'samples': self.samples}, f, indent=2)
+            json.dump({'samples': self.samples}, f, indent=1)
 
     # ---- recording ----
 
     def add_sample(self, displacement_px, angle_rad, range_m,
-                   corr_dx, corr_dy, duration_s, hit):
-        """Add one manual-guidance sample."""
+                   trajectory, hit):
+        """
+        Add one manual-guidance sample with full mouse trajectory.
+
+        trajectory: list of {'t': float, 'dx': int, 'dy': int}
+                    where t is seconds since LMB click.
+        """
+        total_dx = sum(p['dx'] for p in trajectory)
+        total_dy = sum(p['dy'] for p in trajectory)
+        duration = trajectory[-1]['t'] if trajectory else 0.0
+
         self.samples.append({
             'disp':  round(displacement_px, 1),
             'angle': round(angle_rad, 4),
             'range': round(range_m, 1),
-            'dx':    round(corr_dx, 1),
-            'dy':    round(corr_dy, 1),
-            'dur':   round(duration_s, 3),
+            'total_dx': total_dx,
+            'total_dy': total_dy,
+            'dur':   round(duration, 3),
+            'traj':  trajectory,
             'hit':   hit,
         })
         self._save()
@@ -89,18 +99,22 @@ class CorrectionLearner:
 
     def predict(self, displacement_px, angle_rad, range_m):
         """
-        KNN-weighted prediction from hit samples.
+        KNN prediction from hit samples.
 
-        Returns (corr_dx, corr_dy, duration_s, confidence)
-        or      (None,    None,    None,       0.0) if insufficient data.
+        Returns (trajectory, confidence) where trajectory is a list of
+        {'t': float, 'dx': float, 'dy': float} entries,
+        or (None, 0.0) if insufficient data.
+
+        The returned trajectory is a displacement-scaled version of the
+        nearest hit's trajectory, preserving the original timing/dynamics.
         """
-        hits = [s for s in self.samples if s['hit']]
+        hits = [s for s in self.samples if s['hit'] and s.get('traj')]
         if len(hits) < 3:
-            return None, None, None, 0.0
+            return None, 0.0
 
-        # Normalise features
-        D_SCALE = 300.0   # typical displacement range
-        R_SCALE = 500.0   # typical target-range span
+        # Normalise features for distance metric
+        D_SCALE = 300.0   # typical displacement range in px
+        R_SCALE = 500.0   # typical target-range span in m
 
         query = (
             displacement_px / D_SCALE,
@@ -121,32 +135,45 @@ class CorrectionLearner:
             distances.append((dist, i))
 
         distances.sort()
-        k = min(self.k, len(distances))
 
-        EPS = 0.001
-        w_dx = w_dy = w_dur = w_sum = 0.0
+        # Use nearest hit's full trajectory as the base
+        best_dist, best_idx = distances[0]
+        best = hits[best_idx]
+        base_traj = best['traj']
 
-        for dist, idx in distances[:k]:
-            s = hits[idx]
-            w = 1.0 / (dist + EPS)
-            w_dx  += w * s['dx']
-            w_dy  += w * s['dy']
-            w_dur += w * s['dur']
-            w_sum += w
+        # Scale the trajectory proportionally:
+        # If query displacement is 120px and best sample was 80px,
+        # scale all dx/dy by 120/80 = 1.5x to match the larger correction needed.
+        base_disp = best['disp']
+        if base_disp > 0:
+            scale = displacement_px / base_disp
+        else:
+            scale = 1.0
+        # Clamp scale to avoid extreme extrapolation
+        scale = max(0.3, min(scale, 3.0))
 
-        if w_sum < EPS:
-            return None, None, None, 0.0
+        # Also need to rotate if the angle is different
+        angle_diff = angle_rad - best['angle']
+        cos_a = math.cos(angle_diff)
+        sin_a = math.sin(angle_diff)
 
-        pred_dx  = w_dx  / w_sum
-        pred_dy  = w_dy  / w_sum
-        pred_dur = w_dur / w_sum
+        scaled_traj = []
+        for pt in base_traj:
+            # Rotate then scale
+            rdx = pt['dx'] * cos_a - pt['dy'] * sin_a
+            rdy = pt['dx'] * sin_a + pt['dy'] * cos_a
+            scaled_traj.append({
+                't':  pt['t'],
+                'dx': rdx * scale,
+                'dy': rdy * scale,
+            })
 
-        # confidence: sample density x proximity to nearest neighbour
+        # Confidence: sample density × proximity to nearest neighbour
         sample_factor    = min(1.0, len(hits) / 20.0)
-        proximity_factor = max(0.0, 1.0 - distances[0][0] * 2.0)
+        proximity_factor = max(0.0, 1.0 - best_dist * 2.0)
         confidence       = sample_factor * proximity_factor
 
-        return pred_dx, pred_dy, pred_dur, confidence
+        return scaled_traj, confidence
 
     # ---- stats ----
 
@@ -185,7 +212,7 @@ class TrainingOverlay(SACLOSOverlay):
         self._train_disp_px        = None
         self._train_disp_angle     = None
         self._train_range          = None
-        self._train_deltas         = []     # [(dx, dy), ...]
+        self._train_deltas         = []     # [{'t': float, 'dx': int, 'dy': int}, ...]
         self._train_start_time     = None
 
         # Post-cycle labelling
@@ -208,7 +235,7 @@ class TrainingOverlay(SACLOSOverlay):
         print(f"  Auto-correct : DISABLED")
         print()
         print("  Workflow:")
-        print("    Track -> LMB -> Guide -> Release -> [1] Hit / [2] Miss")
+        print("    Track -> LMB -> Guide -> Release -> [1] Hit / [2] Miss / [3] Discard")
         print("=" * 44)
         print()
 
@@ -274,11 +301,12 @@ class TrainingOverlay(SACLOSOverlay):
               f"- recording guidance ...")
 
     def _on_mouse_move(self, x, y):
-        """Override: also accumulate raw deltas when recording."""
+        """Override: also accumulate timestamped raw deltas when recording."""
         if self._train_recording and self.last_mouse_x is not None:
             raw_dx = x - self.last_mouse_x
             raw_dy = y - self.last_mouse_y
-            self._train_deltas.append((raw_dx, raw_dy))
+            t = time.perf_counter() - self._train_start_time
+            self._train_deltas.append({'t': round(t, 4), 'dx': raw_dx, 'dy': raw_dy})
 
         super()._on_mouse_move(x, y)
 
@@ -294,12 +322,11 @@ class TrainingOverlay(SACLOSOverlay):
 
         # Build capture if we have data
         if self._train_lmb_detected and self._train_deltas:
-            total_dx = sum(d[0] for d in self._train_deltas)
-            total_dy = sum(d[1] for d in self._train_deltas)
+            total_dx = sum(d['dx'] for d in self._train_deltas)
+            total_dy = sum(d['dy'] for d in self._train_deltas)
             corr_dist = math.sqrt(total_dx ** 2 + total_dy ** 2)
             corr_deg  = math.degrees(math.atan2(total_dy, total_dx)) if corr_dist > 0 else 0
-            dur = (time.perf_counter() - self._train_start_time
-                   if self._train_start_time else 0)
+            dur = self._train_deltas[-1]['t'] if self._train_deltas else 0
 
             print()
             print("--- Training Capture ---")
@@ -311,15 +338,13 @@ class TrainingOverlay(SACLOSOverlay):
             print(f"  Time   :  {dur:.2f}s   "
                   f"({len(self._train_deltas)} mouse events)")
             print()
-            print("  >>> Press  [1] HIT   or   [2] MISS  <<<")
+            print("  >>> Press  [1] HIT  /  [2] MISS  /  [3] DISCARD  <<<")
 
             self._last_capture = {
                 'displacement_px': self._train_disp_px,
                 'angle_rad':       self._train_disp_angle,
                 'range_m':         self._train_range,
-                'corr_dx':         total_dx,
-                'corr_dy':         total_dy,
-                'duration_s':      dur,
+                'trajectory':      self._train_deltas,  # full timestamped path
             }
             self._awaiting_label = True
 
@@ -337,7 +362,7 @@ class TrainingOverlay(SACLOSOverlay):
         super()._stop_tracking()
 
     # ----------------------------------------------------------------
-    #  Label keys  (1 = Hit,  2 = Miss)
+    #  Label keys  (1 = Hit,  2 = Miss,  3 = Discard)
     # ----------------------------------------------------------------
 
     def _start_label_kbd(self):
@@ -348,26 +373,28 @@ class TrainingOverlay(SACLOSOverlay):
         def on_press(key):
             try:
                 char = getattr(key, 'char', None)
-                if not self._awaiting_label or char not in ('1', '2'):
+                if not self._awaiting_label or char not in ('1', '2', '3'):
                     return
 
-                hit = (char == '1')
-                if self._last_capture and self.learner:
-                    info = self._last_capture
-                    n = self.learner.add_sample(
-                        info['displacement_px'],
-                        info['angle_rad'],
-                        info['range_m'],
-                        info['corr_dx'],
-                        info['corr_dy'],
-                        info['duration_s'],
-                        hit,
-                    )
-                    stats = self.learner.get_stats()
-                    tag = 'HIT' if hit else 'MISS'
-                    print(f"  Recorded: {tag}  -  "
-                          f"total {n} samples  "
-                          f"({stats['hits']} hits, {stats['misses']} misses)")
+                if char == '3':
+                    # Discard — don't save anything
+                    print("  DISCARDED  (not saved)")
+                else:
+                    hit = (char == '1')
+                    if self._last_capture and self.learner:
+                        info = self._last_capture
+                        n = self.learner.add_sample(
+                            info['displacement_px'],
+                            info['angle_rad'],
+                            info['range_m'],
+                            info['trajectory'],
+                            hit,
+                        )
+                        stats = self.learner.get_stats()
+                        tag = 'HIT' if hit else 'MISS'
+                        print(f"  Recorded: {tag}  -  "
+                              f"total {n} samples  "
+                              f"({stats['hits']} hits, {stats['misses']} misses)")
 
                 self._awaiting_label = False
                 self._last_capture   = None
