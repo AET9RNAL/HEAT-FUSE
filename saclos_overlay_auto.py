@@ -160,8 +160,9 @@ class SACLOSOverlay:
         self.ml_confidence_threshold = 0.3  # Minimum confidence to use ML prediction
         self.ml_online_learning = True  # Save ML predictions that result in hits
         self.learner = None           # CorrectionLearner instance (lazy-loaded)
-        self._ml_awaiting_label = False  # Online learning: waiting for HIT/DISCARD
+        self._ml_label_state = None     # Online learning state: None|'outcome'|'timing'|'magnitude'
         self._ml_last_context = None    # Online learning: last prediction context
+        self._ml_miss_timing = None     # Intermediate storage during two-step miss labeling
 
         # Turret/vehicle traverse limits (critical for realistic guidance)
         self.turret_traverse_speed_deg_s = 51.3  # Maximum turret rotation speed in degrees/second
@@ -1261,10 +1262,11 @@ class SACLOSOverlay:
             return  # Already correcting
 
         # Clear any stale online learning prompt (auto-discard if new cycle starts)
-        if getattr(self, '_ml_awaiting_label', False):
+        if getattr(self, '_ml_label_state', None) is not None:
             print("  DISCARDED  (new cycle started)")
-        self._ml_awaiting_label = False
+        self._ml_label_state = None
         self._ml_last_context = None
+        self._ml_miss_timing = None
 
         # ---- ML prediction (always used when data exists) ----
         if self.ml_enabled and self.learner is not None:
@@ -1418,7 +1420,7 @@ class SACLOSOverlay:
         # Online learning: prompt for HIT/MISS/DISCARD
         if getattr(self, 'ml_online_learning', True) and hasattr(self, '_ml_last_context'):
             ctx = self._ml_last_context
-            self._ml_awaiting_label = True
+            self._ml_label_state = 'outcome'
             print()
             print(f"  >>> Press  [1] HIT  /  [2] MISS  /  [3] DISCARD  <<<")
 
@@ -1490,14 +1492,23 @@ class SACLOSOverlay:
         self._reset_to_calibrated_position()
         self._cleanup_correction()
 
-    def _handle_ml_label(self, hit):
-        """Online learning: save the last ML prediction as a HIT or MISS sample."""
+    def _handle_ml_label(self, hit, miss_timing=None, miss_magnitude=None):
+        """Online learning: save the last ML prediction with rich miss labels."""
         ctx = getattr(self, '_ml_last_context', None)
         if ctx is None or self.learner is None:
             print("  Warning: no ML context to save")
             return
 
-        label = "HIT" if hit else "MISS"
+        if hit:
+            label = "HIT"
+        else:
+            parts = []
+            if miss_timing and miss_timing != 'optimal':
+                parts.append(miss_timing)
+            if miss_magnitude and miss_magnitude != 'optimal':
+                parts.append(miss_magnitude)
+            label = f"MISS ({', '.join(parts)})" if parts else "MISS"
+
         try:
             n = self.learner.add_sample(
                 ctx['displacement_px'],
@@ -1505,6 +1516,8 @@ class SACLOSOverlay:
                 ctx['range_m'],
                 ctx['trajectory'],
                 hit=hit,
+                miss_timing=miss_timing,
+                miss_magnitude=miss_magnitude,
             )
             stats = self.learner.get_stats()
             print(f"  Saved {label}  -  total {n} samples  "
@@ -1662,22 +1675,49 @@ class SACLOSOverlay:
 
         def on_press(key):
             try:
-                # Online learning label keys: [1] HIT, [3] DISCARD
-                if getattr(self, '_ml_awaiting_label', False):
+                # Online learning label keys (two-step state machine)
+                ml_state = getattr(self, '_ml_label_state', None)
+                if ml_state is not None:
                     char_label = getattr(key, 'char', None)
-                    if char_label == '1':
-                        self._ml_awaiting_label = False
-                        self._handle_ml_label(hit=True)
-                        return
-                    elif char_label == '2':
-                        self._ml_awaiting_label = False
-                        self._handle_ml_label(hit=False)
-                        return
-                    elif char_label == '3':
-                        self._ml_awaiting_label = False
-                        self._ml_last_context = None
-                        print("  DISCARDED  (not saved)")
-                        return
+
+                    if ml_state == 'outcome':
+                        if char_label == '1':
+                            self._ml_label_state = None
+                            self._handle_ml_label(hit=True)
+                            return
+                        elif char_label == '2':
+                            self._ml_label_state = 'timing'
+                            print()
+                            print("  MISS — Timing?  [Q] Premature  [W] Optimal  [E] Late")
+                            return
+                        elif char_label == '3':
+                            self._ml_label_state = None
+                            self._ml_last_context = None
+                            print("  DISCARDED  (not saved)")
+                            return
+
+                    elif ml_state == 'timing':
+                        if char_label in ('q', 'w', 'e'):
+                            timing_map = {'q': 'premature', 'w': 'optimal', 'e': 'late'}
+                            self._ml_miss_timing = timing_map[char_label]
+                            self._ml_label_state = 'magnitude'
+                            print(f"  Timing: {self._ml_miss_timing}")
+                            print("  MISS — Magnitude?  [A] Undershoot  [S] Optimal  [D] Overshoot")
+                            return
+
+                    elif ml_state == 'magnitude':
+                        if char_label in ('a', 's', 'd'):
+                            mag_map = {'a': 'undershoot', 's': 'optimal', 'd': 'overshoot'}
+                            miss_mag = mag_map[char_label]
+                            print(f"  Magnitude: {miss_mag}")
+                            self._ml_label_state = None
+                            self._handle_ml_label(
+                                hit=False,
+                                miss_timing=self._ml_miss_timing,
+                                miss_magnitude=miss_mag,
+                            )
+                            self._ml_miss_timing = None
+                            return
 
                 # If waiting for tracking key setup, capture this key
                 if self.awaiting_tracking_key:

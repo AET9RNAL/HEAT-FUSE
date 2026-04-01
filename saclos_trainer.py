@@ -72,18 +72,20 @@ class CorrectionLearner:
     # ---- recording ----
 
     def add_sample(self, displacement_px, angle_rad, range_m,
-                   trajectory, hit):
+                   trajectory, hit, miss_timing=None, miss_magnitude=None):
         """
         Add one manual-guidance sample with full mouse trajectory.
 
         trajectory: list of {'t': float, 'dx': int, 'dy': int}
                     where t is seconds since LMB click.
+        miss_timing: 'premature'|'optimal'|'late' (misses only)
+        miss_magnitude: 'undershoot'|'optimal'|'overshoot' (misses only)
         """
         total_dx = sum(p['dx'] for p in trajectory)
         total_dy = sum(p['dy'] for p in trajectory)
         duration = trajectory[-1]['t'] if trajectory else 0.0
 
-        self.samples.append({
+        sample = {
             'disp':  round(displacement_px, 1),
             'angle': round(angle_rad, 4),
             'range': round(range_m, 1),
@@ -92,7 +94,15 @@ class CorrectionLearner:
             'dur':   round(duration, 3),
             'traj':  trajectory,
             'hit':   hit,
-        })
+        }
+        # Store rich labels for misses (enables directed correction in predict())
+        if not hit:
+            if miss_timing:
+                sample['miss_timing'] = miss_timing
+            if miss_magnitude:
+                sample['miss_magnitude'] = miss_magnitude
+
+        self.samples.append(sample)
         self._save()
         return len(self.samples)
 
@@ -240,26 +250,64 @@ class CorrectionLearner:
                         blended[j]['dy'] += nudge_dy / n_pts
 
         # ============================================================
-        #  3.  Exploration perturbation in high-miss zones
+        #  3.  Label-directed correction / exploration fallback
         # ============================================================
-        # When misses outnumber hits nearby, the deterministic nudge
-        # alone may not be enough — the model keeps retrying similar
-        # trajectories.  Add a random perturbation so each attempt
-        # explores a slightly different correction, giving the label
-        # loop a chance to discover what works.
+        # When nearby misses carry rich labels (timing, magnitude),
+        # apply systematic adjustments instead of random perturbation.
+        # A single labeled miss gives ~5-10x more signal than binary.
         nearby_hits_count = sum(1 for d, _ in hit_dists if d < MISS_RADIUS)
         nearby_miss_count = len(nearby_misses)
 
-        if nearby_miss_count > nearby_hits_count and n_pts > 0:
-            # Exploration intensity scales with miss dominance (0→1)
+        labeled_misses = [(d, i) for d, i in nearby_misses
+                          if misses[i].get('miss_timing') or misses[i].get('miss_magnitude')]
+
+        if labeled_misses and n_pts > 0:
+            # --- Timing adjustment ---
+            # premature -> stretch timeline (corrections happen later)
+            # late      -> compress timeline (corrections happen earlier)
+            timing_weights = []
+            for d, idx in labeled_misses:
+                timing = misses[idx].get('miss_timing')
+                if timing and timing != 'optimal':
+                    w = 1.0 / (d + EPS)
+                    factor = 1.20 if timing == 'premature' else 0.80
+                    timing_weights.append((w, factor))
+
+            if timing_weights:
+                total_w = sum(w for w, _ in timing_weights)
+                timing_factor = sum(w * f for w, f in timing_weights) / total_w
+                timing_factor = max(0.5, min(timing_factor, 2.0))
+                for j in range(n_pts):
+                    blended[j]['t'] *= timing_factor
+
+            # --- Magnitude adjustment ---
+            # overshoot  -> scale down dx/dy
+            # undershoot -> scale up dx/dy
+            mag_weights = []
+            for d, idx in labeled_misses:
+                magnitude = misses[idx].get('miss_magnitude')
+                if magnitude and magnitude != 'optimal':
+                    w = 1.0 / (d + EPS)
+                    factor = 0.82 if magnitude == 'overshoot' else 1.18
+                    mag_weights.append((w, factor))
+
+            if mag_weights:
+                total_w = sum(w for w, _ in mag_weights)
+                mag_factor = sum(w * f for w, f in mag_weights) / total_w
+                mag_factor = max(0.5, min(mag_factor, 2.0))
+                for j in range(n_pts):
+                    blended[j]['dx'] *= mag_factor
+                    blended[j]['dy'] *= mag_factor
+
+        elif nearby_miss_count > nearby_hits_count and n_pts > 0:
+            # Fallback: no rich labels -> original random exploration
+            # (backwards compatible with old unlabeled data)
             miss_ratio = nearby_miss_count / (nearby_miss_count + nearby_hits_count + EPS)
-            # Base magnitude: 15% of total predicted correction length
             pred_total_dx = sum(p['dx'] for p in blended)
             pred_total_dy = sum(p['dy'] for p in blended)
             pred_len = math.sqrt(pred_total_dx**2 + pred_total_dy**2) + EPS
             explore_mag = pred_len * 0.15 * miss_ratio
 
-            # Random direction (uniform angle)
             theta = random.uniform(0, 2 * math.pi)
             explore_dx = explore_mag * math.cos(theta)
             explore_dy = explore_mag * math.sin(theta)
@@ -294,7 +342,10 @@ class CorrectionLearner:
     def get_stats(self):
         total = len(self.samples)
         hits  = sum(1 for s in self.samples if s['hit'])
-        return {'total': total, 'hits': hits, 'misses': total - hits}
+        misses = total - hits
+        labeled = sum(1 for s in self.samples
+                      if not s['hit'] and (s.get('miss_timing') or s.get('miss_magnitude')))
+        return {'total': total, 'hits': hits, 'misses': misses, 'labeled_misses': labeled}
 
 
 # ======================================================================
@@ -329,9 +380,11 @@ class TrainingOverlay(SACLOSOverlay):
         self._train_deltas         = []     # [{'t': float, 'dx': int, 'dy': int}, ...]
         self._train_start_time     = None
 
-        # Post-cycle labelling
-        self._awaiting_label       = False
+        # Post-cycle labelling (two-step state machine)
+        # States: None -> 'outcome' -> 'timing' -> 'magnitude' -> None
+        self._label_state          = None
         self._last_capture         = None
+        self._miss_timing          = None
 
         # Start an extra keyboard listener for the 1 / 2 label keys
         self._label_kbd = None
@@ -350,6 +403,7 @@ class TrainingOverlay(SACLOSOverlay):
         print()
         print("  Workflow:")
         print("    Track -> LMB -> Guide -> Release -> [1] Hit / [2] Miss / [3] Discard")
+        print("    If MISS: [Q/W/E] timing  then  [A/S/D] magnitude")
         print("=" * 44)
         print()
 
@@ -364,7 +418,7 @@ class TrainingOverlay(SACLOSOverlay):
         self._train_lmb_detected = False
         self._train_deltas       = []
         self._train_start_time   = None
-        self._awaiting_label     = False
+        self._label_state        = None
 
         super()._start_tracking()
 
@@ -460,7 +514,7 @@ class TrainingOverlay(SACLOSOverlay):
                 'range_m':         self._train_range,
                 'trajectory':      self._train_deltas,  # full timestamped path
             }
-            self._awaiting_label = True
+            self._label_state = 'outcome'
 
         elif self.tracking_active and not self._train_lmb_detected:
             print("  Tracking ended  -  no LMB detected (nothing recorded)")
@@ -487,31 +541,69 @@ class TrainingOverlay(SACLOSOverlay):
         def on_press(key):
             try:
                 char = getattr(key, 'char', None)
-                if not self._awaiting_label or char not in ('1', '2', '3'):
+                if self._label_state is None or char is None:
                     return
 
-                if char == '3':
-                    # Discard — don't save anything
-                    print("  DISCARDED  (not saved)")
-                else:
-                    hit = (char == '1')
-                    if self._last_capture and self.learner:
-                        info = self._last_capture
-                        n = self.learner.add_sample(
-                            info['displacement_px'],
-                            info['angle_rad'],
-                            info['range_m'],
-                            info['trajectory'],
-                            hit,
-                        )
-                        stats = self.learner.get_stats()
-                        tag = 'HIT' if hit else 'MISS'
-                        print(f"  Recorded: {tag}  -  "
-                              f"total {n} samples  "
-                              f"({stats['hits']} hits, {stats['misses']} misses)")
+                if self._label_state == 'outcome':
+                    if char == '1':
+                        # HIT — save immediately
+                        if self._last_capture and self.learner:
+                            info = self._last_capture
+                            n = self.learner.add_sample(
+                                info['displacement_px'],
+                                info['angle_rad'],
+                                info['range_m'],
+                                info['trajectory'],
+                                hit=True,
+                            )
+                            stats = self.learner.get_stats()
+                            print(f"  Recorded: HIT  -  "
+                                  f"total {n} samples  "
+                                  f"({stats['hits']} hits, {stats['misses']} misses)")
+                        self._label_state = None
+                        self._last_capture = None
+                    elif char == '2':
+                        # MISS — proceed to timing step
+                        self._label_state = 'timing'
+                        print()
+                        print("  MISS — Timing?  [Q] Premature  [W] Optimal  [E] Late")
+                    elif char == '3':
+                        print("  DISCARDED  (not saved)")
+                        self._label_state = None
+                        self._last_capture = None
 
-                self._awaiting_label = False
-                self._last_capture   = None
+                elif self._label_state == 'timing':
+                    if char in ('q', 'w', 'e'):
+                        timing_map = {'q': 'premature', 'w': 'optimal', 'e': 'late'}
+                        self._miss_timing = timing_map[char]
+                        self._label_state = 'magnitude'
+                        print(f"  Timing: {self._miss_timing}")
+                        print("  MISS — Magnitude?  [A] Undershoot  [S] Optimal  [D] Overshoot")
+
+                elif self._label_state == 'magnitude':
+                    if char in ('a', 's', 'd'):
+                        mag_map = {'a': 'undershoot', 's': 'optimal', 'd': 'overshoot'}
+                        miss_mag = mag_map[char]
+                        print(f"  Magnitude: {miss_mag}")
+                        if self._last_capture and self.learner:
+                            info = self._last_capture
+                            n = self.learner.add_sample(
+                                info['displacement_px'],
+                                info['angle_rad'],
+                                info['range_m'],
+                                info['trajectory'],
+                                hit=False,
+                                miss_timing=self._miss_timing,
+                                miss_magnitude=miss_mag,
+                            )
+                            stats = self.learner.get_stats()
+                            detail = f"{self._miss_timing} + {miss_mag}"
+                            print(f"  Recorded: MISS ({detail})  -  "
+                                  f"total {n} samples  "
+                                  f"({stats['hits']} hits, {stats['misses']} misses)")
+                        self._label_state = None
+                        self._last_capture = None
+                        self._miss_timing = None
             except Exception:
                 import traceback
                 traceback.print_exc()
