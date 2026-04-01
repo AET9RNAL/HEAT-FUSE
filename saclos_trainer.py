@@ -95,85 +95,176 @@ class CorrectionLearner:
         self._save()
         return len(self.samples)
 
-    # ---- prediction ----
+    # ---- helpers ----
 
-    def predict(self, displacement_px, angle_rad, range_m):
-        """
-        KNN prediction from hit samples.
-
-        Returns (trajectory, confidence) where trajectory is a list of
-        {'t': float, 'dx': float, 'dy': float} entries,
-        or (None, 0.0) if insufficient data.
-
-        The returned trajectory is a displacement-scaled version of the
-        nearest hit's trajectory, preserving the original timing/dynamics.
-        """
-        hits = [s for s in self.samples if s['hit'] and s.get('traj')]
-        if len(hits) < 3:
-            return None, 0.0
-
-        # Normalise features for distance metric
+    @staticmethod
+    def _feature_vec(disp, range_m, angle_rad):
         D_SCALE = 300.0   # typical displacement range in px
         R_SCALE = 500.0   # typical target-range span in m
-
-        query = (
-            displacement_px / D_SCALE,
+        return (
+            disp / D_SCALE,
             range_m / R_SCALE,
             math.sin(angle_rad),
             math.cos(angle_rad),
         )
 
-        distances = []
-        for i, s in enumerate(hits):
-            feat = (
-                s['disp'] / D_SCALE,
-                s['range'] / R_SCALE,
-                math.sin(s['angle']),
-                math.cos(s['angle']),
-            )
-            dist = math.sqrt(sum((a - b) ** 2 for a, b in zip(query, feat)))
-            distances.append((dist, i))
+    @staticmethod
+    def _feat_dist(a, b):
+        return math.sqrt(sum((x - y) ** 2 for x, y in zip(a, b)))
 
-        distances.sort()
-
-        # Use nearest hit's full trajectory as the base
-        best_dist, best_idx = distances[0]
-        best = hits[best_idx]
-        base_traj = best['traj']
-
-        # Scale the trajectory proportionally:
-        # If query displacement is 120px and best sample was 80px,
-        # scale all dx/dy by 120/80 = 1.5x to match the larger correction needed.
-        base_disp = best['disp']
-        if base_disp > 0:
-            scale = displacement_px / base_disp
-        else:
-            scale = 1.0
-        # Clamp scale to avoid extreme extrapolation
+    def _transform_traj(self, sample, query_disp, query_angle):
+        """Scale + rotate a sample's trajectory to match query displacement/angle."""
+        base_disp = sample['disp']
+        scale = (query_disp / base_disp) if base_disp > 0 else 1.0
         scale = max(0.3, min(scale, 3.0))
 
-        # Also need to rotate if the angle is different
-        angle_diff = angle_rad - best['angle']
+        angle_diff = query_angle - sample['angle']
         cos_a = math.cos(angle_diff)
         sin_a = math.sin(angle_diff)
 
-        scaled_traj = []
-        for pt in base_traj:
-            # Rotate then scale
+        out = []
+        for pt in sample['traj']:
             rdx = pt['dx'] * cos_a - pt['dy'] * sin_a
             rdy = pt['dx'] * sin_a + pt['dy'] * cos_a
-            scaled_traj.append({
-                't':  pt['t'],
-                'dx': rdx * scale,
-                'dy': rdy * scale,
-            })
+            out.append({'t': pt['t'], 'dx': rdx * scale, 'dy': rdy * scale})
+        return out
 
-        # Confidence: sample density × proximity to nearest neighbour
-        sample_factor    = min(1.0, len(hits) / 20.0)
-        proximity_factor = max(0.0, 1.0 - best_dist * 2.0)
-        confidence       = sample_factor * proximity_factor
+    # ---- prediction ----
 
-        return scaled_traj, confidence
+    def predict(self, displacement_px, angle_rad, range_m):
+        """
+        K-NN prediction with miss-aware confidence and trajectory nudge.
+
+        1. K-NN weighted average: top-K hits weighted by 1/distance produce
+           a blended trajectory that's more robust than single-nearest.
+        2. Miss-penalized confidence: nearby misses reduce confidence,
+           preventing predictions in high-failure regions.
+        3. Miss-repelled nudge: if nearby misses exist, the prediction is
+           pushed away from miss trajectories toward hit trajectories.
+
+        Returns (trajectory, confidence) or (None, 0.0).
+        """
+        hits   = [s for s in self.samples if s['hit'] and s.get('traj')]
+        misses = [s for s in self.samples if not s['hit'] and s.get('traj')]
+
+        if len(hits) < 3:
+            return None, 0.0
+
+        query_feat = self._feature_vec(displacement_px, range_m, angle_rad)
+
+        # --- distance to every hit ---
+        hit_dists = []
+        for i, s in enumerate(hits):
+            d = self._feat_dist(query_feat,
+                    self._feature_vec(s['disp'], s['range'], s['angle']))
+            hit_dists.append((d, i))
+        hit_dists.sort()
+
+        # --- distance to every miss ---
+        miss_dists = []
+        for i, s in enumerate(misses):
+            d = self._feat_dist(query_feat,
+                    self._feature_vec(s['disp'], s['range'], s['angle']))
+            miss_dists.append((d, i))
+        miss_dists.sort()
+
+        # ============================================================
+        #  1.  K-NN weighted-average trajectory  (inverse-distance)
+        # ============================================================
+        k = min(self.k, len(hits))
+        top_k = hit_dists[:k]
+
+        EPS = 1e-6
+        weights = [1.0 / (d + EPS) for d, _ in top_k]
+        w_sum   = sum(weights)
+
+        # Use the nearest hit's trajectory as the timeline template
+        # (all neighbors are resampled onto this timeline).
+        base_traj = hits[top_k[0][1]]['traj']
+        n_pts     = len(base_traj)
+
+        # Accumulate weighted dx/dy for each time-point
+        blended = [{'t': base_traj[j]['t'], 'dx': 0.0, 'dy': 0.0}
+                    for j in range(n_pts)]
+
+        for wi, (_, idx) in zip(weights, top_k):
+            transformed = self._transform_traj(
+                hits[idx], displacement_px, angle_rad)
+            # Resample transformed traj onto base timeline length
+            t_len = len(transformed)
+            for j in range(n_pts):
+                # Map j in base → proportional index in this neighbor
+                src_j = int(j * t_len / n_pts)
+                src_j = min(src_j, t_len - 1)
+                blended[j]['dx'] += wi / w_sum * transformed[src_j]['dx']
+                blended[j]['dy'] += wi / w_sum * transformed[src_j]['dy']
+
+        # ============================================================
+        #  2.  Miss-repelled trajectory nudge
+        # ============================================================
+        MISS_RADIUS = 0.35   # feature-space radius to consider misses
+        NUDGE_STRENGTH = 0.3 # fraction of (hit−miss) delta to apply
+
+        nearby_misses = [(d, i) for d, i in miss_dists if d < MISS_RADIUS]
+
+        if nearby_misses:
+            # Compute total correction vector of the blended prediction
+            pred_total_dx = sum(p['dx'] for p in blended)
+            pred_total_dy = sum(p['dy'] for p in blended)
+
+            # Weighted-average miss correction vector (transformed to query)
+            miss_wx = 0.0
+            miss_wy = 0.0
+            miss_wt = 0.0
+            for d, idx in nearby_misses:
+                mw = 1.0 / (d + EPS)
+                mt = self._transform_traj(
+                    misses[idx], displacement_px, angle_rad)
+                miss_wx += mw * sum(p['dx'] for p in mt)
+                miss_wy += mw * sum(p['dy'] for p in mt)
+                miss_wt += mw
+
+            if miss_wt > 0:
+                miss_avg_dx = miss_wx / miss_wt
+                miss_avg_dy = miss_wy / miss_wt
+
+                # Nudge direction: hit prediction − miss average
+                nudge_dx = (pred_total_dx - miss_avg_dx) * NUDGE_STRENGTH
+                nudge_dy = (pred_total_dy - miss_avg_dy) * NUDGE_STRENGTH
+
+                # Distribute the nudge proportionally across all points
+                if n_pts > 0:
+                    for j in range(n_pts):
+                        blended[j]['dx'] += nudge_dx / n_pts
+                        blended[j]['dy'] += nudge_dy / n_pts
+
+        # ============================================================
+        #  3.  Miss-penalized confidence
+        # ============================================================
+        best_hit_dist = hit_dists[0][0]
+
+        # Sample density factor (unchanged)
+        sample_factor = min(1.0, len(hits) / 20.0)
+
+        # Proximity factor (unchanged)
+        proximity_factor = max(0.0, 1.0 - best_hit_dist * 2.0)
+
+        # NEW: miss penalty — if nearest miss is closer than nearest hit,
+        # confidence drops significantly.
+        miss_penalty = 1.0
+        if miss_dists:
+            nearest_miss_dist = miss_dists[0][0]
+            if nearest_miss_dist < best_hit_dist:
+                # Miss is closer → big penalty (0.2–0.5 range)
+                miss_penalty = 0.2 + 0.3 * (nearest_miss_dist / (best_hit_dist + EPS))
+                miss_penalty = min(miss_penalty, 1.0)
+            elif nearest_miss_dist < MISS_RADIUS:
+                # Miss is nearby but further than nearest hit → mild penalty
+                miss_penalty = 0.7 + 0.3 * (nearest_miss_dist / MISS_RADIUS)
+
+        confidence = sample_factor * proximity_factor * miss_penalty
+
+        return blended, confidence
 
     # ---- stats ----
 

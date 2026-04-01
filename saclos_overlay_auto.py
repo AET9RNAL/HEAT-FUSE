@@ -1427,12 +1427,12 @@ class SACLOSOverlay:
         print(f"Auto-correction complete [ML] (took {elapsed:.2f}s, "
               f"injected {injected_dx}dx {injected_dy}dy)")
 
-        # Online learning: prompt for HIT/DISCARD
+        # Online learning: prompt for HIT/MISS/DISCARD
         if getattr(self, 'ml_online_learning', True) and hasattr(self, '_ml_last_context'):
             ctx = self._ml_last_context
             self._ml_awaiting_label = True
             print()
-            print(f"  >>> Press  [1] HIT  /  [3] DISCARD  <<<")
+            print(f"  >>> Press  [1] HIT  /  [2] MISS  /  [3] DISCARD  <<<")
 
         self.root.after(0, self._finish_correction)
 
@@ -1502,23 +1502,24 @@ class SACLOSOverlay:
         self._reset_to_calibrated_position()
         self._cleanup_correction()
 
-    def _handle_ml_label_hit(self):
-        """Online learning: save the last ML prediction as a new HIT sample."""
+    def _handle_ml_label(self, hit):
+        """Online learning: save the last ML prediction as a HIT or MISS sample."""
         ctx = getattr(self, '_ml_last_context', None)
         if ctx is None or self.learner is None:
             print("  Warning: no ML context to save")
             return
 
+        label = "HIT" if hit else "MISS"
         try:
             n = self.learner.add_sample(
                 ctx['displacement_px'],
                 ctx['angle_rad'],
                 ctx['range_m'],
                 ctx['trajectory'],
-                hit=True,
+                hit=hit,
             )
             stats = self.learner.get_stats()
-            print(f"  Saved HIT  -  total {n} samples  "
+            print(f"  Saved {label}  -  total {n} samples  "
                   f"({stats['hits']} hits, {stats['misses']} misses)")
         except Exception as e:
             print(f"  Warning: failed to save ML sample: {e}")
@@ -1678,7 +1679,11 @@ class SACLOSOverlay:
                     char_label = getattr(key, 'char', None)
                     if char_label == '1':
                         self._ml_awaiting_label = False
-                        self._handle_ml_label_hit()
+                        self._handle_ml_label(hit=True)
+                        return
+                    elif char_label == '2':
+                        self._ml_awaiting_label = False
+                        self._handle_ml_label(hit=False)
                         return
                     elif char_label == '3':
                         self._ml_awaiting_label = False
