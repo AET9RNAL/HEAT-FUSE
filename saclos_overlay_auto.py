@@ -102,6 +102,7 @@ class SACLOSOverlay:
 
         # Turret/vehicle traverse limits (critical for realistic guidance)
         self.turret_traverse_speed_deg_s = 51.3  # Maximum turret rotation speed in degrees/second
+        self.turret_instant_follow_deg = 15.0  # Turret follows scope instantly within this window
         self.pixels_per_degree = 10.0  # Pixel-to-angular conversion factor (user-tunable)
 
         # Mouse sensitivity scaling
@@ -260,6 +261,7 @@ class SACLOSOverlay:
             "correction_speed_multiplier": self.correction_speed_multiplier,
             "pre_correction_delay_ms": self.pre_correction_delay_ms,
             "turret_traverse_speed_deg_s": self.turret_traverse_speed_deg_s,
+            "turret_instant_follow_deg": self.turret_instant_follow_deg,
             "pixels_per_degree": self.pixels_per_degree,
             "mouse_sensitivity_scale": self.mouse_sensitivity_scale,
             # Algorithm parameters
@@ -319,6 +321,7 @@ class SACLOSOverlay:
             self.correction_speed_multiplier = config.get("correction_speed_multiplier", 1.0)
             self.pre_correction_delay_ms = config.get("pre_correction_delay_ms", 150)
             self.turret_traverse_speed_deg_s = config.get("turret_traverse_speed_deg_s", 51.3)
+            self.turret_instant_follow_deg = config.get("turret_instant_follow_deg", 15.0)
             self.pixels_per_degree = config.get("pixels_per_degree", 10.0)
             self.mouse_sensitivity_scale = config.get("mouse_sensitivity_scale", 1.0)
             # Algorithm parameters
@@ -982,12 +985,15 @@ class SACLOSOverlay:
         urgency = d_norm * (1 + n_norm)
 
         # === RANGE PROXIMITY ===
-        # CRITICAL: Close range = missile arrives quickly = less time to correct
-        # This is the dominant factor in determining overcompensation
-        # At 70m:  1/(0.14+0.05) = 5.3x  (very aggressive - missile arrives in ~0.5s)
-        # At 200m: 1/(0.40+0.05) = 2.2x  (moderate)
-        # At 500m: 1/(1.00+0.05) = 0.95x (gentle - missile has ~2-3s)
-        range_proximity = 1.0 / (r_norm + 0.05)
+        # Gentle multiplier - dataset analysis showed aggressive proximity HURTS accuracy.
+        # At close range, SACLOS force (K × error × range_from_muzzle) already amplifies
+        # the angular error, so we need LESS overcompensation, not more.
+        # The 89m/600m test group (proximity 0.95x) achieved 100% hit rate because
+        # it kept lead factors low (0.5-1.0) and angular distances within instant-follow.
+        # At 70m:  1/(0.14+0.5) = 1.56x  (modest boost)
+        # At 200m: 1/(0.40+0.5) = 1.11x  (near neutral)
+        # At 500m: 1/(1.00+0.5) = 0.67x  (slight reduction at long range)
+        range_proximity = 1.0 / (r_norm + 0.5)
 
         # === LEAD FACTOR (Overcompensation) ===
         # How much to overshoot target to create intercept trajectory
@@ -1000,7 +1006,7 @@ class SACLOSOverlay:
         # Scale by range proximity: close range multiplies overcompensation dramatically
         lead_factor = base_lead * range_proximity
         lead_factor = max(lead_factor, 0.5)  # Minimum 50% overcompensation
-        lead_factor = min(lead_factor, 6.0)  # Cap at 600% for extreme cases
+        lead_factor = min(lead_factor, 2.5)  # Cap at 250% - dataset shows >2.5 always misses
 
         # === LEAD DISTANCE (d') ===
         # Magnitude of mouse movement - typically LARGER than displacement
@@ -1034,14 +1040,20 @@ class SACLOSOverlay:
         duration_ms = self.base_duration_ms / speed_factor
 
         # === TURRET TRAVERSE LIMIT ===
-        # CRITICAL: Turret has maximum angular velocity (e.g., 51.3°/s)
-        # Calculate minimum time needed to traverse the angular distance
+        # CRITICAL: Turret follows scope INSTANTLY within a small window (~15°),
+        # then engages normal traverse rate (51.3°/s) for the excess beyond that.
         # Convert pixel distance to angular distance
         angular_distance_deg = lead_distance_px / self.pixels_per_degree
-        # Minimum time required given traverse speed limit (convert to ms)
-        min_duration_ms = (angular_distance_deg / self.turret_traverse_speed_deg_s) * 1000.0
-        # Add 20% safety margin to account for acceleration/deceleration
-        min_duration_ms *= 1.2
+
+        if angular_distance_deg <= self.turret_instant_follow_deg:
+            # Within instant-follow window - turret tracks scope with zero delay
+            min_duration_ms = 0.0
+        else:
+            # Only rate-limit the angular distance BEYOND the instant window
+            excess_deg = angular_distance_deg - self.turret_instant_follow_deg
+            min_duration_ms = (excess_deg / self.turret_traverse_speed_deg_s) * 1000.0
+            # Add 20% safety margin for the rate-limited portion
+            min_duration_ms *= 1.2
 
         # Duration must be AT LEAST the minimum needed for turret to traverse
         # Otherwise turret can't keep up and guidance fails
@@ -1192,8 +1204,9 @@ class SACLOSOverlay:
         print(f"  Range: {self.target_range_m:.0f}m → proximity: {params['range_proximity']:.2f}x")
         print(f"  Lead y: {params['lead_distance_px']:.1f}px at {math.degrees(params['lead_angle_rad']):.1f}° (base: {params['base_lead']:.2f}, factor: {params['lead_factor']:.2f})")
         print(f"  Direction check: v={math.degrees(angle_rad):.1f}°, y={math.degrees(params['lead_angle_rad']):.1f}° (should be ~180° apart)")
-        print(f"  Angular: {params['angular_distance_deg']:.2f}° traverse needed")
-        print(f"  Traverse limit: {self.turret_traverse_speed_deg_s:.1f}°/s → min duration: {params['min_duration_ms']:.0f}ms")
+        in_instant = params['angular_distance_deg'] <= self.turret_instant_follow_deg
+        print(f"  Angular: {params['angular_distance_deg']:.2f}° traverse needed {'(INSTANT FOLLOW)' if in_instant else ''}")
+        print(f"  Traverse: {self.turret_instant_follow_deg:.0f}° instant window, {self.turret_traverse_speed_deg_s:.1f}°/s beyond → min duration: {params['min_duration_ms']:.0f}ms")
         print(f"  Duration: {params['duration_ms']:.0f}ms (urgency: {params['urgency']:.2f})")
         print(f"  Mouse sensitivity: {self.mouse_sensitivity_scale:.1f}x")
         print(f"  Mouse: ({current_mouse_x}, {current_mouse_y}) → ({target_mouse_x:.0f}, {target_mouse_y:.0f})")
@@ -1949,6 +1962,8 @@ def main():
                         help="Correction speed multiplier (default: 1.0)")
     parser.add_argument("--turret-speed", type=float, default=51.3,
                         help="Turret traverse speed in degrees/second (default: 51.3)")
+    parser.add_argument("--instant-follow", type=float, default=15.0,
+                        help="Turret instant-follow window in degrees (default: 15.0)")
     parser.add_argument("--pixels-per-degree", type=float, default=10.0,
                         help="Pixel to degree conversion factor (default: 10.0, tune based on FOV)")
     parser.add_argument("--mouse-scale", type=float, default=1.0,
@@ -1969,6 +1984,8 @@ def main():
         app.correction_speed_multiplier = args.correction_speed
     if hasattr(args, 'turret_speed'):
         app.turret_traverse_speed_deg_s = args.turret_speed
+    if hasattr(args, 'instant_follow'):
+        app.turret_instant_follow_deg = args.instant_follow
     if hasattr(args, 'pixels_per_degree'):
         app.pixels_per_degree = args.pixels_per_degree
     if hasattr(args, 'mouse_scale'):
