@@ -1,0 +1,524 @@
+###TEMPLATE###
+
+range in-game: 80m
+range set: 80m
+
+case1:
+Auto-correction started:
+  Displacement v: 85.6px at -136.4°
+  Range: 81m → proximity: 1.44x
+  Lead y: 161.7px at 43.6° (base: 0.81, factor: 1.17)
+  Direction check: v=-136.4°, y=43.6° (should be ~180° apart)
+  Angular: 16.17° traverse needed
+  Traverse: 15° instant window, 51.3°/s beyond → min duration: 27ms
+  Duration: 279ms (urgency: 0.08)
+  Mouse sensitivity: 1.0x
+  Mouse: (1730, 1024) → (1847, 1135)
+  Mouse delta: (117, 111)
+  Pre-correction delay: 100ms, engagement delay: 1ms
+Auto-correction complete (took 0.30s)
+
+result: Correction:instant engagement; Speed of correction: fast; Total in-game missile travel distance before impact:80m; Nature: hit; Target hit:YES; Vector y:short, after o;
+Overall: missile converged on target, missed o
+case2:
+Auto-correction started:
+  Displacement v: 84.2px at -136.4°
+  Range: 81m → proximity: 1.44x
+  Lead y: 160.3px at 43.6° (base: 0.81, factor: 1.17)
+  Direction check: v=-136.4°, y=43.6° (should be ~180° apart)
+  Angular: 16.03° traverse needed
+  Traverse: 15° instant window, 51.3°/s beyond → min duration: 24ms
+  Duration: 279ms (urgency: 0.07)
+  Mouse sensitivity: 1.0x
+  Mouse: (1214, 891) → (1330, 1001)
+  Mouse delta: (116, 110)
+  Pre-correction delay: 100ms, engagement delay: 1ms
+Auto-correction complete (took 0.30s)
+result: Correction:instant engagement; Speed of correction: fast; Total in-game missile travel distance before impact:80m; Nature: hit; Target hit:YES; Vector y:short, after o;
+Overall: missile converged on target, missed o
+case3:
+Auto-correction started:
+  Displacement v: 115.2px at 166.4°
+  Range: 81m → proximity: 1.44x
+  Lead y: 191.5px at 346.4° (base: 1.00, factor: 1.44)
+  Direction check: v=166.4°, y=346.4° (should be ~180° apart)
+  Angular: 19.15° traverse needed
+  Traverse: 15° instant window, 51.3°/s beyond → min duration: 97ms
+  Duration: 269ms (urgency: 0.12)
+  Mouse sensitivity: 1.0x
+  Mouse: (1744, 997) → (1930, 952)
+  Mouse delta: (186, -45)
+  Pre-correction delay: 100ms, engagement delay: 2ms
+Auto-correction complete (took 0.30s)
+result: Correction:instant engagement; Speed of correction: fast; Total in-game missile travel distance before impact:80m; Nature: hit; Target hit:YES; Vector y:short, after o;
+Overall: missile converged on target, missed o
+case4:
+Auto-correction started:
+  Displacement v: 82.0px at -90.7°
+  Range: 81m → proximity: 1.44x
+  Lead y: 158.3px at 89.3° (base: 0.55, factor: 1.00)
+  Direction check: v=-90.7°, y=89.3° (should be ~180° apart)
+  Angular: 15.83° traverse needed
+  Traverse: 15° instant window, 51.3°/s beyond → min duration: 19ms
+  Duration: 283ms (urgency: 0.06)
+  Mouse sensitivity: 1.0x
+  Mouse: (1250, 1353) → (1252, 1511)
+  Mouse delta: (2, 158)
+  Pre-correction delay: 100ms, engagement delay: 1ms
+Auto-correction complete (took 0.31s)
+result: Correction:instant engagement; Speed of correction: fast; Total in-game missile travel distance before impact:75m; Nature: undershot; Target hit:NO; Vector y:short, after o;
+Overall: missile undershot on target, missed o
+case5:
+Auto-correction started:
+  Displacement v: 146.1px at -177.6°
+  Range: 81m → proximity: 1.44x
+  Lead y: 222.4px at 2.4° (base: 1.08, factor: 1.57)
+  Direction check: v=-177.6°, y=2.4° (should be ~180° apart)
+  Angular: 22.24° traverse needed
+  Traverse: 15° instant window, 51.3°/s beyond → min duration: 169ms
+  Duration: 260ms (urgency: 0.15)
+  Mouse sensitivity: 1.0x
+  Mouse: (1394, 1060) → (1616, 1069)
+  Mouse delta: (222, 9)
+  Pre-correction delay: 100ms, engagement delay: 2ms
+Auto-correction complete (took 0.29s)
+result: Correction:instant engagement; Speed of correction: fast; Total in-game missile travel distance before impact:80m; Nature: hit; Target hit:YES; Vector y:short, after o;
+Overall: missile converged on target, hit o
+case6:
+Auto-correction started:
+  Displacement v: 75.4px at -128.5°
+  Range: 79m → proximity: 1.44x
+  Lead y: 151.3px at 51.5° (base: 0.76, factor: 1.09)
+  Direction check: v=-128.5°, y=51.5° (should be ~180° apart)
+  Angular: 15.13° traverse needed
+  Traverse: 15° instant window, 51.3°/s beyond → min duration: 3ms
+  Duration: 282ms (urgency: 0.06)
+  Mouse sensitivity: 1.0x
+  Mouse: (1260, 1154) → (1354, 1272)
+  Mouse delta: (94, 118)
+  Pre-correction delay: 100ms, engagement delay: 1ms
+Auto-correction complete (took 0.31s)
+result: Correction:instant engagement; Speed of correction: fast; Total in-game missile travel distance before impact:78m; Nature: undershot; Target hit:NO; Vector y:short, after o;
+Overall: missile undershot on target, missed o
+case7:
+Auto-correction started:
+  Displacement v: 101.2px at -86.6°
+  Range: 79m → proximity: 1.44x
+  Lead y: 177.0px at 93.4° (base: 0.54, factor: 1.00)
+  Direction check: v=-86.6°, y=93.4° (should be ~180° apart)
+  Angular: 17.70° traverse needed
+  Traverse: 15° instant window, 51.3°/s beyond → min duration: 63ms
+  Duration: 280ms (urgency: 0.07)
+  Mouse sensitivity: 1.0x
+  Mouse: (1309, 1125) → (1299, 1302)
+  Mouse delta: (-10, 177)
+  Pre-correction delay: 100ms, engagement delay: 2ms
+Auto-correction complete (took 0.31s)
+result: Correction:instant engagement; Speed of correction: fast; Total in-game missile travel distance before impact:80m; Nature: hit; Target hit:YES; Vector y:long, after o;
+Overall: missile converged on target, hit o
+case8:
+Auto-correction started:
+  Displacement v: 116.2px at -142.3°
+  Range: 79m → proximity: 1.44x
+  Lead y: 192.0px at 37.7° (base: 0.86, factor: 1.24)
+  Direction check: v=-142.3°, y=37.7° (should be ~180° apart)
+  Angular: 19.20° traverse needed
+  Traverse: 15° instant window, 51.3°/s beyond → min duration: 98ms
+  Duration: 271ms (urgency: 0.11)
+  Mouse sensitivity: 1.0x
+  Mouse: (1000, 1209) → (1152, 1326)
+  Mouse delta: (152, 117)
+  Pre-correction delay: 100ms, engagement delay: 2ms
+Auto-correction complete (took 0.29s)
+result: Correction:instant engagement; Speed of correction: fast; Total in-game missile travel distance before impact:80m; Nature: hit; Target hit:YES; Vector y:long, after o;
+Overall: missile converged on target, hit o
+
+case9:
+Auto-correction started:
+  Displacement v: 123.1px at -178.1°
+  Range: 79m → proximity: 1.44x
+  Lead y: 198.9px at 1.9° (base: 1.07, factor: 1.54)
+  Direction check: v=-178.1°, y=1.9° (should be ~180° apart)
+  Angular: 19.89° traverse needed
+  Traverse: 15° instant window, 51.3°/s beyond → min duration: 114ms
+  Duration: 266ms (urgency: 0.13)
+  Mouse sensitivity: 1.0x
+  Mouse: (1093, 1101) → (1292, 1107)
+  Mouse delta: (199, 6)
+  Pre-correction delay: 100ms, engagement delay: 2ms
+Auto-correction complete (took 0.29s)
+result: Correction:instant engagement; Speed of correction: fast; Total in-game missile travel distance before impact:80m; Nature: hit; Target hit:YES; Vector y:long, after o;
+Overall: missile converged on target, hit o
+
+case10:
+Auto-correction started:
+  Displacement v: 34.1px at -58.2°
+  Range: 79m → proximity: 1.44x
+  Lead y: 68.3px at 121.8° (base: 0.34, factor: 1.00)
+  Direction check: v=-58.2°, y=121.8° (should be ~180° apart)
+  Angular: 6.83° traverse needed (INSTANT FOLLOW)
+  Traverse: 15° instant window, 51.3°/s beyond → min duration: 0ms
+  Duration: 294ms (urgency: 0.02)
+  Mouse sensitivity: 1.0x
+  Mouse: (132, 586) → (96, 644)
+  Mouse delta: (-36, 58)
+  Pre-correction delay: 100ms, engagement delay: 1ms
+Auto-correction complete (took 0.32s)
+result: Correction:instant engagement; Speed of correction: fast; Total in-game missile travel distance before impact:80m; Nature: miss; Target hit:NO; Vector y:long, after o;
+Overall: missile missed target, missed o
+
+
+---------------------------------------------------------
+
+range in-game: 200m
+range set: 200m
+
+case1:
+Auto-correction started:
+  Displacement v: 32.2px at -53.8°
+  Range: 200m → proximity: 1.80x
+  Lead y: 64.4px at 126.2° (base: 0.32, factor: 1.00)
+  Direction check: v=-53.8°, y=126.2° (should be ~180° apart)
+  Angular: 6.44° traverse needed (INSTANT FOLLOW)
+  Traverse: 15° instant window, 51.3°/s beyond → min duration: 0ms
+  Duration: 295ms (urgency: 0.02)
+  Mouse sensitivity: 1.0x
+  Mouse: (485, 984) → (447, 1036)
+  Mouse delta: (-38, 52)
+  Pre-correction delay: 100ms, engagement delay: 1ms
+Auto-correction complete (took 0.32s)
+result: Correction:instant engagement; Speed of correction: fast; Total in-game missile travel distance before impact:195m; Nature: undershot; Target hit:NO; Vector y:short, after o;
+Overall: missile undershot target, missed o
+
+case2:
+Auto-correction started:
+  Displacement v: 45.1px at -3.8°
+  Range: 200m → proximity: 1.80x
+  Lead y: 90.2px at 176.2° (base: 0.04, factor: 1.00)
+  Direction check: v=-3.8°, y=176.2° (should be ~180° apart)
+  Angular: 9.02° traverse needed (INSTANT FOLLOW)
+  Traverse: 15° instant window, 51.3°/s beyond → min duration: 0ms
+  Duration: 295ms (urgency: 0.02)
+  Mouse sensitivity: 1.0x
+  Mouse: (1440, 1065) → (1350, 1071)
+  Mouse delta: (-90, 6)
+  Pre-correction delay: 100ms, engagement delay: 1ms
+Auto-correction complete (took 0.32s)
+
+result: Correction:instant engagement; Speed of correction: fast; Total in-game missile travel distance before impact:NA; Nature: overshot; Target hit:NO; Vector y:long, after o;
+Overall: missile overshot target, missed o
+
+case3:
+Auto-correction started:
+  Displacement v: 86.8px at -54.8°
+  Range: 200m → proximity: 1.80x
+  Lead y: 173.7px at 125.2° (base: 0.35, factor: 1.00)
+  Direction check: v=-54.8°, y=125.2° (should be ~180° apart)
+  Angular: 17.37° traverse needed
+  Traverse: 15° instant window, 51.3°/s beyond → min duration: 55ms
+  Duration: 286ms (urgency: 0.05)
+  Mouse sensitivity: 1.0x
+  Mouse: (1013, 1106) → (913, 1248)
+  Mouse delta: (-100, 142)
+  Pre-correction delay: 100ms, engagement delay: 1ms
+Auto-correction complete (took 0.31s)
+result: Correction:instant engagement; Speed of correction: fast; Total in-game missile travel distance before impact:180m; Nature: undershot; Target hit:NO; Vector y:long, after o;
+Overall: missile overshot target, missed o
+
+case4:
+Auto-correction started:
+  Displacement v: 100.1px at -129.7°
+  Range: 200m → proximity: 1.80x
+  Lead y: 200.1px at 50.3° (base: 0.78, factor: 1.41)
+  Direction check: v=-129.7°, y=50.3° (should be ~180° apart)
+  Angular: 20.01° traverse needed
+  Traverse: 15° instant window, 51.3°/s beyond → min duration: 117ms
+  Duration: 276ms (urgency: 0.09)
+  Mouse sensitivity: 1.0x
+  Mouse: (2158, 1354) → (2286, 1508)
+  Mouse delta: (128, 154)
+  Pre-correction delay: 100ms, engagement delay: 2ms
+Auto-correction complete (took 0.30s)
+result: Correction:instant engagement; Speed of correction: fast; Total in-game missile travel distance before impact:157m; Nature: undershot; Target hit:NO; Vector y:long, after o;
+Overall: missile undershot target, missed o
+
+case5:
+Auto-correction started:
+  Displacement v: 122.9px at -97.0°
+  Range: 200m → proximity: 1.80x
+  Lead y: 222.9px at 83.0° (base: 0.61, factor: 1.10)
+  Direction check: v=-97.0°, y=83.0° (should be ~180° apart)
+  Angular: 22.29° traverse needed
+  Traverse: 15° instant window, 51.3°/s beyond → min duration: 171ms
+  Duration: 275ms (urgency: 0.09)
+  Mouse sensitivity: 1.0x
+  Mouse: (1214, 995) → (1241, 1216)
+  Mouse delta: (27, 221)
+  Pre-correction delay: 100ms, engagement delay: 2ms
+Auto-correction complete (took 0.30s)
+
+result: Correction:instant engagement; Speed of correction: fast; Total in-game missile travel distance before impact:168m; Nature: undershot; Target hit:NO; Vector y:long, after o;
+Overall: missile undershot target, missed o
+
+case6:
+Auto-correction started:
+  Displacement v: 199.5px at -94.0°
+  Range: 200m → proximity: 1.80x
+  Lead y: 299.5px at 86.0° (base: 0.64, factor: 1.15)
+  Direction check: v=-94.0°, y=86.0° (should be ~180° apart)
+  Angular: 29.95° traverse needed
+  Traverse: 15° instant window, 51.3°/s beyond → min duration: 350ms
+  Duration: 350ms (urgency: 0.14)
+  Mouse sensitivity: 1.0x
+  Mouse: (1286, 757) → (1307, 1056)
+  Mouse delta: (21, 299)
+  Pre-correction delay: 100ms, engagement delay: 3ms
+Auto-correction complete (took 0.38s)
+result: Correction:instant engagement; Speed of correction: fast; Total in-game missile travel distance before impact:197m; Nature: overshot; Target hit:NO; Vector y:long, after o;
+Overall: missile undershot target, missed o
+
+case7:
+Auto-correction started:
+  Displacement v: 209.3px at -93.0°
+  Range: 200m → proximity: 1.80x
+  Lead y: 309.3px at 87.0° (base: 0.64, factor: 1.14)
+  Direction check: v=-93.0°, y=87.0° (should be ~180° apart)
+  Angular: 30.93° traverse needed
+  Traverse: 15° instant window, 51.3°/s beyond → min duration: 373ms
+  Duration: 373ms (urgency: 0.15)
+  Mouse sensitivity: 1.0x
+  Mouse: (1332, 847) → (1348, 1156)
+  Mouse delta: (16, 309)
+  Pre-correction delay: 100ms, engagement delay: 3ms
+Auto-correction complete (took 0.41s)
+result: Correction:instant engagement; Speed of correction: fast; Total in-game missile travel distance before impact:200m; Nature: hit; Target hit:YES; Vector y:long, after o;
+Overall: missile converged on target, missed o
+
+case8:
+Auto-correction started:
+  Displacement v: 221.2px at -92.3°
+  Range: 200m → proximity: 1.80x
+  Lead y: 321.2px at 87.7° (base: 0.64, factor: 1.15)
+  Direction check: v=-92.3°, y=87.7° (should be ~180° apart)
+  Angular: 32.12° traverse needed
+  Traverse: 15° instant window, 51.3°/s beyond → min duration: 400ms
+  Duration: 400ms (urgency: 0.16)
+  Mouse sensitivity: 1.0x
+  Mouse: (1166, 1131) → (1179, 1452)
+  Mouse delta: (13, 321)
+  Pre-correction delay: 100ms, engagement delay: 3ms
+Auto-correction complete (took 0.44s)
+result: Correction:instant engagement; Speed of correction: fast; Total in-game missile travel distance before impact:200m; Nature: hit; Target hit:YES; Vector y:long, after o;
+Overall: missile converged on target, hit o
+
+case9:
+Auto-correction started:
+  Displacement v: 179.0px at -90.3°
+  Range: 200m → proximity: 1.80x
+  Lead y: 279.0px at 89.7° (base: 0.60, factor: 1.09)
+  Direction check: v=-90.3°, y=89.7° (should be ~180° apart)
+  Angular: 27.90° traverse needed
+  Traverse: 15° instant window, 51.3°/s beyond → min duration: 302ms
+  Duration: 302ms (urgency: 0.13)
+  Mouse sensitivity: 1.0x
+  Mouse: (1320, 1259) → (1322, 1538)
+  Mouse delta: (2, 279)
+  Pre-correction delay: 100ms, engagement delay: 3ms
+Auto-correction complete (took 0.33s)
+result: Correction:instant engagement; Speed of correction: fast; Total in-game missile travel distance before impact:200m; Nature: hit; Target hit:YES; Vector y:long, after o;
+Overall: missile converged on target, hit o
+
+case10:
+Auto-correction started:
+  Displacement v: 176.4px at -124.1°
+  Range: 200m → proximity: 1.80x
+  Lead y: 276.4px at 55.9° (base: 0.80, factor: 1.43)
+  Direction check: v=-124.1°, y=55.9° (should be ~180° apart)
+  Angular: 27.64° traverse needed
+  Traverse: 15° instant window, 51.3°/s beyond → min duration: 296ms
+  Duration: 296ms (urgency: 0.15)
+  Mouse sensitivity: 1.0x
+  Mouse: (1327, 852) → (1482, 1081)
+  Mouse delta: (155, 229)
+  Pre-correction delay: 100ms, engagement delay: 2ms
+Auto-correction complete (took 0.32s)
+result: Correction:instant engagement; Speed of correction: fast; Total in-game missile travel distance before impact:200m; Nature: hit; Target hit:YES; Vector y:long, after o;
+Overall: missile converged on target, hit o
+
+
+---------------------------------------------------------
+
+range in-game: 400m
+range set: 400m
+
+case1:
+Auto-correction started:
+  Displacement v: 217.6px at -94.2°
+  Range: 401m → proximity: 2.40x
+  Lead y: 357.9px at 85.8° (base: 0.65, factor: 1.56)
+  Direction check: v=-94.2°, y=85.8° (should be ~180° apart)
+  Angular: 35.79° traverse needed
+  Traverse: 15° instant window, 51.3°/s beyond → min duration: 486ms
+  Duration: 486ms (urgency: 0.16)
+  Mouse sensitivity: 1.0x
+  Mouse: (1453, 1221) → (1479, 1578)
+  Mouse delta: (26, 357)
+  Pre-correction delay: 100ms, engagement delay: 3ms
+Auto-correction complete (took 0.53s)
+result: Correction:instant engagement; Speed of correction: fast; Total in-game missile travel distance before impact:345m; Nature: undershot; Target hit:NO; Vector y:long, after o;
+Overall: missile undershot target, missed o
+
+case2:
+Auto-correction started:
+  Displacement v: 295.8px at -132.5°
+  Range: 401m → proximity: 2.40x
+  Lead y: 436.1px at 47.5° (base: 0.92, factor: 2.21)
+  Direction check: v=-132.5°, y=47.5° (should be ~180° apart)
+  Angular: 43.61° traverse needed
+  Traverse: 15° instant window, 51.3°/s beyond → min duration: 669ms
+  Duration: 669ms (urgency: 0.26)
+  Mouse sensitivity: 1.0x
+  Mouse: (989, 816) → (1284, 1137)
+  Mouse delta: (295, 321)
+  Pre-correction delay: 100ms, engagement delay: 3ms
+Auto-correction complete (took 0.72s)
+result: Correction:instant engagement; Speed of correction: fast; Total in-game missile travel distance before impact:395m; Nature: undershot; Target hit:NO; Vector y:long, after o;
+Overall: missile undershot target, missed o
+
+case3:
+Auto-correction started:
+  Displacement v: 395.0px at -117.9°
+  Range: 401m → proximity: 2.40x
+  Lead y: 535.3px at 62.1° (base: 0.89, factor: 2.14)
+  Direction check: v=-117.9°, y=62.1° (should be ~180° apart)sAWSS
+  Angular: 53.53° traverse needed
+  Traverse: 15° instant window, 51.3°/s beyond → min duration: 901ms
+  Duration: 901ms (urgency: 0.32)
+  Mouse sensitivity: 1.0x
+  Mouse: (2360, 1089) → (2611, 1562)
+  Mouse delta: (251, 473)
+  Pre-correction delay: 100ms, engagement delay: 4ms
+Auto-correction complete (took 0.98s)
+result: Correction:instant engagement; Speed of correction: medium; Total in-game missile travel distance before impact:600m; Nature: overshot; Target hit:NO; Vector y:long, after o;
+Overall: missile overshot target, missed o
+
+case4:
+Auto-correction started:
+  Displacement v: 282.3px at -87.6°
+  Range: 401m → proximity: 2.40x
+  Lead y: 422.5px at 92.4° (base: 0.65, factor: 1.55)
+  Direction check: v=-87.6°, y=92.4° (should be ~180° apart)
+  Angular: 42.25° traverse needed
+  Traverse: 15° instant window, 51.3°/s beyond → min duration: 638ms
+  Duration: 638ms (urgency: 0.20)
+  Mouse sensitivity: 1.0x
+  Mouse: (1413, 1015) → (1395, 1437)
+  Mouse delta: (-18, 422)
+  Pre-correction delay: 100ms, engagement delay: 4ms
+Auto-correction complete (took 0.70s)
+result: Correction:instant engagement; Speed of correction: fast; Total in-game missile travel distance before impact:395m; Nature: undershot; Target hit:NO; Vector y:long, after o;
+Overall: missile undershot target, missed o
+
+case5:
+Auto-correction started:
+  Displacement v: 238.5px at -93.6°
+  Range: 401m → proximity: 2.40x
+  Lead y: 378.8px at 86.4° (base: 0.66, factor: 1.58)
+  Direction check: v=-93.6°, y=86.4° (should be ~180° apart)
+  Angular: 37.88° traverse needed
+  Traverse: 15° instant window, 51.3°/s beyond → min duration: 535ms
+  Duration: 535ms (urgency: 0.17)
+  Mouse sensitivity: 1.0x
+  Mouse: (1187, 873) → (1211, 1251)
+  Mouse delta: (24, 378)
+  Pre-correction delay: 100ms, engagement delay: 3ms
+Auto-correction complete (took 0.58s)
+result: Correction:instant engagement; Speed of correction: fast; Total in-game missile travel distance before impact:379m; Nature: undershot; Target hit:NO; Vector y:long, after o;
+Overall: missile undershot target, missed o
+
+case6:
+Auto-correction started:
+  Displacement v: 262.7px at -151.6°
+  Range: 401m → proximity: 2.40x
+  Lead y: 402.9px at 28.4° (base: 1.01, factor: 2.43)
+  Direction check: v=-151.6°, y=28.4° (should be ~180° apart)
+  Angular: 40.29° traverse needed
+  Traverse: 15° instant window, 51.3°/s beyond → min duration: 592ms
+  Duration: 592ms (urgency: 0.25)
+  Mouse sensitivity: 1.0x
+  Mouse: (1274, 1167) → (1628, 1359)
+  Mouse delta: (354, 192)
+  Pre-correction delay: 100ms, engagement delay: 3ms
+Auto-correction complete (took 0.64s)
+result: Correction:instant engagement; Speed of correction: fast; Total in-game missile travel distance before impact:395m; Nature: undershot; Target hit:NO; Vector y:long, after o;
+Overall: missile undershot target, missed o
+
+case7:
+Auto-correction started:
+  Displacement v: 270.0px at -142.1°
+  Range: 401m → proximity: 2.40x
+  Lead y: 410.3px at 37.9° (base: 0.96, factor: 2.30)
+  Direction check: v=-142.1°, y=37.9° (should be ~180° apart)
+  Angular: 41.03° traverse needed
+  Traverse: 15° instant window, 51.3°/s beyond → min duration: 609ms
+  Duration: 609ms (urgency: 0.25)
+  Mouse sensitivity: 1.0x
+  Mouse: (1431, 1158) → (1755, 1410)
+  Mouse delta: (324, 252)
+  Pre-correction delay: 100ms, engagement delay: 3ms
+Auto-correction complete (took 0.66s)
+result: Correction:instant engagement; Speed of correction: fast; Total in-game missile travel distance before impact:397m; Nature: undershot; Target hit:NO; Vector y:long, after o;
+Overall: missile undershot target, missed o
+
+case8:
+Auto-correction started:
+  Displacement v: 245.2px at -57.2°
+  Range: 401m → proximity: 2.40x
+  Lead y: 385.5px at 122.8° (base: 0.45, factor: 1.07)
+  Direction check: v=-57.2°, y=122.8° (should be ~180° apart)
+  Angular: 38.55° traverse needed
+  Traverse: 15° instant window, 51.3°/s beyond → min duration: 551ms
+  Duration: 551ms (urgency: 0.14)
+  Mouse sensitivity: 1.0x
+  Mouse: (1280, 598) → (1071, 922)
+  Mouse delta: (-209, 324)
+  Pre-correction delay: 100ms, engagement delay: 3ms
+Auto-correction complete (took 0.60s)
+result: Correction:instant engagement; Speed of correction: fast; Total in-game missile travel distance before impact:367m; Nature: undershot; Target hit:NO; Vector y:long, after o;
+Overall: missile undershot target, missed o
+
+case9:
+Auto-correction started:
+  Displacement v: 256.0px at -89.1°
+  Range: 401m → proximity: 2.40x
+  Lead y: 396.3px at 90.9° (base: 0.64, factor: 1.54)
+  Direction check: v=-89.1°, y=90.9° (should be ~180° apart)
+  Angular: 39.63° traverse needed
+  Traverse: 15° instant window, 51.3°/s beyond → min duration: 576ms
+  Duration: 576ms (urgency: 0.18)
+  Mouse sensitivity: 1.0x
+  Mouse: (1746, 818) → (1740, 1214)
+  Mouse delta: (-6, 396)
+  Pre-correction delay: 100ms, engagement delay: 3ms
+Auto-correction complete (took 0.63s)
+result: Correction:instant engagement; Speed of correction: fast; Total in-game missile travel distance before impact:396m; Nature: undershot; Target hit:NO; Vector y:long, after o;
+Overall: missile undershot target, missed o
+
+case10:
+Auto-correction started:
+  Displacement v: 288.9px at -96.6°
+  Range: 401m → proximity: 2.40x
+  Lead y: 429.2px at 83.4° (base: 0.70, factor: 1.69)
+  Direction check: v=-96.6°, y=83.4° (should be ~180° apart)
+  Angular: 42.92° traverse needed
+  Traverse: 15° instant window, 51.3°/s beyond → min duration: 653ms
+  Duration: 653ms (urgency: 0.21)
+  Mouse sensitivity: 1.0x
+  Mouse: (1123, 1151) → (1172, 1577)
+  Mouse delta: (49, 426)
+  Pre-correction delay: 100ms, engagement delay: 4ms
+Auto-correction complete (took 0.71s)
+
+result: Correction:instant engagement; Speed of correction: fast; Total in-game missile travel distance before impact:545m; Nature: overshot; Target hit:NO; Vector y:long, after o;
+Overall: missile overshot target, missed o
+

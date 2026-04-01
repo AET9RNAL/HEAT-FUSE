@@ -950,6 +950,12 @@ class SACLOSOverlay:
             # which is immune to user clicks blocking Tkinter's event loop
             self.root.after(0, lambda: self._start_auto_correction(distance_px, angle_rad))
         else:
+            # We must still fire the missile even if no movement is needed!
+            # Otherwise, aiming perfectly results in no shot being taken.
+            if self.correction_enabled:
+                import threading
+                threading.Thread(target=self._inject_mouse_click, daemon=True).start()
+
             # No correction needed or disabled - reset immediately
             self._reset_to_calibrated_position()
         # Status bar remains hidden (we're still in locked mode)
@@ -985,15 +991,10 @@ class SACLOSOverlay:
         urgency = d_norm * (1 + n_norm)
 
         # === RANGE PROXIMITY ===
-        # Gentle multiplier - dataset analysis showed aggressive proximity HURTS accuracy.
-        # At close range, SACLOS force (K × error × range_from_muzzle) already amplifies
-        # the angular error, so we need LESS overcompensation, not more.
-        # The 89m/600m test group (proximity 0.95x) achieved 100% hit rate because
-        # it kept lead factors low (0.5-1.0) and angular distances within instant-follow.
-        # At 70m:  1/(0.14+0.5) = 1.56x  (modest boost)
-        # At 200m: 1/(0.40+0.5) = 1.11x  (near neutral)
-        # At 500m: 1/(1.00+0.5) = 0.67x  (slight reduction at long range)
-        range_proximity = 1.0 / (r_norm + 0.5)
+        # Proximity should INCREASE with range because more distance requires a stronger
+        # initial course correction (more pixels of lead) to bend the trajectory.
+        # Scaled linearly from 1.2x at close range, up to 2.7x at 500m
+        range_proximity = 1.2 + r_norm * 1.5
 
         # === LEAD FACTOR (Overcompensation) ===
         # How much to overshoot target to create intercept trajectory
@@ -1003,15 +1004,29 @@ class SACLOSOverlay:
             self.lead_beta * n_norm +             # Angle contribution
             self.lead_gamma * urgency             # Urgency contribution
         )
-        # Scale by range proximity: close range multiplies overcompensation dramatically
+        # Scale by range proximity: distant targets multiply overcompensation
         lead_factor = base_lead * range_proximity
-        lead_factor = max(lead_factor, 0.5)  # Minimum 50% overcompensation
-        lead_factor = min(lead_factor, 2.5)  # Cap at 250% - dataset shows >2.5 always misses
+        lead_factor = max(lead_factor, 1.0)  # Minimum 100% overcompensation
+        lead_factor = min(lead_factor, 3.0)  # Cap at 300%
 
+        # Calculate initial unbounded lead distance
+        lead_distance_px_raw = distance_px * (1 + lead_factor)
+        
+        # Calculate how many pixels PAST the origin this represents (overshoot)
+        overshoot_px = lead_distance_px_raw - distance_px
+        
         # === LEAD DISTANCE (d') ===
-        # Magnitude of mouse movement - typically LARGER than displacement
+        # CRITICAL: Cap the overshoot based on range. 
+        # Large initial displacements should NOT result in linearly unbounded overshoots!
+        # This keeps the total movement fast and prevents over-correction.
+        # At 70m -> ~74px max overshoot. At 350m -> ~130px.
+        max_overshoot_px = 60.0 + (self.target_range_m / 100.0) * 20.0
+        
+        overshoot_px = min(overshoot_px, max_overshoot_px)
+        
+        # Reconstruct final lead distance
         # Apply mouse sensitivity scale to convert overlay pixels → SendInput units
-        lead_distance_px = distance_px * (1 + lead_factor) * self.mouse_sensitivity_scale
+        lead_distance_px = (distance_px + overshoot_px) * self.mouse_sensitivity_scale
 
         # === LEAD ANGLE (n') ===
         # Direction of mouse movement
@@ -1238,6 +1253,11 @@ class SACLOSOverlay:
         # This replaces the user needing to manually click before releasing the key
         self._inject_mouse_click()
 
+        # Pre-correction delay (allow game to process click before moving)
+        # Prevents initial movement from being dropped during the 'fire weapon' frame
+        if hasattr(self, 'pre_correction_delay_ms') and self.pre_correction_delay_ms > 0:
+            time.sleep(self.pre_correction_delay_ms / 1000.0)
+
         # Wait for engagement delay
         if engagement_delay_s > 0:
             time.sleep(engagement_delay_s)
@@ -1380,15 +1400,17 @@ class SACLOSOverlay:
             down = INPUT()
             down.type = INPUT_MOUSE
             down.mi = MOUSEINPUT(0, 0, 0, MOUSEEVENTF_LEFTDOWN, 0, ctypes.pointer(extra))
+            ctypes.windll.user32.SendInput(1, ctypes.pointer(down), ctypes.sizeof(INPUT))
+
+            # Hold the click for 20ms to ensure the game engine's input loop registers it
+            import time
+            time.sleep(0.05)
 
             # Mouse up
             up = INPUT()
             up.type = INPUT_MOUSE
             up.mi = MOUSEINPUT(0, 0, 0, MOUSEEVENTF_LEFTUP, 0, ctypes.pointer(extra))
-
-            # Send both as a single batch (down then up)
-            inputs = (INPUT * 2)(down, up)
-            ctypes.windll.user32.SendInput(2, ctypes.pointer(inputs[0]), ctypes.sizeof(INPUT))
+            ctypes.windll.user32.SendInput(1, ctypes.pointer(up), ctypes.sizeof(INPUT))
 
         except Exception as e:
             print(f"Warning: Failed to inject mouse click: {e}")
@@ -1578,9 +1600,10 @@ class SACLOSOverlay:
                             self.root.after(0, self._open_image)
                     elif char and char.lower() == 'p':
                         self.root.after(0, self._quit)
-            except Exception:
-                # Silently ignore errors but could log them for debugging
-                pass
+            except Exception as e:
+                import traceback
+                print("Exception in on_press:", e)
+                traceback.print_exc()
 
         def on_release(key):
             try:
@@ -1632,8 +1655,10 @@ class SACLOSOverlay:
                     if is_tracking_key:
                         if self.state == "locked" and self.tracking_active:
                             self.root.after(0, self._stop_tracking)
-            except Exception:
-                pass
+            except Exception as e:
+                import traceback
+                print("Exception in on_release:", e)
+                traceback.print_exc()
 
         try:
             self.kbd_listener = pynkeyboard.Listener(

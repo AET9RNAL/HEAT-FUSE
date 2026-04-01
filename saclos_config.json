@@ -10,7 +10,7 @@
   "tracking_key_name": "Q",
   "rf_key_name": "r",
   "correction_enabled": true,
-  "target_range_m": 89.08000000000001,
+  "target_range_m": 401.4,
   "correction_min_threshold_px": 5.0,
   "correction_speed_multiplier": 1.0,
   "pre_correction_delay_ms": 100,
