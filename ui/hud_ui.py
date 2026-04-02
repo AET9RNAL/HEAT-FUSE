@@ -96,6 +96,7 @@ class HudUiMixin:
         self.hud_predict_blink_id = None
         self.hud_predict_blink_visible = True
         self.hud_img_status_predict_blank = None
+        self.hud_status_canvas_item = None
 
         # Default positions (screen coordinates)
         sw = self.root.winfo_screenwidth()
@@ -313,9 +314,16 @@ class HudUiMixin:
             status_img_label.pack(side=tk.LEFT)
             spacer = tk.Label(status_frame, width=4, bg=self.HUD_BG)
             spacer.pack(side=tk.LEFT)
-            # Set image before packing to get correct size
-            status_img = self.hud_img_status_idle  # Default status
-            self.hud_status_label = tk.Label(status_frame, image=status_img, bg=self.HUD_BG)
+            status_img = self.hud_img_status_idle
+            _status_imgs = [i for i in [self.hud_img_status_idle, self.hud_img_status_predict,
+                                         self.hud_img_status_intercept] if i]
+            _slw = max((i.width() for i in _status_imgs), default=60)
+            _slh = max((i.height() for i in _status_imgs), default=20)
+            self.hud_status_label = tk.Canvas(status_frame, width=_slw, height=_slh,
+                                              bg=self.HUD_BG, highlightthickness=0, bd=0)
+            self.hud_status_canvas_item = self.hud_status_label.create_image(
+                0, 0, anchor='nw', image=status_img or ''
+            )
             self.hud_status_label.pack(side=tk.LEFT)
             # Update window geometry after packing
             self.root.update_idletasks()
@@ -449,7 +457,10 @@ class HudUiMixin:
         img = img_map.get(self.hud_status, self.hud_img_status_idle)
 
         if img:
-            self.hud_status_label.config(image=img, bg=self.HUD_BG)
+            if self.hud_status_canvas_item is not None:
+                self.hud_status_label.itemconfigure(self.hud_status_canvas_item, image=img, state='normal')
+            else:
+                self.hud_status_label.config(image=img, bg=self.HUD_BG)
             # Update window geometry if HUD is visible (in case image sizes differ)
             if self.hud_visible and self.hud_status_win:
                 self.root.update_idletasks()
@@ -711,7 +722,10 @@ class HudUiMixin:
             self.hud_predict_blink_id = None
         if self.hud_status_label and self.hud_img_status_predict:
             try:
-                self.hud_status_label.config(image=self.hud_img_status_predict)
+                if self.hud_status_canvas_item is not None:
+                    self.hud_status_label.itemconfigure(self.hud_status_canvas_item, state='normal')
+                else:
+                    self.hud_status_label.config(image=self.hud_img_status_predict)
             except Exception:
                 pass
 
@@ -719,13 +733,17 @@ class HudUiMixin:
         """Toggle predict status image on/off (hold keyframes, no easing)."""
         if not self.hud_status_label:
             return
-        img = (
-            self.hud_img_status_predict
-            if self.hud_predict_blink_visible
-            else (self.hud_img_status_predict_blank or self.hud_img_status_predict)
-        )
         try:
-            self.hud_status_label.config(image=img)
+            if self.hud_status_canvas_item is not None:
+                state = 'normal' if self.hud_predict_blink_visible else 'hidden'
+                self.hud_status_label.itemconfigure(self.hud_status_canvas_item, state=state)
+            else:
+                img = (
+                    self.hud_img_status_predict
+                    if self.hud_predict_blink_visible
+                    else (self.hud_img_status_predict_blank or self.hud_img_status_predict)
+                )
+                self.hud_status_label.config(image=img)
         except Exception:
             return
         self.hud_predict_blink_visible = not self.hud_predict_blink_visible
