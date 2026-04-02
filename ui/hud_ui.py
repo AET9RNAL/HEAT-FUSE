@@ -92,6 +92,11 @@ class HudUiMixin:
         self.hud_designator_anim_start = 0
         self.hud_designator_alpha = 1.0
 
+        # Predict status blink animation
+        self.hud_predict_blink_id = None
+        self.hud_predict_blink_visible = True
+        self.hud_img_status_predict_blank = None
+
         # Default positions (screen coordinates)
         sw = self.root.winfo_screenwidth()
         sh = self.root.winfo_screenheight()
@@ -130,6 +135,11 @@ class HudUiMixin:
         self.hud_img_status = load_png(self.hud_status_image)
         self.hud_img_status_idle = load_png(self.hud_status_idle)
         self.hud_img_status_predict = load_png(self.hud_status_predict)
+        if self.hud_img_status_predict:
+            _bw = self.hud_img_status_predict.width()
+            _bh = self.hud_img_status_predict.height()
+            _blank = Image.new("RGB", (_bw, _bh), (0, 0, 1))
+            self.hud_img_status_predict_blank = ImageTk.PhotoImage(_blank)
         self.hud_img_status_intercept = load_png(self.hud_status_intercept)
         self.hud_img_designator_predict = load_png(self.hud_designator_predict)
         self.hud_img_designator_intercept = load_png(self.hud_designator_intercept)
@@ -516,6 +526,7 @@ class HudUiMixin:
 
         # Stop animations
         self._stop_designator_animation()
+        self._stop_predict_blink()
         self._stop_logo_animation()
 
         # Hide all windows
@@ -565,7 +576,12 @@ class HudUiMixin:
         if status == self.hud_status:
             return
 
+        prev_status = self.hud_status
         self.hud_status = status
+
+        if prev_status == "predict":
+            self._stop_predict_blink()
+
         self._update_status_image()
 
         # Handle designator visibility and animation
@@ -573,6 +589,7 @@ class HudUiMixin:
             self._hide_designators()
         elif status == "predict":
             self._show_predict_designator()
+            self._start_predict_blink()
         elif status == "intercept":
             self._show_intercept_designator()
 
@@ -681,6 +698,40 @@ class HudUiMixin:
         if self.hud_status == "predict":
             self.hud_designator_anim_id = self.root.after(50, self._animate_designator)
 
+    def _start_predict_blink(self):
+        """Start square-wave blink on the predict status image."""
+        self._stop_predict_blink()
+        self.hud_predict_blink_visible = True
+        self._animate_predict_blink()
+
+    def _stop_predict_blink(self):
+        """Stop predict blink and restore the image to fully visible."""
+        if self.hud_predict_blink_id:
+            self.root.after_cancel(self.hud_predict_blink_id)
+            self.hud_predict_blink_id = None
+        if self.hud_status_label and self.hud_img_status_predict:
+            try:
+                self.hud_status_label.config(image=self.hud_img_status_predict)
+            except Exception:
+                pass
+
+    def _animate_predict_blink(self):
+        """Toggle predict status image on/off (hold keyframes, no easing)."""
+        if not self.hud_status_label:
+            return
+        img = (
+            self.hud_img_status_predict
+            if self.hud_predict_blink_visible
+            else (self.hud_img_status_predict_blank or self.hud_img_status_predict)
+        )
+        try:
+            self.hud_status_label.config(image=img)
+        except Exception:
+            return
+        self.hud_predict_blink_visible = not self.hud_predict_blink_visible
+        if self.hud_status == "predict":
+            self.hud_predict_blink_id = self.root.after(500, self._animate_predict_blink)
+
     def _stop_designator_animation(self):
         """Stop the designator animation."""
         if self.hud_designator_anim_id:
@@ -767,6 +818,7 @@ class HudUiMixin:
     def _cleanup_hud(self):
         """Clean up HUD windows."""
         self._stop_designator_animation()
+        self._stop_predict_blink()
         self._stop_logo_animation()
         for win in [self.hud_name_win, self.hud_descriptor_win,
                     self.hud_range_win, self.hud_status_win,
