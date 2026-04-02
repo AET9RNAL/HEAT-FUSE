@@ -320,6 +320,8 @@ class BaseSACLOSOverlay(OCRUiMixin, RangefinderUiMixin, HudUiMixin):
 
         if has_update:
             self._apply_geometry()
+            if self.hud_visible and self.hud_status in ("predict", "intercept"):
+                self._position_designators()
 
         self.update_timer_id = self.root.after(1, self._process_position_queue)
 
@@ -420,6 +422,13 @@ class BaseSACLOSOverlay(OCRUiMixin, RangefinderUiMixin, HudUiMixin):
                 self.corner_handles.append(self.canvas.create_rectangle(cx_h - handle_size, cy_h - handle_size, cx_h + handle_size, cy_h + handle_size, fill="#ff9900", outline="#ffffff", width=1, tags=corner_id))
 
     def _toggle_lock(self):
+        # Debounce: both Tkinter binding and pynput listener fire on Ctrl+L,
+        # causing a double state transition (calibrate→adjust→locked instantly).
+        now = time.perf_counter()
+        if now - getattr(self, '_last_toggle_time', 0) < 0.3:
+            return
+        self._last_toggle_time = now
+
         if self.state == "calibrate":
             self._enter_adjust_bounds()
         elif self.state == "adjust_bounds":

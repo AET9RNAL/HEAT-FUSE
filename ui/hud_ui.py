@@ -144,20 +144,50 @@ class HudUiMixin:
                 print(f"Warning: Could not load logo: {e}")
 
     def _prerender_logo_frames(self):
-        """Pre-render rotated logo frames for spin animation."""
+        """Pre-render rotated logo frames for spin animation.
+        Rotates around the center of mass of opaque pixels so the
+        visual pivot matches the perceived center of the logo."""
         if not self.hud_img_logo_raw:
             return
         raw = self.hud_img_logo_raw
-        # Pad to square first so the rotation center matches the visual center
-        diag = int(math.ceil(math.sqrt(raw.width ** 2 + raw.height ** 2)))
-        padded = Image.new("RGBA", (diag, diag), (0, 0, 0, 0))
-        padded.paste(raw, ((diag - raw.width) // 2, (diag - raw.height) // 2), raw)
+
+        # Calculate center of mass from alpha channel
+        alpha = raw.split()[3]
+        pixels = alpha.load()
+        total_w = 0
+        sum_x = 0.0
+        sum_y = 0.0
+        for y in range(raw.height):
+            for x in range(raw.width):
+                w = pixels[x, y]
+                if w > 0:
+                    total_w += w
+                    sum_x += x * w
+                    sum_y += y * w
+
+        if total_w == 0:
+            return
+
+        com_x = sum_x / total_w
+        com_y = sum_y / total_w
+
+        # Canvas large enough so no corner clips after rotation
+        corners = [(0, 0), (raw.width, 0), (0, raw.height), (raw.width, raw.height)]
+        max_dist = max(math.sqrt((px - com_x) ** 2 + (py - com_y) ** 2) for px, py in corners)
+        canvas_size = int(math.ceil(max_dist * 2)) + 2
+
+        # Place image so center of mass sits at canvas center
+        offset_x = int(canvas_size / 2 - com_x)
+        offset_y = int(canvas_size / 2 - com_y)
+        padded = Image.new("RGBA", (canvas_size, canvas_size), (0, 0, 0, 0))
+        padded.paste(raw, (offset_x, offset_y), raw)
+
         self.hud_logo_frames = []
         for angle in range(0, 360, 10):
             rotated = padded.rotate(angle, resample=Image.Resampling.BICUBIC, expand=False)
-            canvas = Image.new("RGBA", (diag, diag), (0, 0, 1, 255))
-            canvas.paste(rotated, (0, 0), rotated)
-            self.hud_logo_frames.append(ImageTk.PhotoImage(canvas.convert("RGB")))
+            bg = Image.new("RGBA", (canvas_size, canvas_size), (0, 0, 1, 255))
+            bg.paste(rotated, (0, 0), rotated)
+            self.hud_logo_frames.append(ImageTk.PhotoImage(bg.convert("RGB")))
 
     def _create_hud_windows(self):
         """Create all HUD windows."""
@@ -430,58 +460,53 @@ class HudUiMixin:
 
     def _show_hud_setup(self):
         """Show HUD windows in draggable setup mode."""
-        self.hud_visible = True
         self.hud_locked = False
 
-        # Deiconify all windows first
+        # Update content while still withdrawn (hud_visible is False)
+        self._update_hud_range_text()
+        self._update_status_image()
+
+        # Position BEFORE deiconify (matches working OCR pattern)
+        self._position_hud_windows()
+
+        # Now deiconify — windows appear at the correct saved position
         for win in [self.hud_name_win, self.hud_descriptor_win,
                     self.hud_range_win, self.hud_status_win]:
             if win:
                 win.deiconify()
                 win.attributes("-topmost", True)
-
-        # Ensure windows are fully realized before positioning
-        self.root.update_idletasks()
-
-        # Position from saved config
-        self._position_hud_windows()
-
-        # Ensure z-order above main overlay
-        for win in [self.hud_name_win, self.hud_descriptor_win,
-                    self.hud_range_win, self.hud_status_win]:
-            if win:
                 win.lift()
 
-        self._update_hud_range_text()
-        self._update_status_image()
+        self.hud_visible = True
         self._start_logo_animation()
 
     def _show_hud_locked(self):
         """Show HUD windows in locked (click-through) mode."""
-        self.hud_visible = True
         self.hud_locked = True
 
-        # Show all windows
+        # Update content while still withdrawn (hud_visible is False)
+        self._update_hud_range_text()
+        self._update_status_image()
+
+        # Position BEFORE deiconify (matches working OCR pattern)
+        self._position_hud_windows()
+
+        # Now deiconify — windows appear at the correct saved position
         for win in [self.hud_name_win, self.hud_descriptor_win,
                     self.hud_range_win, self.hud_status_win]:
             if win:
                 win.deiconify()
                 win.attributes("-topmost", True)
 
-        # Ensure windows are realized before setting click-through
-        self.root.update_idletasks()
-
-        # Position from saved config
-        self._position_hud_windows()
+        self.hud_visible = True
 
         # Set click-through on all HUD windows
+        self.root.update_idletasks()
         for win in [self.hud_name_win, self.hud_descriptor_win,
                     self.hud_range_win, self.hud_status_win]:
             if win:
                 self._set_hud_clickthrough(win, True)
 
-        self._update_hud_range_text()
-        self._update_status_image()
         self._start_logo_animation()
 
     def _hide_hud(self):
@@ -501,22 +526,17 @@ class HudUiMixin:
                 win.withdraw()
 
     def _position_hud_windows(self):
-        """Position HUD windows from saved config."""
-        # Name
-        if self.hud_name_win and self.hud_name_pos:
-            self.hud_name_win.geometry(f"+{int(self.hud_name_pos[0])}+{int(self.hud_name_pos[1])}")
-
-        # Descriptor
-        if self.hud_descriptor_win and self.hud_descriptor_pos:
-            self.hud_descriptor_win.geometry(f"+{int(self.hud_descriptor_pos[0])}+{int(self.hud_descriptor_pos[1])}")
-
-        # Range
-        if self.hud_range_win and self.hud_range_pos:
-            self.hud_range_win.geometry(f"+{int(self.hud_range_pos[0])}+{int(self.hud_range_pos[1])}")
-
-        # Status
-        if self.hud_status_win and self.hud_status_pos:
-            self.hud_status_win.geometry(f"+{int(self.hud_status_pos[0])}+{int(self.hud_status_pos[1])}")
+        """Position HUD windows from saved config using full WxH+X+Y geometry."""
+        self.root.update_idletasks()
+        for win, pos in [(self.hud_name_win, self.hud_name_pos),
+                         (self.hud_descriptor_win, self.hud_descriptor_pos),
+                         (self.hud_range_win, self.hud_range_pos),
+                         (self.hud_status_win, self.hud_status_pos)]:
+            if win and pos:
+                w = max(1, win.winfo_reqwidth())
+                h = max(1, win.winfo_reqheight())
+                x, y = int(pos[0]), int(pos[1])
+                win.geometry(f"{w}x{h}+{x}+{y}")
 
     def _update_hud_range_text(self, range_m=None):
         """Update the range text display."""
@@ -612,14 +632,9 @@ class HudUiMixin:
                 self._set_hud_clickthrough(self.hud_designator_intercept_win, True)
 
     def _position_designators(self):
-        """Position designators at overlay center."""
-        # Calculate overlay center from calibrated position
-        if hasattr(self, 'calibrated_x') and self.calibrated_x is not None:
-            overlay_cx = self.calibrated_x + self.img_w / 2
-            overlay_cy = self.calibrated_y + self.img_h / 2
-        else:
-            overlay_cx = self.win_x + self.img_w / 2
-            overlay_cy = self.win_y + self.img_h / 2
+        """Position designators at the current overlay center (follows tracking)."""
+        overlay_cx = self.win_x + self.img_w / 2
+        overlay_cy = self.win_y + self.img_h / 2
 
         # Center designator on this point
         pred_w = self.hud_img_designator_predict.width() if self.hud_img_designator_predict else 30
