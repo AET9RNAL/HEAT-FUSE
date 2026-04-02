@@ -12,6 +12,7 @@ from utils.window_utils import apply_geometry_fast, set_window_clickthrough, for
 from utils.ocr_reader import TESSERACT_OK, ocr_capture_range
 from ui.ocr_ui import OCRUiMixin
 from ui.rangefinder_ui import RangefinderUiMixin
+from ui.hud_ui import HudUiMixin
 
 try:
     from PIL import Image, ImageTk
@@ -25,7 +26,7 @@ try:
 except ImportError:
     PYNPUT_OK = False
 
-class BaseSACLOSOverlay(OCRUiMixin, RangefinderUiMixin):
+class BaseSACLOSOverlay(OCRUiMixin, RangefinderUiMixin, HudUiMixin):
     def __init__(self, root, image_path=None, tracking_image_path=None, margin_x=200, margin_y=200):
         self.root = root
         self.root.title("SACLOS Overlay")
@@ -67,6 +68,7 @@ class BaseSACLOSOverlay(OCRUiMixin, RangefinderUiMixin):
         # Run mixin initializations
         self._init_rangefinder()
         self._init_ocr_ui()
+        self._init_hud()
 
         self.root.attributes("-topmost", True)
         self.root.attributes("-transparentcolor", "#000001")
@@ -159,9 +161,10 @@ class BaseSACLOSOverlay(OCRUiMixin, RangefinderUiMixin):
             "ocr_display_pos": self.ocr_display_pos,
             "target_range_m": self.target_range_m
         }
-        
+
         # Merge with generic config manager rules
         # Subclasses can override this to inject mode-specific variables
+        self._save_hud_config(config_dict)
         self._add_extra_config(config_dict)
         self.config_mgr.save(config_dict)
 
@@ -196,6 +199,8 @@ class BaseSACLOSOverlay(OCRUiMixin, RangefinderUiMixin):
         self.ocr_enabled = config.get("ocr_enabled", False)
         self.ocr_poll_interval_ms = config.get("ocr_poll_interval_ms", 350)
         self.ocr_display_pos = config.get("ocr_display_pos", None)
+
+        self._load_hud_config(config)
 
         self._load_extra_config(config)
 
@@ -432,6 +437,7 @@ class BaseSACLOSOverlay(OCRUiMixin, RangefinderUiMixin):
         self._draw_boundary_box()
         if self.ocr_region and TESSERACT_OK:
             self._show_ocr_setup()
+        self._show_hud_setup()
 
     def _enter_locked(self):
         if not PYNPUT_OK:
@@ -441,6 +447,7 @@ class BaseSACLOSOverlay(OCRUiMixin, RangefinderUiMixin):
         self.calibrated_x = self.win_x
         self.calibrated_y = self.win_y
         self.tracking_active = False
+        self._capture_hud_positions()
         self._save_config()
 
         if self.boundary_box_id: self.canvas.delete(self.boundary_box_id)
@@ -452,10 +459,12 @@ class BaseSACLOSOverlay(OCRUiMixin, RangefinderUiMixin):
         self._set_clickthrough(True)
 
         if getattr(self, "ocr_setup_visible", False): self._hide_ocr_setup()
-        if getattr(self, "ocr_enabled", False) and getattr(self, "ocr_region", None) and TESSERACT_OK:
+        if self.ocr_enabled and getattr(self, "ocr_region", None) and TESSERACT_OK:
             self._start_ocr_thread()
             self._start_ocr_update_timer()
-            self._show_ocr_display()
+
+        self._show_hud_locked()
+        self.hud_status = "predict"
 
     def _start_tracking(self):
         if self.state != "locked" or self.tracking_active: return
@@ -464,27 +473,29 @@ class BaseSACLOSOverlay(OCRUiMixin, RangefinderUiMixin):
         self._reset_to_calibrated_position()
         self.tracking_active = True
         self.bar.pack_forget()
-        
+
         if self.img_tracking and self.img_id:
             self.canvas.itemconfig(self.img_id, image=self.img_tracking)
-            
+
         self.mouse_start_x, self.mouse_start_y = None, None
         self.win_start_x, self.win_start_y = None, None
-        
+
         with self.position_lock: self.position_queue.clear()
-            
+
         try:
             import ctypes
             if self.hwnd is None: self.hwnd = ctypes.windll.user32.FindWindowW(None, "SACLOS Overlay")
             if self.hwnd: ctypes.windll.user32.SetWindowPos(self.hwnd, 0, 0, 0, self.img_w, self.img_h, 0x0002 | 0x0004 | 0x0010)
         except Exception:
             self.root.geometry(f"{self.img_w}x{self.img_h}")
-            
+
         self.mouse_listener = pynmouse.Listener(on_move=self._on_mouse_move)
         self.mouse_listener.start()
-        
+
         if self.update_timer_id is None:
             self.update_timer_id = self.root.after(1, self._process_position_queue)
+
+        self._update_hud_status("predict")
 
     def _stop_tracking(self):
         """Common tracking teardown. Subclasses override and call super()."""
@@ -529,6 +540,8 @@ class BaseSACLOSOverlay(OCRUiMixin, RangefinderUiMixin):
         if self.img_normal and self.img_id:
             self.canvas.itemconfig(self.img_id, image=self.img_normal)
 
+        self._update_hud_status("idle")
+
     def _reset_to_calibrated_position(self):
         self.win_x = self.calibrated_x
         self.win_y = self.calibrated_y
@@ -541,6 +554,8 @@ class BaseSACLOSOverlay(OCRUiMixin, RangefinderUiMixin):
             self.root.after_cancel(self.ocr_update_timer)
             self.ocr_update_timer = None
         self._hide_ocr_display()
+
+        self._hide_hud()
 
         self.state = "calibrate"
         self.tracking_active = False
@@ -710,7 +725,7 @@ class BaseSACLOSOverlay(OCRUiMixin, RangefinderUiMixin):
 
         if new_range is not None and abs(new_range - self.target_range_m) > 0.5:
             self.target_range_m = new_range
-            self._update_ocr_display(new_range)
+            self._update_hud_range_text(new_range)
 
         self.ocr_update_timer = self.root.after(200, self._process_ocr_updates)
 
@@ -736,6 +751,8 @@ class BaseSACLOSOverlay(OCRUiMixin, RangefinderUiMixin):
             self.ocr_setup_win.destroy()
         if hasattr(self, 'ocr_display_win') and self.ocr_display_win:
             self.ocr_display_win.destroy()
+
+        self._cleanup_hud()
 
         try:
             from utils.hardware_inject import disable_hires_timer

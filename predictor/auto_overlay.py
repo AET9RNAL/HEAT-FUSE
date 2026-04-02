@@ -253,6 +253,7 @@ class AutoOverlay(BaseSACLOSOverlay):
                     self.correction_active = True
                     self.correction_interrupted.clear()
                     self.correction_start_time = time.perf_counter()
+                    self._update_hud_status("intercept")
                     self.correction_thread = threading.Thread(
                         target=self._ml_trajectory_thread_func,
                         args=(ml_trajectory,),
@@ -265,17 +266,20 @@ class AutoOverlay(BaseSACLOSOverlay):
                     print(f"  ML: insufficient hit data (<3 hits), cannot predict")
                     print(f"  Run trainer to collect training data.")
                     self._reset_to_calibrated_position()
+                    self._update_hud_status("idle")
                     return
 
             except Exception as e:
                 print(f"  ML prediction error: {e}")
                 traceback.print_exc()
                 self._reset_to_calibrated_position()
+                self._update_hud_status("idle")
                 return
 
         # ---- No ML mode ----
         print("  No correction mode active. Use --ml flag with training data.")
         self._reset_to_calibrated_position()
+        self._update_hud_status("idle")
 
     def _ml_trajectory_thread_func(self, trajectory):
         """
@@ -378,6 +382,7 @@ class AutoOverlay(BaseSACLOSOverlay):
         """Called on main thread after correction thread completes."""
         self._reset_to_calibrated_position()
         self._cleanup_correction()
+        self._update_hud_status("idle")
 
     def _handle_ml_label(self, hit, miss_timing=None, miss_magnitude=None):
         """Online learning: save the last ML prediction with rich miss labels."""

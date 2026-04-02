@@ -21,7 +21,34 @@
     1430,
     820
   ],
-  "target_range_m": 184.0,
+  "target_range_m": 200.0,
+  "hud_assets_dir": "assets",
+  "hud_name_image": "predictor.png",
+  "hud_descriptor_image": "interceptSystem.png",
+  "hud_range_image": "range.png",
+  "hud_status_image": "status.png",
+  "hud_status_idle": "statusIdle.png",
+  "hud_status_predict": "statusPredict.png",
+  "hud_status_intercept": "statusIntercept.png",
+  "hud_designator_predict": "designatorPredict.png",
+  "hud_designator_intercept": "designatorIntercept.png",
+  "hud_logo_image": "logo.png",
+  "hud_name_pos": [
+    0,
+    0
+  ],
+  "hud_descriptor_pos": [
+    0,
+    0
+  ],
+  "hud_range_pos": [
+    0,
+    0
+  ],
+  "hud_status_pos": [
+    0,
+    0
+  ],
   "correction_enabled": true,
   "correction_min_threshold_px": 5.0,
   "correction_speed_multiplier": 1.0,

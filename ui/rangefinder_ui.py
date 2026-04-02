@@ -186,6 +186,7 @@ class RangefinderUiMixin:
         if new_range is not None and abs(new_range - self.target_range_m) > 0.5:
             self.target_range_m = new_range
             self._update_rangefinder_notch()
+            self._update_hud_range_text(new_range)
 
         self.rf_update_timer = self.root.after(16, self._process_rf_updates)
 
