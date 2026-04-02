@@ -3,6 +3,7 @@ import time
 import re
 
 import numpy as np
+from loguru import logger
 
 try:
     from PIL import Image, ImageGrab
@@ -172,7 +173,7 @@ def ocr_capture_range(ocr_region):
     """
     if not ocr_region or not TESSERACT_OK:
         if OCR_DEBUG:
-            print(f"[OCR] Skipped: ocr_region={ocr_region!r} TESSERACT_OK={TESSERACT_OK}")
+            logger.debug(f"[OCR] Skipped: ocr_region={ocr_region!r} TESSERACT_OK={TESSERACT_OK}")
         return None
 
     try:
@@ -182,12 +183,12 @@ def ocr_capture_range(ocr_region):
 
         if img_rgb_np is None or img_rgb_np.size == 0:
             if OCR_DEBUG:
-                print("[OCR] Capture returned None or empty array")
+                logger.debug("[OCR] Capture returned None or empty array")
             return _temporal_filter.update(None)
 
         if OCR_DEBUG:
             backend = "mss" if MSS_OK else "ImageGrab"
-            print(f"[OCR] Capture ({backend}) shape={img_rgb_np.shape} in {(t_grab-t0)*1000:.1f}ms")
+            logger.debug(f"[OCR] Capture ({backend}) shape={img_rgb_np.shape} in {(t_grab-t0)*1000:.1f}ms")
 
         mask = _color_mask_hsv(img_rgb_np)
         t_mask = time.perf_counter()
@@ -195,7 +196,7 @@ def ocr_capture_range(ocr_region):
         if OCR_DEBUG:
             hits = int(mask.sum())
             total = mask.size
-            print(f"[OCR] HSV mask hits: {hits}/{total}")
+            logger.debug(f"[OCR] HSV mask hits: {hits}/{total}")
 
         gray_np = np.where(mask, 0, 255).astype(np.uint8)
         pil_mask = Image.fromarray(gray_np, mode='L')
@@ -220,25 +221,25 @@ def ocr_capture_range(ocr_region):
         t_tess = time.perf_counter()
 
         if OCR_DEBUG:
-            print(f"[OCR] Tesseract raw={text.strip()!r} in {(t_tess-t_mask)*1000:.1f}ms")
+            logger.debug(f"[OCR] Tesseract raw={text.strip()!r} in {(t_tess-t_mask)*1000:.1f}ms")
 
         match = re.search(r'(\d+)', text.strip())
         if match:
             raw_val = float(match.group(1))
             in_range = 20 <= raw_val <= 900
             if OCR_DEBUG:
-                print(f"[OCR] Parsed raw_val={raw_val} in_range={in_range} -> filter={_temporal_filter._last_confirmed}")
+                logger.debug(f"[OCR] Parsed raw_val={raw_val} in_range={in_range} -> filter={_temporal_filter._last_confirmed}")
             if in_range:
                 confirmed = _temporal_filter.update(raw_val)
                 if OCR_DEBUG:
-                    print(f"[OCR] Confirmed={confirmed}")
+                    logger.debug(f"[OCR] Confirmed={confirmed}")
                 return confirmed
         else:
             if OCR_DEBUG:
-                print("[OCR] No digit match in Tesseract output")
+                logger.debug("[OCR] No digit match in Tesseract output")
 
         return _temporal_filter.update(None)
 
     except Exception as e:
-        print(f"OCR Exception: {e}")
+        logger.error(f"OCR Exception: {e}")
         return None

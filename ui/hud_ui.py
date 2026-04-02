@@ -12,6 +12,7 @@ Provides configurable HUD elements:
 import os
 import math
 import tkinter as tk
+from loguru import logger
 
 try:
     from PIL import Image, ImageTk
@@ -118,7 +119,7 @@ class HudUiMixin:
         def load_png(name):
             path = os.path.join(assets_base, name)
             if not os.path.exists(path):
-                print(f"Warning: HUD image not found: {path}")
+                logger.warning(f"HUD image not found: {path}")
                 return None
             try:
                 img = Image.open(path).convert("RGBA")
@@ -127,7 +128,7 @@ class HudUiMixin:
                 composed = Image.alpha_composite(bg, img).convert("RGB")
                 return ImageTk.PhotoImage(composed)
             except Exception as e:
-                print(f"Warning: Could not load HUD image {name}: {e}")
+                logger.warning(f"Could not load HUD image {name}: {e}")
                 return None
 
         self.hud_img_name = load_png(self.hud_name_image)
@@ -152,7 +153,7 @@ class HudUiMixin:
                 self.hud_img_logo_raw = Image.open(logo_path).convert("RGBA")
                 self._prerender_logo_frames()
             except Exception as e:
-                print(f"Warning: Could not load logo: {e}")
+                logger.warning(f"Could not load logo: {e}")
 
     def _prerender_logo_frames(self):
         """Pre-render rotated logo frames for spin animation.

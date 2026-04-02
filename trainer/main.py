@@ -19,6 +19,7 @@ Workflow:
 import os
 import argparse
 import tkinter as tk
+from loguru import logger
 
 from trainer.training_overlay import TrainingOverlay
 from trainer.correction_learner import CorrectionLearner
@@ -50,9 +51,9 @@ def main():
     if args.reset:
         if os.path.exists('saclos_ml_data.json'):
             os.remove('saclos_ml_data.json')
-            print("Training data deleted.")
+            logger.info("Training data deleted.")
         else:
-            print("No training data file found.")
+            logger.info("No training data file found.")
         if not args.image and not args.stats:
             return
 
@@ -60,8 +61,8 @@ def main():
     if args.stats:
         learner = CorrectionLearner()
         stats = learner.get_stats()
-        print(f"Training data: {stats['total']} samples  "
-              f"({stats['hits']} hits, {stats['misses']} misses)")
+        logger.info(f"Training data: {stats['total']} samples  "
+                    f"({stats['hits']} hits, {stats['misses']} misses)")
         if stats['total'] > 0:
             ranges = {}
             for s in learner.samples:
@@ -71,12 +72,11 @@ def main():
                 ranges[r]['total'] += 1
                 if s['hit']:
                     ranges[r]['hits'] += 1
-            print("\nBy range:")
             for r in sorted(ranges):
                 info = ranges[r]
                 pct = info['hits'] / info['total'] * 100 if info['total'] > 0 else 0
-                print(f"  {r:>4d}m : {info['total']:>3d} samples, "
-                      f"{info['hits']:>3d} hits ({pct:.0f}%)")
+                logger.info(f"{r:>4d}m : {info['total']:>3d} samples, "
+                            f"{info['hits']:>3d} hits ({pct:.0f}%)")
         return
 
     root = tk.Tk()

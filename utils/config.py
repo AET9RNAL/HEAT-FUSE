@@ -1,6 +1,8 @@
 import os
 import json
 
+from loguru import logger
+
 class ConfigManager:
     """Manages loading and saving application configuration."""
     
@@ -18,7 +20,7 @@ class ConfigManager:
                 loaded = json.load(f)
                 config.update(loaded)
         except Exception as e:
-            print(f"Warning: Could not load config: {e}")
+            logger.warning(f"Could not load config: {e}")
             
         return config
 
@@ -27,6 +29,6 @@ class ConfigManager:
         try:
             with open(self.config_path, 'w') as f:
                 json.dump(config_dict, f, indent=2)
-            print(f"Config saved to {self.config_path}")
+            logger.info(f"Config saved to {self.config_path}")
         except Exception as e:
-            print(f"Warning: Could not save config: {e}")
+            logger.warning(f"Could not save config: {e}")

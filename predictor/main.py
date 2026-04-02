@@ -15,6 +15,7 @@ Requirements:
 
 import argparse
 import tkinter as tk
+from loguru import logger
 
 from predictor.auto_overlay import AutoOverlay
 from utils.hardware_inject import is_admin
@@ -55,15 +56,13 @@ def main():
 
     # --- Admin elevation check ---
     if not is_admin():
-        print()
-        print("=" * 60)
-        print("  WARNING: Not running as Administrator!")
-        print("  Windows UIPI will silently block SendInput events")
-        print("  targeting elevated (admin) windows like fullscreen games.")
-        print("  If mouse clicks / movements are ignored in-game,")
-        print("  re-launch this script with 'Run as administrator'.")
-        print("=" * 60)
-        print()
+        logger.warning(
+            "Not running as Administrator! "
+            "Windows UIPI will silently block SendInput events "
+            "targeting elevated (admin) windows like fullscreen games. "
+            "If mouse clicks / movements are ignored in-game, "
+            "re-launch this script with 'Run as administrator'."
+        )
 
     root = tk.Tk()
     app = AutoOverlay(root, image_path=args.image,
@@ -88,24 +87,20 @@ def main():
             app.ml_confidence_threshold = args.ml_confidence
             app.learner = CorrectionLearner(data_file=args.ml_data)
             stats = app.learner.get_stats()
-            print()
-            print("=" * 44)
-            print("  ML-ASSISTED CORRECTION ENABLED")
-            print("=" * 44)
-            print(f"  Data file  : {args.ml_data}")
-            print(f"  Samples    : {stats['total']}  "
-                  f"({stats['hits']} hits, {stats['misses']} misses)")
-            print(f"  Confidence : >={args.ml_confidence:.0%} to use prediction")
+            logger.info(
+                f"ML-ASSISTED CORRECTION ENABLED | "
+                f"Data file: {args.ml_data} | "
+                f"Samples: {stats['total']} ({stats['hits']} hits, {stats['misses']} misses) | "
+                f"Confidence: >={args.ml_confidence:.0%}"
+            )
             if stats['hits'] < 3:
-                print(f"  WARNING: Need at least 3 hit samples for predictions!")
-                print(f"    Run trainer to collect training data.")
-            print("=" * 44)
-            print()
+                logger.warning("Need at least 3 hit samples for predictions! "
+                               "Run trainer to collect training data.")
         except ImportError:
-            print("ERROR: Cannot import trainer.correction_learner.")
+            logger.error("Cannot import trainer.correction_learner.")
             app.ml_enabled = False
         except Exception as e:
-            print(f"ERROR loading ML data: {e}")
+            logger.error(f"Loading ML data: {e}")
             app.ml_enabled = False
 
     # Force tracking key setup if requested

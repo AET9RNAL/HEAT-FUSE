@@ -1,4 +1,5 @@
 import tkinter as tk
+from loguru import logger
 from utils.ocr_reader import TESSERACT_OK
 
 class OCRUiMixin:
@@ -104,12 +105,12 @@ class OCRUiMixin:
 
         self.ocr_setup_win.withdraw()
         self._hide_ocr_display_setup()
-        print(f"OCR region set: {self.ocr_region}")
+        logger.info(f"OCR region set: {self.ocr_region}")
 
     def _toggle_ocr_setup(self):
         if not TESSERACT_OK:
-            print("OCR unavailable: pip install pytesseract  "
-                  "(+ Tesseract binary on PATH)")
+            logger.warning("OCR unavailable: pip install pytesseract  "
+                           "(+ Tesseract binary on PATH)")
             return
         if self.ocr_setup_visible:
             self._hide_ocr_setup()

@@ -12,6 +12,7 @@ import math
 import time
 import threading
 import traceback
+from loguru import logger
 
 from ui.base_overlay import BaseSACLOSOverlay
 from utils.hardware_inject import inject_mouse_movement, inject_mouse_click
@@ -110,10 +111,10 @@ class AutoOverlay(BaseSACLOSOverlay):
                 from trainer.correction_learner import CorrectionLearner
                 self.learner = CorrectionLearner()
                 stats = self.learner.get_stats()
-                print(f"ML loaded from config: {stats['total']} samples "
-                      f"({stats['hits']} hits, {stats['misses']} misses)")
+                logger.info(f"ML loaded from config: {stats['total']} samples "
+                            f"({stats['hits']} hits, {stats['misses']} misses)")
             except Exception as e:
-                print(f"Warning: could not load ML data: {e}")
+                logger.warning(f"Could not load ML data: {e}")
                 self.ml_enabled = False
 
     # ----------------------------------------------------------------
@@ -133,13 +134,12 @@ class AutoOverlay(BaseSACLOSOverlay):
                     return True
                 elif char_label == '2':
                     self._ml_label_state = 'timing'
-                    print()
-                    print("  MISS — Timing?  [Q] Premature  [W] Optimal  [E] Late")
+                    logger.info("MISS — Timing?  [Q] Premature  [W] Optimal  [E] Late")
                     return True
                 elif char_label == '3':
                     self._ml_label_state = None
                     self._ml_last_context = None
-                    print("  DISCARDED  (not saved)")
+                    logger.info("DISCARDED  (not saved)")
                     return True
 
             elif ml_state == 'timing':
@@ -147,15 +147,15 @@ class AutoOverlay(BaseSACLOSOverlay):
                     timing_map = {'q': 'premature', 'w': 'optimal', 'e': 'late'}
                     self._ml_miss_timing = timing_map[char_label]
                     self._ml_label_state = 'magnitude'
-                    print(f"  Timing: {self._ml_miss_timing}")
-                    print("  MISS — Magnitude?  [A] Undershoot  [S] Optimal  [D] Overshoot")
+                    logger.info(f"Timing: {self._ml_miss_timing}")
+                    logger.info("MISS — Magnitude?  [A] Undershoot  [S] Optimal  [D] Overshoot")
                     return True
 
             elif ml_state == 'magnitude':
                 if char_label in ('a', 's', 'd'):
                     mag_map = {'a': 'undershoot', 's': 'optimal', 'd': 'overshoot'}
                     miss_mag = mag_map[char_label]
-                    print(f"  Magnitude: {miss_mag}")
+                    logger.info(f"Magnitude: {miss_mag}")
                     self._ml_label_state = None
                     self._handle_ml_label(
                         hit=False,
@@ -216,7 +216,7 @@ class AutoOverlay(BaseSACLOSOverlay):
 
         # Clear any stale online learning prompt
         if getattr(self, '_ml_label_state', None) is not None:
-            print("  DISCARDED  (new cycle started)")
+            logger.info("DISCARDED  (new cycle started)")
         self._ml_label_state = None
         self._ml_last_context = None
         self._ml_miss_timing = None
@@ -234,14 +234,14 @@ class AutoOverlay(BaseSACLOSOverlay):
                     duration = ml_trajectory[-1]['t'] if ml_trajectory else 0
 
                     stats = self.learner.get_stats()
-                    print(f"Auto-correction started [ML TRAJECTORY mode]:")
-                    print(f"  Displacement v: {distance_px:.1f}px at {math.degrees(angle_rad):.1f}\u00b0")
-                    print(f"  Range: {self.target_range_m:.0f}m")
-                    print(f"  ML trajectory: {len(ml_trajectory)} points, "
-                          f"dx={total_dx:.0f} dy={total_dy:.0f} dur={duration:.2f}s")
-                    print(f"  ML confidence: {confidence:.2f}")
-                    print(f"  Training data: {stats['total']} samples "
-                          f"({stats['hits']} hits, {stats['misses']} misses)")
+                    logger.info(
+                        f"Auto-correction [ML TRAJECTORY] | "
+                        f"Disp: {distance_px:.1f}px @ {math.degrees(angle_rad):.1f}° | "
+                        f"Range: {self.target_range_m:.0f}m | "
+                        f"Traj: {len(ml_trajectory)} pts, dx={total_dx:.0f} dy={total_dy:.0f} dur={duration:.2f}s | "
+                        f"Confidence: {confidence:.2f} | "
+                        f"Data: {stats['total']} samples ({stats['hits']} hits, {stats['misses']} misses)"
+                    )
 
                     self._ml_last_context = {
                         'displacement_px': distance_px,
@@ -263,21 +263,20 @@ class AutoOverlay(BaseSACLOSOverlay):
                     return
 
                 else:
-                    print(f"  ML: insufficient hit data (<3 hits), cannot predict")
-                    print(f"  Run trainer to collect training data.")
+                    logger.warning("ML: insufficient hit data (<3 hits), cannot predict. "
+                                    "Run trainer to collect training data.")
                     self._reset_to_calibrated_position()
                     self._update_hud_status("idle")
                     return
 
             except Exception as e:
-                print(f"  ML prediction error: {e}")
-                traceback.print_exc()
+                logger.exception(f"ML prediction error: {e}")
                 self._reset_to_calibrated_position()
                 self._update_hud_status("idle")
                 return
 
         # ---- No ML mode ----
-        print("  No correction mode active. Use --ml flag with training data.")
+        logger.info("No correction mode active. Use --ml flag with training data.")
         self._reset_to_calibrated_position()
         self._update_hud_status("idle")
 
@@ -316,19 +315,18 @@ class AutoOverlay(BaseSACLOSOverlay):
                     injected_dx += inject_x
                     injected_dy += inject_y
                 except Exception as e:
-                    print(f"Warning: mouse injection error: {e}")
+                    logger.warning(f"Mouse injection error: {e}")
                     break
 
         elapsed = time.perf_counter() - start_time
-        print(f"Auto-correction complete [ML] (took {elapsed:.2f}s, "
-              f"injected {injected_dx}dx {injected_dy}dy)")
+        logger.info(f"Auto-correction complete [ML] (took {elapsed:.2f}s, "
+                    f"injected {injected_dx}dx {injected_dy}dy)")
 
         # Online learning: prompt for HIT/MISS/DISCARD
         if getattr(self, 'ml_online_learning', True) and hasattr(self, '_ml_last_context'):
             ctx = self._ml_last_context
             self._ml_label_state = 'outcome'
-            print()
-            print(f"  >>> Press  [1] HIT  /  [2] MISS  /  [3] DISCARD  <<<")
+            logger.info(">>> Press  [1] HIT  /  [2] MISS  /  [3] DISCARD  <<<")
 
         self.root.after(0, self._finish_correction)
 
@@ -365,7 +363,7 @@ class AutoOverlay(BaseSACLOSOverlay):
             try:
                 inject_mouse_movement(delta_x, delta_y)
             except Exception as e:
-                print(f"Warning: Could not move mouse: {e}")
+                logger.warning(f"Could not move mouse: {e}")
                 break
 
             if i + 1 < len(waypoints):
@@ -375,7 +373,7 @@ class AutoOverlay(BaseSACLOSOverlay):
                     time.sleep(sleep_s)
 
         elapsed = time.perf_counter() - start_time
-        print(f"Auto-correction complete (took {elapsed:.2f}s)")
+        logger.info(f"Auto-correction complete (took {elapsed:.2f}s)")
         self.root.after(0, self._finish_correction)
 
     def _finish_correction(self):
@@ -388,7 +386,7 @@ class AutoOverlay(BaseSACLOSOverlay):
         """Online learning: save the last ML prediction with rich miss labels."""
         ctx = getattr(self, '_ml_last_context', None)
         if ctx is None or self.learner is None:
-            print("  Warning: no ML context to save")
+            logger.warning("No ML context to save")
             return
 
         if hit:
@@ -412,10 +410,10 @@ class AutoOverlay(BaseSACLOSOverlay):
                 miss_magnitude=miss_magnitude,
             )
             stats = self.learner.get_stats()
-            print(f"  Saved {label}  -  total {n} samples  "
-                  f"({stats['hits']} hits, {stats['misses']} misses)")
+            logger.info(f"Saved {label} | total {n} samples "
+                        f"({stats['hits']} hits, {stats['misses']} misses)")
         except Exception as e:
-            print(f"  Warning: failed to save ML sample: {e}")
+            logger.warning(f"Failed to save ML sample: {e}")
         finally:
             self._ml_last_context = None
 

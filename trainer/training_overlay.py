@@ -10,6 +10,7 @@ Same overlay as the production predictor, but:
 
 import math
 import time
+from loguru import logger
 
 try:
     from pynput import mouse as pynmouse, keyboard as pynkeyboard
@@ -62,20 +63,16 @@ class TrainingOverlay(BaseSACLOSOverlay):
 
         # Banner
         stats = self.learner.get_stats()
-        print()
-        print("=" * 44)
-        print("  SACLOS TRAINING MODE")
-        print("=" * 44)
-        print(f"  ML data file : {self.learner.data_file}")
-        print(f"  Samples      : {stats['total']}  "
-              f"({stats['hits']} hits, {stats['misses']} misses)")
-        print(f"  Auto-correct : DISABLED")
-        print()
-        print("  Workflow:")
-        print("    Track -> LMB -> Guide -> Release -> [1] Hit / [2] Miss / [3] Discard")
-        print("    If MISS: [Q/W/E] timing  then  [A/S/D] magnitude")
-        print("=" * 44)
-        print()
+        logger.info(
+            f"SACLOS TRAINING MODE | "
+            f"ML data: {self.learner.data_file} | "
+            f"Samples: {stats['total']} ({stats['hits']} hits, {stats['misses']} misses) | "
+            f"Auto-correct: DISABLED"
+        )
+        logger.info(
+            "Workflow: Track -> LMB -> Guide -> Release -> [1] Hit / [2] Miss / [3] Discard | "
+            "If MISS: [Q/W/E] timing  then  [A/S/D] magnitude"
+        )
 
     # ----------------------------------------------------------------
     #  Tracking overrides
@@ -103,7 +100,7 @@ class TrainingOverlay(BaseSACLOSOverlay):
                 on_click=self._on_train_click,
             )
             self._train_click_listener.start()
-            print("Tracking started  -  click LMB to fire & begin recording")
+            logger.info("Tracking started - click LMB to fire & begin recording")
 
     def _on_train_click(self, x, y, button, pressed):
         """Passive LMB listener: snapshot displacement at fire moment."""
@@ -134,10 +131,9 @@ class TrainingOverlay(BaseSACLOSOverlay):
         self._train_last_x       = None
         self._train_last_y       = None
 
-        print(f"  LMB!  d={self._train_disp_px:.1f}px  "
-              f"n={math.degrees(self._train_disp_angle):.1f}\u00b0  "
-              f"r={self._train_range:.0f}m   "
-              f"- recording guidance ...")
+        logger.info(f"LMB! d={self._train_disp_px:.1f}px "
+                    f"n={math.degrees(self._train_disp_angle):.1f}\u00b0 "
+                    f"r={self._train_range:.0f}m - recording guidance ...")
 
     def _on_mouse_move(self, x, y):
         """Override: also accumulate timestamped raw deltas when recording."""
@@ -170,17 +166,13 @@ class TrainingOverlay(BaseSACLOSOverlay):
             corr_deg  = math.degrees(math.atan2(total_dy, total_dx)) if corr_dist > 0 else 0
             dur = self._train_deltas[-1]['t'] if self._train_deltas else 0
 
-            print()
-            print("--- Training Capture ---")
-            print(f"  Input  :  d={self._train_disp_px:.1f}px  "
-                  f"n={math.degrees(self._train_disp_angle):.1f}\u00b0  "
-                  f"r={self._train_range:.0f}m")
-            print(f"  Output :  dx={total_dx:.0f}  dy={total_dy:.0f}  "
-                  f"({corr_dist:.1f}px at {corr_deg:.1f}\u00b0)")
-            print(f"  Time   :  {dur:.2f}s   "
-                  f"({len(self._train_deltas)} mouse events)")
-            print()
-            print("  >>> Press  [1] HIT  /  [2] MISS  /  [3] DISCARD  <<<")
+            logger.info(
+                f"Training Capture | "
+                f"Input: d={self._train_disp_px:.1f}px n={math.degrees(self._train_disp_angle):.1f}\u00b0 r={self._train_range:.0f}m | "
+                f"Output: dx={total_dx:.0f} dy={total_dy:.0f} ({corr_dist:.1f}px @ {corr_deg:.1f}\u00b0) | "
+                f"Time: {dur:.2f}s ({len(self._train_deltas)} mouse events)"
+            )
+            logger.info(">>> Press  [1] HIT  /  [2] MISS  /  [3] DISCARD  <<<")
 
             self._last_capture = {
                 'displacement_px': self._train_disp_px,
@@ -191,7 +183,7 @@ class TrainingOverlay(BaseSACLOSOverlay):
             self._label_state = 'outcome'
 
         elif self.tracking_active and not self._train_lmb_detected:
-            print("  Tracking ended  -  no LMB detected (nothing recorded)")
+            logger.info("Tracking ended - no LMB detected (nothing recorded)")
 
         # Reset training state
         self._train_recording    = False
@@ -231,17 +223,15 @@ class TrainingOverlay(BaseSACLOSOverlay):
                                 hit=True,
                             )
                             stats = self.learner.get_stats()
-                            print(f"  Recorded: HIT  -  "
-                                  f"total {n} samples  "
-                                  f"({stats['hits']} hits, {stats['misses']} misses)")
+                            logger.info(f"Recorded: HIT | total {n} samples "
+                                        f"({stats['hits']} hits, {stats['misses']} misses)")
                         self._label_state = None
                         self._last_capture = None
                     elif char == '2':
                         self._label_state = 'timing'
-                        print()
-                        print("  MISS — Timing?  [Q] Premature  [W] Optimal  [E] Late")
+                        logger.info("MISS — Timing?  [Q] Premature  [W] Optimal  [E] Late")
                     elif char == '3':
-                        print("  DISCARDED  (not saved)")
+                        logger.info("DISCARDED  (not saved)")
                         self._label_state = None
                         self._last_capture = None
 
@@ -250,14 +240,14 @@ class TrainingOverlay(BaseSACLOSOverlay):
                         timing_map = {'q': 'premature', 'w': 'optimal', 'e': 'late'}
                         self._miss_timing = timing_map[char]
                         self._label_state = 'magnitude'
-                        print(f"  Timing: {self._miss_timing}")
-                        print("  MISS — Magnitude?  [A] Undershoot  [S] Optimal  [D] Overshoot")
+                        logger.info(f"Timing: {self._miss_timing}")
+                        logger.info("MISS — Magnitude?  [A] Undershoot  [S] Optimal  [D] Overshoot")
 
                 elif self._label_state == 'magnitude':
                     if char in ('a', 's', 'd'):
                         mag_map = {'a': 'undershoot', 's': 'optimal', 'd': 'overshoot'}
                         miss_mag = mag_map[char]
-                        print(f"  Magnitude: {miss_mag}")
+                        logger.info(f"Magnitude: {miss_mag}")
                         if self._last_capture and self.learner:
                             info = self._last_capture
                             n = self.learner.add_sample(
@@ -271,15 +261,13 @@ class TrainingOverlay(BaseSACLOSOverlay):
                             )
                             stats = self.learner.get_stats()
                             detail = f"{self._miss_timing} + {miss_mag}"
-                            print(f"  Recorded: MISS ({detail})  -  "
-                                  f"total {n} samples  "
-                                  f"({stats['hits']} hits, {stats['misses']} misses)")
+                            logger.info(f"Recorded: MISS ({detail}) | total {n} samples "
+                                        f"({stats['hits']} hits, {stats['misses']} misses)")
                         self._label_state = None
                         self._last_capture = None
                         self._miss_timing = None
             except Exception:
-                import traceback
-                traceback.print_exc()
+                logger.exception("Error in label keyboard handler")
 
         self._label_kbd = pynkeyboard.Listener(on_press=on_press)
         self._label_kbd.start()

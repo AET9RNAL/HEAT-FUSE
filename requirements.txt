@@ -1,0 +1,6 @@
+pynput
+Pillow
+pytesseract
+numpy
+mss
+loguru
