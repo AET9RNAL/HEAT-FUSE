@@ -732,9 +732,12 @@ class BaseSACLOSOverlay(OCRUiMixin, RangefinderUiMixin, HudUiMixin):
                 new_range = self.ocr_pending_range
                 self.ocr_pending_range = None
 
-        if new_range is not None and abs(new_range - self.target_range_m) > 0.5:
-            self.target_range_m = new_range
-            self._update_hud_range_text(new_range)
+        if new_range is not None:
+            if self.manual_range_override:
+                self.manual_range_override = False
+            if abs(new_range - self.target_range_m) > 0.5:
+                self.target_range_m = new_range
+                self._update_hud_range_text(new_range)
 
         self.ocr_update_timer = self.root.after(200, self._process_ocr_updates)
 

@@ -16,12 +16,12 @@
     524
   ],
   "ocr_enabled": true,
-  "ocr_poll_interval_ms": 350,
+  "ocr_poll_interval_ms": 100,
   "ocr_display_pos": [
     2488,
     1409
   ],
-  "target_range_m": 200.0,
+  "target_range_m": 74.0,
   "hud_assets_dir": "assets",
   "hud_name_image": "predictor.png",
   "hud_descriptor_image": "interceptSystem.png",

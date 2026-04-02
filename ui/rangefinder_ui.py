@@ -4,6 +4,7 @@ try:
     PYNPUT_OK = True
 except ImportError:
     PYNPUT_OK = False
+from utils.ocr_reader import reset_ocr_filter
 
 class RangefinderUiMixin:
     """Mixin for the SACLOS Rangefinder UI component."""
@@ -25,8 +26,8 @@ class RangefinderUiMixin:
         self.RF_HEIGHT = 300
         self.RF_SCALE_TOP = 30      # 600m
         self.RF_SCALE_BOTTOM = 280  # 70m
-        self.RF_RANGE_MIN = 70.0
-        self.RF_RANGE_MAX = 600.0
+        self.RF_RANGE_MIN = 20.0
+        self.RF_RANGE_MAX = 900.0
         self.RF_COLOR = "#77ffaa"
 
         self._create_rangefinder_window()
@@ -75,12 +76,19 @@ class RangefinderUiMixin:
         ]:
             c.create_line(*line, fill=color, width=2)
 
-        for range_val in range(int(self.RF_RANGE_MIN), int(self.RF_RANGE_MAX) + 1, 50):
+        notch_step = 55  # 16 steps of 55m = 880m = RF_RANGE_MAX - RF_RANGE_MIN
+        notch_count = round((self.RF_RANGE_MAX - self.RF_RANGE_MIN) / notch_step)
+        lx = ox1          # left bracket edge  (x=5)
+        rx = ox2          # right bracket edge (x=w-5)
+        for i in range(notch_count + 1):
+            range_val = self.RF_RANGE_MIN + i * notch_step
             y = self._range_to_canvas_y(range_val)
-            if range_val in (70, 300, 600):
-                c.create_line(0, y, 12, y, fill=color, width=2)
+            if i % 4 == 0:  # Long: 20, 240, 460, 680, 900m
+                c.create_line(lx, y, lx + 12, y, fill=color, width=2)
+                c.create_line(rx - 12, y, rx, y, fill=color, width=2)
             else:
-                c.create_line(3, y, 8, y, fill=color, width=1)
+                c.create_line(lx, y, lx + 6, y, fill=color, width=1)
+                c.create_line(rx - 6, y, rx, y, fill=color, width=1)
 
         notch_y = self._range_to_canvas_y(self.target_range_m)
         c.create_line(22, notch_y, 33, notch_y, fill=color, width=3, tags="rf_notch")
@@ -138,6 +146,8 @@ class RangefinderUiMixin:
 
         self.rf_visible = False
         self.ocr_paused = False
+        self.manual_range_override = True
+        reset_ocr_filter()
 
         if self.rf_mouse_listener:
             self.rf_mouse_listener.stop()

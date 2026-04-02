@@ -7,13 +7,14 @@ class OCRUiMixin:
     def _init_ocr_ui(self):
         self.ocr_enabled = False
         self.ocr_region = None
-        self.ocr_poll_interval_ms = 350
+        self.ocr_poll_interval_ms = 100
         self.ocr_thread = None
         self.ocr_stop_event = None
         self.ocr_last_range = None
         self.ocr_pending_range = None
         self.ocr_paused = False
         self.ocr_update_timer = None
+        self.manual_range_override = False
 
         self.ocr_setup_win = None
         self.ocr_setup_visible = False
