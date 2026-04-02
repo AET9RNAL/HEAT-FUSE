@@ -40,8 +40,28 @@ except ImportError:
 
 try:
     import pytesseract
-    TESSERACT_OK = True
-except ImportError:
+    try:
+        pytesseract.get_tesseract_version()
+        TESSERACT_OK = True
+    except Exception:
+        # Fallback for Windows if PATH hasn't updated yet or user skipped adding it
+        import os
+        common_paths = [
+            r"C:\Program Files\Tesseract-OCR\tesseract.exe",
+            r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
+            os.path.expanduser(r"~\AppData\Local\Programs\Tesseract-OCR\tesseract.exe")
+        ]
+        TESSERACT_OK = False
+        for p in common_paths:
+            if os.path.exists(p):
+                pytesseract.pytesseract.tesseract_cmd = p
+                try:
+                    pytesseract.get_tesseract_version()
+                    TESSERACT_OK = True
+                    break
+                except Exception:
+                    pass
+except Exception:
     TESSERACT_OK = False
 
 # ---------------------------------------------------------------------------
@@ -275,7 +295,7 @@ class SACLOSOverlay:
 
         self.status_lbl = tk.Label(
             self.bar,
-            text="CALIBRATE  |  Ctrl+L = lock    Ctrl+P = quit",
+            text="CALIBRATE  |  T=OCR region  |  Ctrl+L = lock    Ctrl+P = quit",
             bg="#111111", fg="#555", font=("Courier", 9)
         )
         self.status_lbl.pack(side=tk.LEFT, padx=10)
@@ -317,6 +337,8 @@ class SACLOSOverlay:
             widget.bind("<Control-L>", lambda e: self._toggle_lock())
             widget.bind("<Control-p>", lambda e: self._quit())
             widget.bind("<Control-P>", lambda e: self._quit())
+            widget.bind("<t>", lambda e: self._toggle_ocr_setup() if self.state in ("calibrate", "adjust_bounds") else None)
+            widget.bind("<T>", lambda e: self._toggle_ocr_setup() if self.state in ("calibrate", "adjust_bounds") else None)
 
         # Global keyboard via pynput (works when game has focus)
         self._start_kbd_listener()
@@ -382,6 +404,7 @@ class SACLOSOverlay:
             "ocr_region": self.ocr_region,
             "ocr_enabled": self.ocr_enabled,
             "ocr_poll_interval_ms": self.ocr_poll_interval_ms,
+            "ocr_display_pos": self.ocr_display_pos,
         }
         try:
             config_path = self._get_config_path()
@@ -462,6 +485,7 @@ class SACLOSOverlay:
             self.ocr_region = config.get("ocr_region", None)
             self.ocr_enabled = config.get("ocr_enabled", False)
             self.ocr_poll_interval_ms = config.get("ocr_poll_interval_ms", 350)
+            self.ocr_display_pos = config.get("ocr_display_pos", None)
             if self.ocr_region and not TESSERACT_OK:
                 print("  Warning: OCR region configured but pytesseract not installed")
                 self.ocr_enabled = False
@@ -557,7 +581,7 @@ class SACLOSOverlay:
 
         # Wait a moment, then show normal calibrate status
         self.root.after(2000, lambda: self.status_lbl.config(
-            text="CALIBRATE  |  Ctrl+L = lock    Ctrl+P = quit",
+            text="CALIBRATE  |  T=OCR region  |  Ctrl+L = lock    Ctrl+P = quit",
             fg="#555"
         ))
 
@@ -985,6 +1009,7 @@ class SACLOSOverlay:
         if self.ocr_enabled and self.ocr_region and TESSERACT_OK:
             self._start_ocr_thread()
             self._start_ocr_update_timer()
+            self._show_ocr_display()
 
     def _start_tracking(self):
         """Start counter-translation tracking (Space pressed)."""
@@ -1661,6 +1686,7 @@ class SACLOSOverlay:
         if self.ocr_update_timer is not None:
             self.root.after_cancel(self.ocr_update_timer)
             self.ocr_update_timer = None
+        self._hide_ocr_display()
 
         self.state = "calibrate"
         self.tracking_active = False
@@ -1694,7 +1720,7 @@ class SACLOSOverlay:
         self.root.geometry(f"{self.img_w}x{self.img_h + bar_h}")
         self.bar.pack(side=tk.BOTTOM, fill=tk.X)
         self.status_lbl.config(
-            text="CALIBRATE  |  Ctrl+L = lock    Ctrl+P = quit",
+            text="CALIBRATE  |  T=OCR region  |  Ctrl+L = lock    Ctrl+P = quit",
             fg="#555"
         )
         # Redraw boundary box
@@ -1848,9 +1874,10 @@ class SACLOSOverlay:
                     if self.state == "locked" and not self.tracking_active and not self.ctrl_pressed:
                         self.root.after(0, self._show_rangefinder)
 
-                # T key: toggle OCR region setup in adjust_bounds
+                # T key: toggle OCR region setup in adjust_bounds / calibrate
                 if char and char.lower() == 't' and not self.ctrl_pressed:
-                    if self.state == "adjust_bounds":
+                    print(f"DEBUG: 'T' key pressed. App state is: {self.state}")
+                    if self.state in ("calibrate", "adjust_bounds"):
                         self.root.after(0, self._toggle_ocr_setup)
 
                 # Check for CTRL+key combinations
@@ -2173,13 +2200,13 @@ class SACLOSOverlay:
         self.ocr_setup_win.title("SACLOS OCR Region")
         self.ocr_setup_win.overrideredirect(True)
         self.ocr_setup_win.attributes("-topmost", True)
-        self.ocr_setup_win.configure(bg="#000001")
-        self.ocr_setup_win.attributes("-transparentcolor", "#000001")
+        self.ocr_setup_win.configure(bg="#002255")
+        self.ocr_setup_win.attributes("-alpha", 0.6)
 
         self.ocr_setup_canvas = tk.Canvas(
             self.ocr_setup_win,
             width=self.OCR_SETUP_W, height=self.OCR_SETUP_H,
-            bg="#000001", highlightthickness=0
+            bg="#002255", highlightthickness=0
         )
         self.ocr_setup_canvas.pack(fill=tk.BOTH, expand=True)
         self._draw_ocr_setup_border()
@@ -2220,6 +2247,11 @@ class SACLOSOverlay:
             x = sw // 2 - self.OCR_SETUP_W // 2
             y = sh // 2 + 100
 
+        sw = self.root.winfo_screenwidth()
+        sh = self.root.winfo_screenheight()
+        x = max(0, min(int(x), sw - self.OCR_SETUP_W))
+        y = max(0, min(int(y), sh - self.OCR_SETUP_H))
+        
         self.ocr_setup_win.geometry(
             f"{self.OCR_SETUP_W}x{self.OCR_SETUP_H}+{x}+{y}")
         self.ocr_setup_canvas.config(
@@ -2251,13 +2283,16 @@ class SACLOSOverlay:
 
     def _toggle_ocr_setup(self):
         """Toggle OCR region setup window visibility."""
+        print(f"DEBUG: _toggle_ocr_setup called. TESSERACT_OK={TESSERACT_OK}, visible={self.ocr_setup_visible}")
         if not TESSERACT_OK:
             print("OCR unavailable: pip install pytesseract  "
                   "(+ Tesseract binary on PATH)")
             return
         if self.ocr_setup_visible:
+            print("DEBUG: Hiding OCR setup window...")
             self._hide_ocr_setup()
         else:
+            print("DEBUG: Showing OCR setup window...")
             self._show_ocr_setup()
 
     def _ocr_setup_drag_start(self, event):
@@ -2417,17 +2452,25 @@ class SACLOSOverlay:
         try:
             img = ImageGrab.grab(bbox=tuple(self.ocr_region))
 
-            # Green channel isolation: keep bright green text, suppress background
-            r, g, b = img.split()
-            g_thresh = g.point(lambda p: 255 if p > 150 else 0)
-            r_suppress = r.point(lambda p: 0 if p > 120 else 255)
-            b_suppress = b.point(lambda p: 0 if p > 120 else 255)
-
-            mask = ImageChops.multiply(g_thresh, r_suppress)
-            mask = ImageChops.multiply(mask, b_suppress)
-
-            # Invert: Tesseract prefers dark text on light background
-            mask = mask.point(lambda p: 255 - p)
+            # The user explicitly mandated the target color is #84ffb1 (R=132, G=255, B=177)
+            img_rgb = img.convert('RGB')
+            pixels = img_rgb.getdata()
+            
+            # Threshold distance = 70 (squared = 4900)
+            # Gives a precise 3D spherical color tolerance that cleanly isolates the HUD from bright skies
+            threshold_sq = 4900
+            
+            new_pixels = []
+            for r, g, b in pixels:
+                dist_sq = (r - 132)**2 + (g - 255)**2 + (b - 177)**2
+                # Tesseract wants black text (0) on white background (255)
+                if dist_sq < threshold_sq:
+                    new_pixels.append(0)
+                else:
+                    new_pixels.append(255)
+                    
+            mask = Image.new('L', img.size)
+            mask.putdata(new_pixels)
 
             # Scale up 3x for better OCR accuracy on small text
             w, h = mask.size
@@ -2440,13 +2483,19 @@ class SACLOSOverlay:
 
             import re
             match = re.search(r'(\d+)', text.strip())
+            
+            # Debug logging
+            print(f"DEBUG OCR raw text: {text!r}")
+            mask.save("debug_ocr_mask.png")
+            
             if match:
                 val = float(match.group(1))
                 if 50 <= val <= 5000:
                     return val
 
             return None
-        except Exception:
+        except Exception as e:
+            print(f"OCR Thread Exception: {e}")
             return None
 
     # --- OCR polling thread ---
@@ -2584,6 +2633,8 @@ class SACLOSOverlay:
             self.ocr_update_timer = None
         if hasattr(self, 'ocr_setup_win') and self.ocr_setup_win:
             self.ocr_setup_win.destroy()
+        if hasattr(self, 'ocr_display_win') and self.ocr_display_win:
+            self.ocr_display_win.destroy()
 
         # Restore default Windows timer resolution
         _disable_hires_timer()
