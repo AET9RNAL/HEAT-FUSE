@@ -130,8 +130,9 @@ class TrajectoryEditorWindow(tk.Toplevel):
         self._times, self._cum_x, self._cum_y = _traj_to_cumulative(self._traj)
         self._orig_cum_x = self._cum_x.copy()
         self._orig_cum_y = self._cum_y.copy()
+        self._orig_times = self._times.copy()
 
-        # Undo stack
+        # Undo stack — entries are (cum_x, cum_y, times) 3-tuples
         self._undo_stack = []
         self._redo_stack = []
 
@@ -142,10 +143,31 @@ class TrajectoryEditorWindow(tk.Toplevel):
         self._selected_knots = set()  # indices of selected knots
         self._dragging = False
         self._pan_start = None
+        self._marquee_start = None  # (canvas_x, canvas_y) or None
+        self._marquee_rect_id = None
+
+        # Time remap state
+        self._edit_mode = 'spatial'  # 'spatial' | 'time_remap'
+        self._time_remap_expanded = False
+        self._time_remap_knots = []  # list of [frac, t] pairs
+        self._tr_canvas = None
+        self._tr_frame = None
+        self._tr_selected_knot = None
+        self._tr_dragging = False
+        self._tr_drag_start_times = None
 
         # Replay state
         self._replay_thread = None
         self._replay_abort = threading.Event()
+
+        # Simulation (in-canvas preview) state
+        self._sim_running = False
+        self._sim_paused = False
+        self._sim_loop = False
+        self._sim_index = 0          # current point index
+        self._sim_start_time = 0.0   # perf_counter when sim started
+        self._sim_after_id = None    # tk after id for cancellation
+        self._sim_use_edited = True  # True=edited, False=original
 
         # Pre-init tk variables (needed before _build_ui because
         # <Configure> on the canvas can fire during widget creation)
@@ -210,6 +232,7 @@ class TrajectoryEditorWindow(tk.Toplevel):
         # --- Sliders ---
         slider_frame = tk.Frame(main, **frame_bg)
         slider_frame.pack(padx=8, pady=4, fill=tk.X)
+        self._slider_frame = slider_frame  # ref for time remap insertion
 
         tk.Label(slider_frame, text="Knots:", font=("Consolas", 9),
                  **style).pack(side=tk.LEFT)
@@ -226,6 +249,9 @@ class TrajectoryEditorWindow(tk.Toplevel):
                                 bg="#16213e", fg="#e0e0e0", troughcolor="#0d1117",
                                 highlightthickness=0, length=120, sliderlength=15)
         sigma_slider.pack(side=tk.LEFT, padx=4)
+
+        # --- Time Remap ---
+        self._build_time_remap_panel(main, btn_style, style, frame_bg)
 
         # --- Replay ---
         replay_frame = tk.Frame(main, **frame_bg)
@@ -247,6 +273,9 @@ class TrajectoryEditorWindow(tk.Toplevel):
         tk.Label(replay_frame, textvariable=self._replay_status_var,
                  font=("Consolas", 9, "bold"), bg="#1a1a2e", fg="#00ff88"
                  ).pack(side=tk.LEFT, padx=16)
+
+        # --- Simulation (in-editor preview) ---
+        self._build_sim_panel(main, btn_style, style, frame_bg)
 
         # --- Save / Label ---
         save_frame = tk.LabelFrame(main, text=" Save ", font=("Consolas", 9),
@@ -503,10 +532,18 @@ class TrajectoryEditorWindow(tk.Toplevel):
                 c.create_line(*ghost_pts, fill="#333355", width=1, smooth=False)
 
         # Edited trajectory — colored by time
+        # In time_remap mode: color by actual time fraction (shows speed distribution)
+        # In spatial mode: color by index fraction (uniform gradient)
+        use_time_color = (self._edit_mode == 'time_remap' and len(self._times) > 1)
+        t_min_c = float(self._times[0]) if use_time_color else 0
+        t_span_c = float(self._times[-1] - self._times[0]) if use_time_color else 1
+
         if n > 1:
             for i in range(n - 1):
-                frac = i / max(n - 1, 1)
-                # blue→cyan→green→yellow→red
+                if use_time_color:
+                    frac = (float(self._times[i]) - t_min_c) / max(t_span_c, 1e-6)
+                else:
+                    frac = i / max(n - 1, 1)
                 r, g, b = self._time_color(frac)
                 color = f"#{r:02x}{g:02x}{b:02x}"
                 x1, y1 = self._world_to_canvas(self._cum_x[i], self._cum_y[i])
@@ -515,7 +552,10 @@ class TrajectoryEditorWindow(tk.Toplevel):
 
         # Point dots
         for i in range(n):
-            frac = i / max(n - 1, 1)
+            if use_time_color:
+                frac = (float(self._times[i]) - t_min_c) / max(t_span_c, 1e-6)
+            else:
+                frac = i / max(n - 1, 1)
             r, g, b = self._time_color(frac)
             color = f"#{r:02x}{g:02x}{b:02x}"
             px, py = self._world_to_canvas(self._cum_x[i], self._cum_y[i])
@@ -525,13 +565,14 @@ class TrajectoryEditorWindow(tk.Toplevel):
         ex, ey = self._world_to_canvas(self._cum_x[-1], self._cum_y[-1])
         c.create_oval(ex - 4, ey - 4, ex + 4, ey + 4, outline="#ffffff", width=1)
 
-        # Control knots
+        # Control knots (greyed out in time remap mode)
         knot_indices = self._get_knot_indices()
+        in_time_mode = self._edit_mode == 'time_remap'
         for ki in knot_indices:
             kx, ky = self._world_to_canvas(self._cum_x[ki], self._cum_y[ki])
             r = self.KNOT_RADIUS
-            if ki == 0:
-                # Locked origin knot — grey, not selectable
+            if in_time_mode or ki == 0:
+                # Locked knot — grey
                 c.create_oval(kx - r, ky - r, kx + r, ky + r,
                               fill="#333333", outline="#666666", width=2,
                               tags=f"knot_{ki}")
@@ -676,7 +717,9 @@ class TrajectoryEditorWindow(tk.Toplevel):
     # ------------------------------------------------------------------
 
     def _on_canvas_press(self, event):
-        """Select knots or start drag. Ctrl+click toggles, click replaces. Index 0 is locked."""
+        """Select knots or start drag/marquee. Ctrl+click toggles. Index 0 is locked."""
+        if self._edit_mode == 'time_remap':
+            return  # spatial editing disabled in time remap mode
         knot_indices = self._get_knot_indices()
         best_dist = float('inf')
         best_ki = None
@@ -711,11 +754,25 @@ class TrajectoryEditorWindow(tk.Toplevel):
                 self._drag_start_cum_y = self._cum_y.copy()
             self._redraw()
         else:
+            # No knot hit — start marquee selection
             if not ctrl_held:
                 self._selected_knots.clear()
-                self._redraw()
+            self._marquee_start = (event.x, event.y)
+            self._redraw()
 
     def _on_canvas_drag(self, event):
+        if self._edit_mode == 'time_remap':
+            return
+        # Marquee selection drag
+        if self._marquee_start is not None and not self._dragging:
+            sx, sy = self._marquee_start
+            # Draw rubber-band rectangle
+            if self._marquee_rect_id:
+                self._canvas.delete(self._marquee_rect_id)
+            self._marquee_rect_id = self._canvas.create_rectangle(
+                sx, sy, event.x, event.y,
+                outline="#4fc3f7", width=1, dash=(3, 3))
+            return
         if not self._dragging or not self._selected_knots:
             return
         wx, wy = self._canvas_to_world(event.x, event.y)
@@ -740,9 +797,35 @@ class TrajectoryEditorWindow(tk.Toplevel):
         self._update_info()
 
     def _on_canvas_release(self, event):
+        # Finalize marquee selection
+        if self._marquee_start is not None and not self._dragging:
+            sx, sy = self._marquee_start
+            ex, ey = event.x, event.y
+            x1, x2 = min(sx, ex), max(sx, ex)
+            y1, y2 = min(sy, ey), max(sy, ey)
+
+            # Only select if marquee has meaningful size (> 4px)
+            if (x2 - x1) > 4 or (y2 - y1) > 4:
+                ctrl_held = bool(event.state & 0x4)
+                if not ctrl_held:
+                    self._selected_knots.clear()
+                for ki in self._get_knot_indices():
+                    if ki == 0:
+                        continue
+                    kx, ky = self._world_to_canvas(self._cum_x[ki], self._cum_y[ki])
+                    if x1 <= kx <= x2 and y1 <= ky <= y2:
+                        self._selected_knots.add(ki)
+
+            if self._marquee_rect_id:
+                self._canvas.delete(self._marquee_rect_id)
+                self._marquee_rect_id = None
+            self._marquee_start = None
+            self._redraw()
+            return
+
         if self._dragging:
-            # Push to undo stack
-            self._undo_stack.append((self._drag_start_cum_x, self._drag_start_cum_y))
+            # Push to undo stack (3-tuple: cum_x, cum_y, times)
+            self._undo_stack.append((self._drag_start_cum_x, self._drag_start_cum_y, self._times.copy()))
             self._redo_stack.clear()
             self._dragging = False
 
@@ -785,30 +868,647 @@ class TrajectoryEditorWindow(tk.Toplevel):
     def _undo(self):
         if not self._undo_stack:
             return
-        self._redo_stack.append((self._cum_x.copy(), self._cum_y.copy()))
-        prev_x, prev_y = self._undo_stack.pop()
-        self._cum_x = prev_x.copy()
-        self._cum_y = prev_y.copy()
+        self._redo_stack.append((self._cum_x.copy(), self._cum_y.copy(), self._times.copy()))
+        prev = self._undo_stack.pop()
+        self._cum_x = prev[0].copy()
+        self._cum_y = prev[1].copy()
+        if len(prev) >= 3:
+            self._times = prev[2].copy()
+        if self._time_remap_expanded:
+            self._init_time_remap_knots()
+            self._redraw_time_remap()
         self._redraw()
         self._update_info()
 
     def _redo(self):
         if not self._redo_stack:
             return
-        self._undo_stack.append((self._cum_x.copy(), self._cum_y.copy()))
-        next_x, next_y = self._redo_stack.pop()
-        self._cum_x = next_x.copy()
-        self._cum_y = next_y.copy()
+        self._undo_stack.append((self._cum_x.copy(), self._cum_y.copy(), self._times.copy()))
+        nxt = self._redo_stack.pop()
+        self._cum_x = nxt[0].copy()
+        self._cum_y = nxt[1].copy()
+        if len(nxt) >= 3:
+            self._times = nxt[2].copy()
+        if self._time_remap_expanded:
+            self._init_time_remap_knots()
+            self._redraw_time_remap()
         self._redraw()
         self._update_info()
 
     def _reset_edits(self):
-        self._undo_stack.append((self._cum_x.copy(), self._cum_y.copy()))
+        self._undo_stack.append((self._cum_x.copy(), self._cum_y.copy(), self._times.copy()))
         self._redo_stack.clear()
         self._cum_x = self._orig_cum_x.copy()
         self._cum_y = self._orig_cum_y.copy()
+        self._times = self._orig_times.copy()
+        if self._time_remap_expanded:
+            self._init_time_remap_knots()
+            self._redraw_time_remap()
         self._redraw()
         self._update_info()
+
+    # ------------------------------------------------------------------
+    #  Time Remap
+    # ------------------------------------------------------------------
+
+    def _build_time_remap_panel(self, parent, btn_style, style, frame_bg):
+        """Build the collapsible time remap sub-panel."""
+        toggle_row = tk.Frame(parent, **frame_bg)
+        toggle_row.pack(fill=tk.X, padx=8, pady=(4, 0))
+
+        self._tr_toggle_btn = tk.Button(
+            toggle_row, text="Time Remap \u25b6",
+            command=self._toggle_time_remap, **btn_style)
+        self._tr_toggle_btn.pack(side=tk.LEFT)
+
+        self._tr_mode_label = tk.Label(
+            toggle_row, text="", font=("Consolas", 8),
+            bg="#1a1a2e", fg="#ff8800")
+        self._tr_mode_label.pack(side=tk.LEFT, padx=8)
+
+        # Collapsible frame (initially hidden)
+        self._tr_frame = tk.Frame(parent, bg="#0d1117", bd=1, relief=tk.SUNKEN)
+
+        # Mini timing canvas
+        self._tr_canvas = tk.Canvas(
+            self._tr_frame, bg="#0d1117", width=580, height=120,
+            highlightthickness=0, cursor="hand2")
+        self._tr_canvas.pack(padx=4, pady=4, fill=tk.X)
+
+        self._tr_canvas.bind("<ButtonPress-1>", self._on_tr_press)
+        self._tr_canvas.bind("<B1-Motion>", self._on_tr_drag)
+        self._tr_canvas.bind("<ButtonRelease-1>", self._on_tr_release)
+        self._tr_canvas.bind("<Double-Button-1>", self._on_tr_double_click)
+        self._tr_canvas.bind("<Button-3>", self._on_tr_right_click)
+        self._tr_canvas.bind("<Configure>", lambda e: self._redraw_time_remap()
+                             if self._time_remap_expanded else None)
+
+        # Quick action buttons
+        small_btn = {**btn_style, "font": ("Consolas", 8)}
+        action_row = tk.Frame(self._tr_frame, **frame_bg)
+        action_row.pack(fill=tk.X, padx=4, pady=(0, 4))
+
+        tk.Button(action_row, text="Reset Timing",
+                  command=self._reset_timing, **small_btn).pack(side=tk.LEFT, padx=2)
+        tk.Button(action_row, text="Delay +20ms",
+                  command=lambda: self._shift_onset(0.02), **small_btn).pack(side=tk.LEFT, padx=2)
+        tk.Button(action_row, text="Advance -20ms",
+                  command=lambda: self._shift_onset(-0.02), **small_btn).pack(side=tk.LEFT, padx=2)
+        tk.Button(action_row, text="Stretch x1.2",
+                  command=lambda: self._scale_duration(1.2), **small_btn).pack(side=tk.LEFT, padx=2)
+        tk.Button(action_row, text="Compress x0.8",
+                  command=lambda: self._scale_duration(0.8), **small_btn).pack(side=tk.LEFT, padx=2)
+
+    def _toggle_time_remap(self):
+        if self._time_remap_expanded:
+            self._tr_frame.pack_forget()
+            self._edit_mode = 'spatial'
+            self._tr_toggle_btn.config(text="Time Remap \u25b6")
+            self._tr_mode_label.config(text="")
+            self._time_remap_expanded = False
+        else:
+            self._tr_frame.pack(fill=tk.X, padx=8, pady=4,
+                                after=self._slider_frame)
+            self._edit_mode = 'time_remap'
+            self._tr_toggle_btn.config(text="Time Remap \u25bc")
+            self._tr_mode_label.config(text="EDITING TIMING (spatial locked)")
+            self._time_remap_expanded = True
+            self._init_time_remap_knots()
+            self._redraw_time_remap()
+        self._redraw()
+
+    def _init_time_remap_knots(self):
+        """Derive remap knots from current times array."""
+        n = len(self._times)
+        if n < 2:
+            self._time_remap_knots = []
+            return
+        num_knots = min(7, n)
+        self._time_remap_knots = []
+        for i in range(num_knots):
+            frac = i / (num_knots - 1)
+            idx = int(round(frac * (n - 1)))
+            self._time_remap_knots.append([frac, float(self._times[idx])])
+
+    # --- Timing curve drawing ---
+
+    def _tr_layout(self):
+        """Return (cw, ch, pad_l, pad_r, pad_t, pad_b, plot_w, plot_h, t_max)."""
+        cw = self._tr_canvas.winfo_width() or 580
+        ch = self._tr_canvas.winfo_height() or 120
+        pad_l, pad_r, pad_t, pad_b = 44, 10, 10, 20
+        plot_w = cw - pad_l - pad_r
+        plot_h = ch - pad_t - pad_b
+        t_max = float(max(self._times[-1], self._orig_times[-1])) * 1.15
+        if t_max <= 0:
+            t_max = 0.1
+        return cw, ch, pad_l, pad_r, pad_t, pad_b, plot_w, plot_h, t_max
+
+    def _tr_frac_to_cx(self, frac, pad_l, plot_w):
+        return pad_l + frac * plot_w
+
+    def _tr_t_to_cy(self, t, pad_t, plot_h, t_max):
+        return pad_t + plot_h - t / max(t_max, 1e-6) * plot_h
+
+    def _redraw_time_remap(self):
+        """Draw the timing curve on the mini canvas."""
+        c = self._tr_canvas
+        if c is None:
+            return
+        c.delete("all")
+
+        n = len(self._times)
+        if n < 2:
+            return
+
+        cw, ch, pad_l, pad_r, pad_t, pad_b, plot_w, plot_h, t_max = self._tr_layout()
+        frac_cx = lambda f: self._tr_frac_to_cx(f, pad_l, plot_w)
+        t_cy = lambda t: self._tr_t_to_cy(t, pad_t, plot_h, t_max)
+        font = ("Consolas", 7)
+        tc = "#444455"
+
+        # Grid lines
+        for i in range(5):
+            y = pad_t + i * plot_h / 4
+            c.create_line(pad_l, y, pad_l + plot_w, y, fill="#1a1a2e", width=1, dash=(2, 4))
+
+        # Original timing (ghost reference)
+        for i in range(n - 1):
+            f1 = i / (n - 1)
+            f2 = (i + 1) / (n - 1)
+            x1, y1 = frac_cx(f1), t_cy(float(self._orig_times[i]))
+            x2, y2 = frac_cx(f2), t_cy(float(self._orig_times[i + 1]))
+            c.create_line(x1, y1, x2, y2, fill="#333355", width=1)
+
+        # Current remap curve (interpolated from knots)
+        if self._time_remap_knots:
+            fracs = [k[0] for k in self._time_remap_knots]
+            t_outs = [k[1] for k in self._time_remap_knots]
+            steps = 100
+            prev_px, prev_py = None, None
+            for s in range(steps + 1):
+                frac = s / steps
+                t_val = float(np.interp(frac, fracs, t_outs))
+                px = frac_cx(frac)
+                py = t_cy(t_val)
+                if prev_px is not None:
+                    c.create_line(prev_px, prev_py, px, py, fill="#4fc3f7", width=2)
+                prev_px, prev_py = px, py
+
+        # Knot handles
+        r = 5
+        for i, (frac, t_val) in enumerate(self._time_remap_knots):
+            kx = frac_cx(frac)
+            ky = t_cy(t_val)
+            if i == self._tr_selected_knot:
+                fill, outline = "#ff8800", "#ffcc00"
+            else:
+                fill, outline = "#0f3460", "#4fc3f7"
+            c.create_oval(kx - r, ky - r, kx + r, ky + r,
+                          fill=fill, outline=outline, width=2)
+
+        # Axis labels
+        c.create_text(pad_l - 4, pad_t, text=f"{t_max:.3f}s",
+                      fill=tc, font=font, anchor=tk.NE)
+        c.create_text(pad_l - 4, pad_t + plot_h, text="0.000s",
+                      fill=tc, font=font, anchor=tk.NE)
+        c.create_text(pad_l, ch - 2, text="0%",
+                      fill=tc, font=font, anchor=tk.SW)
+        c.create_text(pad_l + plot_w, ch - 2, text="100%",
+                      fill=tc, font=font, anchor=tk.SE)
+        c.create_text(pad_l + plot_w / 2, ch - 2, text="trajectory progress",
+                      fill=tc, font=font, anchor=tk.S)
+        c.create_text(pad_l - 4, pad_t + plot_h / 2, text="t(s)",
+                      fill=tc, font=font, anchor=tk.E)
+
+    # --- Timing knot interaction ---
+
+    def _on_tr_press(self, event):
+        """Select nearest knot on the timing curve."""
+        cw, ch, pad_l, pad_r, pad_t, pad_b, plot_w, plot_h, t_max = self._tr_layout()
+        best_dist = float('inf')
+        best_i = None
+        for i, (frac, t_val) in enumerate(self._time_remap_knots):
+            kx = self._tr_frac_to_cx(frac, pad_l, plot_w)
+            ky = self._tr_t_to_cy(t_val, pad_t, plot_h, t_max)
+            d = math.hypot(event.x - kx, event.y - ky)
+            if d < 12 and d < best_dist:
+                best_dist = d
+                best_i = i
+
+        if best_i is not None:
+            self._tr_selected_knot = best_i
+            self._tr_dragging = True
+            self._tr_drag_start_times = self._times.copy()
+        else:
+            self._tr_selected_knot = None
+        self._redraw_time_remap()
+
+    def _on_tr_drag(self, event):
+        """Drag selected time knot vertically (change time value)."""
+        if not self._tr_dragging or self._tr_selected_knot is None:
+            return
+
+        cw, ch, pad_l, pad_r, pad_t, pad_b, plot_w, plot_h, t_max = self._tr_layout()
+        ki = self._tr_selected_knot
+        knots = self._time_remap_knots
+
+        # Convert canvas Y → time
+        t_val = (pad_t + plot_h - event.y) / max(plot_h, 1) * t_max
+        t_val = max(0.0, t_val)
+
+        # Clamp between neighboring knots for monotonicity
+        min_t = knots[ki - 1][1] + 1e-4 if ki > 0 else 0.0
+        max_t = knots[ki + 1][1] - 1e-4 if ki < len(knots) - 1 else t_val + 0.5
+        t_val = max(min_t, min(max_t, t_val))
+
+        knots[ki][1] = t_val
+        self._apply_remap_from_knots()
+        self._redraw_time_remap()
+        self._redraw()
+        self._update_info()
+
+    def _on_tr_release(self, event):
+        if self._tr_dragging and self._tr_drag_start_times is not None:
+            self._undo_stack.append((
+                self._cum_x.copy(), self._cum_y.copy(), self._tr_drag_start_times))
+            self._redo_stack.clear()
+            self._tr_dragging = False
+            self._tr_drag_start_times = None
+
+    def _on_tr_double_click(self, event):
+        """Double-click: add a new knot at that position."""
+        cw, ch, pad_l, pad_r, pad_t, pad_b, plot_w, plot_h, t_max = self._tr_layout()
+
+        frac = (event.x - pad_l) / max(plot_w, 1)
+        t_val = (pad_t + plot_h - event.y) / max(plot_h, 1) * t_max
+        frac = max(0.01, min(0.99, frac))
+        t_val = max(0.0, t_val)
+
+        # Insert in sorted order by frac
+        insert_idx = 0
+        for i, (f, _) in enumerate(self._time_remap_knots):
+            if frac > f:
+                insert_idx = i + 1
+
+        # Clamp between neighbors
+        if insert_idx > 0:
+            t_val = max(t_val, self._time_remap_knots[insert_idx - 1][1] + 1e-4)
+        if insert_idx < len(self._time_remap_knots):
+            t_val = min(t_val, self._time_remap_knots[insert_idx][1] - 1e-4)
+
+        self._undo_stack.append((self._cum_x.copy(), self._cum_y.copy(), self._times.copy()))
+        self._redo_stack.clear()
+
+        self._time_remap_knots.insert(insert_idx, [frac, t_val])
+        self._apply_remap_from_knots()
+        self._redraw_time_remap()
+        self._redraw()
+        self._update_info()
+
+    def _on_tr_right_click(self, event):
+        """Right-click: delete nearest intermediate knot."""
+        if len(self._time_remap_knots) <= 2:
+            return
+        cw, ch, pad_l, pad_r, pad_t, pad_b, plot_w, plot_h, t_max = self._tr_layout()
+        best_dist = float('inf')
+        best_i = None
+        for i, (frac, t_val) in enumerate(self._time_remap_knots):
+            if i == 0 or i == len(self._time_remap_knots) - 1:
+                continue  # don't delete endpoints
+            kx = self._tr_frac_to_cx(frac, pad_l, plot_w)
+            ky = self._tr_t_to_cy(t_val, pad_t, plot_h, t_max)
+            d = math.hypot(event.x - kx, event.y - ky)
+            if d < 12 and d < best_dist:
+                best_dist = d
+                best_i = i
+
+        if best_i is not None:
+            self._undo_stack.append((self._cum_x.copy(), self._cum_y.copy(), self._times.copy()))
+            self._redo_stack.clear()
+            self._time_remap_knots.pop(best_i)
+            self._apply_remap_from_knots()
+            self._tr_selected_knot = None
+            self._redraw_time_remap()
+            self._redraw()
+            self._update_info()
+
+    # --- Core remap math ---
+
+    def _apply_remap_from_knots(self):
+        """Interpolate time remap knots into self._times, preserving monotonicity."""
+        n = len(self._times)
+        if n < 2 or not self._time_remap_knots:
+            return
+
+        fracs = np.array([k[0] for k in self._time_remap_knots])
+        t_outs = np.array([k[1] for k in self._time_remap_knots])
+
+        index_fracs = np.linspace(0, 1, n)
+        new_times = np.interp(index_fracs, fracs, t_outs)
+
+        # Enforce strict monotonicity
+        for i in range(1, n):
+            if new_times[i] <= new_times[i - 1]:
+                new_times[i] = new_times[i - 1] + 1e-5
+
+        self._times = new_times
+
+    # --- Quick actions ---
+
+    def _reset_timing(self):
+        """Reset times to original values."""
+        self._undo_stack.append((self._cum_x.copy(), self._cum_y.copy(), self._times.copy()))
+        self._redo_stack.clear()
+        self._times = self._orig_times.copy()
+        self._init_time_remap_knots()
+        self._redraw_time_remap()
+        self._redraw()
+        self._update_info()
+
+    def _shift_onset(self, delta_s):
+        """Shift all times by delta_s (positive = delay, negative = advance)."""
+        self._undo_stack.append((self._cum_x.copy(), self._cum_y.copy(), self._times.copy()))
+        self._redo_stack.clear()
+        new_times = self._times + delta_s
+        min_val = float(np.min(new_times))
+        if min_val < 0:
+            new_times -= min_val
+        self._times = new_times
+        self._init_time_remap_knots()
+        self._redraw_time_remap()
+        self._redraw()
+        self._update_info()
+
+    def _scale_duration(self, factor):
+        """Scale all times by a factor (>1 = stretch, <1 = compress)."""
+        self._undo_stack.append((self._cum_x.copy(), self._cum_y.copy(), self._times.copy()))
+        self._redo_stack.clear()
+        self._times = self._times * factor
+        self._init_time_remap_knots()
+        self._redraw_time_remap()
+        self._redraw()
+        self._update_info()
+
+    # ------------------------------------------------------------------
+    #  Simulation (in-editor animated preview)
+    # ------------------------------------------------------------------
+
+    SIM_CANVAS_H = 100
+
+    def _build_sim_panel(self, parent, btn_style, style, frame_bg):
+        """Build the always-visible simulation preview panel."""
+        sim_label = tk.LabelFrame(parent, text=" Simulate ", font=("Consolas", 9),
+                                  bg="#1a1a2e", fg="#e0e0e0", bd=1)
+        sim_label.pack(padx=8, pady=4, fill=tk.X)
+
+        # Simulation canvas
+        self._sim_canvas = tk.Canvas(sim_label, bg="#0d1117", height=self.SIM_CANVAS_H,
+                                     highlightthickness=0)
+        self._sim_canvas.pack(padx=4, pady=(4, 2), fill=tk.X)
+
+        # Controls row
+        ctrl_row = tk.Frame(sim_label, **frame_bg)
+        ctrl_row.pack(fill=tk.X, padx=4, pady=(0, 4))
+
+        small_btn = {**btn_style, "font": ("Consolas", 8)}
+
+        self._sim_play_btn = tk.Button(ctrl_row, text="\u25b6 Play",
+                                       command=self._sim_play_pause, **small_btn)
+        self._sim_play_btn.pack(side=tk.LEFT, padx=2)
+
+        tk.Button(ctrl_row, text="\u25a0 Stop",
+                  command=self._sim_stop, **small_btn).pack(side=tk.LEFT, padx=2)
+
+        self._sim_loop_var = tk.BooleanVar(value=False)
+        self._sim_loop_cb = tk.Checkbutton(
+            ctrl_row, text="Loop", variable=self._sim_loop_var,
+            command=self._sim_loop_toggle,
+            bg="#1a1a2e", fg="#e0e0e0", selectcolor="#16213e",
+            activebackground="#1a1a2e", activeforeground="#e0e0e0",
+            font=("Consolas", 8))
+        self._sim_loop_cb.pack(side=tk.LEFT, padx=8)
+
+        self._sim_src_var = tk.StringVar(value="edited")
+        tk.Radiobutton(ctrl_row, text="Edited", variable=self._sim_src_var,
+                       value="edited", command=self._sim_source_change,
+                       bg="#1a1a2e", fg="#e0e0e0", selectcolor="#16213e",
+                       activebackground="#1a1a2e", activeforeground="#e0e0e0",
+                       font=("Consolas", 8)).pack(side=tk.LEFT, padx=(8, 2))
+        tk.Radiobutton(ctrl_row, text="Original", variable=self._sim_src_var,
+                       value="original", command=self._sim_source_change,
+                       bg="#1a1a2e", fg="#e0e0e0", selectcolor="#16213e",
+                       activebackground="#1a1a2e", activeforeground="#e0e0e0",
+                       font=("Consolas", 8)).pack(side=tk.LEFT, padx=2)
+
+        self._sim_time_var = tk.StringVar(value="")
+        tk.Label(ctrl_row, textvariable=self._sim_time_var,
+                 font=("Consolas", 8), bg="#1a1a2e", fg="#00ff88"
+                 ).pack(side=tk.RIGHT, padx=4)
+
+        # Draw static preview immediately
+        self._sim_draw_static()
+
+    def _sim_get_data(self):
+        """Return (times, cum_x, cum_y) for the selected source."""
+        if self._sim_use_edited:
+            return self._times, self._cum_x, self._cum_y
+        else:
+            return self._orig_times, self._orig_cum_x, self._orig_cum_y
+
+    def _sim_layout(self):
+        """Return (cw, ch, pad, x_min, x_max, y_min, y_max, scale)."""
+        c = self._sim_canvas
+        cw = c.winfo_width() or 580
+        ch = c.winfo_height() or self.SIM_CANVAS_H
+        pad = 12
+
+        times, cx_arr, cy_arr = self._sim_get_data()
+        if len(cx_arr) == 0:
+            return cw, ch, pad, 0, 1, 0, 1, 1.0
+
+        x_min = min(0, float(np.min(cx_arr)))
+        x_max = max(0, float(np.max(cx_arr)))
+        y_min = min(0, float(np.min(cy_arr)))
+        y_max = max(0, float(np.max(cy_arr)))
+
+        span_x = max(x_max - x_min, 1)
+        span_y = max(y_max - y_min, 1)
+        scale = min((cw - 2 * pad) / span_x, (ch - 2 * pad) / span_y)
+
+        return cw, ch, pad, x_min, x_max, y_min, y_max, scale
+
+    def _sim_world_to_canvas(self, wx, wy):
+        cw, ch, pad, x_min, x_max, y_min, y_max, scale = self._sim_layout()
+        mid_x = (x_min + x_max) / 2
+        mid_y = (y_min + y_max) / 2
+        cx = cw / 2 + (wx - mid_x) * scale
+        cy = ch / 2 + (wy - mid_y) * scale
+        return cx, cy
+
+    def _sim_draw_static(self):
+        """Draw the full trajectory path (dimmed) as background."""
+        c = self._sim_canvas
+        c.delete("all")
+        times, cx_arr, cy_arr = self._sim_get_data()
+        n = len(cx_arr)
+        if n < 2:
+            return
+
+        # Origin crosshair
+        ox, oy = self._sim_world_to_canvas(0, 0)
+        c.create_line(ox - 6, oy, ox + 6, oy, fill="#333333", width=1)
+        c.create_line(ox, oy - 6, ox, oy + 6, fill="#333333", width=1)
+
+        # Full path (dim)
+        pts = []
+        for i in range(n):
+            px, py = self._sim_world_to_canvas(cx_arr[i], cy_arr[i])
+            pts.extend([px, py])
+        if len(pts) >= 4:
+            c.create_line(*pts, fill="#222244", width=1.5, smooth=False)
+
+        # Endpoint
+        ex, ey = self._sim_world_to_canvas(cx_arr[-1], cy_arr[-1])
+        c.create_oval(ex - 3, ey - 3, ex + 3, ey + 3, outline="#444466", width=1)
+
+    def _sim_draw_frame(self, up_to_index):
+        """Draw the animated portion up to the given index + cursor dot."""
+        c = self._sim_canvas
+        # Clear previous animated elements
+        c.delete("sim_trail")
+        c.delete("sim_cursor")
+
+        times, cx_arr, cy_arr = self._sim_get_data()
+        n = len(cx_arr)
+        if n < 2 or up_to_index < 0:
+            return
+
+        idx = min(up_to_index, n - 1)
+
+        # Bright trail up to current point
+        if idx > 0:
+            pts = []
+            for i in range(idx + 1):
+                frac = i / max(n - 1, 1)
+                px, py = self._sim_world_to_canvas(cx_arr[i], cy_arr[i])
+                pts.extend([px, py])
+            if len(pts) >= 4:
+                c.create_line(*pts, fill="#4fc3f7", width=2, smooth=False,
+                              tags="sim_trail")
+
+        # Cursor dot
+        px, py = self._sim_world_to_canvas(cx_arr[idx], cy_arr[idx])
+        r = 5
+        c.create_oval(px - r, py - r, px + r, py + r,
+                      fill="#ff8800", outline="#ffcc00", width=2,
+                      tags="sim_cursor")
+
+        # Time readout
+        t_val = float(times[idx])
+        self._sim_time_var.set(f"t={t_val:.4f}s  [{idx+1}/{n}]")
+
+    def _sim_play_pause(self):
+        """Toggle play/pause."""
+        if self._sim_running and not self._sim_paused:
+            # Pause
+            self._sim_paused = True
+            self._sim_play_btn.config(text="\u25b6 Resume")
+            if self._sim_after_id:
+                self.after_cancel(self._sim_after_id)
+                self._sim_after_id = None
+        elif self._sim_running and self._sim_paused:
+            # Resume
+            self._sim_paused = False
+            self._sim_play_btn.config(text="\u23f8 Pause")
+            self._sim_start_time = time.perf_counter() - self._sim_pause_elapsed
+            self._sim_tick()
+        else:
+            # Start fresh
+            self._sim_start(from_index=0)
+
+    def _sim_start(self, from_index=0):
+        """Start simulation from a given index."""
+        times, cx_arr, cy_arr = self._sim_get_data()
+        n = len(times)
+        if n < 2:
+            return
+
+        self._sim_running = True
+        self._sim_paused = False
+        self._sim_index = from_index
+        self._sim_loop = self._sim_loop_var.get()
+        self._sim_use_edited = (self._sim_src_var.get() == "edited")
+        self._sim_play_btn.config(text="\u23f8 Pause")
+
+        # Offset start time so we begin at the correct t for from_index
+        t_offset = float(times[from_index]) if from_index > 0 else 0.0
+        self._sim_start_time = time.perf_counter() - t_offset
+        self._sim_pause_elapsed = t_offset
+
+        self._sim_draw_static()
+        self._sim_tick()
+
+    def _sim_tick(self):
+        """Advance simulation by one frame (~16ms)."""
+        if not self._sim_running or self._sim_paused:
+            return
+
+        times, cx_arr, cy_arr = self._sim_get_data()
+        n = len(times)
+        if n < 2:
+            self._sim_stop()
+            return
+
+        elapsed = time.perf_counter() - self._sim_start_time
+        self._sim_pause_elapsed = elapsed
+
+        # Find the index whose time we've reached
+        idx = self._sim_index
+        while idx < n and float(times[idx]) <= elapsed:
+            idx += 1
+        idx = min(idx, n - 1)
+        self._sim_index = idx
+
+        self._sim_draw_frame(idx)
+
+        if idx >= n - 1:
+            # Reached end
+            if self._sim_loop_var.get():
+                # Restart after a brief pause
+                self._sim_after_id = self.after(300, lambda: self._sim_start(0))
+            else:
+                self._sim_running = False
+                self._sim_play_btn.config(text="\u25b6 Play")
+                self._sim_time_var.set(f"t={float(times[-1]):.4f}s  [done]")
+            return
+
+        # Schedule next tick (~16ms ≈ 60fps)
+        self._sim_after_id = self.after(16, self._sim_tick)
+
+    def _sim_stop(self):
+        """Stop simulation and reset."""
+        self._sim_running = False
+        self._sim_paused = False
+        self._sim_play_btn.config(text="\u25b6 Play")
+        if self._sim_after_id:
+            self.after_cancel(self._sim_after_id)
+            self._sim_after_id = None
+        self._sim_index = 0
+        self._sim_time_var.set("")
+        self._sim_draw_static()
+
+    def _sim_loop_toggle(self):
+        self._sim_loop = self._sim_loop_var.get()
+
+    def _sim_source_change(self):
+        """When switching edited/original source, restart if running."""
+        self._sim_use_edited = (self._sim_src_var.get() == "edited")
+        if self._sim_running:
+            self._sim_stop()
+            self._sim_start(0)
+        else:
+            self._sim_draw_static()
 
     # ------------------------------------------------------------------
     #  Replay
@@ -1052,6 +1752,9 @@ class TrajectoryEditorWindow(tk.Toplevel):
         self.destroy()
 
     def _on_close(self):
+        if self._sim_after_id:
+            self.after_cancel(self._sim_after_id)
+            self._sim_after_id = None
         if self._replay_thread and self._replay_thread.is_alive():
             self._replay_abort.set()
         if self._on_discard_cb:
