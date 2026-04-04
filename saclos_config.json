@@ -21,7 +21,7 @@
     2488,
     1409
   ],
-  "target_range_m": 72.8,
+  "target_range_m": 52.160000000000025,
   "hud_assets_dir": "assets",
   "hud_name_image": "predictor.png",
   "hud_descriptor_image": "interceptSystem.png",

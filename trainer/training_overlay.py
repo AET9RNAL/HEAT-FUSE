@@ -51,6 +51,13 @@ class TrainingOverlay(BaseSACLOSOverlay):
         self._train_last_x         = None
         self._train_last_y         = None
 
+        # Pre-fire aiming trajectory (tracking start → LMB click)
+        # Stateless — never written to dataset, only used for replay context
+        self._prefire_deltas     = []
+        self._prefire_start_time = None
+        self._prefire_last_x     = None
+        self._prefire_last_y     = None
+
         # Refiner editor window reference
         self._refiner_win = None
 
@@ -79,6 +86,11 @@ class TrainingOverlay(BaseSACLOSOverlay):
         self._train_last_x       = None
         self._train_last_y       = None
 
+        self._prefire_deltas     = []
+        self._prefire_start_time = None
+        self._prefire_last_x     = None
+        self._prefire_last_y     = None
+
         super()._start_tracking()
 
         if self.tracking_active and PYNPUT_OK:
@@ -87,6 +99,7 @@ class TrainingOverlay(BaseSACLOSOverlay):
                     self._train_click_listener.stop()
                 except Exception:
                     pass
+            self._prefire_start_time = time.perf_counter()
             self._train_click_listener = pynmouse.Listener(
                 on_click=self._on_train_click,
             )
@@ -127,8 +140,13 @@ class TrainingOverlay(BaseSACLOSOverlay):
                     f"r={self._train_range:.0f}m - recording guidance ...")
 
     def _on_mouse_move(self, x, y):
-        """Override: also accumulate timestamped raw deltas when recording."""
+        """Override: accumulate timestamped raw deltas.
+
+        Before LMB (pre-fire aiming): deltas go into _prefire_deltas.
+        After  LMB (guidance recording): deltas go into _train_deltas.
+        """
         if self._train_recording:
+            # Post-fire guidance
             if self._train_last_x is not None:
                 raw_dx = x - self._train_last_x
                 raw_dy = y - self._train_last_y
@@ -136,6 +154,15 @@ class TrainingOverlay(BaseSACLOSOverlay):
                 self._train_deltas.append({'t': round(t, 4), 'dx': raw_dx, 'dy': raw_dy})
             self._train_last_x = x
             self._train_last_y = y
+        elif self.tracking_active and not self._train_lmb_detected and self._prefire_start_time is not None:
+            # Pre-fire aiming phase
+            if self._prefire_last_x is not None:
+                raw_dx = x - self._prefire_last_x
+                raw_dy = y - self._prefire_last_y
+                t = time.perf_counter() - self._prefire_start_time
+                self._prefire_deltas.append({'t': round(t, 4), 'dx': raw_dx, 'dy': raw_dy})
+            self._prefire_last_x = x
+            self._prefire_last_y = y
 
         super()._on_mouse_move(x, y)
 
@@ -169,6 +196,7 @@ class TrainingOverlay(BaseSACLOSOverlay):
                 'angle_rad':       self._train_disp_angle,
                 'range_m':         self._train_range,
                 'trajectory':      self._train_deltas,
+                'pre_trajectory':  self._prefire_deltas,
             }
             # Open visual editor on the main thread
             self.root.after(50, lambda c=capture: self._open_refiner(c))
@@ -208,6 +236,7 @@ class TrainingOverlay(BaseSACLOSOverlay):
         self._refiner_win = TrajectoryEditorWindow(
             self.root,
             trajectory=capture['trajectory'],
+            pre_trajectory=capture.get('pre_trajectory'),
             context={
                 'displacement_px': capture['displacement_px'],
                 'angle_rad': capture['angle_rad'],

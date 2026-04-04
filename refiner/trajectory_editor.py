@@ -93,6 +93,7 @@ class TrajectoryEditorWindow(tk.Toplevel):
     DEFAULT_SIGMA_FRAC = 0.15  # fraction of trajectory length
 
     def __init__(self, parent, trajectory, *,
+                 pre_trajectory=None,
                  context=None, record_index=None,
                  learner=None,
                  on_save=None, on_discard=None,
@@ -113,6 +114,15 @@ class TrajectoryEditorWindow(tk.Toplevel):
         self._all_samples = all_samples
         self._data_file = data_file or 'saclos_ml_data.json'
         self._backup_done = False
+
+        # Pre-fire aiming trajectory (tracking start → LMB click)
+        # Stateless: never saved to dataset, displayed but not editable
+        self._pre_traj = pre_trajectory or []
+        if self._pre_traj:
+            _, self._pre_cum_x, self._pre_cum_y = _traj_to_cumulative(self._pre_traj)
+        else:
+            self._pre_cum_x = np.zeros(0)
+            self._pre_cum_y = np.zeros(0)
 
         # Trajectory data (original + working copy)
         self._orig_traj = copy.deepcopy(trajectory)
@@ -382,6 +392,9 @@ class TrajectoryEditorWindow(tk.Toplevel):
         if ctx.get('range_m') is not None:
             parts.append(f"range={ctx['range_m']:.0f}m")
         parts.append(f"Σdx={tdx}  Σdy={tdy}  dur={dur:.3f}s  pts={len(traj)}")
+        if self._pre_traj:
+            pre_dur = self._pre_traj[-1]['t'] if self._pre_traj else 0
+            parts.append(f"  |  pre-fire: {len(self._pre_traj)}pts {pre_dur:.3f}s")
         self._info_var.set("  ".join(parts))
 
     # ------------------------------------------------------------------
@@ -413,6 +426,15 @@ class TrajectoryEditorWindow(tk.Toplevel):
         max_x = max(0, float(np.max(self._cum_x)))
         min_y = min(0, float(np.min(self._cum_y)))
         max_y = max(0, float(np.max(self._cum_y)))
+
+        # Also include the pre-fire trajectory extent
+        if len(self._pre_cum_x) > 1:
+            off_x = self._pre_cum_x[-1]
+            off_y = self._pre_cum_y[-1]
+            min_x = min(min_x, float(np.min(self._pre_cum_x - off_x)))
+            max_x = max(max_x, float(np.max(self._pre_cum_x - off_x)))
+            min_y = min(min_y, float(np.min(self._pre_cum_y - off_y)))
+            max_y = max(max_y, float(np.max(self._pre_cum_y - off_y)))
 
         span_x = max(max_x - min_x, 1)
         span_y = max(max_y - min_y, 1)
@@ -446,6 +468,30 @@ class TrajectoryEditorWindow(tk.Toplevel):
         c.create_line(ox, oy - arm, ox, oy + arm, fill="#555555", width=1)
         c.create_text(ox + 12, oy - 10, text="(0,0)", fill="#555555",
                       font=("Consolas", 7), anchor=tk.W)
+
+        # Pre-fire aiming trajectory (non-editable, dimmed)
+        # Offset so the last point lands at origin (0,0)
+        n_pre = len(self._pre_cum_x)
+        if n_pre > 1:
+            off_x = self._pre_cum_x[-1]
+            off_y = self._pre_cum_y[-1]
+            pre_pts = []
+            for i in range(n_pre):
+                px, py = self._world_to_canvas(
+                    self._pre_cum_x[i] - off_x,
+                    self._pre_cum_y[i] - off_y,
+                )
+                pre_pts.extend([px, py])
+            if len(pre_pts) >= 4:
+                c.create_line(*pre_pts, fill="#4a3060", width=1.5,
+                              dash=(4, 3), smooth=False)
+            # Start marker (where tracking began)
+            sx, sy = self._world_to_canvas(
+                self._pre_cum_x[0] - off_x, self._pre_cum_y[0] - off_y)
+            c.create_oval(sx - 3, sy - 3, sx + 3, sy + 3,
+                          outline="#4a3060", fill="#2a1840", width=1)
+            c.create_text(sx + 8, sy - 8, text="aim",
+                          fill="#4a3060", font=("Consolas", 7), anchor=tk.W)
 
         # Ghost line (original trajectory)
         if n > 1:
@@ -806,6 +852,41 @@ class TrajectoryEditorWindow(tk.Toplevel):
         if self._replay_abort.is_set():
             return
 
+        # --- Pre-fire aiming phase (if present) ---
+        if self._pre_traj:
+            self._set_replay_status("AIMING (pre-fire)")
+            pre_start = time.perf_counter()
+            pre_cum_dx, pre_cum_dy = 0.0, 0.0
+            pre_inj_dx, pre_inj_dy = 0, 0
+
+            for pt in self._pre_traj:
+                if self._replay_abort.is_set():
+                    return
+                target_time = pre_start + pt['t']
+                now = time.perf_counter()
+                sleep_s = target_time - now
+                if sleep_s > 0.0005:
+                    time.sleep(sleep_s)
+
+                pre_cum_dx += pt['dx']
+                pre_cum_dy += pt['dy']
+                ix = int(round(pre_cum_dx)) - pre_inj_dx
+                iy = int(round(pre_cum_dy)) - pre_inj_dy
+                if ix != 0 or iy != 0:
+                    try:
+                        inject_mouse_movement(ix, iy)
+                        pre_inj_dx += ix
+                        pre_inj_dy += iy
+                    except Exception as e:
+                        logger.warning(f"Pre-fire replay error: {e}")
+                        break
+
+            logger.info(f"Pre-fire aiming complete ({pre_inj_dx}dx {pre_inj_dy}dy)")
+
+        if self._replay_abort.is_set():
+            return
+
+        # --- Fire click + guidance trajectory ---
         self._set_replay_status("REPLAYING")
 
         inject_mouse_click()
