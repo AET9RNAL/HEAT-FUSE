@@ -5,7 +5,7 @@ Same overlay as the production predictor, but:
   - auto-correction is DISABLED
   - LMB click during tracking captures the displacement snapshot
   - mouse movement after LMB is recorded as the guidance vector
-  - on tracking-key release the user labels the result (1/2/3)
+  - on tracking-key release the visual trajectory editor opens for review/save
 """
 
 import math
@@ -27,8 +27,7 @@ class TrainingOverlay(BaseSACLOSOverlay):
     Overlay subclass that records manual guidance trajectories.
 
     Workflow:
-        Track -> LMB -> Guide -> Release -> [1] Hit / [2] Miss / [3] Discard
-        If MISS: [Q/W/E] timing  then  [A/S/D] magnitude
+        Track -> LMB -> Guide -> Release -> Visual Editor (tweak, replay, save/discard)
     """
 
     def __init__(self, root, *args, **kwargs):
@@ -52,14 +51,8 @@ class TrainingOverlay(BaseSACLOSOverlay):
         self._train_last_x         = None
         self._train_last_y         = None
 
-        # Post-cycle labelling (two-step state machine)
-        self._label_state          = None
-        self._last_capture         = None
-        self._miss_timing          = None
-
-        # Start an extra keyboard listener for the 1/2 label keys
-        self._label_kbd = None
-        self._start_label_kbd()
+        # Refiner editor window reference
+        self._refiner_win = None
 
         # Banner
         stats = self.learner.get_stats()
@@ -70,8 +63,7 @@ class TrainingOverlay(BaseSACLOSOverlay):
             f"Auto-correct: DISABLED"
         )
         logger.info(
-            "Workflow: Track -> LMB -> Guide -> Release -> [1] Hit / [2] Miss / [3] Discard | "
-            "If MISS: [Q/W/E] timing  then  [A/S/D] magnitude"
+            "Workflow: Track -> LMB -> Guide -> Release -> Visual Editor"
         )
 
     # ----------------------------------------------------------------
@@ -86,7 +78,6 @@ class TrainingOverlay(BaseSACLOSOverlay):
         self._train_start_time   = None
         self._train_last_x       = None
         self._train_last_y       = None
-        self._label_state        = None
 
         super()._start_tracking()
 
@@ -172,15 +163,15 @@ class TrainingOverlay(BaseSACLOSOverlay):
                 f"Output: dx={total_dx:.0f} dy={total_dy:.0f} ({corr_dist:.1f}px @ {corr_deg:.1f}\u00b0) | "
                 f"Time: {dur:.2f}s ({len(self._train_deltas)} mouse events)"
             )
-            logger.info(">>> Press  [1] HIT  /  [2] MISS  /  [3] DISCARD  <<<")
 
-            self._last_capture = {
+            capture = {
                 'displacement_px': self._train_disp_px,
                 'angle_rad':       self._train_disp_angle,
                 'range_m':         self._train_range,
                 'trajectory':      self._train_deltas,
             }
-            self._label_state = 'outcome'
+            # Open visual editor on the main thread
+            self.root.after(50, lambda c=capture: self._open_refiner(c))
 
         elif self.tracking_active and not self._train_lmb_detected:
             logger.info("Tracking ended - no LMB detected (nothing recorded)")
@@ -196,81 +187,36 @@ class TrainingOverlay(BaseSACLOSOverlay):
         # Parent handles listener shutdown + overlay reset
         super()._stop_tracking()
 
+        # Snap overlay back to calibrated centre immediately
+        self._reset_to_calibrated_position()
+
     # ----------------------------------------------------------------
-    #  Label keys  (1 = Hit,  2 = Miss,  3 = Discard)
+    #  Visual editor (replaces keyboard labelling)
     # ----------------------------------------------------------------
 
-    def _start_label_kbd(self):
-        """Separate keyboard listener for post-capture labelling."""
-        if not PYNPUT_OK:
-            return
+    def _open_refiner(self, capture):
+        """Open the trajectory editor for visual review/edit before saving."""
+        from refiner.trajectory_editor import TrajectoryEditorWindow
 
-        def on_press(key):
+        # Close any existing editor
+        if self._refiner_win is not None:
             try:
-                char = getattr(key, 'char', None)
-                if self._label_state is None or char is None:
-                    return
-
-                if self._label_state == 'outcome':
-                    if char == '1':
-                        if self._last_capture and self.learner:
-                            info = self._last_capture
-                            n = self.learner.add_sample(
-                                info['displacement_px'],
-                                info['angle_rad'],
-                                info['range_m'],
-                                info['trajectory'],
-                                hit=True,
-                            )
-                            stats = self.learner.get_stats()
-                            logger.info(f"Recorded: HIT | total {n} samples "
-                                        f"({stats['hits']} hits, {stats['misses']} misses)")
-                        self._label_state = None
-                        self._last_capture = None
-                    elif char == '2':
-                        self._label_state = 'timing'
-                        logger.info("MISS — Timing?  [Q] Premature  [W] Optimal  [E] Late")
-                    elif char == '3':
-                        logger.info("DISCARDED  (not saved)")
-                        self._label_state = None
-                        self._last_capture = None
-
-                elif self._label_state == 'timing':
-                    if char in ('q', 'w', 'e'):
-                        timing_map = {'q': 'premature', 'w': 'optimal', 'e': 'late'}
-                        self._miss_timing = timing_map[char]
-                        self._label_state = 'magnitude'
-                        logger.info(f"Timing: {self._miss_timing}")
-                        logger.info("MISS — Magnitude?  [A] Undershoot  [S] Optimal  [D] Overshoot")
-
-                elif self._label_state == 'magnitude':
-                    if char in ('a', 's', 'd'):
-                        mag_map = {'a': 'undershoot', 's': 'optimal', 'd': 'overshoot'}
-                        miss_mag = mag_map[char]
-                        logger.info(f"Magnitude: {miss_mag}")
-                        if self._last_capture and self.learner:
-                            info = self._last_capture
-                            n = self.learner.add_sample(
-                                info['displacement_px'],
-                                info['angle_rad'],
-                                info['range_m'],
-                                info['trajectory'],
-                                hit=False,
-                                miss_timing=self._miss_timing,
-                                miss_magnitude=miss_mag,
-                            )
-                            stats = self.learner.get_stats()
-                            detail = f"{self._miss_timing} + {miss_mag}"
-                            logger.info(f"Recorded: MISS ({detail}) | total {n} samples "
-                                        f"({stats['hits']} hits, {stats['misses']} misses)")
-                        self._label_state = None
-                        self._last_capture = None
-                        self._miss_timing = None
+                self._refiner_win.destroy()
             except Exception:
-                logger.exception("Error in label keyboard handler")
+                pass
 
-        self._label_kbd = pynkeyboard.Listener(on_press=on_press)
-        self._label_kbd.start()
+        self._refiner_win = TrajectoryEditorWindow(
+            self.root,
+            trajectory=capture['trajectory'],
+            context={
+                'displacement_px': capture['displacement_px'],
+                'angle_rad': capture['angle_rad'],
+                'range_m': capture['range_m'],
+            },
+            learner=self.learner,
+            mode='capture',
+        )
+        logger.info("Visual editor opened — edit trajectory, then Save or Discard")
 
     # ----------------------------------------------------------------
     #  Cleanup
@@ -282,9 +228,9 @@ class TrainingOverlay(BaseSACLOSOverlay):
                 self._train_click_listener.stop()
             except Exception:
                 pass
-        if self._label_kbd:
+        if self._refiner_win is not None:
             try:
-                self._label_kbd.stop()
+                self._refiner_win.destroy()
             except Exception:
                 pass
         super()._quit()

@@ -42,9 +42,8 @@ class AutoOverlay(BaseSACLOSOverlay):
         self.ml_confidence_threshold = 0.3
         self.ml_online_learning = True
         self.learner = None
-        self._ml_label_state = None
         self._ml_last_context = None
-        self._ml_miss_timing = None
+        self._refiner_win = None
 
         self.turret_traverse_speed_deg_s = 51.3
         self.turret_instant_follow_deg = 15.0
@@ -117,56 +116,6 @@ class AutoOverlay(BaseSACLOSOverlay):
                 logger.warning(f"Could not load ML data: {e}")
                 self.ml_enabled = False
 
-    # ----------------------------------------------------------------
-    #  Keyboard override: ML online learning labels
-    # ----------------------------------------------------------------
-
-    def _catch_kbd_press(self, key):
-        """Intercept ML label keys (1/2/3, Q/W/E, A/S/D) during online learning."""
-        ml_state = self._ml_label_state
-        if ml_state is not None:
-            char_label = getattr(key, 'char', None)
-
-            if ml_state == 'outcome':
-                if char_label == '1':
-                    self._ml_label_state = None
-                    self._handle_ml_label(hit=True)
-                    return True
-                elif char_label == '2':
-                    self._ml_label_state = 'timing'
-                    logger.info("MISS — Timing?  [Q] Premature  [W] Optimal  [E] Late")
-                    return True
-                elif char_label == '3':
-                    self._ml_label_state = None
-                    self._ml_last_context = None
-                    logger.info("DISCARDED  (not saved)")
-                    return True
-
-            elif ml_state == 'timing':
-                if char_label in ('q', 'w', 'e'):
-                    timing_map = {'q': 'premature', 'w': 'optimal', 'e': 'late'}
-                    self._ml_miss_timing = timing_map[char_label]
-                    self._ml_label_state = 'magnitude'
-                    logger.info(f"Timing: {self._ml_miss_timing}")
-                    logger.info("MISS — Magnitude?  [A] Undershoot  [S] Optimal  [D] Overshoot")
-                    return True
-
-            elif ml_state == 'magnitude':
-                if char_label in ('a', 's', 'd'):
-                    mag_map = {'a': 'undershoot', 's': 'optimal', 'd': 'overshoot'}
-                    miss_mag = mag_map[char_label]
-                    logger.info(f"Magnitude: {miss_mag}")
-                    self._ml_label_state = None
-                    self._handle_ml_label(
-                        hit=False,
-                        miss_timing=self._ml_miss_timing,
-                        miss_magnitude=miss_mag,
-                    )
-                    self._ml_miss_timing = None
-                    return True
-
-        # Not consumed — let parent handle it
-        return super()._catch_kbd_press(key)
 
     # ----------------------------------------------------------------
     #  Tracking override: displacement + correction
@@ -214,12 +163,8 @@ class AutoOverlay(BaseSACLOSOverlay):
         if self.correction_active:
             return
 
-        # Clear any stale online learning prompt
-        if getattr(self, '_ml_label_state', None) is not None:
-            logger.info("DISCARDED  (new cycle started)")
-        self._ml_label_state = None
+        # Clear any stale context
         self._ml_last_context = None
-        self._ml_miss_timing = None
 
         # ---- ML prediction ----
         if self.ml_enabled and self.learner is not None:
@@ -322,11 +267,10 @@ class AutoOverlay(BaseSACLOSOverlay):
         logger.info(f"Auto-correction complete [ML] (took {elapsed:.2f}s, "
                     f"injected {injected_dx}dx {injected_dy}dy)")
 
-        # Online learning: prompt for HIT/MISS/DISCARD
-        if getattr(self, 'ml_online_learning', True) and hasattr(self, '_ml_last_context'):
+        # Online learning: open visual editor for labelling
+        if getattr(self, 'ml_online_learning', True) and self._ml_last_context is not None:
             ctx = self._ml_last_context
-            self._ml_label_state = 'outcome'
-            logger.info(">>> Press  [1] HIT  /  [2] MISS  /  [3] DISCARD  <<<")
+            self.root.after(50, lambda c=ctx: self._open_refiner(c))
 
         self.root.after(0, self._finish_correction)
 
@@ -382,40 +326,29 @@ class AutoOverlay(BaseSACLOSOverlay):
         self._cleanup_correction()
         self._update_hud_status("idle")
 
-    def _handle_ml_label(self, hit, miss_timing=None, miss_magnitude=None):
-        """Online learning: save the last ML prediction with rich miss labels."""
-        ctx = getattr(self, '_ml_last_context', None)
-        if ctx is None or self.learner is None:
-            logger.warning("No ML context to save")
-            return
+    # ----------------------------------------------------------------
+    #  Visual editor (replaces keyboard labelling)
+    # ----------------------------------------------------------------
 
-        if hit:
-            label = "HIT"
-        else:
-            parts = []
-            if miss_timing and miss_timing != 'optimal':
-                parts.append(miss_timing)
-            if miss_magnitude and miss_magnitude != 'optimal':
-                parts.append(miss_magnitude)
-            label = f"MISS ({', '.join(parts)})" if parts else "MISS"
+    def _open_refiner(self, context):
+        """Open the trajectory editor for visual review/edit before saving."""
+        from refiner.trajectory_editor import TrajectoryEditorWindow
 
-        try:
-            n = self.learner.add_sample(
-                ctx['displacement_px'],
-                ctx['angle_rad'],
-                ctx['range_m'],
-                ctx['trajectory'],
-                hit=hit,
-                miss_timing=miss_timing,
-                miss_magnitude=miss_magnitude,
-            )
-            stats = self.learner.get_stats()
-            logger.info(f"Saved {label} | total {n} samples "
-                        f"({stats['hits']} hits, {stats['misses']} misses)")
-        except Exception as e:
-            logger.warning(f"Failed to save ML sample: {e}")
-        finally:
-            self._ml_last_context = None
+        # Close any existing editor
+        if self._refiner_win is not None:
+            try:
+                self._refiner_win.destroy()
+            except Exception:
+                pass
+
+        self._refiner_win = TrajectoryEditorWindow(
+            self.root,
+            trajectory=context['trajectory'],
+            context=context,
+            learner=self.learner,
+            mode='capture',
+        )
+        logger.info("Visual editor opened — review trajectory, then Save or Discard")
 
     def _cleanup_correction(self):
         """Clean up correction state."""

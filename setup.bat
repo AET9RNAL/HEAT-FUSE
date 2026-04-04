@@ -78,16 +78,18 @@ echo ======================================================
 echo.
 echo   [1] Run Predictor   (run_predictor.py)
 echo   [2] Run Trainer     (run_trainer.py)
-echo   [3] Open shell in environment
-echo   [4] Exit
+echo   [3] Run Refiner     (run_refiner.py)
+echo   [4] Open shell in environment
+echo   [5] Exit
 echo.
 echo   NOTE: For OCR features, install Tesseract separately:
 echo         https://github.com/tesseract-ocr/tesseract
 echo ======================================================
 echo.
-choice /c 1234 /n /m "Select option [1-4]: "
-if errorlevel 4 goto quit
-if errorlevel 3 goto open_shell
+choice /c 12345 /n /m "Select option [1-5]: "
+if errorlevel 5 goto quit
+if errorlevel 4 goto open_shell
+if errorlevel 3 goto run_refiner
 if errorlevel 2 goto run_trainer
 if errorlevel 1 goto run_predictor
 goto menu
@@ -106,6 +108,14 @@ echo Starting Trainer ...
 python "%~dp0run_trainer.py"
 echo.
 echo Trainer exited.
+goto menu
+
+:run_refiner
+echo.
+echo Starting Refiner ...
+python "%~dp0run_refiner.py"
+echo.
+echo Refiner exited.
 goto menu
 
 :open_shell
