@@ -29,7 +29,7 @@ class OCRUiMixin:
         self.ocr_display_hwnd = None
 
         self._create_ocr_setup_window()
-        self._create_ocr_display_window()
+        # self._create_ocr_display_window()
 
     def _create_ocr_setup_window(self):
         self.ocr_setup_win = tk.Toplevel(self.root)
@@ -89,7 +89,7 @@ class OCRUiMixin:
         self._draw_ocr_setup_border()
         self.ocr_setup_win.deiconify()
         self.ocr_setup_win.attributes("-topmost", True)
-        self._show_ocr_display_setup()
+        # self._show_ocr_display_setup()
 
     def _hide_ocr_setup(self):
         if not self.ocr_setup_visible:
@@ -104,7 +104,7 @@ class OCRUiMixin:
         self.ocr_enabled = True
 
         self.ocr_setup_win.withdraw()
-        self._hide_ocr_display_setup()
+        # self._hide_ocr_display_setup()
         logger.info(f"OCR region set: {self.ocr_region}")
 
     def _toggle_ocr_setup(self):
@@ -143,86 +143,86 @@ class OCRUiMixin:
         self.ocr_setup_canvas.config(width=self.OCR_SETUP_W, height=self.OCR_SETUP_H)
         self._draw_ocr_setup_border()
 
-    def _create_ocr_display_window(self):
-        self.ocr_display_win = tk.Toplevel(self.root)
-        self.ocr_display_win.title("SACLOS OCR Display")
-        self.ocr_display_win.overrideredirect(True)
-        self.ocr_display_win.attributes("-topmost", True)
-        self.ocr_display_win.configure(bg="#000001")
-        self.ocr_display_win.attributes("-transparentcolor", "#000001")
+    # def _create_ocr_display_window(self):
+    #     self.ocr_display_win = tk.Toplevel(self.root)
+    #     self.ocr_display_win.title("SACLOS OCR Display")
+    #     self.ocr_display_win.overrideredirect(True)
+    #     self.ocr_display_win.attributes("-topmost", True)
+    #     self.ocr_display_win.configure(bg="#000001")
+    #     self.ocr_display_win.attributes("-transparentcolor", "#000001")
 
-        self.ocr_display_label = tk.Label(
-            self.ocr_display_win,
-            text="--- m",
-            fg="#00ff00", bg="#111111",
-            font=("Courier", 14, "bold"),
-            padx=6, pady=2
-        )
-        self.ocr_display_label.pack()
+    #     self.ocr_display_label = tk.Label(
+    #         self.ocr_display_win,
+    #         text="--- m",
+    #         fg="#00ff00", bg="#111111",
+    #         font=("Courier", 14, "bold"),
+    #         padx=6, pady=2
+    #     )
+    #     self.ocr_display_label.pack()
 
-        self.ocr_display_label.bind("<ButtonPress-1>", self._ocr_display_drag_start)
-        self.ocr_display_label.bind("<B1-Motion>", self._ocr_display_drag_move)
-        self.ocr_display_win.withdraw()
+    #     self.ocr_display_label.bind("<ButtonPress-1>", self._ocr_display_drag_start)
+    #     self.ocr_display_label.bind("<B1-Motion>", self._ocr_display_drag_move)
+    #     self.ocr_display_win.withdraw()
 
-    def _ocr_display_drag_start(self, event):
-        self._ocr_disp_ox = event.x_root - self.ocr_display_win.winfo_x()
-        self._ocr_disp_oy = event.y_root - self.ocr_display_win.winfo_y()
+    # def _ocr_display_drag_start(self, event):
+    #     self._ocr_disp_ox = event.x_root - self.ocr_display_win.winfo_x()
+    #     self._ocr_disp_oy = event.y_root - self.ocr_display_win.winfo_y()
 
-    def _ocr_display_drag_move(self, event):
-        nx = event.x_root - self._ocr_disp_ox
-        ny = event.y_root - self._ocr_disp_oy
-        self.ocr_display_win.geometry(f"+{nx}+{ny}")
+    # def _ocr_display_drag_move(self, event):
+    #     nx = event.x_root - self._ocr_disp_ox
+    #     ny = event.y_root - self._ocr_disp_oy
+    #     self.ocr_display_win.geometry(f"+{nx}+{ny}")
 
-    def _show_ocr_display_setup(self):
-        if self.ocr_display_pos:
-            x, y = self.ocr_display_pos
-        else:
-            sw = self.root.winfo_screenwidth()
-            sh = self.root.winfo_screenheight()
-            x = sw // 2 + 150
-            y = sh // 2 + 100
+    # def _show_ocr_display_setup(self):
+    #     if self.ocr_display_pos:
+    #         x, y = self.ocr_display_pos
+    #     else:
+    #         sw = self.root.winfo_screenwidth()
+    #         sh = self.root.winfo_screenheight()
+    #         x = sw // 2 + 150
+    #         y = sh // 2 + 100
 
-        self.ocr_display_label.config(text=f"{int(self.target_range_m)} m", bg="#111111")
-        self.ocr_display_win.geometry(f"+{x}+{y}")
-        self.ocr_display_win.deiconify()
-        self.ocr_display_win.attributes("-topmost", True)
-        self._set_ocr_display_clickthrough(False)
+    #     self.ocr_display_label.config(text=f"{int(self.target_range_m)} m", bg="#111111")
+    #     self.ocr_display_win.geometry(f"+{x}+{y}")
+    #     self.ocr_display_win.deiconify()
+    #     self.ocr_display_win.attributes("-topmost", True)
+    #     self._set_ocr_display_clickthrough(False)
 
-    def _hide_ocr_display_setup(self):
-        x = self.ocr_display_win.winfo_x()
-        y = self.ocr_display_win.winfo_y()
-        self.ocr_display_pos = [x, y]
-        self.ocr_display_win.withdraw()
+    # def _hide_ocr_display_setup(self):
+    #     x = self.ocr_display_win.winfo_x()
+    #     y = self.ocr_display_win.winfo_y()
+    #     self.ocr_display_pos = [x, y]
+    #     self.ocr_display_win.withdraw()
 
-    def _show_ocr_display(self):
-        if self.ocr_display_visible or not self.ocr_display_pos:
-            return
+    # def _show_ocr_display(self):
+    #     if self.ocr_display_visible or not self.ocr_display_pos:
+    #         return
         
-        self.ocr_display_visible = True
-        x, y = self.ocr_display_pos
-        self.ocr_display_label.config(text=f"{int(self.target_range_m)} m", bg="#111111")
-        self.ocr_display_win.geometry(f"+{x}+{y}")
-        self.ocr_display_win.deiconify()
-        self.ocr_display_win.attributes("-topmost", True)
-        self._set_ocr_display_clickthrough(True)
+    #     self.ocr_display_visible = True
+    #     x, y = self.ocr_display_pos
+    #     self.ocr_display_label.config(text=f"{int(self.target_range_m)} m", bg="#111111")
+    #     self.ocr_display_win.geometry(f"+{x}+{y}")
+    #     self.ocr_display_win.deiconify()
+    #     self.ocr_display_win.attributes("-topmost", True)
+    #     self._set_ocr_display_clickthrough(True)
 
-    def _hide_ocr_display(self):
-        if not self.ocr_display_visible:
-            return
-        self.ocr_display_visible = False
-        self.ocr_display_win.withdraw()
+    # def _hide_ocr_display(self):
+    #     if not self.ocr_display_visible:
+    #         return
+    #     self.ocr_display_visible = False
+    #     self.ocr_display_win.withdraw()
 
-    def _update_ocr_display(self, range_m):
-        if self.ocr_display_visible and self.ocr_display_label:
-            self.ocr_display_label.config(text=f"{int(range_m)} m")
+    # def _update_ocr_display(self, range_m):
+    #     if self.ocr_display_visible and self.ocr_display_label:
+    #         self.ocr_display_label.config(text=f"{int(range_m)} m")
 
-    def _set_ocr_display_clickthrough(self, enable):
-        try:
-            import ctypes
-            from utils.window_utils import set_window_clickthrough
-            if self.ocr_display_hwnd is None:
-                self.ocr_display_hwnd = ctypes.windll.user32.FindWindowW(None, "SACLOS OCR Display")
-            if self.ocr_display_hwnd:
-                set_window_clickthrough(self.ocr_display_hwnd, enable)
-        except Exception:
-            pass
+    # def _set_ocr_display_clickthrough(self, enable):
+    #     try:
+    #         import ctypes
+    #         from utils.window_utils import set_window_clickthrough
+    #         if self.ocr_display_hwnd is None:
+    #             self.ocr_display_hwnd = ctypes.windll.user32.FindWindowW(None, "SACLOS OCR Display")
+    #         if self.ocr_display_hwnd:
+    #             set_window_clickthrough(self.ocr_display_hwnd, enable)
+    #     except Exception:
+    #         pass
