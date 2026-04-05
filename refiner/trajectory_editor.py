@@ -64,6 +64,135 @@ def _gaussian_weights(n, center, sigma):
     return np.exp(-0.5 * ((indices - center) / max(sigma, 0.5)) ** 2)
 
 
+def _monotone_hermite_interp(xs, ys, ms, x_eval):
+    """Evaluate monotone cubic Hermite spline at x_eval points.
+
+    Parameters
+    ----------
+    xs : array of knot x positions (sorted, ascending)
+    ys : array of knot y values
+    ms : array of tangent slopes at each knot
+    x_eval : array of x values to evaluate
+
+    Returns
+    -------
+    array of interpolated y values (clamped monotone)
+    """
+    xs = np.asarray(xs, dtype=float)
+    ys = np.asarray(ys, dtype=float)
+    ms = np.asarray(ms, dtype=float)
+    x_eval = np.asarray(x_eval, dtype=float)
+    n = len(xs)
+    result = np.empty_like(x_eval)
+
+    # Find interval for each eval point
+    idx = np.searchsorted(xs, x_eval, side='right') - 1
+    idx = np.clip(idx, 0, n - 2)
+
+    for k in range(len(x_eval)):
+        i = idx[k]
+        h = xs[i + 1] - xs[i]
+        if h <= 0:
+            result[k] = ys[i]
+            continue
+        t = (x_eval[k] - xs[i]) / h
+        t = max(0.0, min(1.0, t))
+
+        # Hermite basis functions
+        h00 = (1 + 2 * t) * (1 - t) ** 2
+        h10 = t * (1 - t) ** 2
+        h01 = t ** 2 * (3 - 2 * t)
+        h11 = t ** 2 * (t - 1)
+
+        result[k] = h00 * ys[i] + h10 * h * ms[i] + h01 * ys[i + 1] + h11 * h * ms[i + 1]
+
+    return result
+
+
+def _fritsch_carlson_tangents(xs, ys):
+    """Compute Fritsch-Carlson monotone tangent slopes for data points.
+
+    Guarantees the interpolant is monotonically increasing when the data is.
+    """
+    xs = np.asarray(xs, dtype=float)
+    ys = np.asarray(ys, dtype=float)
+    n = len(xs)
+    if n < 2:
+        return np.zeros(n)
+
+    # Secant slopes
+    deltas = np.diff(ys) / np.maximum(np.diff(xs), 1e-12)
+
+    # Initial tangent estimates (average of adjacent secants)
+    ms = np.zeros(n)
+    ms[0] = deltas[0]
+    ms[-1] = deltas[-1]
+    for i in range(1, n - 1):
+        if deltas[i - 1] * deltas[i] <= 0:
+            ms[i] = 0.0  # local extremum → flat
+        else:
+            ms[i] = (deltas[i - 1] + deltas[i]) / 2
+
+    # Fritsch-Carlson monotonicity fix
+    for i in range(n - 1):
+        if abs(deltas[i]) < 1e-12:
+            ms[i] = 0.0
+            ms[i + 1] = 0.0
+        else:
+            alpha = ms[i] / deltas[i]
+            beta = ms[i + 1] / deltas[i]
+            # Restrict to monotone region (circle of radius 3)
+            mag = math.hypot(alpha, beta)
+            if mag > 3:
+                tau = 3.0 / mag
+                ms[i] = tau * alpha * deltas[i]
+                ms[i + 1] = tau * beta * deltas[i]
+
+    return ms
+
+
+def _rdp_simplify(points, epsilon):
+    """Ramer-Douglas-Peucker path simplification.
+
+    Parameters
+    ----------
+    points : list of (x, y) tuples
+    epsilon : max perpendicular distance tolerance
+
+    Returns
+    -------
+    list of indices to keep
+    """
+    if len(points) <= 2:
+        return list(range(len(points)))
+
+    # Find point furthest from line between first and last
+    start = np.array(points[0], dtype=float)
+    end = np.array(points[-1], dtype=float)
+    line_vec = end - start
+    line_len = np.linalg.norm(line_vec)
+
+    if line_len < 1e-12:
+        # Degenerate: all points same, find furthest from start
+        dists = [np.linalg.norm(np.array(p) - start) for p in points]
+        max_idx = int(np.argmax(dists))
+        max_dist = dists[max_idx]
+    else:
+        line_unit = line_vec / line_len
+        perp = np.array([-line_unit[1], line_unit[0]])
+        dists = [abs(np.dot(np.array(p) - start, perp)) for p in points]
+        max_idx = int(np.argmax(dists))
+        max_dist = dists[max_idx]
+
+    if max_dist > epsilon:
+        left = _rdp_simplify(points[:max_idx + 1], epsilon)
+        right = _rdp_simplify(points[max_idx:], epsilon)
+        # Offset right indices
+        return left + [max_idx + r for r in right[1:]]
+    else:
+        return [0, len(points) - 1]
+
+
 # ---------------------------------------------------------------------------
 #  Main editor window
 # ---------------------------------------------------------------------------
@@ -149,11 +278,12 @@ class TrajectoryEditorWindow(tk.Toplevel):
         # Time remap state
         self._edit_mode = 'spatial'  # 'spatial' | 'time_remap'
         self._time_remap_expanded = False
-        self._time_remap_knots = []  # list of [frac, t] pairs
+        self._time_remap_knots = []  # list of [frac, t, slope] triples
         self._tr_canvas = None
         self._tr_frame = None
         self._tr_selected_knot = None
-        self._tr_dragging = False
+        self._tr_dragging = False         # dragging a knot body
+        self._tr_dragging_handle = None   # 'in' or 'out' tangent handle
         self._tr_drag_start_times = None
 
         # Replay state
@@ -226,7 +356,7 @@ class TrajectoryEditorWindow(tk.Toplevel):
         # Info bar
         self._info_var = tk.StringVar()
         self._update_info()
-        tk.Label(main, textvariable=self._info_var, font=("Consolas", 9),
+        tk.Label(main, textvariable=self._info_var, font=("Montserrat", 9),
                  **style).pack(padx=8, anchor=tk.W)
 
         # --- Sliders ---
@@ -234,7 +364,7 @@ class TrajectoryEditorWindow(tk.Toplevel):
         slider_frame.pack(padx=8, pady=4, fill=tk.X)
         self._slider_frame = slider_frame  # ref for time remap insertion
 
-        tk.Label(slider_frame, text="Knots:", font=("Consolas", 9),
+        tk.Label(slider_frame, text="Knots:", font=("Montserrat", 9),
                  **style).pack(side=tk.LEFT)
         knot_slider = tk.Scale(slider_frame, from_=3, to=30, orient=tk.HORIZONTAL,
                                variable=self._num_knots_var, command=self._on_knot_count_change,
@@ -242,13 +372,33 @@ class TrajectoryEditorWindow(tk.Toplevel):
                                highlightthickness=0, length=120, sliderlength=15)
         knot_slider.pack(side=tk.LEFT, padx=(4, 16))
 
-        tk.Label(slider_frame, text="Influence:", font=("Consolas", 9),
+        tk.Label(slider_frame, text="Influence:", font=("Montserrat", 9),
                  **style).pack(side=tk.LEFT)
         sigma_slider = tk.Scale(slider_frame, from_=0.02, to=0.5, resolution=0.01,
                                 orient=tk.HORIZONTAL, variable=self._sigma_var,
                                 bg="#16213e", fg="#e0e0e0", troughcolor="#0d1117",
                                 highlightthickness=0, length=120, sliderlength=15)
         sigma_slider.pack(side=tk.LEFT, padx=4)
+
+        # --- Simplify ---
+        simplify_frame = tk.Frame(main, **frame_bg)
+        simplify_frame.pack(padx=8, pady=(0, 4), fill=tk.X)
+
+        tk.Button(simplify_frame, text="Simplify Path",
+                  command=self._simplify_path, **btn_style).pack(side=tk.LEFT, padx=(0, 8))
+
+        tk.Label(simplify_frame, text="Tolerance:", font=("Consolas", 9),
+                 **style).pack(side=tk.LEFT)
+        self._simplify_tol_var = tk.DoubleVar(value=1.0)
+        tk.Scale(simplify_frame, from_=0.2, to=10.0, resolution=0.1,
+                 orient=tk.HORIZONTAL, variable=self._simplify_tol_var,
+                 bg="#16213e", fg="#e0e0e0", troughcolor="#0d1117",
+                 highlightthickness=0, length=120, sliderlength=15).pack(side=tk.LEFT, padx=4)
+
+        self._simplify_info_var = tk.StringVar(value="")
+        tk.Label(simplify_frame, textvariable=self._simplify_info_var,
+                 font=("Consolas", 8), bg="#1a1a2e", fg="#00ff88"
+                 ).pack(side=tk.LEFT, padx=8)
 
         # --- Time Remap ---
         self._build_time_remap_panel(main, btn_style, style, frame_bg)
@@ -262,23 +412,23 @@ class TrajectoryEditorWindow(tk.Toplevel):
         tk.Button(replay_frame, text="Replay Edited", command=self._replay_edited,
                   **btn_style).pack(side=tk.LEFT, padx=4)
 
-        tk.Label(replay_frame, text="Countdown:", font=("Consolas", 9),
+        tk.Label(replay_frame, text="Countdown:", font=("Montserrat", 9),
                  **style).pack(side=tk.LEFT, padx=(16, 4))
         tk.Spinbox(replay_frame, from_=0, to=10, width=3, textvariable=self._countdown_var,
                    background="#16213e", foreground="#e0e0e0",
                    highlightthickness=0).pack(side=tk.LEFT)
-        tk.Label(replay_frame, text="s", font=("Consolas", 9),
+        tk.Label(replay_frame, text="s", font=("Montserrat", 9),
                  **style).pack(side=tk.LEFT)
 
         tk.Label(replay_frame, textvariable=self._replay_status_var,
-                 font=("Consolas", 9, "bold"), bg="#1a1a2e", fg="#00ff88"
+                 font=("Montserrat", 9, "bold"), bg="#1a1a2e", fg="#00ff88"
                  ).pack(side=tk.LEFT, padx=16)
 
         # --- Simulation (in-editor preview) ---
         self._build_sim_panel(main, btn_style, style, frame_bg)
 
         # --- Save / Label ---
-        save_frame = tk.LabelFrame(main, text=" Save ", font=("Consolas", 9),
+        save_frame = tk.LabelFrame(main, text=" Save ", font=("Montserrat", 9),
                                    bg="#1a1a2e", fg="#e0e0e0", bd=1)
         save_frame.pack(padx=8, pady=(4, 8), fill=tk.X)
 
@@ -297,33 +447,33 @@ class TrajectoryEditorWindow(tk.Toplevel):
                        command=self._on_hit_miss_change,
                        bg="#1a1a2e", fg="#00ff88", selectcolor="#16213e",
                        activebackground="#1a1a2e", activeforeground="#00ff88",
-                       font=("Consolas", 10, "bold")).pack(side=tk.LEFT, padx=(0, 12))
+                       font=("Montserrat", 10, "bold")).pack(side=tk.LEFT, padx=(0, 12))
         tk.Radiobutton(row1, text="MISS", variable=self._hit_var, value=False,
                        command=self._on_hit_miss_change,
                        bg="#1a1a2e", fg="#ff4444", selectcolor="#16213e",
                        activebackground="#1a1a2e", activeforeground="#ff4444",
-                       font=("Consolas", 10, "bold")).pack(side=tk.LEFT)
+                       font=("Montserrat", 10, "bold")).pack(side=tk.LEFT)
 
         # Miss sub-labels (hidden when HIT selected)
         self._miss_frame = tk.Frame(parent, **frame_bg)
 
-        tk.Label(self._miss_frame, text="Timing:", font=("Consolas", 9),
+        tk.Label(self._miss_frame, text="Timing:", font=("Montserrat", 9),
                  **style).pack(side=tk.LEFT, padx=(4, 2))
         self._timing_var = tk.StringVar(value="optimal")
         for val, txt in [("premature", "Premature"), ("optimal", "Optimal"), ("late", "Late")]:
             tk.Radiobutton(self._miss_frame, text=txt, variable=self._timing_var,
                            value=val, bg="#1a1a2e", fg="#e0e0e0", selectcolor="#16213e",
                            activebackground="#1a1a2e", activeforeground="#e0e0e0",
-                           font=("Consolas", 9)).pack(side=tk.LEFT)
+                           font=("Montserrat", 9)).pack(side=tk.LEFT)
 
-        tk.Label(self._miss_frame, text="  Mag:", font=("Consolas", 9),
+        tk.Label(self._miss_frame, text="  Mag:", font=("Montserrat", 9),
                  **style).pack(side=tk.LEFT, padx=(8, 2))
         self._magnitude_var = tk.StringVar(value="optimal")
         for val, txt in [("undershoot", "Under"), ("optimal", "Optimal"), ("overshoot", "Over")]:
             tk.Radiobutton(self._miss_frame, text=txt, variable=self._magnitude_var,
                            value=val, bg="#1a1a2e", fg="#e0e0e0", selectcolor="#16213e",
                            activebackground="#1a1a2e", activeforeground="#e0e0e0",
-                           font=("Consolas", 9)).pack(side=tk.LEFT)
+                           font=("Montserrat", 9)).pack(side=tk.LEFT)
 
         # Buttons
         row_btn = tk.Frame(parent, **frame_bg)
@@ -332,17 +482,17 @@ class TrajectoryEditorWindow(tk.Toplevel):
         tk.Button(row_btn, text="Save & Close", command=self._save_capture,
                   bg="#0f3460", fg="#00ff88", activebackground="#1a5276",
                   activeforeground="#ffffff", relief=tk.FLAT, padx=12, pady=4,
-                  font=("Consolas", 10, "bold")).pack(side=tk.LEFT, padx=(0, 8))
+                  font=("Montserrat", 10, "bold")).pack(side=tk.LEFT, padx=(0, 8))
         tk.Button(row_btn, text="Discard", command=self._discard,
                   bg="#3d0000", fg="#ff4444", activebackground="#5c0000",
                   activeforeground="#ffffff", relief=tk.FLAT, padx=12, pady=4,
-                  font=("Consolas", 10)).pack(side=tk.LEFT, padx=(0, 8))
+                  font=("Montserrat", 10)).pack(side=tk.LEFT, padx=(0, 8))
         tk.Button(row_btn, text="Reset Edits", command=self._reset_edits,
-                  **{**btn_style, "font": ("Consolas", 9)}).pack(side=tk.LEFT)
+                  **{**btn_style, "font": ("Montserrat", 9)}).pack(side=tk.LEFT)
         tk.Button(row_btn, text="Undo", command=self._undo,
-                  **{**btn_style, "font": ("Consolas", 9)}).pack(side=tk.RIGHT, padx=2)
+                  **{**btn_style, "font": ("Montserrat", 9)}).pack(side=tk.RIGHT, padx=2)
         tk.Button(row_btn, text="Redo", command=self._redo,
-                  **{**btn_style, "font": ("Consolas", 9)}).pack(side=tk.RIGHT, padx=2)
+                  **{**btn_style, "font": ("Montserrat", 9)}).pack(side=tk.RIGHT, padx=2)
 
     def _build_browse_save(self, parent, btn_style, style, frame_bg):
         """Build save panel for browse mode (standalone)."""
@@ -352,13 +502,13 @@ class TrajectoryEditorWindow(tk.Toplevel):
         tk.Button(row_btn, text="Overwrite Record", command=self._save_browse,
                   bg="#0f3460", fg="#00ff88", activebackground="#1a5276",
                   activeforeground="#ffffff", relief=tk.FLAT, padx=12, pady=4,
-                  font=("Consolas", 10, "bold")).pack(side=tk.LEFT, padx=(0, 8))
+                  font=("Montserrat", 10, "bold")).pack(side=tk.LEFT, padx=(0, 8))
         tk.Button(row_btn, text="Reset Edits", command=self._reset_edits,
-                  **{**btn_style, "font": ("Consolas", 9)}).pack(side=tk.LEFT, padx=(0, 8))
+                  **{**btn_style, "font": ("Montserrat", 9)}).pack(side=tk.LEFT, padx=(0, 8))
         tk.Button(row_btn, text="Undo", command=self._undo,
-                  **{**btn_style, "font": ("Consolas", 9)}).pack(side=tk.RIGHT, padx=2)
+                  **{**btn_style, "font": ("Montserrat", 9)}).pack(side=tk.RIGHT, padx=2)
         tk.Button(row_btn, text="Redo", command=self._redo,
-                  **{**btn_style, "font": ("Consolas", 9)}).pack(side=tk.RIGHT, padx=2)
+                  **{**btn_style, "font": ("Montserrat", 9)}).pack(side=tk.RIGHT, padx=2)
 
     def _build_browse_panel(self):
         """Build the record browser sidebar for standalone mode."""
@@ -366,7 +516,7 @@ class TrajectoryEditorWindow(tk.Toplevel):
         browse.pack(side=tk.LEFT, fill=tk.Y)
         browse.pack_propagate(False)
 
-        tk.Label(browse, text="Records", font=("Consolas", 11, "bold"),
+        tk.Label(browse, text="Records", font=("Montserrat", 11, "bold"),
                  bg="#111122", fg="#e0e0e0").pack(pady=(8, 4))
 
         cols = ("#", "disp", "ang°", "rng", "hit", "Σdx", "Σdy", "pts")
@@ -496,7 +646,7 @@ class TrajectoryEditorWindow(tk.Toplevel):
         c.create_line(ox - arm, oy, ox + arm, oy, fill="#555555", width=1)
         c.create_line(ox, oy - arm, ox, oy + arm, fill="#555555", width=1)
         c.create_text(ox + 12, oy - 10, text="(0,0)", fill="#555555",
-                      font=("Consolas", 7), anchor=tk.W)
+                      font=("Montserrat", 7), anchor=tk.W)
 
         # Pre-fire aiming trajectory (non-editable, dimmed)
         # Offset so the last point lands at origin (0,0)
@@ -520,12 +670,13 @@ class TrajectoryEditorWindow(tk.Toplevel):
             c.create_oval(sx - 3, sy - 3, sx + 3, sy + 3,
                           outline="#4a3060", fill="#2a1840", width=1)
             c.create_text(sx + 8, sy - 8, text="aim",
-                          fill="#4a3060", font=("Consolas", 7), anchor=tk.W)
+                          fill="#4a3060", font=("Montserrat", 7), anchor=tk.W)
 
-        # Ghost line (original trajectory)
-        if n > 1:
+        # Ghost line (original trajectory — may differ in length after simplify)
+        n_orig = len(self._orig_cum_x)
+        if n_orig > 1:
             ghost_pts = []
-            for i in range(n):
+            for i in range(n_orig):
                 px, py = self._world_to_canvas(self._orig_cum_x[i], self._orig_cum_y[i])
                 ghost_pts.extend([px, py])
             if len(ghost_pts) >= 4:
@@ -615,7 +766,7 @@ class TrajectoryEditorWindow(tk.Toplevel):
         """Draw X / Y axis ticks with labels and a time (dur) color bar."""
         cw = c.winfo_width() or self.CANVAS_W
         ch = c.winfo_height() or self.CANVAS_H
-        font = ("Consolas", 7)
+        font = ("Montserrat", 7)
         tc = "#666666"  # tick colour
         tl = 5          # tick length
 
@@ -711,6 +862,108 @@ class TrajectoryEditorWindow(tk.Toplevel):
 
     def _on_knot_count_change(self, _=None):
         self._redraw()
+
+    # ------------------------------------------------------------------
+    #  Path simplification (Ramer-Douglas-Peucker)
+    # ------------------------------------------------------------------
+
+    def _simplify_path(self):
+        """Simplify the trajectory path in the selected region or entire path.
+
+        Uses RDP algorithm on cumulative (x, y) positions. Removes intermediate
+        points while preserving shape within tolerance. Timing is linearly
+        redistributed across surviving points in the simplified segment.
+        """
+        n = len(self._cum_x)
+        if n < 3:
+            return
+
+        epsilon = self._simplify_tol_var.get()
+
+        # Determine the range to simplify
+        if self._selected_knots:
+            selected_ki = sorted(self._selected_knots)
+            # Find the trajectory index range covered by the selection
+            lo = min(selected_ki)
+            hi = max(selected_ki)
+            # Extend to include the full span between the outermost selected knots
+            # But pin to actual trajectory indices, not knot indices
+            lo = max(0, lo)
+            hi = min(n - 1, hi)
+        else:
+            lo, hi = 0, n - 1
+
+        if hi - lo < 2:
+            self._simplify_info_var.set("Need 3+ pts")
+            return
+
+        # Extract segment
+        seg_points = [(float(self._cum_x[i]), float(self._cum_y[i]))
+                      for i in range(lo, hi + 1)]
+        seg_times = self._times[lo:hi + 1].copy()
+
+        # Run RDP
+        keep_local = _rdp_simplify(seg_points, epsilon)
+
+        removed = (hi - lo + 1) - len(keep_local)
+        if removed == 0:
+            self._simplify_info_var.set("Already simple")
+            return
+
+        # Push undo
+        self._undo_stack.append((self._cum_x.copy(), self._cum_y.copy(), self._times.copy()))
+        self._redo_stack.clear()
+
+        # Build new arrays: keep everything outside [lo, hi], replace inside
+        # with only the kept points. Redistribute timing linearly.
+        new_cum_x = []
+        new_cum_y = []
+        new_times = []
+
+        # Before the segment
+        for i in range(lo):
+            new_cum_x.append(self._cum_x[i])
+            new_cum_y.append(self._cum_y[i])
+            new_times.append(self._times[i])
+
+        # The simplified segment — redistribute time linearly
+        t_start = float(seg_times[0])
+        t_end = float(seg_times[-1])
+        num_kept = len(keep_local)
+        for j, local_idx in enumerate(keep_local):
+            new_cum_x.append(seg_points[local_idx][0])
+            new_cum_y.append(seg_points[local_idx][1])
+            if num_kept > 1:
+                frac = j / (num_kept - 1)
+            else:
+                frac = 0.0
+            new_times.append(t_start + frac * (t_end - t_start))
+
+        # After the segment
+        for i in range(hi + 1, n):
+            new_cum_x.append(self._cum_x[i])
+            new_cum_y.append(self._cum_y[i])
+            new_times.append(self._times[i])
+
+        self._cum_x = np.array(new_cum_x)
+        self._cum_y = np.array(new_cum_y)
+        self._times = np.array(new_times)
+
+        # Note: _orig_cum_x/y/times are NOT updated — they retain the
+        # pre-simplification shape so the ghost line still shows it and
+        # undo can restore to any previous length.
+
+        # Clear selection (indices shifted)
+        self._selected_knots.clear()
+
+        new_n = len(self._cum_x)
+        self._simplify_info_var.set(f"{n}\u2192{new_n} pts (-{removed})")
+        logger.info(f"Path simplified: {n} \u2192 {new_n} points "
+                    f"(removed {removed}, tolerance={epsilon:.1f}px, "
+                    f"range [{lo}:{hi}])")
+
+        self._redraw()
+        self._update_info()
 
     # ------------------------------------------------------------------
     #  Canvas interaction
@@ -922,7 +1175,7 @@ class TrajectoryEditorWindow(tk.Toplevel):
         self._tr_toggle_btn.pack(side=tk.LEFT)
 
         self._tr_mode_label = tk.Label(
-            toggle_row, text="", font=("Consolas", 8),
+            toggle_row, text="", font=("Montserrat", 8),
             bg="#1a1a2e", fg="#ff8800")
         self._tr_mode_label.pack(side=tk.LEFT, padx=8)
 
@@ -944,7 +1197,7 @@ class TrajectoryEditorWindow(tk.Toplevel):
                              if self._time_remap_expanded else None)
 
         # Quick action buttons
-        small_btn = {**btn_style, "font": ("Consolas", 8)}
+        small_btn = {**btn_style, "font": ("Montserrat", 8)}
         action_row = tk.Frame(self._tr_frame, **frame_bg)
         action_row.pack(fill=tk.X, padx=4, pady=(0, 4))
 
@@ -978,17 +1231,24 @@ class TrajectoryEditorWindow(tk.Toplevel):
         self._redraw()
 
     def _init_time_remap_knots(self):
-        """Derive remap knots from current times array."""
+        """Derive remap knots with Fritsch-Carlson monotone tangents."""
         n = len(self._times)
         if n < 2:
             self._time_remap_knots = []
             return
         num_knots = min(7, n)
-        self._time_remap_knots = []
+        fracs = []
+        t_vals = []
         for i in range(num_knots):
             frac = i / (num_knots - 1)
             idx = int(round(frac * (n - 1)))
-            self._time_remap_knots.append([frac, float(self._times[idx])])
+            fracs.append(frac)
+            t_vals.append(float(self._times[idx]))
+
+        slopes = _fritsch_carlson_tangents(fracs, t_vals)
+        self._time_remap_knots = []
+        for i in range(num_knots):
+            self._time_remap_knots.append([fracs[i], t_vals[i], float(slopes[i])])
 
     # --- Timing curve drawing ---
 
@@ -1024,7 +1284,7 @@ class TrajectoryEditorWindow(tk.Toplevel):
         cw, ch, pad_l, pad_r, pad_t, pad_b, plot_w, plot_h, t_max = self._tr_layout()
         frac_cx = lambda f: self._tr_frac_to_cx(f, pad_l, plot_w)
         t_cy = lambda t: self._tr_t_to_cy(t, pad_t, plot_h, t_max)
-        font = ("Consolas", 7)
+        font = ("Montserrat", 7)
         tc = "#444455"
 
         # Grid lines
@@ -1040,26 +1300,61 @@ class TrajectoryEditorWindow(tk.Toplevel):
             x2, y2 = frac_cx(f2), t_cy(float(self._orig_times[i + 1]))
             c.create_line(x1, y1, x2, y2, fill="#333355", width=1)
 
-        # Current remap curve (interpolated from knots)
+        # Current remap curve (cubic hermite)
         if self._time_remap_knots:
-            fracs = [k[0] for k in self._time_remap_knots]
-            t_outs = [k[1] for k in self._time_remap_knots]
-            steps = 100
+            fracs_arr = np.array([k[0] for k in self._time_remap_knots])
+            t_arr = np.array([k[1] for k in self._time_remap_knots])
+            m_arr = np.array([k[2] for k in self._time_remap_knots])
+            steps = 120
+            x_eval = np.linspace(0, 1, steps + 1)
+            y_eval = _monotone_hermite_interp(fracs_arr, t_arr, m_arr, x_eval)
             prev_px, prev_py = None, None
             for s in range(steps + 1):
-                frac = s / steps
-                t_val = float(np.interp(frac, fracs, t_outs))
-                px = frac_cx(frac)
-                py = t_cy(t_val)
+                px = frac_cx(float(x_eval[s]))
+                py = t_cy(float(y_eval[s]))
                 if prev_px is not None:
                     c.create_line(prev_px, prev_py, px, py, fill="#4fc3f7", width=2)
                 prev_px, prev_py = px, py
 
-        # Knot handles
+        # Tangent handles + knot bodies
+        handle_len = 30  # px length of tangent arm on canvas
         r = 5
-        for i, (frac, t_val) in enumerate(self._time_remap_knots):
+        for i, knot in enumerate(self._time_remap_knots):
+            frac, t_val, slope = knot[0], knot[1], knot[2]
             kx = frac_cx(frac)
             ky = t_cy(t_val)
+
+            # Tangent handle endpoints (slope is dt/dfrac in world units)
+            # Convert slope to canvas: dx_canvas per dfrac = plot_w,
+            # dy_canvas per dt = -plot_h/t_max
+            dx_world = 1.0  # unit in frac
+            dy_world = slope  # dt per dfrac
+            dx_px = dx_world * plot_w
+            dy_px = -dy_world * plot_h / max(t_max, 1e-6)
+            arm_len = math.hypot(dx_px, dy_px)
+            if arm_len > 0:
+                scale = handle_len / arm_len
+                hx = dx_px * scale
+                hy = dy_px * scale
+            else:
+                hx, hy = handle_len, 0
+
+            # Draw tangent arms + handle dots (only when this knot is selected)
+            if i == self._tr_selected_knot:
+                # In handle (behind)
+                c.create_line(kx, ky, kx - hx, ky - hy,
+                              fill="#996633", width=1, dash=(3, 2))
+                c.create_oval(kx - hx - 3, ky - hy - 3,
+                              kx - hx + 3, ky - hy + 3,
+                              fill="#ff8800", outline="#ffcc00", width=1)
+                # Out handle (ahead)
+                c.create_line(kx, ky, kx + hx, ky + hy,
+                              fill="#996633", width=1, dash=(3, 2))
+                c.create_oval(kx + hx - 3, ky + hy - 3,
+                              kx + hx + 3, ky + hy + 3,
+                              fill="#ff8800", outline="#ffcc00", width=1)
+
+            # Knot body
             if i == self._tr_selected_knot:
                 fill, outline = "#ff8800", "#ffcc00"
             else:
@@ -1083,19 +1378,52 @@ class TrajectoryEditorWindow(tk.Toplevel):
 
     # --- Timing knot interaction ---
 
+    def _tr_handle_pos(self, knot_idx, which, pad_l, plot_w, pad_t, plot_h, t_max):
+        """Get canvas position of a tangent handle ('in' or 'out')."""
+        frac, t_val, slope = self._time_remap_knots[knot_idx]
+        kx = self._tr_frac_to_cx(frac, pad_l, plot_w)
+        ky = self._tr_t_to_cy(t_val, pad_t, plot_h, t_max)
+        dx_px = plot_w
+        dy_px = -slope * plot_h / max(t_max, 1e-6)
+        arm_len = math.hypot(dx_px, dy_px)
+        handle_len = 30
+        if arm_len > 0:
+            s = handle_len / arm_len
+            hx, hy = dx_px * s, dy_px * s
+        else:
+            hx, hy = handle_len, 0
+        if which == 'in':
+            return kx - hx, ky - hy
+        else:
+            return kx + hx, ky + hy
+
     def _on_tr_press(self, event):
-        """Select nearest knot on the timing curve."""
+        """Select nearest knot or tangent handle on the timing curve."""
         cw, ch, pad_l, pad_r, pad_t, pad_b, plot_w, plot_h, t_max = self._tr_layout()
+
+        # First check tangent handles of the currently selected knot
+        if self._tr_selected_knot is not None:
+            si = self._tr_selected_knot
+            for which in ('in', 'out'):
+                hx, hy = self._tr_handle_pos(si, which, pad_l, plot_w, pad_t, plot_h, t_max)
+                if math.hypot(event.x - hx, event.y - hy) < 10:
+                    self._tr_dragging_handle = which
+                    self._tr_dragging = False
+                    self._tr_drag_start_times = self._times.copy()
+                    return
+
+        # Then check knot bodies
         best_dist = float('inf')
         best_i = None
-        for i, (frac, t_val) in enumerate(self._time_remap_knots):
-            kx = self._tr_frac_to_cx(frac, pad_l, plot_w)
-            ky = self._tr_t_to_cy(t_val, pad_t, plot_h, t_max)
+        for i, knot in enumerate(self._time_remap_knots):
+            kx = self._tr_frac_to_cx(knot[0], pad_l, plot_w)
+            ky = self._tr_t_to_cy(knot[1], pad_t, plot_h, t_max)
             d = math.hypot(event.x - kx, event.y - ky)
             if d < 12 and d < best_dist:
                 best_dist = d
                 best_i = i
 
+        self._tr_dragging_handle = None
         if best_i is not None:
             self._tr_selected_knot = best_i
             self._tr_dragging = True
@@ -1105,15 +1433,44 @@ class TrajectoryEditorWindow(tk.Toplevel):
         self._redraw_time_remap()
 
     def _on_tr_drag(self, event):
-        """Drag selected time knot vertically (change time value)."""
-        if not self._tr_dragging or self._tr_selected_knot is None:
+        """Drag selected time knot or tangent handle."""
+        if self._tr_selected_knot is None:
             return
 
         cw, ch, pad_l, pad_r, pad_t, pad_b, plot_w, plot_h, t_max = self._tr_layout()
         ki = self._tr_selected_knot
         knots = self._time_remap_knots
 
-        # Convert canvas Y → time
+        if self._tr_dragging_handle is not None:
+            # Dragging a tangent handle → compute new slope
+            kx = self._tr_frac_to_cx(knots[ki][0], pad_l, plot_w)
+            ky = self._tr_t_to_cy(knots[ki][1], pad_t, plot_h, t_max)
+            dx_px = event.x - kx
+            dy_px = event.y - ky
+            if self._tr_dragging_handle == 'in':
+                dx_px, dy_px = -dx_px, -dy_px
+
+            # Convert canvas deltas back to slope (dt/dfrac)
+            # dx_px = dfrac * plot_w → dfrac = dx_px / plot_w
+            # dy_px = -dt * plot_h / t_max → dt = -dy_px * t_max / plot_h
+            if abs(dx_px) < 2:
+                return  # avoid division by near-zero
+            dfrac = dx_px / max(plot_w, 1)
+            dt = -dy_px * t_max / max(plot_h, 1)
+            slope = dt / dfrac
+            slope = max(0.0, slope)  # keep non-negative for monotonicity
+            knots[ki][2] = slope
+
+            self._apply_remap_from_knots()
+            self._redraw_time_remap()
+            self._redraw()
+            self._update_info()
+            return
+
+        if not self._tr_dragging:
+            return
+
+        # Dragging knot body vertically
         t_val = (pad_t + plot_h - event.y) / max(plot_h, 1) * t_max
         t_val = max(0.0, t_val)
 
@@ -1129,15 +1486,16 @@ class TrajectoryEditorWindow(tk.Toplevel):
         self._update_info()
 
     def _on_tr_release(self, event):
-        if self._tr_dragging and self._tr_drag_start_times is not None:
+        if (self._tr_dragging or self._tr_dragging_handle) and self._tr_drag_start_times is not None:
             self._undo_stack.append((
                 self._cum_x.copy(), self._cum_y.copy(), self._tr_drag_start_times))
             self._redo_stack.clear()
             self._tr_dragging = False
+            self._tr_dragging_handle = None
             self._tr_drag_start_times = None
 
     def _on_tr_double_click(self, event):
-        """Double-click: add a new knot at that position."""
+        """Double-click: add a new knot with auto-computed slope."""
         cw, ch, pad_l, pad_r, pad_t, pad_b, plot_w, plot_h, t_max = self._tr_layout()
 
         frac = (event.x - pad_l) / max(plot_w, 1)
@@ -1147,8 +1505,8 @@ class TrajectoryEditorWindow(tk.Toplevel):
 
         # Insert in sorted order by frac
         insert_idx = 0
-        for i, (f, _) in enumerate(self._time_remap_knots):
-            if frac > f:
+        for i, knot in enumerate(self._time_remap_knots):
+            if frac > knot[0]:
                 insert_idx = i + 1
 
         # Clamp between neighbors
@@ -1157,10 +1515,20 @@ class TrajectoryEditorWindow(tk.Toplevel):
         if insert_idx < len(self._time_remap_knots):
             t_val = min(t_val, self._time_remap_knots[insert_idx][1] - 1e-4)
 
+        # Estimate slope from neighbors (secant)
+        slope = 0.0
+        if insert_idx > 0 and insert_idx < len(self._time_remap_knots):
+            prev = self._time_remap_knots[insert_idx - 1]
+            nxt = self._time_remap_knots[insert_idx]
+            df = nxt[0] - prev[0]
+            if df > 0:
+                slope = (nxt[1] - prev[1]) / df
+        slope = max(0.0, slope)
+
         self._undo_stack.append((self._cum_x.copy(), self._cum_y.copy(), self._times.copy()))
         self._redo_stack.clear()
 
-        self._time_remap_knots.insert(insert_idx, [frac, t_val])
+        self._time_remap_knots.insert(insert_idx, [frac, t_val, slope])
         self._apply_remap_from_knots()
         self._redraw_time_remap()
         self._redraw()
@@ -1173,11 +1541,11 @@ class TrajectoryEditorWindow(tk.Toplevel):
         cw, ch, pad_l, pad_r, pad_t, pad_b, plot_w, plot_h, t_max = self._tr_layout()
         best_dist = float('inf')
         best_i = None
-        for i, (frac, t_val) in enumerate(self._time_remap_knots):
+        for i, knot in enumerate(self._time_remap_knots):
             if i == 0 or i == len(self._time_remap_knots) - 1:
                 continue  # don't delete endpoints
-            kx = self._tr_frac_to_cx(frac, pad_l, plot_w)
-            ky = self._tr_t_to_cy(t_val, pad_t, plot_h, t_max)
+            kx = self._tr_frac_to_cx(knot[0], pad_l, plot_w)
+            ky = self._tr_t_to_cy(knot[1], pad_t, plot_h, t_max)
             d = math.hypot(event.x - kx, event.y - ky)
             if d < 12 and d < best_dist:
                 best_dist = d
@@ -1196,18 +1564,19 @@ class TrajectoryEditorWindow(tk.Toplevel):
     # --- Core remap math ---
 
     def _apply_remap_from_knots(self):
-        """Interpolate time remap knots into self._times, preserving monotonicity."""
+        """Interpolate time remap via monotone cubic Hermite spline."""
         n = len(self._times)
         if n < 2 or not self._time_remap_knots:
             return
 
         fracs = np.array([k[0] for k in self._time_remap_knots])
         t_outs = np.array([k[1] for k in self._time_remap_knots])
+        slopes = np.array([k[2] for k in self._time_remap_knots])
 
         index_fracs = np.linspace(0, 1, n)
-        new_times = np.interp(index_fracs, fracs, t_outs)
+        new_times = _monotone_hermite_interp(fracs, t_outs, slopes, index_fracs)
 
-        # Enforce strict monotonicity
+        # Enforce strict monotonicity (safety net)
         for i in range(1, n):
             if new_times[i] <= new_times[i - 1]:
                 new_times[i] = new_times[i - 1] + 1e-5
@@ -1258,7 +1627,7 @@ class TrajectoryEditorWindow(tk.Toplevel):
 
     def _build_sim_panel(self, parent, btn_style, style, frame_bg):
         """Build the always-visible simulation preview panel."""
-        sim_label = tk.LabelFrame(parent, text=" Simulate ", font=("Consolas", 9),
+        sim_label = tk.LabelFrame(parent, text=" Simulate ", font=("Montserrat", 9),
                                   bg="#1a1a2e", fg="#e0e0e0", bd=1)
         sim_label.pack(padx=8, pady=4, fill=tk.X)
 
@@ -1271,7 +1640,7 @@ class TrajectoryEditorWindow(tk.Toplevel):
         ctrl_row = tk.Frame(sim_label, **frame_bg)
         ctrl_row.pack(fill=tk.X, padx=4, pady=(0, 4))
 
-        small_btn = {**btn_style, "font": ("Consolas", 8)}
+        small_btn = {**btn_style, "font": ("Montserrat", 8)}
 
         self._sim_play_btn = tk.Button(ctrl_row, text="\u25b6 Play",
                                        command=self._sim_play_pause, **small_btn)
@@ -1286,7 +1655,7 @@ class TrajectoryEditorWindow(tk.Toplevel):
             command=self._sim_loop_toggle,
             bg="#1a1a2e", fg="#e0e0e0", selectcolor="#16213e",
             activebackground="#1a1a2e", activeforeground="#e0e0e0",
-            font=("Consolas", 8))
+            font=("Montserrat", 8))
         self._sim_loop_cb.pack(side=tk.LEFT, padx=8)
 
         self._sim_src_var = tk.StringVar(value="edited")
@@ -1294,16 +1663,16 @@ class TrajectoryEditorWindow(tk.Toplevel):
                        value="edited", command=self._sim_source_change,
                        bg="#1a1a2e", fg="#e0e0e0", selectcolor="#16213e",
                        activebackground="#1a1a2e", activeforeground="#e0e0e0",
-                       font=("Consolas", 8)).pack(side=tk.LEFT, padx=(8, 2))
+                       font=("Montserrat", 8)).pack(side=tk.LEFT, padx=(8, 2))
         tk.Radiobutton(ctrl_row, text="Original", variable=self._sim_src_var,
                        value="original", command=self._sim_source_change,
                        bg="#1a1a2e", fg="#e0e0e0", selectcolor="#16213e",
                        activebackground="#1a1a2e", activeforeground="#e0e0e0",
-                       font=("Consolas", 8)).pack(side=tk.LEFT, padx=2)
+                       font=("Montserrat", 8)).pack(side=tk.LEFT, padx=2)
 
         self._sim_time_var = tk.StringVar(value="")
         tk.Label(ctrl_row, textvariable=self._sim_time_var,
-                 font=("Consolas", 8), bg="#1a1a2e", fg="#00ff88"
+                 font=("Montserrat", 8), bg="#1a1a2e", fg="#00ff88"
                  ).pack(side=tk.RIGHT, padx=4)
 
         # Draw static preview immediately

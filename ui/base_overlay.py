@@ -473,7 +473,6 @@ class BaseSACLOSOverlay(OCRUiMixin, RangefinderUiMixin, HudUiMixin):
             self._start_ocr_update_timer()
 
         self._show_hud_locked()
-        self.hud_status = "predict"
 
     def _start_tracking(self):
         if self.state != "locked" or self.tracking_active: return

@@ -1,6 +1,7 @@
 @echo off
 color 0A
 mode con cols=70 lines=35
+powershell -NoProfile -Command "$host.UI.RawUI.BufferSize = New-Object System.Management.Automation.Host.Size(70, 9999)" 2>nul
 :: -------------------------------------------------------
 ::  Self-elevate to Administrator if not already
 :: -------------------------------------------------------

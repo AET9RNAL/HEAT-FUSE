@@ -549,8 +549,11 @@ class HudUiMixin:
                 win.withdraw()
 
     def _position_hud_windows(self):
-        """Position HUD windows from saved config using full WxH+X+Y geometry."""
+        """Position HUD windows from saved config using full WxH+X+Y geometry.
+        Clamps positions to visible screen area to prevent off-screen windows."""
         self.root.update_idletasks()
+        sw = self.root.winfo_screenwidth()
+        sh = self.root.winfo_screenheight()
         for win, pos in [(self.hud_name_win, self.hud_name_pos),
                          (self.hud_descriptor_win, self.hud_descriptor_pos),
                          (self.hud_range_win, self.hud_range_pos),
@@ -558,7 +561,8 @@ class HudUiMixin:
             if win and pos:
                 w = max(1, win.winfo_reqwidth())
                 h = max(1, win.winfo_reqheight())
-                x, y = int(pos[0]), int(pos[1])
+                x = max(0, min(int(pos[0]), sw - w))
+                y = max(0, min(int(pos[1]), sh - h))
                 win.geometry(f"{w}x{h}+{x}+{y}")
 
     def _update_hud_range_text(self, range_m=None):
