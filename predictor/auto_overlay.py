@@ -45,6 +45,12 @@ class AutoOverlay(BaseSACLOSOverlay):
         self._ml_last_context = None
         self._refiner_win = None
 
+        # AttnRes self-improvement config
+        self.attn_enabled = True
+        self.attn_lr = 0.02
+        self.attn_n_buckets = 10
+        self.torc_quality_weight = 0.5
+
         self.turret_traverse_speed_deg_s = 51.3
         self.turret_instant_follow_deg = 15.0
         self.pixels_per_degree = 10.0
@@ -84,6 +90,10 @@ class AutoOverlay(BaseSACLOSOverlay):
             "ml_enabled": self.ml_enabled,
             "ml_confidence_threshold": self.ml_confidence_threshold,
             "ml_online_learning": self.ml_online_learning,
+            "attn_enabled": self.attn_enabled,
+            "attn_lr": self.attn_lr,
+            "attn_n_buckets": self.attn_n_buckets,
+            "torc_quality_weight": self.torc_quality_weight,
         })
 
     def _load_extra_config(self, config):
@@ -104,14 +114,27 @@ class AutoOverlay(BaseSACLOSOverlay):
         self.ml_confidence_threshold = config.get("ml_confidence_threshold", 0.3)
         self.ml_online_learning = config.get("ml_online_learning", True)
 
+        # AttnRes self-improvement config
+        self.attn_enabled = config.get("attn_enabled", True)
+        self.attn_lr = config.get("attn_lr", 0.02)
+        self.attn_n_buckets = config.get("attn_n_buckets", 10)
+        self.torc_quality_weight = config.get("torc_quality_weight", 0.5)
+
         # Auto-load learner if ml_enabled from config and not already set
         if self.ml_enabled and self.learner is None:
             try:
                 from trainer.correction_learner import CorrectionLearner
-                self.learner = CorrectionLearner()
+                self.learner = CorrectionLearner(
+                    attn_enabled=self.attn_enabled,
+                    attn_lr=self.attn_lr,
+                    attn_n_buckets=self.attn_n_buckets,
+                    torc_quality_weight=self.torc_quality_weight,
+                )
                 stats = self.learner.get_stats()
                 logger.info(f"ML loaded from config: {stats['total']} samples "
-                            f"({stats['hits']} hits, {stats['misses']} misses)")
+                            f"({stats['hits']} hits, {stats['misses']} misses)"
+                            f" | AttnRes: {'ON' if self.attn_enabled else 'OFF'}"
+                            f" | TORC Q avg: {stats.get('avg_torc_quality', 0):.3f}")
             except Exception as e:
                 logger.warning(f"Could not load ML data: {e}")
                 self.ml_enabled = False
@@ -341,12 +364,32 @@ class AutoOverlay(BaseSACLOSOverlay):
             except Exception:
                 pass
 
+        def _on_refiner_save(sample):
+            """Callback after HIT/MISS label is confirmed — triggers REINFORCE update."""
+            if self.learner is not None:
+                try:
+                    self.learner.update_from_outcome(
+                        hit=sample.get('hit', False),
+                        trajectory=sample.get('traj'),
+                        angle_rad=sample.get('angle'),
+                    )
+                    q_str = ""
+                    if sample.get('traj') and sample.get('angle') is not None:
+                        from trainer.torc_quality import estimate_torc_quality
+                        q = estimate_torc_quality(sample['traj'], sample['angle'])
+                        q_str = f" | TORC Q: {q:.3f}"
+                    label = "HIT" if sample.get('hit') else "MISS"
+                    logger.info(f"AttnRes update: {label}{q_str}")
+                except Exception as e:
+                    logger.warning(f"AttnRes update error: {e}")
+
         self._refiner_win = TrajectoryEditorWindow(
             self.root,
             trajectory=context['trajectory'],
             context=context,
             learner=self.learner,
             mode='capture',
+            on_save=_on_refiner_save,
         )
         logger.info("Visual editor opened — review trajectory, then Save or Discard")
 

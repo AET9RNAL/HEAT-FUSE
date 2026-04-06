@@ -3,21 +3,46 @@ CorrectionLearner - KNN regression on human guidance data.
 
 Stores human-guided missile correction trajectories and predicts via KNN
 with miss-aware confidence, trajectory nudge, and label-directed corrections.
+
+When attn_enabled=True, the fixed inverse-distance blend is replaced by
+a learned AttnRes-inspired per-time-bucket attention aggregation that
+self-improves via REINFORCE after each labeled engagement.
 """
 
 import json
 import math
+import os
 import random
+
+from trainer.torc_quality import estimate_torc_quality
+from trainer.trajectory_attentioner import TrajectoryAttentioner
 
 
 class CorrectionLearner:
     """Stores human-guided missile correction trajectories and predicts via KNN."""
 
-    def __init__(self, data_file='saclos_ml_data.json', k=5):
+    def __init__(self, data_file='saclos_ml_data.json', k=5,
+                 attn_enabled=True, attn_lr=0.02, attn_n_buckets=10,
+                 torc_quality_weight=0.5):
         self.data_file = data_file
         self.k = k
         self.samples = []
+
+        # AttnRes aggregation
+        self.attn_enabled = attn_enabled
+        self.torc_quality_weight = torc_quality_weight
+        self.attentioner = None
+
+        if attn_enabled:
+            weights_file = os.path.splitext(data_file)[0] + '_attn_weights.json'
+            self.attentioner = TrajectoryAttentioner(
+                n_buckets=attn_n_buckets,
+                lr=attn_lr,
+                weights_file=weights_file,
+            )
+
         self._load()
+        self._ensure_torc_quality()
 
     # ---- persistence (JSONL — one JSON object per line, append-only) ----
 
@@ -65,6 +90,19 @@ class CorrectionLearner:
         with open(self.data_file, 'a') as f:
             f.write(json.dumps(sample, separators=(',', ':')) + '\n')
 
+    # ---- retroactive TORC quality migration ----
+
+    def _ensure_torc_quality(self):
+        """Add torc_quality field to any samples missing it (one-time migration)."""
+        dirty = False
+        for s in self.samples:
+            if 'torc_quality' not in s and s.get('traj'):
+                s['torc_quality'] = round(
+                    estimate_torc_quality(s['traj'], s.get('angle', 0.0)), 4)
+                dirty = True
+        if dirty:
+            self._rewrite_jsonl()
+
     # ---- recording ----
 
     def add_sample(self, displacement_px, angle_rad, range_m,
@@ -90,6 +128,8 @@ class CorrectionLearner:
             'dur':   round(duration, 3),
             'traj':  trajectory,
             'hit':   hit,
+            'torc_quality': round(
+                estimate_torc_quality(trajectory, angle_rad), 4),
         }
         if not hit:
             if miss_timing:
@@ -165,29 +205,43 @@ class CorrectionLearner:
             miss_dists.append((d, i))
         miss_dists.sort()
 
-        # 1. K-NN weighted-average trajectory (inverse-distance)
+        # 1. K-NN weighted-average trajectory
         k = min(self.k, len(hits))
         top_k = hit_dists[:k]
 
         EPS = 1e-6
-        weights = [1.0 / (d + EPS) for d, _ in top_k]
-        w_sum   = sum(weights)
+
+        candidates = [hits[idx] for _, idx in top_k]
+
+        # AttnRes aggregation (when enabled and k>1)
+        if self.attn_enabled and self.attentioner is not None and k > 1:
+            blended = self.attentioner.aggregate(
+                candidates, displacement_px, angle_rad, range_m,
+                self._transform_traj,
+            )
+        else:
+            # Fallback: fixed inverse-distance blend
+            weights = [1.0 / (d + EPS) for d, _ in top_k]
+            w_sum   = sum(weights)
+
+            base_traj = hits[top_k[0][1]]['traj']
+            n_pts     = len(base_traj)
+
+            blended = [{'t': base_traj[j]['t'], 'dx': 0.0, 'dy': 0.0}
+                        for j in range(n_pts)]
+
+            for wi, (_, idx) in zip(weights, top_k):
+                transformed = self._transform_traj(
+                    hits[idx], displacement_px, angle_rad)
+                t_len = len(transformed)
+                for j in range(n_pts):
+                    src_j = int(j * t_len / n_pts)
+                    src_j = min(src_j, t_len - 1)
+                    blended[j]['dx'] += wi / w_sum * transformed[src_j]['dx']
+                    blended[j]['dy'] += wi / w_sum * transformed[src_j]['dy']
 
         base_traj = hits[top_k[0][1]]['traj']
-        n_pts     = len(base_traj)
-
-        blended = [{'t': base_traj[j]['t'], 'dx': 0.0, 'dy': 0.0}
-                    for j in range(n_pts)]
-
-        for wi, (_, idx) in zip(weights, top_k):
-            transformed = self._transform_traj(
-                hits[idx], displacement_px, angle_rad)
-            t_len = len(transformed)
-            for j in range(n_pts):
-                src_j = int(j * t_len / n_pts)
-                src_j = min(src_j, t_len - 1)
-                blended[j]['dx'] += wi / w_sum * transformed[src_j]['dx']
-                blended[j]['dy'] += wi / w_sum * transformed[src_j]['dy']
+        n_pts     = len(blended)
 
         # 2. Miss-repelled trajectory nudge
         MISS_RADIUS = 0.35
@@ -295,6 +349,32 @@ class CorrectionLearner:
 
         return blended, confidence
 
+    # ---- self-improvement ----
+
+    def update_from_outcome(self, hit, trajectory=None, angle_rad=None):
+        """
+        REINFORCE update on attention weights after a labeled engagement.
+
+        Parameters
+        ----------
+        hit        : bool — did the engagement result in a hit?
+        trajectory : optional predicted trajectory (for TORC quality estimation)
+        angle_rad  : optional engagement angle (for TORC quality estimation)
+        """
+        if not self.attn_enabled or self.attentioner is None:
+            return
+
+        # Compute TORC quality from the predicted trajectory
+        torc_q = 0.0
+        if trajectory and angle_rad is not None:
+            torc_q = estimate_torc_quality(trajectory, angle_rad)
+
+        # Composite reward: R = hit * (0.5 + λ * Q)
+        lam = self.torc_quality_weight
+        reward = float(hit) * (0.5 + lam * torc_q)
+
+        self.attentioner.update(reward)
+
     # ---- stats ----
 
     def get_stats(self):
@@ -303,4 +383,22 @@ class CorrectionLearner:
         misses = total - hits
         labeled = sum(1 for s in self.samples
                       if not s['hit'] and (s.get('miss_timing') or s.get('miss_magnitude')))
-        return {'total': total, 'hits': hits, 'misses': misses, 'labeled_misses': labeled}
+
+        # Average TORC quality of hit samples
+        hit_samples = [s for s in self.samples if s['hit']]
+        avg_torc_q = 0.0
+        if hit_samples:
+            q_vals = [s.get('torc_quality', 0.0) for s in hit_samples]
+            avg_torc_q = sum(q_vals) / len(q_vals)
+
+        stats = {
+            'total': total, 'hits': hits, 'misses': misses,
+            'labeled_misses': labeled,
+            'avg_torc_quality': round(avg_torc_q, 3),
+        }
+
+        if self.attentioner:
+            stats['attn_updates'] = self.attentioner.update_count
+            stats['attn_enabled'] = self.attn_enabled
+
+        return stats

@@ -64,5 +64,9 @@
   "base_duration_ms": 300.0,
   "ml_enabled": true,
   "ml_confidence_threshold": 0.3,
-  "ml_online_learning": false
+  "ml_online_learning": false,
+  "attn_enabled": true,
+  "attn_lr": 0.02,
+  "attn_n_buckets": 10,
+  "torc_quality_weight": 0.5
 }
