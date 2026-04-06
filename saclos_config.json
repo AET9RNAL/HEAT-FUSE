@@ -64,9 +64,30 @@
   "base_duration_ms": 300.0,
   "ml_enabled": true,
   "ml_confidence_threshold": 0.3,
-  "ml_online_learning": false,
+  "ml_online_learning": true,
   "attn_enabled": true,
   "attn_lr": 0.02,
   "attn_n_buckets": 10,
-  "torc_quality_weight": 0.5
+  "torc_quality_weight": 0.5,
+  "quick_label_enabled": true,
+  "ql_prompt_pos": [
+    1104,
+    1290
+  ],
+  "ql_graph_factors_pos": [
+    826,
+    1224
+  ],
+  "ql_graph_lr_pos": [
+    1480,
+    1224
+  ],
+  "ql_sim_pos": [
+    2252,
+    130
+  ],
+  "ql_checkpoint_pos": [
+    2253,
+    383
+  ]
 }

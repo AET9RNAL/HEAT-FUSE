@@ -6,8 +6,10 @@ Extends BaseSACLOSOverlay with:
   - ML trajectory replay (KNN on recorded human guidance)
   - Formula-based bezier correction (deprecated, kept for reference)
   - Online learning: label each correction as HIT/MISS
+  - Quick Correction mode: keyboard-driven rapid iteration with live HUD
 """
 
+import copy
 import math
 import time
 import threading
@@ -15,10 +17,11 @@ import traceback
 from loguru import logger
 
 from ui.base_overlay import BaseSACLOSOverlay
+from predictor.ql_hud import QuickLabelHudMixin
 from utils.hardware_inject import inject_mouse_movement, inject_mouse_click
 
 
-class AutoOverlay(BaseSACLOSOverlay):
+class AutoOverlay(QuickLabelHudMixin, BaseSACLOSOverlay):
     """Production overlay that auto-corrects missile trajectory after tracking."""
 
     def __init__(self, root, *args, **kwargs):
@@ -51,6 +54,15 @@ class AutoOverlay(BaseSACLOSOverlay):
         self.attn_n_buckets = 10
         self.torc_quality_weight = 0.5
 
+        # Quick-label state
+        self._ql_active = False
+        self._ql_state = None           # 'prompt' | 'hit' | 'miss' | 'rollback_select'
+        self._ql_context = None
+        self._ql_torc_quality = None
+        self._ql_rollback_digits = ""   # accumulates digits during rollback select
+        self._correction_session = None
+        self.quick_label_enabled = True
+
         self.turret_traverse_speed_deg_s = 51.3
         self.turret_instant_follow_deg = 15.0
         self.pixels_per_degree = 10.0
@@ -66,6 +78,7 @@ class AutoOverlay(BaseSACLOSOverlay):
         self.correction_speed_multiplier = 1.0
 
         super().__init__(root, *args, **kwargs)
+        self._init_ql_hud()
 
     # ----------------------------------------------------------------
     #  Config hooks
@@ -94,7 +107,10 @@ class AutoOverlay(BaseSACLOSOverlay):
             "attn_lr": self.attn_lr,
             "attn_n_buckets": self.attn_n_buckets,
             "torc_quality_weight": self.torc_quality_weight,
+            "quick_label_enabled": self.quick_label_enabled,
         })
+        self._ql_capture_positions()
+        self._ql_save_config(config_dict)
 
     def _load_extra_config(self, config):
         self.correction_enabled = config.get("correction_enabled", True)
@@ -120,6 +136,10 @@ class AutoOverlay(BaseSACLOSOverlay):
         self.attn_n_buckets = config.get("attn_n_buckets", 10)
         self.torc_quality_weight = config.get("torc_quality_weight", 0.5)
 
+        # Quick-label config
+        self.quick_label_enabled = config.get("quick_label_enabled", True)
+        self._ql_load_config(config)
+
         # Auto-load learner if ml_enabled from config and not already set
         if self.ml_enabled and self.learner is None:
             try:
@@ -139,6 +159,98 @@ class AutoOverlay(BaseSACLOSOverlay):
                 logger.warning(f"Could not load ML data: {e}")
                 self.ml_enabled = False
 
+
+    # ----------------------------------------------------------------
+    #  HUD lifecycle overrides — QL overlays visible in setup mode
+    # ----------------------------------------------------------------
+
+    def _show_hud_setup(self):
+        """Show QL overlays alongside base HUD in draggable setup mode."""
+        super()._show_hud_setup()
+        self._ql_ensure_windows()
+        self._ql_position_windows()
+        for win in self._ql_all_windows():
+            if win:
+                win.deiconify()
+                win.attributes("-topmost", True)
+                win.lift()
+        # Show placeholder data so user can see the overlays
+        self._ql_update_prompt(
+            "[Quick-Label]\n"
+            "[H] HIT  [M] MISS  [E] Editor  [Esc] Discard"
+        )
+        self._ql_show_placeholder_graphs()
+
+    def _show_hud_locked(self):
+        """In locked mode, hide QL overlays (they reappear when QL activates)."""
+        super()._show_hud_locked()
+        # Capture positions user dragged to during setup, then hide
+        self._ql_capture_positions()
+        self._ql_hide_all()
+
+    def _hide_hud(self):
+        """Hide all HUD windows including QL overlays."""
+        super()._hide_hud()
+        self._ql_hide_all()
+
+    def _capture_hud_positions(self):
+        """Capture HUD positions including QL overlays."""
+        super()._capture_hud_positions()
+        self._ql_capture_positions()
+
+    def _ql_show_placeholder_graphs(self):
+        """Draw placeholder data on graphs so they're visible during setup."""
+        if self._ql_graph_factors_canvas:
+            self._ql_draw_line_graph(
+                self._ql_graph_factors_canvas,
+                [[1.0, 1.15, 1.15, 1.32], [1.0, 1.0, 1.15, 1.15]],
+                [self.HUD_GREEN, self.HUD_CYAN],
+                ["Timing", "Magnitude"],
+                y_ref=1.0,
+            )
+        if self._ql_graph_lr_canvas:
+            self._ql_draw_line_graph(
+                self._ql_graph_lr_canvas,
+                [[0.15, 0.15, 0.17, 0.17], [0.15, 0.15, 0.15, 0.17]],
+                [self.HUD_GREEN, self.HUD_CYAN],
+                ["T Step", "M Step"],
+            )
+        if self._ql_sim_canvas:
+            # Draw a sample trajectory path
+            from predictor.ql_hud import _traj_to_cumulative
+            sample_traj = [
+                {'t': 0.0, 'dx': 0, 'dy': 0},
+                {'t': 0.05, 'dx': 3, 'dy': -1},
+                {'t': 0.10, 'dx': 5, 'dy': -2},
+                {'t': 0.15, 'dx': 4, 'dy': -3},
+                {'t': 0.20, 'dx': 3, 'dy': -2},
+                {'t': 0.25, 'dx': 2, 'dy': -1},
+                {'t': 0.30, 'dx': 1, 'dy': 0},
+            ]
+            self._ql_sim_data = _traj_to_cumulative(sample_traj)
+            self._ql_sim_draw_static()
+            self._ql_sim_start_time = __import__('time').perf_counter()
+            self._ql_sim_tick()
+        if self._ql_checkpoint_frame:
+            # Show sample checkpoints
+            for lbl in self._ql_checkpoint_labels:
+                lbl.destroy()
+            self._ql_checkpoint_labels = []
+            import tkinter as tk
+            samples = [
+                ("#0  T=1.000  M=1.000  \u2190 base", "#888888"),
+                ("#1  T=1.150  M=1.000  \u2190 premature", "#888888"),
+                ("#2  T=1.150  M=1.150  \u2190 undershoot", "#888888"),
+                (">> T=1.320  M=1.150  [Seeking Hit]", self.HUD_GREEN),
+            ]
+            for text, color in samples:
+                lbl = tk.Label(
+                    self._ql_checkpoint_frame, text=text,
+                    fg=color, bg=self.QL_CANVAS_BG,
+                    font=("Consolas", 8), anchor="w",
+                )
+                lbl.pack(fill=tk.X, padx=2)
+                self._ql_checkpoint_labels.append(lbl)
 
     # ----------------------------------------------------------------
     #  Tracking override: displacement + correction
@@ -197,6 +309,19 @@ class AutoOverlay(BaseSACLOSOverlay):
                 )
 
                 if ml_trajectory is not None:
+                    # Apply correction bias if any
+                    bias_info = ""
+                    if self.quick_label_enabled:
+                        self._ensure_correction_session()
+                        tf, mf, _ = self._correction_session.get_bias(
+                            distance_px, angle_rad, self.target_range_m)
+                        if tf != 1.0 or mf != 1.0:
+                            from trainer.correction_session import CorrectionSession
+                            ml_trajectory = copy.deepcopy(ml_trajectory)
+                            CorrectionSession.apply_bias_to_trajectory(
+                                ml_trajectory, tf, mf)
+                            bias_info = f" | Bias: T={tf:.3f} M={mf:.3f}"
+
                     total_dx = sum(p['dx'] for p in ml_trajectory)
                     total_dy = sum(p['dy'] for p in ml_trajectory)
                     duration = ml_trajectory[-1]['t'] if ml_trajectory else 0
@@ -207,7 +332,7 @@ class AutoOverlay(BaseSACLOSOverlay):
                         f"Disp: {distance_px:.1f}px @ {math.degrees(angle_rad):.1f}° | "
                         f"Range: {self.target_range_m:.0f}m | "
                         f"Traj: {len(ml_trajectory)} pts, dx={total_dx:.0f} dy={total_dy:.0f} dur={duration:.2f}s | "
-                        f"Confidence: {confidence:.2f} | "
+                        f"Confidence: {confidence:.2f}{bias_info} | "
                         f"Data: {stats['total']} samples ({stats['hits']} hits, {stats['misses']} misses)"
                     )
 
@@ -290,10 +415,13 @@ class AutoOverlay(BaseSACLOSOverlay):
         logger.info(f"Auto-correction complete [ML] (took {elapsed:.2f}s, "
                     f"injected {injected_dx}dx {injected_dy}dy)")
 
-        # Online learning: open visual editor for labelling
+        # Online learning: quick-label or full visual editor
         if getattr(self, 'ml_online_learning', True) and self._ml_last_context is not None:
             ctx = self._ml_last_context
-            self.root.after(50, lambda c=ctx: self._open_refiner(c))
+            if self.quick_label_enabled:
+                self.root.after(50, lambda c=ctx: self._enter_quick_label(c))
+            else:
+                self.root.after(50, lambda c=ctx: self._open_refiner(c))
 
         self.root.after(0, self._finish_correction)
 
@@ -392,6 +520,289 @@ class AutoOverlay(BaseSACLOSOverlay):
             on_save=_on_refiner_save,
         )
         logger.info("Visual editor opened — review trajectory, then Save or Discard")
+
+    # ----------------------------------------------------------------
+    #  Quick Correction mode
+    # ----------------------------------------------------------------
+
+    def _ensure_correction_session(self):
+        """Lazy-init the CorrectionSession."""
+        if self._correction_session is None:
+            from trainer.correction_session import CorrectionSession
+            self._correction_session = CorrectionSession()
+
+    def _enter_quick_label(self, context):
+        """Enter quick-label mode after ML trajectory execution."""
+        self._ql_active = True
+        self._ql_state = 'prompt'
+        self._ql_context = context
+        self._ql_torc_quality = None
+        self._ql_rollback_digits = ""
+
+        self._ensure_correction_session()
+        self._correction_session.get_bias(
+            context['displacement_px'],
+            context['angle_rad'],
+            context['range_m'],
+        )
+
+        # Show HUD overlays
+        self._ql_show_all()
+        self._ql_update_prompt(
+            "[H] HIT   [M] MISS   [E] Editor   [Esc] Discard"
+        )
+        attentioner = getattr(self.learner, 'attentioner', None)
+        self._ql_update_all_overlays(
+            self._correction_session, context.get('trajectory'),
+            attentioner,
+        )
+        logger.info("Quick-label mode: [H]it / [M]iss / [E]ditor / [Esc]")
+
+    def _catch_kbd_press(self, key):
+        """Override: intercept QL keys when active, then fall through to base."""
+        if self._ql_active:
+            char = getattr(key, 'char', None)
+            name = getattr(key, 'name', None)
+            if char:
+                self.root.after(0, lambda c=char.lower(): self._ql_handle_key(c))
+                return True
+            if name:
+                self.root.after(0, lambda n=name: self._ql_handle_special(n))
+                return True
+            return True  # consume all keys while QL is active
+
+        return super()._catch_kbd_press(key)
+
+    def _ql_handle_key(self, char):
+        """Handle a character key press in quick-label mode."""
+        if self._ql_state == 'prompt':
+            if char == 'h':
+                self._ql_on_hit()
+            elif char == 'm':
+                self._ql_on_miss()
+            elif char == 'e':
+                self._ql_open_editor()
+            return
+
+        if self._ql_state == 'hit':
+            if char == 's':
+                self._ql_save_to_dataset()
+            return
+
+        if self._ql_state == 'miss':
+            if char == '1':
+                self._ql_apply_correction('premature')
+            elif char == '2':
+                self._ql_apply_correction('late')
+            elif char == '3':
+                self._ql_apply_correction('undershoot')
+            elif char == '4':
+                self._ql_apply_correction('overshoot')
+            elif char == 'r':
+                self._ql_state = 'rollback_select'
+                self._ql_rollback_digits = ""
+                self._ql_update_prompt(
+                    "ROLLBACK: type checkpoint # then [Enter]\n"
+                    "[Esc] cancel"
+                )
+            return
+
+        if self._ql_state == 'rollback_select':
+            if char.isdigit():
+                self._ql_rollback_digits += char
+                self._ql_update_prompt(
+                    f"ROLLBACK: #{self._ql_rollback_digits}_\n"
+                    f"[Enter] confirm  [Esc] cancel"
+                )
+
+    def _ql_handle_special(self, name):
+        """Handle special keys (Enter, Esc, PgUp, PgDn)."""
+        if name == 'esc':
+            if self._ql_state == 'rollback_select':
+                # Cancel rollback, return to miss state
+                self._ql_state = 'miss'
+                self._ql_show_miss_prompt()
+            else:
+                self._ql_exit()
+            return
+
+        if name in ('enter', 'return'):
+            if self._ql_state == 'rollback_select' and self._ql_rollback_digits:
+                idx = int(self._ql_rollback_digits)
+                self._ql_do_rollback(idx)
+                return
+            # Enter in hit or miss state → exit (bias persists)
+            if self._ql_state in ('hit', 'miss'):
+                self._ql_exit()
+            return
+
+        if self._ql_state == 'miss':
+            if name == 'page_up':
+                self._correction_session.adjust_steps(0.02)
+                self._ql_refresh_overlays()
+                entry = self._correction_session.get_active_entry()
+                if entry:
+                    logger.info(f"Step size increased: T={entry.get('timing_step', 0):.3f} "
+                                f"M={entry.get('magnitude_step', 0):.3f}")
+            elif name == 'page_down':
+                self._correction_session.adjust_steps(-0.02)
+                self._ql_refresh_overlays()
+                entry = self._correction_session.get_active_entry()
+                if entry:
+                    logger.info(f"Step size decreased: T={entry.get('timing_step', 0):.3f} "
+                                f"M={entry.get('magnitude_step', 0):.3f}")
+
+    def _ql_on_hit(self):
+        """Handle HIT in quick-label mode."""
+        self._ql_state = 'hit'
+
+        # Compute TORC quality
+        traj = self._ql_context.get('trajectory')
+        angle = self._ql_context.get('angle_rad', 0)
+        if traj:
+            from trainer.torc_quality import estimate_torc_quality
+            self._ql_torc_quality = estimate_torc_quality(traj, angle)
+        else:
+            self._ql_torc_quality = 0.0
+
+        # Record in correction session
+        self._correction_session.record_hit(self._ql_torc_quality)
+
+        # AttnRes update
+        if self.learner is not None:
+            try:
+                self.learner.update_from_outcome(
+                    hit=True, trajectory=traj, angle_rad=angle)
+            except Exception as e:
+                logger.warning(f"AttnRes update error: {e}")
+
+        self._ql_update_prompt(
+            f"HIT!  TORC Q: {self._ql_torc_quality:.3f}\n"
+            f"[S] Save to dataset  [Enter] Done  [Esc] Discard"
+        )
+        self._ql_refresh_overlays()
+        logger.info(f"Quick-label: HIT | TORC Q: {self._ql_torc_quality:.3f}")
+
+    def _ql_on_miss(self):
+        """Handle MISS in quick-label mode."""
+        self._ql_state = 'miss'
+
+        # AttnRes update
+        if self.learner is not None:
+            traj = self._ql_context.get('trajectory')
+            angle = self._ql_context.get('angle_rad', 0)
+            try:
+                self.learner.update_from_outcome(
+                    hit=False, trajectory=traj, angle_rad=angle)
+            except Exception as e:
+                logger.warning(f"AttnRes update error: {e}")
+
+        self._ql_show_miss_prompt()
+        self._ql_refresh_overlays()
+        logger.info("Quick-label: MISS — apply corrections")
+
+    def _ql_show_miss_prompt(self):
+        """Show the MISS state prompt with current step sizes."""
+        entry = self._correction_session.get_active_entry()
+        ts = entry.get('timing_step', 0.15) if entry else 0.15
+        ms = entry.get('magnitude_step', 0.15) if entry else 0.15
+        self._ql_update_prompt(
+            f"MISS — Correct:  step T={ts:.2f} M={ms:.2f}\n"
+            f"[1] Premature  [2] Late  [3] Undershoot  [4] Overshoot\n"
+            f"[PgUp/Dn] step size  [R] Rollback  [Enter] Done  [Esc] Discard"
+        )
+
+    def _ql_apply_correction(self, kind):
+        """Apply a correction and refresh all overlays."""
+        method = {
+            'premature': self._correction_session.apply_premature,
+            'late': self._correction_session.apply_late,
+            'undershoot': self._correction_session.apply_undershoot,
+            'overshoot': self._correction_session.apply_overshoot,
+        }.get(kind)
+        if method:
+            method()
+
+        entry = self._correction_session.get_active_entry()
+        if entry:
+            logger.info(f"Correction [{kind}]: T={entry['timing_factor']:.3f} "
+                        f"M={entry['magnitude_factor']:.3f}")
+
+        self._ql_show_miss_prompt()
+        self._ql_refresh_overlays()
+
+    def _ql_do_rollback(self, checkpoint_index):
+        """Rollback to a checkpoint and refresh."""
+        success = self._correction_session.rollback(checkpoint_index)
+        if success:
+            entry = self._correction_session.get_active_entry()
+            if entry:
+                logger.info(f"Rollback to #{checkpoint_index}: "
+                            f"T={entry['timing_factor']:.3f} "
+                            f"M={entry['magnitude_factor']:.3f}")
+        else:
+            logger.warning(f"Rollback failed: invalid checkpoint #{checkpoint_index}")
+
+        self._ql_state = 'miss'
+        self._ql_show_miss_prompt()
+        self._ql_refresh_overlays()
+
+    def _ql_refresh_overlays(self):
+        """Refresh all QL overlays with current state."""
+        attentioner = getattr(self.learner, 'attentioner', None)
+        traj = self._ql_context.get('trajectory') if self._ql_context else None
+        self._ql_update_all_overlays(
+            self._correction_session, traj, attentioner)
+
+    def _ql_save_to_dataset(self):
+        """Save current biased trajectory as a HIT to the dataset."""
+        if self.learner is None or self._ql_context is None:
+            self._ql_exit()
+            return
+
+        ctx = self._ql_context
+        traj = copy.deepcopy(ctx.get('trajectory', []))
+
+        # Apply accumulated bias
+        entry = self._correction_session.get_active_entry()
+        if entry:
+            from trainer.correction_session import CorrectionSession
+            CorrectionSession.apply_bias_to_trajectory(
+                traj, entry['timing_factor'], entry['magnitude_factor'])
+
+        # Save as HIT
+        self.learner.add_sample(
+            displacement_px=ctx['displacement_px'],
+            angle_rad=ctx['angle_rad'],
+            range_m=ctx['range_m'],
+            trajectory=traj,
+            hit=True,
+        )
+
+        # Clear converged bias
+        self._correction_session.clear_active()
+
+        logger.info(f"Quick-label: saved biased trajectory as HIT "
+                    f"(T={entry['timing_factor']:.3f} M={entry['magnitude_factor']:.3f})"
+                    if entry else "Quick-label: saved trajectory as HIT")
+        self._ql_exit()
+
+    def _ql_open_editor(self):
+        """Escape hatch: exit QL and open the full trajectory editor."""
+        ctx = self._ql_context  # save before exit clears it
+        self._ql_exit()
+        if ctx:
+            self.root.after(50, lambda c=ctx: self._open_refiner(c))
+
+    def _ql_exit(self):
+        """Exit quick-label mode and hide overlays."""
+        self._ql_active = False
+        self._ql_state = None
+        self._ql_context = None
+        self._ql_torc_quality = None
+        self._ql_rollback_digits = ""
+        self._ql_hide_all()
+        logger.info("Quick-label mode exited")
 
     def _cleanup_correction(self):
         """Clean up correction state."""
