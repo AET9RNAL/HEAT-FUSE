@@ -17,10 +17,10 @@ from loguru import logger
 class CorrectionSession:
     """Manages correction biases per geometry region with checkpointing."""
 
-    DEFAULT_RADIUS = 0.25
+    DEFAULT_RADIUS = 0.08
     DEFAULT_STEP = 0.15
-    MAX_FACTOR = 3.0
-    MIN_FACTOR = 0.3
+    MAX_FACTOR = 10.0
+    MIN_FACTOR = 0.05
     MIN_STEP = 0.02
     MAX_STEP = 0.50
 

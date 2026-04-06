@@ -2,16 +2,16 @@
   "biases": [
     {
       "feature_vec": [
-        0.18012341448141728,
-        0.19584000000000004,
-        0.9993148337667671,
-        0.037011660509880355
+        0.2366901396810231,
+        0.6604800000000001,
+        -0.9999008280852424,
+        -0.014083110254721821
       ],
-      "timing_factor": 0.85,
+      "timing_factor": 1.0,
       "magnitude_factor": 1.0,
       "timing_step": 0.15,
       "magnitude_step": 0.15,
-      "iteration_count": 1,
+      "iteration_count": 58,
       "phase": "seeking_hit",
       "last_torc_quality": null,
       "checkpoints": [
@@ -21,57 +21,25 @@
           "timing_step": 0.15,
           "magnitude_step": 0.15,
           "iteration": 0,
-          "timestamp": 1775448156.8001757,
-          "label": "late"
+          "timestamp": 1775451164.583798,
+          "label": "premature"
         }
       ]
     },
     {
       "feature_vec": [
-        0.12666666666666668,
-        0.4,
-        -1.0,
-        6.123233995736766e-17
+        0.5566766466171263,
+        0.6604800000000001,
+        -0.9999820722666916,
+        -0.0059879166003992896
       ],
       "timing_factor": 1.0,
       "magnitude_factor": 1.0,
       "timing_step": 0.15,
       "magnitude_step": 0.15,
-      "iteration_count": 0,
+      "iteration_count": 35,
       "phase": "seeking_hit",
       "last_torc_quality": null,
-      "checkpoints": []
-    },
-    {
-      "feature_vec": [
-        0.341044148331431,
-        0.4,
-        0.9969383778125515,
-        -0.07819124531863139
-      ],
-      "timing_factor": 1.0,
-      "magnitude_factor": 1.0,
-      "timing_step": 0.15,
-      "magnitude_step": 0.15,
-      "iteration_count": 0,
-      "phase": "seeking_hit",
-      "last_torc_quality": null,
-      "checkpoints": []
-    },
-    {
-      "feature_vec": [
-        0.4339610837646876,
-        0.4,
-        -0.9985534407235127,
-        -0.05376826219280451
-      ],
-      "timing_factor": 1.1241249999999998,
-      "magnitude_factor": 1.0,
-      "timing_step": 0.15,
-      "magnitude_step": 0.15,
-      "iteration_count": 17,
-      "phase": "optimizing_torc",
-      "last_torc_quality": 0.0751,
       "checkpoints": [
         {
           "timing_factor": 1.0,
@@ -79,7 +47,49 @@
           "timing_step": 0.15,
           "magnitude_step": 0.15,
           "iteration": 0,
-          "timestamp": 1775449413.3916101,
+          "timestamp": 1775451735.2508168,
+          "label": "premature"
+        }
+      ]
+    },
+    {
+      "feature_vec": [
+        0.2248209163855633,
+        0.4,
+        -0.9637300218770025,
+        0.26687908298132385
+      ],
+      "timing_factor": 1.0,
+      "magnitude_factor": 1.0,
+      "timing_step": 0.15,
+      "magnitude_step": 0.15,
+      "iteration_count": 0,
+      "phase": "seeking_hit",
+      "last_torc_quality": null,
+      "checkpoints": []
+    },
+    {
+      "feature_vec": [
+        0.23118054512532937,
+        0.4,
+        -0.9948934062566149,
+        -0.10093121512748267
+      ],
+      "timing_factor": 0.11499999999999999,
+      "magnitude_factor": 6.0,
+      "timing_step": 0.15,
+      "magnitude_step": 0.15,
+      "iteration_count": 34,
+      "phase": "optimizing_torc",
+      "last_torc_quality": 0.0302,
+      "checkpoints": [
+        {
+          "timing_factor": 1.0,
+          "magnitude_factor": 1.0,
+          "timing_step": 0.15,
+          "magnitude_step": 0.15,
+          "iteration": 0,
+          "timestamp": 1775500609.389871,
           "label": "hit"
         },
         {
@@ -88,7 +98,7 @@
           "timing_step": 0.15,
           "magnitude_step": 0.15,
           "iteration": 0,
-          "timestamp": 1775449485.0073369,
+          "timestamp": 1775500617.76392,
           "label": "premature"
         },
         {
@@ -97,7 +107,7 @@
           "timing_step": 0.15,
           "magnitude_step": 0.15,
           "iteration": 1,
-          "timestamp": 1775449485.8286326,
+          "timestamp": 1775500620.798023,
           "label": "premature"
         },
         {
@@ -106,17 +116,606 @@
           "timing_step": 0.15,
           "magnitude_step": 0.15,
           "iteration": 2,
-          "timestamp": 1775449488.3120527,
+          "timestamp": 1775500622.8380249,
+          "label": "undershoot"
+        },
+        {
+          "timing_factor": 1.3224999999999998,
+          "magnitude_factor": 1.15,
+          "timing_step": 0.15,
+          "magnitude_step": 0.15,
+          "iteration": 3,
+          "timestamp": 1775500623.2495801,
+          "label": "undershoot"
+        },
+        {
+          "timing_factor": 1.3224999999999998,
+          "magnitude_factor": 1.3224999999999998,
+          "timing_step": 0.15,
+          "magnitude_step": 0.15,
+          "iteration": 4,
+          "timestamp": 1775500634.4851637,
           "label": "late"
         },
         {
           "timing_factor": 1.1241249999999998,
+          "magnitude_factor": 1.3224999999999998,
+          "timing_step": 0.15,
+          "magnitude_step": 0.15,
+          "iteration": 5,
+          "timestamp": 1775500637.534429,
+          "label": "late"
+        },
+        {
+          "timing_factor": 0.9555062499999998,
+          "magnitude_factor": 1.3224999999999998,
+          "timing_step": 0.15,
+          "magnitude_step": 0.15,
+          "iteration": 6,
+          "timestamp": 1775500637.6846545,
+          "label": "late"
+        },
+        {
+          "timing_factor": 0.8121803124999998,
+          "magnitude_factor": 1.3224999999999998,
+          "timing_step": 0.15,
+          "magnitude_step": 0.15,
+          "iteration": 7,
+          "timestamp": 1775500639.1598117,
+          "label": "late"
+        },
+        {
+          "timing_factor": 0.6903532656249998,
+          "magnitude_factor": 1.3224999999999998,
+          "timing_step": 0.15,
+          "magnitude_step": 0.15,
+          "iteration": 8,
+          "timestamp": 1775500639.8921819,
+          "label": "late"
+        },
+        {
+          "timing_factor": 0.5868002757812498,
+          "magnitude_factor": 1.3224999999999998,
+          "timing_step": 0.15,
+          "magnitude_step": 0.15,
+          "iteration": 9,
+          "timestamp": 1775500641.4568913,
+          "label": "late"
+        },
+        {
+          "timing_factor": 0.49878023441406233,
+          "magnitude_factor": 1.3224999999999998,
+          "timing_step": 0.15,
+          "magnitude_step": 0.15,
+          "iteration": 10,
+          "timestamp": 1775500649.9784622,
+          "label": "late"
+        },
+        {
+          "timing_factor": 0.42396319925195297,
+          "magnitude_factor": 1.3224999999999998,
+          "timing_step": 0.15,
+          "magnitude_step": 0.15,
+          "iteration": 11,
+          "timestamp": 1775500650.298325,
+          "label": "late"
+        },
+        {
+          "timing_factor": 0.36036871936416004,
+          "magnitude_factor": 1.3224999999999998,
+          "timing_step": 0.15,
+          "magnitude_step": 0.15,
+          "iteration": 12,
+          "timestamp": 1775500650.5413253,
+          "label": "late"
+        },
+        {
+          "timing_factor": 0.306313411459536,
+          "magnitude_factor": 1.3224999999999998,
+          "timing_step": 0.15,
+          "magnitude_step": 0.15,
+          "iteration": 13,
+          "timestamp": 1775500650.7883832,
+          "label": "late"
+        },
+        {
+          "timing_factor": 0.2603663997406056,
+          "magnitude_factor": 1.3224999999999998,
+          "timing_step": 0.15,
+          "magnitude_step": 0.15,
+          "iteration": 14,
+          "timestamp": 1775500650.995077,
+          "label": "late"
+        },
+        {
+          "timing_factor": 0.22131143977951476,
+          "magnitude_factor": 1.3224999999999998,
+          "timing_step": 0.15,
+          "magnitude_step": 0.15,
+          "iteration": 15,
+          "timestamp": 1775500651.1783586,
+          "label": "late"
+        },
+        {
+          "timing_factor": 0.18811472381258754,
+          "magnitude_factor": 1.3224999999999998,
+          "timing_step": 0.15,
+          "magnitude_step": 0.15,
+          "iteration": 16,
+          "timestamp": 1775500651.6047785,
+          "label": "late"
+        },
+        {
+          "timing_factor": 0.1598975152406994,
+          "magnitude_factor": 1.3224999999999998,
+          "timing_step": 0.15,
+          "magnitude_step": 0.15,
+          "iteration": 17,
+          "timestamp": 1775500652.4494843,
+          "label": "late"
+        },
+        {
+          "timing_factor": 0.13591288795459447,
+          "magnitude_factor": 1.3224999999999998,
+          "timing_step": 0.15,
+          "magnitude_step": 0.15,
+          "iteration": 18,
+          "timestamp": 1775500652.6785038,
+          "label": "late"
+        },
+        {
+          "timing_factor": 0.1155259547614053,
+          "magnitude_factor": 1.3224999999999998,
+          "timing_step": 0.15,
+          "magnitude_step": 0.15,
+          "iteration": 19,
+          "timestamp": 1775500652.9230506,
+          "label": "late"
+        },
+        {
+          "timing_factor": 0.1,
+          "magnitude_factor": 1.3224999999999998,
+          "timing_step": 0.15,
+          "magnitude_step": 0.15,
+          "iteration": 20,
+          "timestamp": 1775500663.865066,
+          "label": "undershoot"
+        },
+        {
+          "timing_factor": 0.1,
+          "magnitude_factor": 1.5208749999999995,
+          "timing_step": 0.15,
+          "magnitude_step": 0.15,
+          "iteration": 21,
+          "timestamp": 1775500665.1492405,
+          "label": "undershoot"
+        },
+        {
+          "timing_factor": 0.1,
+          "magnitude_factor": 1.7490062499999994,
+          "timing_step": 0.15,
+          "magnitude_step": 0.15,
+          "iteration": 22,
+          "timestamp": 1775500665.3874316,
+          "label": "undershoot"
+        },
+        {
+          "timing_factor": 0.1,
+          "magnitude_factor": 2.0113571874999994,
+          "timing_step": 0.15,
+          "magnitude_step": 0.15,
+          "iteration": 23,
+          "timestamp": 1775500665.5938373,
+          "label": "undershoot"
+        },
+        {
+          "timing_factor": 0.1,
+          "magnitude_factor": 2.313060765624999,
+          "timing_step": 0.15,
+          "magnitude_step": 0.15,
+          "iteration": 24,
+          "timestamp": 1775500665.8050108,
+          "label": "undershoot"
+        },
+        {
+          "timing_factor": 0.1,
+          "magnitude_factor": 2.6600198804687487,
+          "timing_step": 0.15,
+          "magnitude_step": 0.15,
+          "iteration": 25,
+          "timestamp": 1775500667.800422,
+          "label": "undershoot"
+        },
+        {
+          "timing_factor": 0.1,
+          "magnitude_factor": 3.0590228625390607,
+          "timing_step": 0.15,
+          "magnitude_step": 0.15,
+          "iteration": 26,
+          "timestamp": 1775500675.777899,
+          "label": "undershoot"
+        },
+        {
+          "timing_factor": 0.1,
+          "magnitude_factor": 3.5178762919199196,
+          "timing_step": 0.15,
+          "magnitude_step": 0.15,
+          "iteration": 27,
+          "timestamp": 1775500676.0162532,
+          "label": "undershoot"
+        },
+        {
+          "timing_factor": 0.1,
+          "magnitude_factor": 4.0455577357079076,
+          "timing_step": 0.15,
+          "magnitude_step": 0.15,
+          "iteration": 28,
+          "timestamp": 1775500676.272158,
+          "label": "undershoot"
+        },
+        {
+          "timing_factor": 0.1,
+          "magnitude_factor": 4.652391396064093,
+          "timing_step": 0.15,
+          "magnitude_step": 0.15,
+          "iteration": 29,
+          "timestamp": 1775500676.5028086,
+          "label": "undershoot"
+        },
+        {
+          "timing_factor": 0.1,
+          "magnitude_factor": 5.350250105473707,
+          "timing_step": 0.15,
+          "magnitude_step": 0.15,
+          "iteration": 30,
+          "timestamp": 1775500676.7642996,
+          "label": "undershoot"
+        },
+        {
+          "timing_factor": 0.1,
+          "magnitude_factor": 6.0,
+          "timing_step": 0.15,
+          "magnitude_step": 0.15,
+          "iteration": 31,
+          "timestamp": 1775500677.0152252,
+          "label": "undershoot"
+        },
+        {
+          "timing_factor": 0.1,
+          "magnitude_factor": 6.0,
+          "timing_step": 0.15,
+          "magnitude_step": 0.15,
+          "iteration": 32,
+          "timestamp": 1775500677.2787027,
+          "label": "undershoot"
+        },
+        {
+          "timing_factor": 0.1,
+          "magnitude_factor": 6.0,
+          "timing_step": 0.15,
+          "magnitude_step": 0.15,
+          "iteration": 33,
+          "timestamp": 1775500703.1141706,
+          "label": "premature"
+        }
+      ]
+    },
+    {
+      "feature_vec": [
+        0.31729761703766035,
+        0.4,
+        0.9454845668267112,
+        -0.32566690635142265
+      ],
+      "timing_factor": 1.0,
+      "magnitude_factor": 1.0,
+      "timing_step": 0.15,
+      "magnitude_step": 0.15,
+      "iteration_count": 0,
+      "phase": "seeking_hit",
+      "last_torc_quality": null,
+      "checkpoints": []
+    },
+    {
+      "feature_vec": [
+        0.44614397277610335,
+        0.4,
+        -0.9937001514885857,
+        0.11207144565660732
+      ],
+      "timing_factor": 1.0,
+      "magnitude_factor": 1.0,
+      "timing_step": 0.15,
+      "magnitude_step": 0.15,
+      "iteration_count": 0,
+      "phase": "seeking_hit",
+      "last_torc_quality": null,
+      "checkpoints": []
+    },
+    {
+      "feature_vec": [
+        0.4527692569068708,
+        0.4,
+        -0.861365903383803,
+        0.507985019944294
+      ],
+      "timing_factor": 0.9806526422585463,
+      "magnitude_factor": 2.857149866107861,
+      "timing_step": 0.15,
+      "magnitude_step": 0.15,
+      "iteration_count": 29,
+      "phase": "optimizing_torc",
+      "last_torc_quality": 0.4564,
+      "checkpoints": [
+        {
+          "timing_factor": 1.0,
           "magnitude_factor": 1.0,
           "timing_step": 0.15,
           "magnitude_step": 0.15,
+          "iteration": 0,
+          "timestamp": 1775507456.843101,
+          "label": "hit"
+        },
+        {
+          "timing_factor": 1.0,
+          "magnitude_factor": 1.0,
+          "timing_step": 0.15,
+          "magnitude_step": 0.15,
+          "iteration": 0,
+          "timestamp": 1775507462.351413,
+          "label": "undershoot"
+        },
+        {
+          "timing_factor": 1.0,
+          "magnitude_factor": 1.15,
+          "timing_step": 0.15,
+          "magnitude_step": 0.15,
+          "iteration": 1,
+          "timestamp": 1775507465.93537,
+          "label": "undershoot"
+        },
+        {
+          "timing_factor": 1.0,
+          "magnitude_factor": 1.3224999999999998,
+          "timing_step": 0.15,
+          "magnitude_step": 0.15,
+          "iteration": 2,
+          "timestamp": 1775507467.0553718,
+          "label": "undershoot"
+        },
+        {
+          "timing_factor": 1.0,
+          "magnitude_factor": 1.5208749999999995,
+          "timing_step": 0.15,
+          "magnitude_step": 0.15,
           "iteration": 3,
-          "timestamp": 1775449488.7494223,
+          "timestamp": 1775507468.9873314,
+          "label": "undershoot"
+        },
+        {
+          "timing_factor": 1.0,
+          "magnitude_factor": 1.7490062499999994,
+          "timing_step": 0.15,
+          "magnitude_step": 0.15,
+          "iteration": 4,
+          "timestamp": 1775507469.8983085,
+          "label": "undershoot"
+        },
+        {
+          "timing_factor": 1.0,
+          "magnitude_factor": 2.0113571874999994,
+          "timing_step": 0.15,
+          "magnitude_step": 0.15,
+          "iteration": 5,
+          "timestamp": 1775507487.2941275,
+          "label": "premature"
+        },
+        {
+          "timing_factor": 1.15,
+          "magnitude_factor": 2.0113571874999994,
+          "timing_step": 0.15,
+          "magnitude_step": 0.15,
+          "iteration": 6,
+          "timestamp": 1775507489.0681355,
+          "label": "premature"
+        },
+        {
+          "timing_factor": 1.3224999999999998,
+          "magnitude_factor": 2.0113571874999994,
+          "timing_step": 0.15,
+          "magnitude_step": 0.15,
+          "iteration": 7,
+          "timestamp": 1775507490.4449046,
+          "label": "premature"
+        },
+        {
+          "timing_factor": 1.5208749999999995,
+          "magnitude_factor": 2.0113571874999994,
+          "timing_step": 0.15,
+          "magnitude_step": 0.15,
+          "iteration": 8,
+          "timestamp": 1775507513.8107865,
+          "label": "undershoot"
+        },
+        {
+          "timing_factor": 1.5208749999999995,
+          "magnitude_factor": 2.313060765624999,
+          "timing_step": 0.15,
+          "magnitude_step": 0.15,
+          "iteration": 9,
+          "timestamp": 1775507515.3978505,
+          "label": "undershoot"
+        },
+        {
+          "timing_factor": 1.5208749999999995,
+          "magnitude_factor": 2.6600198804687487,
+          "timing_step": 0.15,
+          "magnitude_step": 0.15,
+          "iteration": 10,
+          "timestamp": 1775507516.1607277,
+          "label": "undershoot"
+        },
+        {
+          "timing_factor": 1.5208749999999995,
+          "magnitude_factor": 3.0590228625390607,
+          "timing_step": 0.15,
+          "magnitude_step": 0.15,
+          "iteration": 11,
+          "timestamp": 1775507518.3979845,
+          "label": "undershoot"
+        },
+        {
+          "timing_factor": 1.5208749999999995,
+          "magnitude_factor": 3.5178762919199196,
+          "timing_step": 0.15,
+          "magnitude_step": 0.15,
+          "iteration": 12,
+          "timestamp": 1775507522.9341433,
+          "label": "undershoot"
+        },
+        {
+          "timing_factor": 1.5208749999999995,
+          "magnitude_factor": 4.0455577357079076,
+          "timing_step": 0.15,
+          "magnitude_step": 0.15,
+          "iteration": 13,
+          "timestamp": 1775507523.957403,
+          "label": "undershoot"
+        },
+        {
+          "timing_factor": 1.5208749999999995,
+          "magnitude_factor": 4.652391396064093,
+          "timing_step": 0.15,
+          "magnitude_step": 0.15,
+          "iteration": 14,
+          "timestamp": 1775507540.7039282,
+          "label": "overshoot"
+        },
+        {
+          "timing_factor": 1.5208749999999995,
+          "magnitude_factor": 3.954532686654479,
+          "timing_step": 0.15,
+          "magnitude_step": 0.15,
+          "iteration": 15,
+          "timestamp": 1775507541.728807,
+          "label": "overshoot"
+        },
+        {
+          "timing_factor": 1.5208749999999995,
+          "magnitude_factor": 3.361352783656307,
+          "timing_step": 0.15,
+          "magnitude_step": 0.15,
+          "iteration": 16,
+          "timestamp": 1775507545.514278,
+          "label": "overshoot"
+        },
+        {
+          "timing_factor": 1.5208749999999995,
+          "magnitude_factor": 2.857149866107861,
+          "timing_step": 0.15,
+          "magnitude_step": 0.15,
+          "iteration": 17,
+          "timestamp": 1775507606.0852532,
           "label": "late"
+        },
+        {
+          "timing_factor": 1.2927437499999996,
+          "magnitude_factor": 2.857149866107861,
+          "timing_step": 0.15,
+          "magnitude_step": 0.15,
+          "iteration": 18,
+          "timestamp": 1775507606.4462593,
+          "label": "late"
+        },
+        {
+          "timing_factor": 1.0988321874999996,
+          "magnitude_factor": 2.857149866107861,
+          "timing_step": 0.15,
+          "magnitude_step": 0.15,
+          "iteration": 19,
+          "timestamp": 1775507606.7152588,
+          "label": "late"
+        },
+        {
+          "timing_factor": 0.9340073593749996,
+          "magnitude_factor": 2.857149866107861,
+          "timing_step": 0.15,
+          "magnitude_step": 0.15,
+          "iteration": 20,
+          "timestamp": 1775507606.9585905,
+          "label": "late"
+        },
+        {
+          "timing_factor": 0.7939062554687496,
+          "magnitude_factor": 2.857149866107861,
+          "timing_step": 0.15,
+          "magnitude_step": 0.15,
+          "iteration": 21,
+          "timestamp": 1775507607.1875963,
+          "label": "late"
+        },
+        {
+          "timing_factor": 0.6748203171484372,
+          "magnitude_factor": 2.857149866107861,
+          "timing_step": 0.15,
+          "magnitude_step": 0.15,
+          "iteration": 22,
+          "timestamp": 1775507607.4712691,
+          "label": "late"
+        },
+        {
+          "timing_factor": 0.5735972695761715,
+          "magnitude_factor": 2.857149866107861,
+          "timing_step": 0.15,
+          "magnitude_step": 0.15,
+          "iteration": 23,
+          "timestamp": 1775507607.8508859,
+          "label": "late"
+        },
+        {
+          "timing_factor": 0.4875576791397458,
+          "magnitude_factor": 2.857149866107861,
+          "timing_step": 0.15,
+          "magnitude_step": 0.15,
+          "iteration": 24,
+          "timestamp": 1775507626.4938405,
+          "label": "premature"
+        },
+        {
+          "timing_factor": 0.5606913310107077,
+          "magnitude_factor": 2.857149866107861,
+          "timing_step": 0.15,
+          "magnitude_step": 0.15,
+          "iteration": 25,
+          "timestamp": 1775507627.650091,
+          "label": "premature"
+        },
+        {
+          "timing_factor": 0.6447950306623138,
+          "magnitude_factor": 2.857149866107861,
+          "timing_step": 0.15,
+          "magnitude_step": 0.15,
+          "iteration": 26,
+          "timestamp": 1775507628.420138,
+          "label": "premature"
+        },
+        {
+          "timing_factor": 0.7415142852616609,
+          "magnitude_factor": 2.857149866107861,
+          "timing_step": 0.15,
+          "magnitude_step": 0.15,
+          "iteration": 27,
+          "timestamp": 1775507641.3953257,
+          "label": "premature"
+        },
+        {
+          "timing_factor": 0.8527414280509099,
+          "magnitude_factor": 2.857149866107861,
+          "timing_step": 0.15,
+          "magnitude_step": 0.15,
+          "iteration": 28,
+          "timestamp": 1775507666.2247086,
+          "label": "premature"
         }
       ]
     }

@@ -67,6 +67,7 @@ class AutoOverlay(QuickLabelHudMixin, BaseSACLOSOverlay):
         self._ql_context = None
         self._ql_torc_quality = None
         self._ql_rollback_digits = ""   # accumulates digits during rollback select
+        self._ql_prev_state = None      # state before entering rollback_select
         self._ql_replay_thread = None
         self._ql_replay_abort = threading.Event()
         self._correction_session = None
@@ -608,6 +609,7 @@ class AutoOverlay(QuickLabelHudMixin, BaseSACLOSOverlay):
         self._ql_update_all_overlays(
             self._correction_session, context.get('trajectory'),
             attentioner, pre_trajectory=context.get('pre_trajectory'),
+            context=context,
         )
         logger.info("Quick-label mode: [H]it / [M]iss / [5] Replay / [E]ditor / [Esc]")
 
@@ -642,6 +644,24 @@ class AutoOverlay(QuickLabelHudMixin, BaseSACLOSOverlay):
         if self._ql_state == 'hit':
             if char == 's':
                 self._ql_save_to_dataset()
+            elif char == '5':
+                self._ql_start_replay()
+            elif char == '1':
+                self._ql_apply_correction('premature')
+            elif char == '2':
+                self._ql_apply_correction('late')
+            elif char == '3':
+                self._ql_apply_correction('undershoot')
+            elif char == '4':
+                self._ql_apply_correction('overshoot')
+            elif char == 'r':
+                self._ql_prev_state = 'hit'
+                self._ql_state = 'rollback_select'
+                self._ql_rollback_digits = ""
+                self._ql_update_prompt(
+                    "ROLLBACK: type checkpoint # then [Enter]\n"
+                    "[Esc] cancel"
+                )
             return
 
         if self._ql_state == 'miss':
@@ -656,8 +676,8 @@ class AutoOverlay(QuickLabelHudMixin, BaseSACLOSOverlay):
             elif char == '5':
                 self._ql_start_replay()
             elif char == 'r':
+                self._ql_prev_state = 'miss'
                 self._ql_state = 'rollback_select'
-                self._ql_rollback_digits = ""
                 self._ql_update_prompt(
                     "ROLLBACK: type checkpoint # then [Enter]\n"
                     "[Esc] cancel"
@@ -680,9 +700,17 @@ class AutoOverlay(QuickLabelHudMixin, BaseSACLOSOverlay):
                 self._ql_replay_abort.set()
                 return
             if self._ql_state == 'rollback_select':
-                # Cancel rollback, return to miss state
-                self._ql_state = 'miss'
-                self._ql_show_miss_prompt()
+                # Cancel rollback, return to previous state
+                prev = self._ql_prev_state or 'miss'
+                self._ql_state = prev
+                if prev == 'hit':
+                    self._ql_update_prompt(
+                        f"HIT!  TORC Q: {self._ql_torc_quality:.3f}\n"
+                        f"[1-4] Correct  [5] Replay  [PgUp/Dn] step  [R] Rollback\n"
+                        f"[S] Save to dataset  [Enter] Done  [Esc] Discard"
+                    )
+                else:
+                    self._ql_show_miss_prompt()
             else:
                 self._ql_exit()
             return
@@ -697,7 +725,7 @@ class AutoOverlay(QuickLabelHudMixin, BaseSACLOSOverlay):
                 self._ql_exit()
             return
 
-        if self._ql_state == 'miss':
+        if self._ql_state in ('hit', 'miss'):
             if name == 'page_up':
                 self._correction_session.adjust_steps(0.02)
                 self._ql_refresh_overlays()
@@ -739,6 +767,7 @@ class AutoOverlay(QuickLabelHudMixin, BaseSACLOSOverlay):
 
         self._ql_update_prompt(
             f"HIT!  TORC Q: {self._ql_torc_quality:.3f}\n"
+            f"[1-4] Correct  [5] Replay  [PgUp/Dn] step  [R] Rollback\n"
             f"[S] Save to dataset  [Enter] Done  [Esc] Discard"
         )
         self._ql_refresh_overlays()
@@ -804,8 +833,17 @@ class AutoOverlay(QuickLabelHudMixin, BaseSACLOSOverlay):
         else:
             logger.warning(f"Rollback failed: invalid checkpoint #{checkpoint_index}")
 
-        self._ql_state = 'miss'
-        self._ql_show_miss_prompt()
+        # Return to the state we were in before entering rollback_select
+        prev = self._ql_prev_state or 'miss'
+        self._ql_state = prev
+        if prev == 'hit':
+            self._ql_update_prompt(
+                f"HIT!  TORC Q: {self._ql_torc_quality:.3f}\n"
+                f"[1-4] Correct  [5] Replay  [PgUp/Dn] step  [R] Rollback\n"
+                f"[S] Save to dataset  [Enter] Done  [Esc] Discard"
+            )
+        else:
+            self._ql_show_miss_prompt()
         self._ql_refresh_overlays()
 
     def _ql_refresh_overlays(self):
@@ -815,7 +853,7 @@ class AutoOverlay(QuickLabelHudMixin, BaseSACLOSOverlay):
         pre_traj = self._ql_context.get('pre_trajectory') if self._ql_context else None
         self._ql_update_all_overlays(
             self._correction_session, traj, attentioner,
-            pre_trajectory=pre_traj)
+            pre_trajectory=pre_traj, context=self._ql_context)
 
     def _ql_save_to_dataset(self):
         """Save current biased trajectory as a HIT to the dataset."""
@@ -1012,8 +1050,59 @@ class AutoOverlay(QuickLabelHudMixin, BaseSACLOSOverlay):
             q = self._ql_torc_quality or 0.0
             self._ql_update_prompt(
                 f"HIT!  TORC Q: {q:.3f}\n"
+                f"[1-4] Correct  [5] Replay  [PgUp/Dn] step  [R] Rollback\n"
                 f"[S] Save to dataset  [Enter] Done  [Esc] Discard")
         self._ql_refresh_overlays()
+
+    def _ql_show_idle(self):
+        """Show QL overlays in idle state between engagements.
+
+        Clears all data-dependent content so no stale data from a previous
+        feature set leaks into the next engagement.
+        """
+        self._ql_ensure_windows()
+        self._ql_update_prompt("[Quick-Label]  Waiting for next engagement...")
+
+        # Clear graphs — show empty "No data" state
+        if self._ql_graph_factors_canvas:
+            self._ql_graph_factors_canvas.delete("all")
+            cw = self._ql_graph_factors_canvas.winfo_width() or 280
+            ch = self._ql_graph_factors_canvas.winfo_height() or 160
+            self._ql_graph_factors_canvas.create_text(
+                cw // 2, ch // 2, text="No data",
+                fill="#666666", font=("Consolas", 9))
+        if self._ql_graph_lr_canvas:
+            self._ql_graph_lr_canvas.delete("all")
+            cw = self._ql_graph_lr_canvas.winfo_width() or 280
+            ch = self._ql_graph_lr_canvas.winfo_height() or 160
+            self._ql_graph_lr_canvas.create_text(
+                cw // 2, ch // 2, text="No data",
+                fill="#666666", font=("Consolas", 9))
+
+        # Clear checkpoint overlay
+        if self._ql_checkpoint_frame:
+            for lbl in self._ql_checkpoint_labels:
+                lbl.destroy()
+            self._ql_checkpoint_labels = []
+
+        # Clear features overlay
+        if self._ql_features_frame:
+            for lbl in self._ql_features_labels:
+                lbl.destroy()
+            self._ql_features_labels = []
+
+        # Stop sim animation, clear canvas
+        self._ql_stop_sim()
+        if self._ql_sim_canvas:
+            self._ql_sim_canvas.delete("all")
+            self._ql_sim_data = None
+            self._ql_sim_pre_data = None
+
+        # Show all windows (they stay visible between engagements)
+        for win in self._ql_all_windows():
+            if win:
+                win.deiconify()
+                win.attributes("-topmost", True)
 
     def _ql_exit(self):
         """Exit quick-label mode. Keep overlays visible during online learning."""

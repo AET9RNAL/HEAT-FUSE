@@ -73,6 +73,10 @@ class QuickLabelHudMixin:
         self._ql_checkpoint_frame = None
         self._ql_checkpoint_labels = []
 
+        self._ql_features_win = None
+        self._ql_features_frame = None
+        self._ql_features_labels = []
+
         # Default positions — use fallback dimensions; real values come from
         # config (loaded after super().__init__ sets self.root).
         root = getattr(self, 'root', None)
@@ -89,6 +93,7 @@ class QuickLabelHudMixin:
         self.ql_graph_lr_pos = [350, sh - 320]
         self.ql_sim_pos = [650, sh - 370]
         self.ql_checkpoint_pos = [960, sh - 320]
+        self.ql_features_pos = [50, sh - 560]
 
     # ================================================================
     #  Window creation (lazy — first call creates, subsequent reuse)
@@ -225,6 +230,27 @@ class QuickLabelHudMixin:
         self._make_draggable(cp_title)
         self._ql_checkpoint_win.withdraw()
 
+        # ---- Features overlay (captured geometry + bias state) ----
+        self._ql_features_win = tk.Toplevel(self.root)
+        self._ql_features_win.title("QL Features")
+        self._ql_features_win.overrideredirect(True)
+        self._ql_features_win.attributes("-topmost", True)
+        self._ql_features_win.configure(bg=self.QL_CANVAS_BG)
+
+        feat_title = tk.Label(
+            self._ql_features_win, text="Captured Features",
+            fg=self.HUD_CYAN, bg=self.QL_CANVAS_BG,
+            font=("Consolas", 9, "bold"),
+        )
+        feat_title.pack(anchor="w", padx=4)
+        self._ql_features_frame = tk.Frame(
+            self._ql_features_win, bg=self.QL_CANVAS_BG,
+        )
+        self._ql_features_frame.pack(fill=tk.BOTH, padx=4, pady=2)
+        self._make_draggable(self._ql_features_win)
+        self._make_draggable(feat_title)
+        self._ql_features_win.withdraw()
+
     # ================================================================
     #  Show / hide / position
     # ================================================================
@@ -243,8 +269,9 @@ class QuickLabelHudMixin:
             self.root.update_idletasks()
             for win in self._ql_all_windows():
                 if win:
-                    # Prompt and checkpoint windows must stay clickable
-                    if win in (self._ql_prompt_win, self._ql_checkpoint_win):
+                    # Prompt, checkpoint, and features windows must stay clickable
+                    if win in (self._ql_prompt_win, self._ql_checkpoint_win,
+                               self._ql_features_win):
                         self._ql_set_clickthrough(win, False)
                     else:
                         self._ql_set_clickthrough(win, True)
@@ -270,8 +297,9 @@ class QuickLabelHudMixin:
             self.root.update_idletasks()
             for win in self._ql_all_windows():
                 if win:
-                    # Prompt and checkpoint windows must stay clickable
-                    if win in (self._ql_prompt_win, self._ql_checkpoint_win):
+                    # Prompt, checkpoint, and features windows must stay clickable
+                    if win in (self._ql_prompt_win, self._ql_checkpoint_win,
+                               self._ql_features_win):
                         self._ql_set_clickthrough(win, False)
                     else:
                         self._ql_set_clickthrough(win, True)
@@ -286,7 +314,7 @@ class QuickLabelHudMixin:
         return [
             self._ql_prompt_win, self._ql_graph_factors_win,
             self._ql_graph_lr_win, self._ql_sim_win,
-            self._ql_checkpoint_win,
+            self._ql_checkpoint_win, self._ql_features_win,
         ]
 
     def _ql_position_windows(self):
@@ -296,6 +324,7 @@ class QuickLabelHudMixin:
             (self._ql_graph_lr_win, self.ql_graph_lr_pos),
             (self._ql_sim_win, self.ql_sim_pos),
             (self._ql_checkpoint_win, self.ql_checkpoint_pos),
+            (self._ql_features_win, self.ql_features_pos),
         ]
         sw = self.root.winfo_screenwidth()
         sh = self.root.winfo_screenheight()
@@ -324,6 +353,7 @@ class QuickLabelHudMixin:
             ('_ql_graph_lr_win', 'ql_graph_lr_pos'),
             ('_ql_sim_win', 'ql_sim_pos'),
             ('_ql_checkpoint_win', 'ql_checkpoint_pos'),
+            ('_ql_features_win', 'ql_features_pos'),
         ]
         for attr, pos_attr in mapping:
             win = getattr(self, attr, None)
@@ -339,12 +369,14 @@ class QuickLabelHudMixin:
             'ql_graph_lr_pos': self.ql_graph_lr_pos,
             'ql_sim_pos': self.ql_sim_pos,
             'ql_checkpoint_pos': self.ql_checkpoint_pos,
+            'ql_features_pos': self.ql_features_pos,
         })
 
     def _ql_load_config(self, config):
         """Load QL HUD positions from config."""
         for key in ['ql_prompt_pos', 'ql_graph_factors_pos',
-                     'ql_graph_lr_pos', 'ql_sim_pos', 'ql_checkpoint_pos']:
+                     'ql_graph_lr_pos', 'ql_sim_pos', 'ql_checkpoint_pos',
+                     'ql_features_pos']:
             val = config.get(key)
             if val:
                 setattr(self, key, list(val))
@@ -687,7 +719,12 @@ class QuickLabelHudMixin:
     # ================================================================
 
     def _ql_redraw_checkpoints(self, session):
-        """Redraw the checkpoint list overlay."""
+        """Redraw the checkpoint list overlay.
+
+        Checkpoints are always scoped to the active bias entry (per feature
+        set). Switching to a new geometry creates a fresh entry with empty
+        checkpoints, so no data from previous corrections leaks through.
+        """
         if not self._ql_checkpoint_frame:
             return
 
@@ -698,6 +735,23 @@ class QuickLabelHudMixin:
 
         history = session.get_history() if session else []
         entry = session.get_active_entry() if session else None
+
+        # Feature geometry header — shows which feature set these checkpoints
+        # belong to so the user always knows the scope.
+        if entry:
+            fv = entry.get('feature_vec', [0, 0, 0, 0])
+            disp = fv[0] * 300
+            rng = fv[1] * 500
+            angle_deg = math.degrees(math.atan2(fv[2], fv[3]))
+            header_text = (f"Features: disp={disp:.0f}px  "
+                           f"rng={rng:.0f}m  ang={angle_deg:.0f}\u00b0")
+            hdr = tk.Label(
+                self._ql_checkpoint_frame, text=header_text,
+                fg="#aaaadd", bg="#1a1a33",
+                font=("Consolas", 7, "italic"), anchor="w",
+            )
+            hdr.pack(fill=tk.X, padx=2, pady=(0, 2))
+            self._ql_checkpoint_labels.append(hdr)
 
         for i, cp in enumerate(history):
             tf = cp['timing_factor']
@@ -746,6 +800,91 @@ class QuickLabelHudMixin:
         self._ql_checkpoint_win.geometry(
             f"{w}x{canvas_h + 30}+{int(x)}+{int(y)}")
 
+    def _ql_redraw_features(self, session, context=None):
+        """Redraw the captured features overlay (geometry + bias state)."""
+        if not self._ql_features_frame:
+            return
+
+        # Clear existing labels
+        for lbl in self._ql_features_labels:
+            lbl.destroy()
+        self._ql_features_labels = []
+
+        entry = session.get_active_entry() if session else None
+
+        # Geometry context from the engagement
+        if context:
+            disp = context.get('displacement_px', 0)
+            angle = context.get('angle_rad', 0)
+            range_m = context.get('range_m', 0)
+            rows = [
+                ("Disp", f"{disp:.1f} px"),
+                ("Angle", f"{math.degrees(angle):.1f}°"),
+                ("Range", f"{range_m:.0f} m"),
+            ]
+            for label, value in rows:
+                lbl = tk.Label(
+                    self._ql_features_frame, text=f"{label:>8}: {value}",
+                    fg="#cccccc", bg=self.QL_CANVAS_BG,
+                    font=("Consolas", 8), anchor="w",
+                )
+                lbl.pack(fill=tk.X, padx=2)
+                self._ql_features_labels.append(lbl)
+
+            # Separator
+            sep = tk.Frame(self._ql_features_frame, bg="#333333", height=1)
+            sep.pack(fill=tk.X, padx=2, pady=4)
+            self._ql_features_labels.append(sep)
+
+        # Bias state
+        if entry:
+            tf = entry['timing_factor']
+            mf = entry['magnitude_factor']
+            phase = entry.get('phase', 'seeking_hit').replace('_', ' ').title()
+            iters = entry.get('iteration_count', 0)
+            torc_q = entry.get('last_torc_quality')
+
+            bias_rows = [
+                ("Timing", f"{tf:.3f}"),
+                ("Magnitude", f"{mf:.3f}"),
+                ("Phase", phase),
+                ("Iter", str(iters)),
+            ]
+            if torc_q is not None:
+                bias_rows.append(("TORC Q", f"{torc_q:.3f}"))
+
+            for label, value in bias_rows:
+                color = self.HUD_GREEN if label == "TORC Q" and torc_q and torc_q > 0.7 else "#aaaaaa"
+                lbl = tk.Label(
+                    self._ql_features_frame, text=f"{label:>8}: {value}",
+                    fg=color, bg=self.QL_CANVAS_BG,
+                    font=("Consolas", 8, "bold" if label == "Phase" else "normal"),
+                    anchor="w",
+                )
+                lbl.pack(fill=tk.X, padx=2)
+                self._ql_features_labels.append(lbl)
+        else:
+            lbl = tk.Label(
+                self._ql_features_frame, text="  (no bias active)",
+                fg="#555555", bg=self.QL_CANVAS_BG,
+                font=("Consolas", 8), anchor="w",
+            )
+            lbl.pack(fill=tk.X, padx=2)
+            self._ql_features_labels.append(lbl)
+
+        # Resize window — keep current position, only update size
+        self.root.update_idletasks()
+        w = max(200, self._ql_features_frame.winfo_reqwidth() + 8)
+        h = min(250, self._ql_features_frame.winfo_reqheight() + 30)
+        # Preserve current window position if it exists
+        if self._ql_features_win.winfo_viewable():
+            x, y = self._ql_features_win.winfo_x(), self._ql_features_win.winfo_y()
+            # Update stored position so capture gets the current location
+            self.ql_features_pos = [x, y]
+        else:
+            x, y = self.ql_features_pos
+        self._ql_features_win.geometry(f"{w}x{h}+{int(x)}+{int(y)}")
+
     def _ql_on_checkpoint_click(self, checkpoint_index):
         """Handle click on a checkpoint label (rollback)."""
         # Implemented in AutoOverlay — this is the hook
@@ -757,11 +896,13 @@ class QuickLabelHudMixin:
     # ================================================================
 
     def _ql_update_all_overlays(self, session, trajectory=None,
-                                 attentioner=None, pre_trajectory=None):
-        """Redraw all graphs, sim, and checkpoints."""
+                                 attentioner=None, pre_trajectory=None,
+                                 context=None):
+        """Redraw all graphs, sim, checkpoints, and features."""
         self._ql_redraw_factors_graph(session)
         self._ql_redraw_lr_graph(session, attentioner)
         self._ql_redraw_checkpoints(session)
+        self._ql_redraw_features(session, context)
         if trajectory:
             self._ql_update_sim(trajectory, session, pre_trajectory)
 
