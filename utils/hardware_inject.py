@@ -58,6 +58,10 @@ def inject_mouse_movement(dx, dy):
     inp.mi = _MOUSEINPUT(dx, dy, 0, _MOUSEEVENTF_MOVE, 0, 0)
     _SendInput(1, ctypes.pointer(inp), ctypes.sizeof(_INPUT))
 
+def set_cursor_pos(x, y):
+    """Teleport mouse cursor to absolute screen coordinates."""
+    ctypes.windll.user32.SetCursorPos(int(x), int(y))
+
 def inject_mouse_click():
     """Inject a left mouse button click (down + up) via SendInput."""
     enable_hires_timer()

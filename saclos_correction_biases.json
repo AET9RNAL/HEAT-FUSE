@@ -1,0 +1,30 @@
+{
+  "biases": [
+    {
+      "feature_vec": [
+        0.18012341448141728,
+        0.19584000000000004,
+        0.9993148337667671,
+        0.037011660509880355
+      ],
+      "timing_factor": 0.85,
+      "magnitude_factor": 1.0,
+      "timing_step": 0.15,
+      "magnitude_step": 0.15,
+      "iteration_count": 1,
+      "phase": "seeking_hit",
+      "last_torc_quality": null,
+      "checkpoints": [
+        {
+          "timing_factor": 1.0,
+          "magnitude_factor": 1.0,
+          "timing_step": 0.15,
+          "magnitude_step": 0.15,
+          "iteration": 0,
+          "timestamp": 1775448156.8001757,
+          "label": "late"
+        }
+      ]
+    }
+  ]
+}

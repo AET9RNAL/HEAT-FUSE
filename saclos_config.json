@@ -21,7 +21,7 @@
     2488,
     1409
   ],
-  "target_range_m": 200.0,
+  "target_range_m": 97.92000000000002,
   "hud_assets_dir": "assets",
   "hud_name_image": "predictor.png",
   "hud_descriptor_image": "interceptSystem.png",
@@ -71,23 +71,23 @@
   "torc_quality_weight": 0.5,
   "quick_label_enabled": true,
   "ql_prompt_pos": [
-    1104,
-    1290
+    50,
+    1340
   ],
   "ql_graph_factors_pos": [
-    826,
-    1224
+    50,
+    1120
   ],
   "ql_graph_lr_pos": [
-    1480,
-    1224
+    350,
+    1120
   ],
   "ql_sim_pos": [
-    2252,
-    130
+    650,
+    1070
   ],
   "ql_checkpoint_pos": [
-    2253,
-    383
+    960,
+    1120
   ]
 }

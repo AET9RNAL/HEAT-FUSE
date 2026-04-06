@@ -64,7 +64,8 @@ class QuickLabelHudMixin:
         self._ql_sim_canvas = None
         self._ql_sim_after_id = None
         self._ql_sim_start_time = 0.0
-        self._ql_sim_data = None  # (times, cum_x, cum_y)
+        self._ql_sim_data = None      # (times, cum_x, cum_y) — guidance
+        self._ql_sim_pre_data = None  # (times, cum_x, cum_y) — pre-fire aiming
 
         self._ql_checkpoint_win = None
         self._ql_checkpoint_frame = None
@@ -469,7 +470,7 @@ class QuickLabelHudMixin:
     #  Trajectory simulation
     # ================================================================
 
-    def _ql_update_sim(self, trajectory, session):
+    def _ql_update_sim(self, trajectory, session, pre_trajectory=None):
         """Update sim canvas with the biased trajectory and restart animation."""
         if not self._ql_sim_canvas:
             return
@@ -482,6 +483,18 @@ class QuickLabelHudMixin:
 
         times, cum_x, cum_y = _traj_to_cumulative(traj)
         self._ql_sim_data = (times, cum_x, cum_y)
+
+        # Pre-fire trajectory (shown greyed out, ending at origin)
+        if pre_trajectory:
+            pt, px, py = _traj_to_cumulative(pre_trajectory)
+            # Offset so pre-fire endpoint lands at (0, 0) = guidance start
+            if px and py:
+                end_x, end_y = px[-1], py[-1]
+                px = [x - end_x for x in px]
+                py = [y - end_y for y in py]
+            self._ql_sim_pre_data = (pt, px, py)
+        else:
+            self._ql_sim_pre_data = None
 
         self._ql_stop_sim()
         self._ql_sim_draw_static()
@@ -501,6 +514,15 @@ class QuickLabelHudMixin:
         x_max = max(0, max(cum_x))
         y_min = min(0, min(cum_y))
         y_max = max(0, max(cum_y))
+
+        # Include pre-fire bounds if present
+        if self._ql_sim_pre_data:
+            _, pre_x, pre_y = self._ql_sim_pre_data
+            if pre_x and pre_y:
+                x_min = min(x_min, min(pre_x))
+                x_max = max(x_max, max(pre_x))
+                y_min = min(y_min, min(pre_y))
+                y_max = max(y_max, max(pre_y))
 
         dx = (x_max - x_min) or 1
         dy = (y_max - y_min) or 1
@@ -530,7 +552,20 @@ class QuickLabelHudMixin:
         c.create_line(ox - 8, oy, ox + 8, oy, fill="#444444", width=1)
         c.create_line(ox, oy - 8, ox, oy + 8, fill="#444444", width=1)
 
-        # Full path (dim)
+        # Pre-fire aiming path (greyed out)
+        if self._ql_sim_pre_data:
+            _, pre_x, pre_y = self._ql_sim_pre_data
+            if len(pre_x) >= 2:
+                pre_pts = []
+                for i in range(len(pre_x)):
+                    px, py = self._ql_sim_w2c(pre_x[i], pre_y[i])
+                    pre_pts.extend([px, py])
+                if len(pre_pts) >= 4:
+                    c.create_line(*pre_pts, fill="#444455", width=1,
+                                  smooth=False, dash=(3, 3),
+                                  tags="sim_prefire")
+
+        # Full guidance path (dim)
         pts = []
         for i in range(n):
             cx, cy = self._ql_sim_w2c(cum_x[i], cum_y[i])
@@ -658,13 +693,13 @@ class QuickLabelHudMixin:
     # ================================================================
 
     def _ql_update_all_overlays(self, session, trajectory=None,
-                                 attentioner=None):
+                                 attentioner=None, pre_trajectory=None):
         """Redraw all graphs, sim, and checkpoints."""
         self._ql_redraw_factors_graph(session)
         self._ql_redraw_lr_graph(session, attentioner)
         self._ql_redraw_checkpoints(session)
         if trajectory:
-            self._ql_update_sim(trajectory, session)
+            self._ql_update_sim(trajectory, session, pre_trajectory)
 
     # ================================================================
     #  Cleanup

@@ -54,12 +54,21 @@ class AutoOverlay(QuickLabelHudMixin, BaseSACLOSOverlay):
         self.attn_n_buckets = 10
         self.torc_quality_weight = 0.5
 
+        # Pre-fire recording (captures aiming trajectory during tracking)
+        self._prefire_deltas = []
+        self._prefire_start_time = None
+        self._prefire_last_x = None
+        self._prefire_last_y = None
+        self._replay_cursor_pos = None  # (x, y) screen pos at tracking start
+
         # Quick-label state
         self._ql_active = False
         self._ql_state = None           # 'prompt' | 'hit' | 'miss' | 'rollback_select'
         self._ql_context = None
         self._ql_torc_quality = None
         self._ql_rollback_digits = ""   # accumulates digits during rollback select
+        self._ql_replay_thread = None
+        self._ql_replay_abort = threading.Event()
         self._correction_session = None
         self.quick_label_enabled = True
 
@@ -253,12 +262,42 @@ class AutoOverlay(QuickLabelHudMixin, BaseSACLOSOverlay):
                 self._ql_checkpoint_labels.append(lbl)
 
     # ----------------------------------------------------------------
-    #  Tracking override: displacement + correction
+    #  Tracking override: pre-fire recording, displacement + correction
     # ----------------------------------------------------------------
+
+    def _start_tracking(self):
+        """Override: reset pre-fire state before starting tracking."""
+        self._prefire_deltas = []
+        self._prefire_start_time = None
+        self._prefire_last_x = None
+        self._prefire_last_y = None
+        self._replay_cursor_pos = None
+        super()._start_tracking()
+        if self.tracking_active:
+            self._prefire_start_time = time.perf_counter()
+
+    def _on_mouse_move(self, x, y):
+        """Override: record pre-fire aiming deltas during tracking."""
+        if self.tracking_active and self._prefire_start_time is not None:
+            if self._prefire_last_x is None:
+                # First move: capture cursor start position for replay teleport
+                self._replay_cursor_pos = (x, y)
+            else:
+                raw_dx = x - self._prefire_last_x
+                raw_dy = y - self._prefire_last_y
+                t = time.perf_counter() - self._prefire_start_time
+                self._prefire_deltas.append(
+                    {'t': round(t, 4), 'dx': raw_dx, 'dy': raw_dy})
+            self._prefire_last_x = x
+            self._prefire_last_y = y
+        super()._on_mouse_move(x, y)
 
     def _stop_tracking(self):
         """Override: common teardown, then calculate displacement and trigger correction."""
         was_tracking = self.tracking_active
+        # Capture cursor start pos before super() clears mouse_start_x/y
+        if was_tracking and self._replay_cursor_pos is None and self.mouse_start_x is not None:
+            self._replay_cursor_pos = (self.mouse_start_x, self.mouse_start_y)
         super()._stop_tracking()  # Common teardown (stop listener, capture position, reset state)
         if not was_tracking:
             return
@@ -341,6 +380,8 @@ class AutoOverlay(QuickLabelHudMixin, BaseSACLOSOverlay):
                         'angle_rad': angle_rad,
                         'range_m': self.target_range_m,
                         'trajectory': ml_trajectory,
+                        'pre_trajectory': list(self._prefire_deltas),
+                        'cursor_start_pos': self._replay_cursor_pos,
                     }
 
                     self.correction_active = True
@@ -549,14 +590,14 @@ class AutoOverlay(QuickLabelHudMixin, BaseSACLOSOverlay):
         # Show HUD overlays
         self._ql_show_all()
         self._ql_update_prompt(
-            "[H] HIT   [M] MISS   [E] Editor   [Esc] Discard"
+            "[H] HIT  [M] MISS  [5] Replay  [E] Editor  [Esc] Discard"
         )
         attentioner = getattr(self.learner, 'attentioner', None)
         self._ql_update_all_overlays(
             self._correction_session, context.get('trajectory'),
-            attentioner,
+            attentioner, pre_trajectory=context.get('pre_trajectory'),
         )
-        logger.info("Quick-label mode: [H]it / [M]iss / [E]ditor / [Esc]")
+        logger.info("Quick-label mode: [H]it / [M]iss / [5] Replay / [E]ditor / [Esc]")
 
     def _catch_kbd_press(self, key):
         """Override: intercept QL keys when active, then fall through to base."""
@@ -580,6 +621,8 @@ class AutoOverlay(QuickLabelHudMixin, BaseSACLOSOverlay):
                 self._ql_on_hit()
             elif char == 'm':
                 self._ql_on_miss()
+            elif char == '5':
+                self._ql_start_replay()
             elif char == 'e':
                 self._ql_open_editor()
             return
@@ -598,6 +641,8 @@ class AutoOverlay(QuickLabelHudMixin, BaseSACLOSOverlay):
                 self._ql_apply_correction('undershoot')
             elif char == '4':
                 self._ql_apply_correction('overshoot')
+            elif char == '5':
+                self._ql_start_replay()
             elif char == 'r':
                 self._ql_state = 'rollback_select'
                 self._ql_rollback_digits = ""
@@ -618,6 +663,10 @@ class AutoOverlay(QuickLabelHudMixin, BaseSACLOSOverlay):
     def _ql_handle_special(self, name):
         """Handle special keys (Enter, Esc, PgUp, PgDn)."""
         if name == 'esc':
+            # If replay is running, abort it
+            if self._ql_replay_thread and self._ql_replay_thread.is_alive():
+                self._ql_replay_abort.set()
+                return
             if self._ql_state == 'rollback_select':
                 # Cancel rollback, return to miss state
                 self._ql_state = 'miss'
@@ -709,7 +758,7 @@ class AutoOverlay(QuickLabelHudMixin, BaseSACLOSOverlay):
         self._ql_update_prompt(
             f"MISS — Correct:  step T={ts:.2f} M={ms:.2f}\n"
             f"[1] Premature  [2] Late  [3] Undershoot  [4] Overshoot\n"
-            f"[PgUp/Dn] step size  [R] Rollback  [Enter] Done  [Esc] Discard"
+            f"[5] Replay  [PgUp/Dn] step  [R] Rollback  [Enter] Done  [Esc] Discard"
         )
 
     def _ql_apply_correction(self, kind):
@@ -751,8 +800,10 @@ class AutoOverlay(QuickLabelHudMixin, BaseSACLOSOverlay):
         """Refresh all QL overlays with current state."""
         attentioner = getattr(self.learner, 'attentioner', None)
         traj = self._ql_context.get('trajectory') if self._ql_context else None
+        pre_traj = self._ql_context.get('pre_trajectory') if self._ql_context else None
         self._ql_update_all_overlays(
-            self._correction_session, traj, attentioner)
+            self._correction_session, traj, attentioner,
+            pre_trajectory=pre_traj)
 
     def _ql_save_to_dataset(self):
         """Save current biased trajectory as a HIT to the dataset."""
@@ -794,8 +845,170 @@ class AutoOverlay(QuickLabelHudMixin, BaseSACLOSOverlay):
         if ctx:
             self.root.after(50, lambda c=ctx: self._open_refiner(c))
 
+    # ---- Replay ----
+
+    def _ql_start_replay(self):
+        """Start replaying the recorded scenario with current bias."""
+        if self._ql_context is None:
+            return
+        if self._ql_replay_thread and self._ql_replay_thread.is_alive():
+            self._ql_replay_abort.set()
+            self._ql_replay_thread.join(timeout=2)
+
+        self._ql_replay_abort.clear()
+        pre_state = self._ql_state  # remember state to return to
+        self._ql_state = 'replay'
+
+        # Hide graph overlays so they don't block the game view
+        # Keep only the prompt for countdown display
+        for win in [self._ql_graph_factors_win, self._ql_graph_lr_win,
+                     self._ql_sim_win, self._ql_checkpoint_win]:
+            if win:
+                win.withdraw()
+
+        self._ql_replay_thread = threading.Thread(
+            target=self._ql_replay_thread_func,
+            args=(pre_state,),
+            daemon=True,
+        )
+        self._ql_replay_thread.start()
+
+    def _ql_replay_thread_func(self, return_state):
+        """Replay: countdown → teleport → pre-fire → click → biased trajectory."""
+        from utils.hardware_inject import (
+            inject_mouse_movement, inject_mouse_click, set_cursor_pos)
+
+        ctx = self._ql_context
+        if ctx is None:
+            self.root.after(0, lambda: self._ql_replay_done(return_state))
+            return
+
+        # Countdown
+        for i in range(3, 0, -1):
+            if self._ql_replay_abort.is_set():
+                self.root.after(0, lambda: self._ql_replay_done(return_state))
+                return
+            self.root.after(0, lambda n=i: self._ql_update_prompt(
+                f"Replay in {n}...  [Esc] abort"))
+            time.sleep(1.0)
+
+        if self._ql_replay_abort.is_set():
+            self.root.after(0, lambda: self._ql_replay_done(return_state))
+            return
+
+        # Teleport cursor to tracking start position
+        cursor_pos = ctx.get('cursor_start_pos')
+        if cursor_pos:
+            set_cursor_pos(cursor_pos[0], cursor_pos[1])
+            time.sleep(0.05)
+
+        # Pre-fire aiming phase
+        pre_traj = ctx.get('pre_trajectory', [])
+        if pre_traj:
+            self.root.after(0, lambda: self._ql_update_prompt("AIMING..."))
+            pre_start = time.perf_counter()
+            pre_cum_dx, pre_cum_dy = 0.0, 0.0
+            pre_inj_dx, pre_inj_dy = 0, 0
+
+            for pt in pre_traj:
+                if self._ql_replay_abort.is_set():
+                    self.root.after(0, lambda: self._ql_replay_done(return_state))
+                    return
+                target_time = pre_start + pt['t']
+                now = time.perf_counter()
+                sleep_s = target_time - now
+                if sleep_s > 0.0005:
+                    time.sleep(sleep_s)
+
+                pre_cum_dx += pt['dx']
+                pre_cum_dy += pt['dy']
+                ix = int(round(pre_cum_dx)) - pre_inj_dx
+                iy = int(round(pre_cum_dy)) - pre_inj_dy
+                if ix != 0 or iy != 0:
+                    try:
+                        inject_mouse_movement(ix, iy)
+                        pre_inj_dx += ix
+                        pre_inj_dy += iy
+                    except Exception:
+                        break
+
+            logger.info(f"Pre-fire aiming complete ({pre_inj_dx}dx {pre_inj_dy}dy)")
+
+        if self._ql_replay_abort.is_set():
+            self.root.after(0, lambda: self._ql_replay_done(return_state))
+            return
+
+        # Fire click + biased guidance trajectory
+        self.root.after(0, lambda: self._ql_update_prompt("REPLAYING..."))
+
+        # Build biased trajectory
+        traj = copy.deepcopy(ctx.get('trajectory', []))
+        entry = self._correction_session.get_active_entry() if self._correction_session else None
+        if entry and (entry['timing_factor'] != 1.0 or entry['magnitude_factor'] != 1.0):
+            from trainer.correction_session import CorrectionSession
+            CorrectionSession.apply_bias_to_trajectory(
+                traj, entry['timing_factor'], entry['magnitude_factor'])
+
+        inject_mouse_click()
+
+        start_time = time.perf_counter()
+        cumulative_dx = 0.0
+        cumulative_dy = 0.0
+        injected_dx = 0
+        injected_dy = 0
+
+        for pt in traj:
+            if self._ql_replay_abort.is_set():
+                break
+            target_time = start_time + pt['t']
+            now = time.perf_counter()
+            sleep_s = target_time - now
+            if sleep_s > 0.0005:
+                time.sleep(sleep_s)
+
+            cumulative_dx += pt['dx']
+            cumulative_dy += pt['dy']
+            inject_x = int(round(cumulative_dx)) - injected_dx
+            inject_y = int(round(cumulative_dy)) - injected_dy
+            if inject_x != 0 or inject_y != 0:
+                try:
+                    inject_mouse_movement(inject_x, inject_y)
+                    injected_dx += inject_x
+                    injected_dy += inject_y
+                except Exception:
+                    break
+
+        elapsed = time.perf_counter() - start_time
+        logger.info(f"Replay complete ({elapsed:.2f}s, {injected_dx}dx {injected_dy}dy)")
+
+        self.root.after(0, lambda: self._ql_update_prompt(
+            f"Replay done ({injected_dx}dx {injected_dy}dy)"))
+        time.sleep(1.5)
+        self.root.after(0, lambda: self._ql_replay_done(return_state))
+
+    def _ql_replay_done(self, return_state):
+        """Return to QL state after replay completes."""
+        # Re-show all overlays
+        self._ql_show_all()
+        self._ql_state = return_state or 'prompt'
+        if self._ql_state == 'miss':
+            self._ql_show_miss_prompt()
+        elif self._ql_state == 'prompt':
+            self._ql_update_prompt(
+                "[H] HIT  [M] MISS  [5] Replay  [E] Editor  [Esc] Discard")
+        elif self._ql_state == 'hit':
+            q = self._ql_torc_quality or 0.0
+            self._ql_update_prompt(
+                f"HIT!  TORC Q: {q:.3f}\n"
+                f"[S] Save to dataset  [Enter] Done  [Esc] Discard")
+        self._ql_refresh_overlays()
+
     def _ql_exit(self):
         """Exit quick-label mode and hide overlays."""
+        # Abort any running replay
+        if self._ql_replay_thread and self._ql_replay_thread.is_alive():
+            self._ql_replay_abort.set()
+            self._ql_replay_thread.join(timeout=2)
         self._ql_active = False
         self._ql_state = None
         self._ql_context = None
