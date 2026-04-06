@@ -25,6 +25,100 @@
           "label": "late"
         }
       ]
+    },
+    {
+      "feature_vec": [
+        0.12666666666666668,
+        0.4,
+        -1.0,
+        6.123233995736766e-17
+      ],
+      "timing_factor": 1.0,
+      "magnitude_factor": 1.0,
+      "timing_step": 0.15,
+      "magnitude_step": 0.15,
+      "iteration_count": 0,
+      "phase": "seeking_hit",
+      "last_torc_quality": null,
+      "checkpoints": []
+    },
+    {
+      "feature_vec": [
+        0.341044148331431,
+        0.4,
+        0.9969383778125515,
+        -0.07819124531863139
+      ],
+      "timing_factor": 1.0,
+      "magnitude_factor": 1.0,
+      "timing_step": 0.15,
+      "magnitude_step": 0.15,
+      "iteration_count": 0,
+      "phase": "seeking_hit",
+      "last_torc_quality": null,
+      "checkpoints": []
+    },
+    {
+      "feature_vec": [
+        0.4339610837646876,
+        0.4,
+        -0.9985534407235127,
+        -0.05376826219280451
+      ],
+      "timing_factor": 1.1241249999999998,
+      "magnitude_factor": 1.0,
+      "timing_step": 0.15,
+      "magnitude_step": 0.15,
+      "iteration_count": 17,
+      "phase": "optimizing_torc",
+      "last_torc_quality": 0.0751,
+      "checkpoints": [
+        {
+          "timing_factor": 1.0,
+          "magnitude_factor": 1.0,
+          "timing_step": 0.15,
+          "magnitude_step": 0.15,
+          "iteration": 0,
+          "timestamp": 1775449413.3916101,
+          "label": "hit"
+        },
+        {
+          "timing_factor": 1.0,
+          "magnitude_factor": 1.0,
+          "timing_step": 0.15,
+          "magnitude_step": 0.15,
+          "iteration": 0,
+          "timestamp": 1775449485.0073369,
+          "label": "premature"
+        },
+        {
+          "timing_factor": 1.15,
+          "magnitude_factor": 1.0,
+          "timing_step": 0.15,
+          "magnitude_step": 0.15,
+          "iteration": 1,
+          "timestamp": 1775449485.8286326,
+          "label": "premature"
+        },
+        {
+          "timing_factor": 1.3224999999999998,
+          "magnitude_factor": 1.0,
+          "timing_step": 0.15,
+          "magnitude_step": 0.15,
+          "iteration": 2,
+          "timestamp": 1775449488.3120527,
+          "label": "late"
+        },
+        {
+          "timing_factor": 1.1241249999999998,
+          "magnitude_factor": 1.0,
+          "timing_step": 0.15,
+          "magnitude_step": 0.15,
+          "iteration": 3,
+          "timestamp": 1775449488.7494223,
+          "label": "late"
+        }
+      ]
     }
   ]
 }

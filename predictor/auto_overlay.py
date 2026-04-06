@@ -86,8 +86,12 @@ class AutoOverlay(QuickLabelHudMixin, BaseSACLOSOverlay):
         self.base_duration_ms = 300.0
         self.correction_speed_multiplier = 1.0
 
-        super().__init__(root, *args, **kwargs)
+        # Initialize QL HUD state BEFORE super().__init__() so that
+        # _ql_load_config (called inside super) finds the attributes
+        # and can override defaults with saved positions.
         self._init_ql_hud()
+
+        super().__init__(root, *args, **kwargs)
 
     # ----------------------------------------------------------------
     #  Config hooks
@@ -165,8 +169,10 @@ class AutoOverlay(QuickLabelHudMixin, BaseSACLOSOverlay):
                             f" | AttnRes: {'ON' if self.attn_enabled else 'OFF'}"
                             f" | TORC Q avg: {stats.get('avg_torc_quality', 0):.3f}")
             except Exception as e:
-                logger.warning(f"Could not load ML data: {e}")
-                self.ml_enabled = False
+                # Don't disable ml_enabled on load failure — the user
+                # explicitly set it to true and we don't want to clobber
+                # the config when _save_config() fires on lock transition.
+                logger.warning(f"Could not load ML learner: {e}")
 
 
     # ----------------------------------------------------------------
@@ -191,11 +197,17 @@ class AutoOverlay(QuickLabelHudMixin, BaseSACLOSOverlay):
         self._ql_show_placeholder_graphs()
 
     def _show_hud_locked(self):
-        """In locked mode, hide QL overlays (they reappear when QL activates)."""
+        """In locked mode, keep QL overlays visible during online learning."""
         super()._show_hud_locked()
-        # Capture positions user dragged to during setup, then hide
-        self._ql_capture_positions()
-        self._ql_hide_all()
+        # During online learning, keep QL overlays visible so user sees
+        # them between engagements. Only hide when online learning is off.
+        if not getattr(self, 'ml_online_learning', True):
+            self._ql_capture_positions()
+            self._ql_hide_all()
+        else:
+            # Capture positions but keep overlays shown with idle prompt
+            self._ql_capture_positions()
+            self._ql_show_idle()
 
     def _hide_hud(self):
         """Hide all HUD windows including QL overlays."""
@@ -1004,7 +1016,7 @@ class AutoOverlay(QuickLabelHudMixin, BaseSACLOSOverlay):
         self._ql_refresh_overlays()
 
     def _ql_exit(self):
-        """Exit quick-label mode and hide overlays."""
+        """Exit quick-label mode. Keep overlays visible during online learning."""
         # Abort any running replay
         if self._ql_replay_thread and self._ql_replay_thread.is_alive():
             self._ql_replay_abort.set()
@@ -1014,7 +1026,12 @@ class AutoOverlay(QuickLabelHudMixin, BaseSACLOSOverlay):
         self._ql_context = None
         self._ql_torc_quality = None
         self._ql_rollback_digits = ""
-        self._ql_hide_all()
+
+        # During online learning, keep overlays visible with idle prompt
+        if getattr(self, 'ml_online_learning', True):
+            self._ql_show_idle()
+        else:
+            self._ql_hide_all()
         logger.info("Quick-label mode exited")
 
     def _cleanup_correction(self):

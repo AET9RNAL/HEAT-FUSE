@@ -68,12 +68,22 @@ class QuickLabelHudMixin:
         self._ql_sim_pre_data = None  # (times, cum_x, cum_y) — pre-fire aiming
 
         self._ql_checkpoint_win = None
+        self._ql_checkpoint_canvas = None
+        self._ql_checkpoint_scrollbar = None
         self._ql_checkpoint_frame = None
         self._ql_checkpoint_labels = []
 
-        # Default positions
-        sw = self.root.winfo_screenwidth()
-        sh = self.root.winfo_screenheight()
+        # Default positions — use fallback dimensions; real values come from
+        # config (loaded after super().__init__ sets self.root).
+        root = getattr(self, 'root', None)
+        if root is not None:
+            try:
+                sw = root.winfo_screenwidth()
+                sh = root.winfo_screenheight()
+            except Exception:
+                sw, sh = 1920, 1080
+        else:
+            sw, sh = 1920, 1080
         self.ql_prompt_pos = [50, sh - 100]
         self.ql_graph_factors_pos = [50, sh - 320]
         self.ql_graph_lr_pos = [350, sh - 320]
@@ -89,7 +99,7 @@ class QuickLabelHudMixin:
         if self._ql_prompt_win is not None:
             return
 
-        # ---- Prompt overlay ----
+        # ---- Prompt overlay (not draggable, stays at configured position) ----
         self._ql_prompt_win = tk.Toplevel(self.root)
         self._ql_prompt_win.title("QL Prompt")
         self._ql_prompt_win.overrideredirect(True)
@@ -103,8 +113,7 @@ class QuickLabelHudMixin:
             padx=8, pady=4, justify=tk.LEFT,
         )
         self._ql_prompt_label.pack()
-        self._make_draggable(self._ql_prompt_win)
-        self._make_draggable(self._ql_prompt_label)
+        # Intentionally NOT _make_draggable — prompt stays at configured position
         self._ql_prompt_win.withdraw()
 
         # ---- Factors graph ----
@@ -173,7 +182,7 @@ class QuickLabelHudMixin:
         self._make_draggable(sim_title)
         self._ql_sim_win.withdraw()
 
-        # ---- Checkpoint overlay ----
+        # ---- Checkpoint overlay (scrollable Canvas) ----
         self._ql_checkpoint_win = tk.Toplevel(self.root)
         self._ql_checkpoint_win.title("QL Checkpoints")
         self._ql_checkpoint_win.overrideredirect(True)
@@ -181,15 +190,37 @@ class QuickLabelHudMixin:
         self._ql_checkpoint_win.configure(bg=self.QL_CANVAS_BG)
 
         cp_title = tk.Label(
-            self._ql_checkpoint_win, text="Checkpoints [R+N=rollback]",
+            self._ql_checkpoint_win, text="Checkpoints [click to rollback]",
             fg=self.HUD_CYAN, bg=self.QL_CANVAS_BG,
             font=("Consolas", 9, "bold"),
         )
         cp_title.pack(anchor="w", padx=4)
-        self._ql_checkpoint_frame = tk.Frame(
+
+        # Scrollable area: Canvas + vertical Scrollbar
+        self._ql_checkpoint_canvas = tk.Canvas(
             self._ql_checkpoint_win, bg=self.QL_CANVAS_BG,
+            highlightthickness=0, width=260,
         )
-        self._ql_checkpoint_frame.pack(fill=tk.BOTH, padx=4, pady=2)
+        self._ql_checkpoint_scrollbar = tk.Scrollbar(
+            self._ql_checkpoint_win, orient="vertical",
+            command=self._ql_checkpoint_canvas.yview,
+        )
+        self._ql_checkpoint_frame = tk.Frame(
+            self._ql_checkpoint_canvas, bg=self.QL_CANVAS_BG,
+        )
+        self._ql_checkpoint_frame.bind(
+            "<Configure>",
+            lambda e: self._ql_checkpoint_canvas.configure(
+                scrollregion=self._ql_checkpoint_canvas.bbox("all")))
+
+        self._ql_checkpoint_canvas.create_window(
+            (0, 0), window=self._ql_checkpoint_frame, anchor="nw")
+        self._ql_checkpoint_canvas.configure(
+            yscrollcommand=self._ql_checkpoint_scrollbar.set)
+
+        self._ql_checkpoint_canvas.pack(side=tk.LEFT, fill=tk.BOTH,
+                                         expand=True, padx=2, pady=2)
+        self._ql_checkpoint_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         self._make_draggable(self._ql_checkpoint_win)
         self._make_draggable(cp_title)
         self._ql_checkpoint_win.withdraw()
@@ -212,7 +243,11 @@ class QuickLabelHudMixin:
             self.root.update_idletasks()
             for win in self._ql_all_windows():
                 if win:
-                    self._ql_set_clickthrough(win, True)
+                    # Prompt and checkpoint windows must stay clickable
+                    if win in (self._ql_prompt_win, self._ql_checkpoint_win):
+                        self._ql_set_clickthrough(win, False)
+                    else:
+                        self._ql_set_clickthrough(win, True)
 
     def _ql_hide_all(self):
         """Hide all QL HUD windows."""
@@ -220,6 +255,32 @@ class QuickLabelHudMixin:
         for win in self._ql_all_windows():
             if win:
                 win.withdraw()
+
+    def _ql_show_idle(self):
+        """Show QL overlays with idle prompt (between engagements)."""
+        self._ql_ensure_windows()
+        self._ql_position_windows()
+        for win in self._ql_all_windows():
+            if win:
+                win.deiconify()
+                win.attributes("-topmost", True)
+                win.lift()
+
+        if getattr(self, 'hud_locked', False):
+            self.root.update_idletasks()
+            for win in self._ql_all_windows():
+                if win:
+                    # Prompt and checkpoint windows must stay clickable
+                    if win in (self._ql_prompt_win, self._ql_checkpoint_win):
+                        self._ql_set_clickthrough(win, False)
+                    else:
+                        self._ql_set_clickthrough(win, True)
+
+        self._ql_update_prompt(
+            "[Quick-Label Ready]\n"
+            "Track target → ML executes → [H]/[M]/[5]/[E]/[Esc]"
+        )
+        self._ql_show_placeholder_graphs()
 
     def _ql_all_windows(self):
         return [
@@ -674,13 +735,16 @@ class QuickLabelHudMixin:
             lbl.pack(fill=tk.X, padx=2, pady=(2, 0))
             self._ql_checkpoint_labels.append(lbl)
 
-        # Resize window
+        # Resize window — canvas has fixed max height, content scrolls
         self.root.update_idletasks()
-        w = max(250, self._ql_checkpoint_frame.winfo_reqwidth() + 8)
-        h = min(300, self._ql_checkpoint_frame.winfo_reqheight() + 30)
+        content_h = self._ql_checkpoint_frame.winfo_reqheight()
+        max_h = 300
+        canvas_h = min(content_h, max_h)
+        w = max(280, self._ql_checkpoint_frame.winfo_reqwidth() + 24)
         x, y = self.ql_checkpoint_pos
+        self._ql_checkpoint_canvas.configure(height=canvas_h)
         self._ql_checkpoint_win.geometry(
-            f"{w}x{h}+{int(x)}+{int(y)}")
+            f"{w}x{canvas_h + 30}+{int(x)}+{int(y)}")
 
     def _ql_on_checkpoint_click(self, checkpoint_index):
         """Handle click on a checkpoint label (rollback)."""
