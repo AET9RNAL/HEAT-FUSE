@@ -1,9 +1,10 @@
 """
 CorrectionSession — Stores per-geometry correction biases for rapid iteration.
 
-Biases are parametric (timing_factor, magnitude_factor) and compound across
-iterations. They live in saclos_correction_biases.json, completely separate
-from the training dataset. Supports checkpointing with rollback.
+Biases are parametric (timing_factor, magnitude_factor, time_shift) and
+compound across iterations. They live in saclos_correction_biases.json,
+completely separate from the training dataset. Supports checkpointing
+with rollback.
 """
 
 import json
@@ -23,6 +24,11 @@ class CorrectionSession:
     MIN_FACTOR = 0.05
     MIN_STEP = 0.02
     MAX_STEP = 0.50
+
+    DEFAULT_SHIFT_STEP = 0.02   # 20 ms per tap
+    MAX_TIME_SHIFT = 2.0        # ±2 s clamp
+    MIN_SHIFT_STEP = 0.005
+    MAX_SHIFT_STEP = 0.200
 
     def __init__(self, bias_file='saclos_correction_biases.json',
                  proximity_radius=None):
@@ -105,8 +111,10 @@ class CorrectionSession:
             'feature_vec': list(query),
             'timing_factor': 1.0,
             'magnitude_factor': 1.0,
+            'time_shift': 0.0,
             'timing_step': self.DEFAULT_STEP,
             'magnitude_step': self.DEFAULT_STEP,
+            'time_shift_step': self.DEFAULT_SHIFT_STEP,
             'iteration_count': 0,
             'phase': 'seeking_hit',
             'last_torc_quality': None,
@@ -123,8 +131,10 @@ class CorrectionSession:
         entry['checkpoints'].append({
             'timing_factor': entry['timing_factor'],
             'magnitude_factor': entry['magnitude_factor'],
+            'time_shift': entry.get('time_shift', 0.0),
             'timing_step': entry.get('timing_step', self.DEFAULT_STEP),
             'magnitude_step': entry.get('magnitude_step', self.DEFAULT_STEP),
+            'time_shift_step': entry.get('time_shift_step', self.DEFAULT_SHIFT_STEP),
             'iteration': entry['iteration_count'],
             'timestamp': time.time(),
             'label': label,
@@ -141,8 +151,10 @@ class CorrectionSession:
         cp = cps[checkpoint_index]
         e['timing_factor'] = cp['timing_factor']
         e['magnitude_factor'] = cp['magnitude_factor']
+        e['time_shift'] = cp.get('time_shift', 0.0)
         e['timing_step'] = cp.get('timing_step', self.DEFAULT_STEP)
         e['magnitude_step'] = cp.get('magnitude_step', self.DEFAULT_STEP)
+        e['time_shift_step'] = cp.get('time_shift_step', self.DEFAULT_SHIFT_STEP)
         # Truncate checkpoints after rollback point, then re-checkpoint current
         e['checkpoints'] = cps[:checkpoint_index + 1]
         self.save()
@@ -179,6 +191,30 @@ class CorrectionSession:
         step = e.get('timing_step', self.DEFAULT_STEP)
         self._checkpoint(e, 'late')
         e['timing_factor'] = self._clamp(e['timing_factor'] * (1.0 - step))
+        e['iteration_count'] += 1
+        self.save()
+
+    def apply_delay(self):
+        """Shift trajectory later in time (preserve dynamics)."""
+        if self._active_index is None:
+            return
+        e = self.biases[self._active_index]
+        step = e.get('time_shift_step', self.DEFAULT_SHIFT_STEP)
+        self._checkpoint(e, 'delay')
+        cur = e.get('time_shift', 0.0)
+        e['time_shift'] = min(cur + step, self.MAX_TIME_SHIFT)
+        e['iteration_count'] += 1
+        self.save()
+
+    def apply_advance(self):
+        """Shift trajectory earlier in time (preserve dynamics)."""
+        if self._active_index is None:
+            return
+        e = self.biases[self._active_index]
+        step = e.get('time_shift_step', self.DEFAULT_SHIFT_STEP)
+        self._checkpoint(e, 'advance')
+        cur = e.get('time_shift', 0.0)
+        e['time_shift'] = max(cur - step, -self.MAX_TIME_SHIFT)
         e['iteration_count'] += 1
         self.save()
 
@@ -226,10 +262,22 @@ class CorrectionSession:
                                       self.MAX_STEP))
         self.save()
 
+    def adjust_time_shift_step(self, delta):
+        """Adjust the time shift step size."""
+        if self._active_index is None:
+            return
+        e = self.biases[self._active_index]
+        e['time_shift_step'] = max(
+            self.MIN_SHIFT_STEP,
+            min(e.get('time_shift_step', self.DEFAULT_SHIFT_STEP) + delta,
+                self.MAX_SHIFT_STEP))
+        self.save()
+
     def adjust_steps(self, delta):
-        """Adjust both step sizes together."""
+        """Adjust all step sizes together."""
         self.adjust_timing_step(delta)
         self.adjust_magnitude_step(delta)
+        self.adjust_time_shift_step(delta * 0.1)
 
     # ---- phase transitions ----
 
@@ -261,14 +309,18 @@ class CorrectionSession:
     # ---- trajectory bias application ----
 
     @staticmethod
-    def apply_bias_to_trajectory(trajectory, timing_factor, magnitude_factor):
+    def apply_bias_to_trajectory(trajectory, timing_factor, magnitude_factor,
+                                 time_shift=0.0):
         """
-        Apply timing and magnitude bias to a trajectory.
+        Apply timing, magnitude, and time-shift bias to a trajectory.
 
+        Order: scale time by timing_factor, then add time_shift.
+        Negative shift advances the stroke; positive delays it.
+        All t values are clamped to >= 0.
         Mutates in-place. Returns the same list.
         """
         for pt in trajectory:
-            pt['t'] *= timing_factor
+            pt['t'] = max(0.0, pt['t'] * timing_factor + time_shift)
             pt['dx'] *= magnitude_factor
             pt['dy'] *= magnitude_factor
         return trajectory

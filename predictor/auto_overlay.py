@@ -260,10 +260,10 @@ class AutoOverlay(QuickLabelHudMixin, BaseSACLOSOverlay):
             self._ql_checkpoint_labels = []
             import tkinter as tk
             samples = [
-                ("#0  T=1.000  M=1.000  \u2190 base", "#888888"),
-                ("#1  T=1.150  M=1.000  \u2190 premature", "#888888"),
-                ("#2  T=1.150  M=1.150  \u2190 undershoot", "#888888"),
-                (">> T=1.320  M=1.150  [Seeking Hit]", self.HUD_GREEN),
+                ("#0  T=1.000  M=1.000  S=+0.000  \u2190 base", "#888888"),
+                ("#1  T=1.150  M=1.000  S=+0.000  \u2190 premature", "#888888"),
+                ("#2  T=1.150  M=1.150  S=+0.040  \u2190 delay", "#888888"),
+                (">> T=1.320  M=1.150  S=+0.040  [Seeking Hit]", self.HUD_GREEN),
             ]
             for text, color in samples:
                 lbl = tk.Label(
@@ -367,12 +367,14 @@ class AutoOverlay(QuickLabelHudMixin, BaseSACLOSOverlay):
                         self._ensure_correction_session()
                         tf, mf, _ = self._correction_session.get_bias(
                             distance_px, angle_rad, self.target_range_m)
-                        if tf != 1.0 or mf != 1.0:
+                        entry = self._correction_session.get_active_entry()
+                        ts = entry.get('time_shift', 0.0) if entry else 0.0
+                        if tf != 1.0 or mf != 1.0 or ts != 0.0:
                             from trainer.correction_session import CorrectionSession
                             ml_trajectory = copy.deepcopy(ml_trajectory)
                             CorrectionSession.apply_bias_to_trajectory(
-                                ml_trajectory, tf, mf)
-                            bias_info = f" | Bias: T={tf:.3f} M={mf:.3f}"
+                                ml_trajectory, tf, mf, ts)
+                            bias_info = f" | Bias: T={tf:.3f} M={mf:.3f} S={ts:+.3f}"
 
                     total_dx = sum(p['dx'] for p in ml_trajectory)
                     total_dy = sum(p['dy'] for p in ml_trajectory)
@@ -654,6 +656,10 @@ class AutoOverlay(QuickLabelHudMixin, BaseSACLOSOverlay):
                 self._ql_apply_correction('undershoot')
             elif char == '4':
                 self._ql_apply_correction('overshoot')
+            elif char == '6':
+                self._ql_apply_correction('delay')
+            elif char == '7':
+                self._ql_apply_correction('advance')
             elif char == 'r':
                 self._ql_prev_state = 'hit'
                 self._ql_state = 'rollback_select'
@@ -673,6 +679,10 @@ class AutoOverlay(QuickLabelHudMixin, BaseSACLOSOverlay):
                 self._ql_apply_correction('undershoot')
             elif char == '4':
                 self._ql_apply_correction('overshoot')
+            elif char == '6':
+                self._ql_apply_correction('delay')
+            elif char == '7':
+                self._ql_apply_correction('advance')
             elif char == '5':
                 self._ql_start_replay()
             elif char == 'r':
@@ -706,8 +716,8 @@ class AutoOverlay(QuickLabelHudMixin, BaseSACLOSOverlay):
                 if prev == 'hit':
                     self._ql_update_prompt(
                         f"HIT!  TORC Q: {self._ql_torc_quality:.3f}\n"
-                        f"[1-4] Correct  [5] Replay  [PgUp/Dn] step  [R] Rollback\n"
-                        f"[S] Save to dataset  [Enter] Done  [Esc] Discard"
+                        f"[1-4] Correct  [6] Delay  [7] Advance  [5] Replay\n"
+                        f"[PgUp/Dn] step  [R] Rollback  [S] Save  [Enter] Done  [Esc] Discard"
                     )
                 else:
                     self._ql_show_miss_prompt()
@@ -732,14 +742,16 @@ class AutoOverlay(QuickLabelHudMixin, BaseSACLOSOverlay):
                 entry = self._correction_session.get_active_entry()
                 if entry:
                     logger.info(f"Step size increased: T={entry.get('timing_step', 0):.3f} "
-                                f"M={entry.get('magnitude_step', 0):.3f}")
+                                f"M={entry.get('magnitude_step', 0):.3f} "
+                                f"S={entry.get('time_shift_step', 0.02):.4f}")
             elif name == 'page_down':
                 self._correction_session.adjust_steps(-0.02)
                 self._ql_refresh_overlays()
                 entry = self._correction_session.get_active_entry()
                 if entry:
                     logger.info(f"Step size decreased: T={entry.get('timing_step', 0):.3f} "
-                                f"M={entry.get('magnitude_step', 0):.3f}")
+                                f"M={entry.get('magnitude_step', 0):.3f} "
+                                f"S={entry.get('time_shift_step', 0.02):.4f}")
 
     def _ql_on_hit(self):
         """Handle HIT in quick-label mode."""
@@ -767,8 +779,8 @@ class AutoOverlay(QuickLabelHudMixin, BaseSACLOSOverlay):
 
         self._ql_update_prompt(
             f"HIT!  TORC Q: {self._ql_torc_quality:.3f}\n"
-            f"[1-4] Correct  [5] Replay  [PgUp/Dn] step  [R] Rollback\n"
-            f"[S] Save to dataset  [Enter] Done  [Esc] Discard"
+            f"[1-4] Correct  [6] Delay  [7] Advance  [5] Replay\n"
+            f"[PgUp/Dn] step  [R] Rollback  [S] Save  [Enter] Done  [Esc] Discard"
         )
         self._ql_refresh_overlays()
         logger.info(f"Quick-label: HIT | TORC Q: {self._ql_torc_quality:.3f}")
@@ -796,9 +808,10 @@ class AutoOverlay(QuickLabelHudMixin, BaseSACLOSOverlay):
         entry = self._correction_session.get_active_entry()
         ts = entry.get('timing_step', 0.15) if entry else 0.15
         ms = entry.get('magnitude_step', 0.15) if entry else 0.15
+        ss = entry.get('time_shift_step', 0.02) if entry else 0.02
         self._ql_update_prompt(
-            f"MISS — Correct:  step T={ts:.2f} M={ms:.2f}\n"
-            f"[1] Premature  [2] Late  [3] Undershoot  [4] Overshoot\n"
+            f"MISS — Correct:  step T={ts:.2f} M={ms:.2f} S={ss:.3f}\n"
+            f"[1] Premature  [2] Late  [3] Under  [4] Over  [6] Delay  [7] Advance\n"
             f"[5] Replay  [PgUp/Dn] step  [R] Rollback  [Enter] Done  [Esc] Discard"
         )
 
@@ -809,6 +822,8 @@ class AutoOverlay(QuickLabelHudMixin, BaseSACLOSOverlay):
             'late': self._correction_session.apply_late,
             'undershoot': self._correction_session.apply_undershoot,
             'overshoot': self._correction_session.apply_overshoot,
+            'delay': self._correction_session.apply_delay,
+            'advance': self._correction_session.apply_advance,
         }.get(kind)
         if method:
             method()
@@ -816,7 +831,8 @@ class AutoOverlay(QuickLabelHudMixin, BaseSACLOSOverlay):
         entry = self._correction_session.get_active_entry()
         if entry:
             logger.info(f"Correction [{kind}]: T={entry['timing_factor']:.3f} "
-                        f"M={entry['magnitude_factor']:.3f}")
+                        f"M={entry['magnitude_factor']:.3f} "
+                        f"S={entry.get('time_shift', 0.0):+.3f}")
 
         self._ql_show_miss_prompt()
         self._ql_refresh_overlays()
@@ -829,7 +845,8 @@ class AutoOverlay(QuickLabelHudMixin, BaseSACLOSOverlay):
             if entry:
                 logger.info(f"Rollback to #{checkpoint_index}: "
                             f"T={entry['timing_factor']:.3f} "
-                            f"M={entry['magnitude_factor']:.3f}")
+                            f"M={entry['magnitude_factor']:.3f} "
+                            f"S={entry.get('time_shift', 0.0):+.3f}")
         else:
             logger.warning(f"Rollback failed: invalid checkpoint #{checkpoint_index}")
 
@@ -839,8 +856,8 @@ class AutoOverlay(QuickLabelHudMixin, BaseSACLOSOverlay):
         if prev == 'hit':
             self._ql_update_prompt(
                 f"HIT!  TORC Q: {self._ql_torc_quality:.3f}\n"
-                f"[1-4] Correct  [5] Replay  [PgUp/Dn] step  [R] Rollback\n"
-                f"[S] Save to dataset  [Enter] Done  [Esc] Discard"
+                f"[1-4] Correct  [6] Delay  [7] Advance  [5] Replay\n"
+                f"[PgUp/Dn] step  [R] Rollback  [S] Save  [Enter] Done  [Esc] Discard"
             )
         else:
             self._ql_show_miss_prompt()
@@ -869,7 +886,8 @@ class AutoOverlay(QuickLabelHudMixin, BaseSACLOSOverlay):
         if entry:
             from trainer.correction_session import CorrectionSession
             CorrectionSession.apply_bias_to_trajectory(
-                traj, entry['timing_factor'], entry['magnitude_factor'])
+                traj, entry['timing_factor'], entry['magnitude_factor'],
+                entry.get('time_shift', 0.0))
 
         # Save as HIT
         self.learner.add_sample(
@@ -994,10 +1012,12 @@ class AutoOverlay(QuickLabelHudMixin, BaseSACLOSOverlay):
         # Build biased trajectory
         traj = copy.deepcopy(ctx.get('trajectory', []))
         entry = self._correction_session.get_active_entry() if self._correction_session else None
-        if entry and (entry['timing_factor'] != 1.0 or entry['magnitude_factor'] != 1.0):
+        if entry and (entry['timing_factor'] != 1.0 or entry['magnitude_factor'] != 1.0
+                       or entry.get('time_shift', 0.0) != 0.0):
             from trainer.correction_session import CorrectionSession
             CorrectionSession.apply_bias_to_trajectory(
-                traj, entry['timing_factor'], entry['magnitude_factor'])
+                traj, entry['timing_factor'], entry['magnitude_factor'],
+                entry.get('time_shift', 0.0))
 
         inject_mouse_click()
 
