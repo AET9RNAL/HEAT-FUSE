@@ -1905,94 +1905,19 @@ class TrajectoryEditorWindow(tk.Toplevel):
         self._replay_thread.start()
 
     def _replay_thread_func(self, traj, countdown_s):
-        try:
-            from utils.hardware_inject import inject_mouse_movement, inject_mouse_click
-        except ImportError:
-            logger.warning("hardware_inject not available — replay disabled")
-            return
+        from utils.trajectory_replay import replay_full_scenario
 
-        # Countdown
-        for i in range(countdown_s, 0, -1):
-            if self._replay_abort.is_set():
-                return
-            self._set_replay_status(f"Replay in {i}...")
-            time.sleep(1.0)
+        dx, dy, elapsed = replay_full_scenario(
+            trajectory=traj,
+            pre_trajectory=self._pre_traj if self._pre_traj else None,
+            cursor_pos=None,
+            abort_event=self._replay_abort,
+            countdown_s=countdown_s,
+            status_callback=lambda msg: self._set_replay_status(msg),
+            fire_click=True,
+        )
 
-        if self._replay_abort.is_set():
-            return
-
-        # --- Pre-fire aiming phase (if present) ---
-        if self._pre_traj:
-            self._set_replay_status("AIMING (pre-fire)")
-            pre_start = time.perf_counter()
-            pre_cum_dx, pre_cum_dy = 0.0, 0.0
-            pre_inj_dx, pre_inj_dy = 0, 0
-
-            for pt in self._pre_traj:
-                if self._replay_abort.is_set():
-                    return
-                target_time = pre_start + pt['t']
-                now = time.perf_counter()
-                sleep_s = target_time - now
-                if sleep_s > 0.0005:
-                    time.sleep(sleep_s)
-
-                pre_cum_dx += pt['dx']
-                pre_cum_dy += pt['dy']
-                ix = int(round(pre_cum_dx)) - pre_inj_dx
-                iy = int(round(pre_cum_dy)) - pre_inj_dy
-                if ix != 0 or iy != 0:
-                    try:
-                        inject_mouse_movement(ix, iy)
-                        pre_inj_dx += ix
-                        pre_inj_dy += iy
-                    except Exception as e:
-                        logger.warning(f"Pre-fire replay error: {e}")
-                        break
-
-            logger.info(f"Pre-fire aiming complete ({pre_inj_dx}dx {pre_inj_dy}dy)")
-
-        if self._replay_abort.is_set():
-            return
-
-        # --- Fire click + guidance trajectory ---
-        self._set_replay_status("REPLAYING")
-
-        inject_mouse_click()
-
-        start_time = time.perf_counter()
-        cumulative_dx = 0.0
-        cumulative_dy = 0.0
-        injected_dx = 0
-        injected_dy = 0
-
-        for pt in traj:
-            if self._replay_abort.is_set():
-                break
-
-            target_time = start_time + pt['t']
-            now = time.perf_counter()
-            sleep_s = target_time - now
-            if sleep_s > 0.0005:
-                time.sleep(sleep_s)
-
-            cumulative_dx += pt['dx']
-            cumulative_dy += pt['dy']
-            inject_x = int(round(cumulative_dx)) - injected_dx
-            inject_y = int(round(cumulative_dy)) - injected_dy
-
-            if inject_x != 0 or inject_y != 0:
-                try:
-                    inject_mouse_movement(inject_x, inject_y)
-                    injected_dx += inject_x
-                    injected_dy += inject_y
-                except Exception as e:
-                    logger.warning(f"Replay injection error: {e}")
-                    break
-
-        elapsed = time.perf_counter() - start_time
-        logger.info(f"Replay complete ({elapsed:.2f}s, {injected_dx}dx {injected_dy}dy)")
-        self._set_replay_status(f"Done ({injected_dx}dx {injected_dy}dy)")
+        self._set_replay_status(f"Done ({dx}dx {dy}dy)")
         time.sleep(2)
         self._set_replay_status("")
 

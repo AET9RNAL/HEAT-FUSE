@@ -87,6 +87,9 @@ class QuickLabelHudMixin:
 
     def _init_ql_hud(self):
         """Initialize Quick-Label HUD state. Call from __init__."""
+        # Widgets that have drag bindings (filled during _ql_ensure_windows)
+        self._ql_draggable_widgets = []
+
         # Overlay windows
         self._ql_prompt_win = None
         self._ql_prompt_label = None
@@ -178,6 +181,7 @@ class QuickLabelHudMixin:
         self._ql_graph_factors_canvas.pack()
         self._make_draggable(self._ql_graph_factors_win)
         self._make_draggable(factors_title)
+        self._ql_draggable_widgets += [self._ql_graph_factors_win, factors_title]
         self._ql_graph_factors_win.withdraw()
 
         # ---- LR graph ----
@@ -200,6 +204,7 @@ class QuickLabelHudMixin:
         self._ql_graph_lr_canvas.pack()
         self._make_draggable(self._ql_graph_lr_win)
         self._make_draggable(lr_title)
+        self._ql_draggable_widgets += [self._ql_graph_lr_win, lr_title]
         self._ql_graph_lr_win.withdraw()
 
         # ---- Trajectory simulation ----
@@ -222,6 +227,7 @@ class QuickLabelHudMixin:
         self._ql_sim_canvas.pack()
         self._make_draggable(self._ql_sim_win)
         self._make_draggable(sim_title)
+        self._ql_draggable_widgets += [self._ql_sim_win, sim_title]
         self._ql_sim_win.withdraw()
 
         # ---- Checkpoint overlay (scrollable Canvas) ----
@@ -265,6 +271,7 @@ class QuickLabelHudMixin:
         self._ql_checkpoint_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         self._make_draggable(self._ql_checkpoint_win)
         self._make_draggable(cp_title)
+        self._ql_draggable_widgets += [self._ql_checkpoint_win, cp_title]
         self._ql_checkpoint_win.withdraw()
 
         # ---- Features overlay (captured geometry + bias state) ----
@@ -286,7 +293,24 @@ class QuickLabelHudMixin:
         self._ql_features_frame.pack(fill=tk.BOTH, padx=4, pady=2)
         self._make_draggable(self._ql_features_win)
         self._make_draggable(feat_title)
+        self._ql_draggable_widgets += [self._ql_features_win, feat_title]
         self._ql_features_win.withdraw()
+
+    # ================================================================
+    #  Drag toggle
+    # ================================================================
+
+    def _ql_set_draggable(self, enable):
+        """Enable or disable drag bindings on all QL overlay widgets."""
+        for widget in self._ql_draggable_widgets:
+            try:
+                if enable:
+                    self._make_draggable(widget)
+                else:
+                    widget.unbind("<ButtonPress-1>")
+                    widget.unbind("<B1-Motion>")
+            except Exception:
+                pass
 
     # ================================================================
     #  Show / hide / position

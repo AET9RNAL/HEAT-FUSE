@@ -62,7 +62,7 @@
   "urgency_k": 2.0,
   "base_engagement_delay_s": 0.05,
   "base_duration_ms": 300.0,
-  "ml_enabled": true,
+  "ml_enabled": false,
   "ml_confidence_threshold": 0.3,
   "ml_online_learning": true,
   "attn_enabled": true,
@@ -71,27 +71,27 @@
   "torc_quality_weight": 0.5,
   "quick_label_enabled": true,
   "ql_prompt_pos": [
-    1102,
-    1342
+    1100,
+    1290
   ],
   "ql_graph_factors_pos": [
-    750,
-    1231
+    656,
+    1235
   ],
   "ql_graph_lr_pos": [
-    1601,
-    1223
+    1460,
+    1238
   ],
   "ql_sim_pos": [
-    2248,
-    85
+    2241,
+    83
   ],
   "ql_checkpoint_pos": [
     2244,
-    927
+    352
   ],
   "ql_features_pos": [
-    12,
-    95
+    39,
+    221
   ]
 }

@@ -41,6 +41,8 @@ class CorrectionSession:
     # ---- persistence ----
 
     def _resolve_path(self):
+        if self.bias_file is None:
+            return None
         if os.path.isabs(self.bias_file):
             return self.bias_file
         base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -48,7 +50,7 @@ class CorrectionSession:
 
     def _load(self):
         path = self._resolve_path()
-        if not os.path.exists(path):
+        if path is None or not os.path.exists(path):
             self.biases = []
             return
         try:
@@ -61,6 +63,8 @@ class CorrectionSession:
 
     def save(self):
         path = self._resolve_path()
+        if path is None:
+            return  # in-memory mode — no persistence
         try:
             with open(path, 'w') as f:
                 json.dump({'biases': self.biases}, f, indent=2)

@@ -184,6 +184,7 @@ class AutoOverlay(QuickLabelHudMixin, BaseSACLOSOverlay):
         """Show QL overlays alongside base HUD in draggable setup mode."""
         super()._show_hud_setup()
         self._ql_ensure_windows()
+        self._ql_set_draggable(True)
         self._ql_position_windows()
         for win in self._ql_all_windows():
             if win:
@@ -200,14 +201,14 @@ class AutoOverlay(QuickLabelHudMixin, BaseSACLOSOverlay):
     def _show_hud_locked(self):
         """In locked mode, keep QL overlays visible during online learning."""
         super()._show_hud_locked()
+        self._ql_capture_positions()
+        self._ql_set_draggable(False)
         # During online learning, keep QL overlays visible so user sees
         # them between engagements. Only hide when online learning is off.
         if not getattr(self, 'ml_online_learning', True):
-            self._ql_capture_positions()
             self._ql_hide_all()
         else:
-            # Capture positions but keep overlays shown with idle prompt
-            self._ql_capture_positions()
+            # Keep overlays shown with idle prompt
             self._ql_show_idle()
 
     def _hide_hud(self):
@@ -435,39 +436,13 @@ class AutoOverlay(QuickLabelHudMixin, BaseSACLOSOverlay):
 
         Each entry in trajectory is {'t': seconds, 'dx': pixels, 'dy': pixels}.
         """
+        from utils.trajectory_replay import replay_movements
+
         inject_mouse_click()
 
-        start_time = time.perf_counter()
-        cumulative_dx = 0.0
-        cumulative_dy = 0.0
-        injected_dx = 0
-        injected_dy = 0
+        injected_dx, injected_dy, elapsed = replay_movements(
+            trajectory, abort_event=self.correction_interrupted)
 
-        for i, pt in enumerate(trajectory):
-            if not self.correction_active or self.correction_interrupted.is_set():
-                break
-
-            target_time = start_time + pt['t']
-            now = time.perf_counter()
-            sleep_s = target_time - now
-            if sleep_s > 0.0005:
-                time.sleep(sleep_s)
-
-            cumulative_dx += pt['dx']
-            cumulative_dy += pt['dy']
-            inject_x = int(round(cumulative_dx)) - injected_dx
-            inject_y = int(round(cumulative_dy)) - injected_dy
-
-            if inject_x != 0 or inject_y != 0:
-                try:
-                    inject_mouse_movement(inject_x, inject_y)
-                    injected_dx += inject_x
-                    injected_dy += inject_y
-                except Exception as e:
-                    logger.warning(f"Mouse injection error: {e}")
-                    break
-
-        elapsed = time.perf_counter() - start_time
         logger.info(f"Auto-correction complete [ML] (took {elapsed:.2f}s, "
                     f"injected {injected_dx}dx {injected_dy}dy)")
 
@@ -943,71 +918,12 @@ class AutoOverlay(QuickLabelHudMixin, BaseSACLOSOverlay):
 
     def _ql_replay_thread_func(self, return_state):
         """Replay: countdown → teleport → pre-fire → click → biased trajectory."""
-        from utils.hardware_inject import (
-            inject_mouse_movement, inject_mouse_click, set_cursor_pos)
+        from utils.trajectory_replay import replay_full_scenario
 
         ctx = self._ql_context
         if ctx is None:
             self.root.after(0, lambda: self._ql_replay_done(return_state))
             return
-
-        # Countdown
-        for i in range(3, 0, -1):
-            if self._ql_replay_abort.is_set():
-                self.root.after(0, lambda: self._ql_replay_done(return_state))
-                return
-            self.root.after(0, lambda n=i: self._ql_update_prompt(
-                f"Replay in {n}...  [Esc] abort"))
-            time.sleep(1.0)
-
-        if self._ql_replay_abort.is_set():
-            self.root.after(0, lambda: self._ql_replay_done(return_state))
-            return
-
-        # Teleport cursor to tracking start position
-        cursor_pos = ctx.get('cursor_start_pos')
-        if cursor_pos:
-            set_cursor_pos(cursor_pos[0], cursor_pos[1])
-            time.sleep(0.05)
-
-        # Pre-fire aiming phase
-        pre_traj = ctx.get('pre_trajectory', [])
-        if pre_traj:
-            self.root.after(0, lambda: self._ql_update_prompt("AIMING..."))
-            pre_start = time.perf_counter()
-            pre_cum_dx, pre_cum_dy = 0.0, 0.0
-            pre_inj_dx, pre_inj_dy = 0, 0
-
-            for pt in pre_traj:
-                if self._ql_replay_abort.is_set():
-                    self.root.after(0, lambda: self._ql_replay_done(return_state))
-                    return
-                target_time = pre_start + pt['t']
-                now = time.perf_counter()
-                sleep_s = target_time - now
-                if sleep_s > 0.0005:
-                    time.sleep(sleep_s)
-
-                pre_cum_dx += pt['dx']
-                pre_cum_dy += pt['dy']
-                ix = int(round(pre_cum_dx)) - pre_inj_dx
-                iy = int(round(pre_cum_dy)) - pre_inj_dy
-                if ix != 0 or iy != 0:
-                    try:
-                        inject_mouse_movement(ix, iy)
-                        pre_inj_dx += ix
-                        pre_inj_dy += iy
-                    except Exception:
-                        break
-
-            logger.info(f"Pre-fire aiming complete ({pre_inj_dx}dx {pre_inj_dy}dy)")
-
-        if self._ql_replay_abort.is_set():
-            self.root.after(0, lambda: self._ql_replay_done(return_state))
-            return
-
-        # Fire click + biased guidance trajectory
-        self.root.after(0, lambda: self._ql_update_prompt("REPLAYING..."))
 
         # Build biased trajectory
         traj = copy.deepcopy(ctx.get('trajectory', []))
@@ -1019,37 +935,18 @@ class AutoOverlay(QuickLabelHudMixin, BaseSACLOSOverlay):
                 traj, entry['timing_factor'], entry['magnitude_factor'],
                 entry.get('time_shift', 0.0))
 
-        inject_mouse_click()
+        def _status(msg):
+            self.root.after(0, lambda m=msg: self._ql_update_prompt(m))
 
-        start_time = time.perf_counter()
-        cumulative_dx = 0.0
-        cumulative_dy = 0.0
-        injected_dx = 0
-        injected_dy = 0
-
-        for pt in traj:
-            if self._ql_replay_abort.is_set():
-                break
-            target_time = start_time + pt['t']
-            now = time.perf_counter()
-            sleep_s = target_time - now
-            if sleep_s > 0.0005:
-                time.sleep(sleep_s)
-
-            cumulative_dx += pt['dx']
-            cumulative_dy += pt['dy']
-            inject_x = int(round(cumulative_dx)) - injected_dx
-            inject_y = int(round(cumulative_dy)) - injected_dy
-            if inject_x != 0 or inject_y != 0:
-                try:
-                    inject_mouse_movement(inject_x, inject_y)
-                    injected_dx += inject_x
-                    injected_dy += inject_y
-                except Exception:
-                    break
-
-        elapsed = time.perf_counter() - start_time
-        logger.info(f"Replay complete ({elapsed:.2f}s, {injected_dx}dx {injected_dy}dy)")
+        injected_dx, injected_dy, elapsed = replay_full_scenario(
+            trajectory=traj,
+            pre_trajectory=ctx.get('pre_trajectory'),
+            cursor_pos=ctx.get('cursor_start_pos'),
+            abort_event=self._ql_replay_abort,
+            countdown_s=3,
+            status_callback=_status,
+            fire_click=True,
+        )
 
         self.root.after(0, lambda: self._ql_update_prompt(
             f"Replay done ({injected_dx}dx {injected_dy}dy)"))
