@@ -28,7 +28,7 @@ class RangefinderUiMixin:
         self.RF_SCALE_BOTTOM = 280  # 70m
         self.RF_RANGE_MIN = 20.0
         self.RF_RANGE_MAX = 900.0
-        self.RF_COLOR = "#77ffaa"
+        self.RF_COLOR = "#84FFB1"
 
         self._create_rangefinder_window()
 
@@ -59,40 +59,59 @@ class RangefinderUiMixin:
 
         color = self.RF_COLOR
         w = self.RF_WIDTH
-        top = self.RF_SCALE_TOP
-        bot = self.RF_SCALE_BOTTOM
+        cx = w // 2
 
-        c.create_text(w // 2, 15, text=f"{int(self.target_range_m)}m",
+        # Beveled bracket geometry (matches rangeFinder.svg)
+        gap_l, gap_r = 30, 50          # center gap
+        arm_l, arm_r = 18, 62          # horizontal arm ends
+        edge_l, edge_r = 4, 76         # outer vertical edges
+        bv = 7                          # bevel segment size
+        y_top, y_bot = 2, self.RF_HEIGHT - 2
+        bv_top = y_top + 2 * bv         # 16
+        bv_bot = y_bot - 2 * bv         # 284
+
+        # Right bracket ]
+        c.create_line(
+            gap_r, y_top, arm_r, y_top,
+            arm_r + bv, y_top + bv, edge_r, bv_top,
+            edge_r, bv_bot,
+            edge_r - bv, y_bot - bv, arm_r, y_bot,
+            gap_r, y_bot,
+            fill=color, width=3, joinstyle='bevel'
+        )
+
+        # Left bracket [
+        c.create_line(
+            gap_l, y_top, arm_l, y_top,
+            arm_l - bv, y_top + bv, edge_l, bv_top,
+            edge_l, bv_bot,
+            edge_l + bv, y_bot - bv, arm_l, y_bot,
+            gap_l, y_bot,
+            fill=color, width=3, joinstyle='bevel'
+        )
+
+        # Range text
+        c.create_text(cx, 15, text=f"{int(self.target_range_m)}m",
                       fill="#ffffff", font=("Courier", 11, "bold"), anchor=tk.CENTER,
                       tags="rf_text")
 
-        arm = 20
-        ox1, oy1, ox2, oy2 = 5, top, w - 5, bot
-        for line in [
-            (ox1, oy1, ox1 + arm, oy1), (ox1, oy1, ox1, oy1 + arm),
-            (ox2 - arm, oy1, ox2, oy1), (ox2, oy1, ox2, oy1 + arm),
-            (ox1, oy2 - arm, ox1, oy2), (ox1, oy2, ox1 + arm, oy2),
-            (ox2, oy2 - arm, ox2, oy2), (ox2 - arm, oy2, ox2, oy2)
-        ]:
-            c.create_line(*line, fill=color, width=2)
-
+        # Scale ticks along bracket edges
         notch_step = 55  # 16 steps of 55m = 880m = RF_RANGE_MAX - RF_RANGE_MIN
         notch_count = round((self.RF_RANGE_MAX - self.RF_RANGE_MIN) / notch_step)
-        lx = ox1          # left bracket edge  (x=5)
-        rx = ox2          # right bracket edge (x=w-5)
         for i in range(notch_count + 1):
             range_val = self.RF_RANGE_MIN + i * notch_step
             y = self._range_to_canvas_y(range_val)
             if i % 4 == 0:  # Long: 20, 240, 460, 680, 900m
-                c.create_line(lx, y, lx + 12, y, fill=color, width=2)
-                c.create_line(rx - 12, y, rx, y, fill=color, width=2)
+                c.create_line(edge_l, y, edge_l + 10, y, fill=color, width=2)
+                c.create_line(edge_r - 10, y, edge_r, y, fill=color, width=2)
             else:
-                c.create_line(lx, y, lx + 6, y, fill=color, width=1)
-                c.create_line(rx - 6, y, rx, y, fill=color, width=1)
+                c.create_line(edge_l, y, edge_l + 5, y, fill=color, width=1)
+                c.create_line(edge_r - 5, y, edge_r, y, fill=color, width=1)
 
+        # Range notch indicator
         notch_y = self._range_to_canvas_y(self.target_range_m)
-        c.create_line(22, notch_y, 33, notch_y, fill=color, width=3, tags="rf_notch")
-        c.create_line(47, notch_y, 58, notch_y, fill=color, width=3, tags="rf_notch")
+        c.create_line(15, notch_y, 28, notch_y, fill=color, width=3, tags="rf_notch")
+        c.create_line(52, notch_y, 65, notch_y, fill=color, width=3, tags="rf_notch")
 
     def _update_rangefinder_notch(self):
         c = self.rf_canvas
@@ -105,8 +124,8 @@ class RangefinderUiMixin:
                       anchor=tk.CENTER, tags="rf_text")
 
         notch_y = self._range_to_canvas_y(self.target_range_m)
-        c.create_line(22, notch_y, 33, notch_y, fill=self.RF_COLOR, width=3, tags="rf_notch")
-        c.create_line(47, notch_y, 58, notch_y, fill=self.RF_COLOR, width=3, tags="rf_notch")
+        c.create_line(15, notch_y, 28, notch_y, fill=self.RF_COLOR, width=3, tags="rf_notch")
+        c.create_line(52, notch_y, 65, notch_y, fill=self.RF_COLOR, width=3, tags="rf_notch")
 
     def _show_rangefinder(self):
         if self.rf_visible or self.tracking_active:

@@ -11,10 +11,22 @@ Extends BaseSACLOSOverlay with:
 
 import copy
 import math
+import os
 import time
 import threading
 import traceback
 from loguru import logger
+
+try:
+    import winsound as _winsound
+    _SOUNDS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                               'assets', 'sounds')
+    _LOCK_SOUND = os.path.join(_SOUNDS_DIR, 'lock.wav')
+    _INTERCEPT_SOUND = os.path.join(_SOUNDS_DIR, 'intercept.wav')
+except ImportError:
+    _winsound = None
+    _LOCK_SOUND = None
+    _INTERCEPT_SOUND = None
 
 from ui.base_overlay import BaseSACLOSOverlay
 from predictor.ql_hud import QuickLabelHudMixin
@@ -289,6 +301,11 @@ class AutoOverlay(QuickLabelHudMixin, BaseSACLOSOverlay):
         super()._start_tracking()
         if self.tracking_active:
             self._prefire_start_time = time.perf_counter()
+            if _winsound and _LOCK_SOUND and os.path.exists(_LOCK_SOUND):
+                try:
+                    _winsound.PlaySound(_LOCK_SOUND, _winsound.SND_FILENAME | _winsound.SND_ASYNC)
+                except Exception:
+                    pass
 
     def _on_mouse_move(self, x, y):
         """Override: record pre-fire aiming deltas during tracking."""
@@ -308,6 +325,11 @@ class AutoOverlay(QuickLabelHudMixin, BaseSACLOSOverlay):
 
     def _stop_tracking(self):
         """Override: common teardown, then calculate displacement and trigger correction."""
+        if self.tracking_active and _winsound and _INTERCEPT_SOUND and os.path.exists(_INTERCEPT_SOUND):
+            try:
+                _winsound.PlaySound(_INTERCEPT_SOUND, _winsound.SND_FILENAME | _winsound.SND_ASYNC)
+            except Exception:
+                pass
         was_tracking = self.tracking_active
         # Capture cursor start pos before super() clears mouse_start_x/y
         if was_tracking and self._replay_cursor_pos is None and self.mouse_start_x is not None:

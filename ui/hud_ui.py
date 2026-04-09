@@ -123,7 +123,13 @@ class HudUiMixin:
                 return None
             try:
                 img = Image.open(path).convert("RGBA")
-                # Composite onto transparent background
+                # Composite against the transparency key so anti-aliased edges
+                # blend toward #000001 (invisible on dark backgrounds).
+                # Snap pixels below alpha=30 hard to key color so intentional
+                # transparent areas (e.g. 10% opacity background) are keyed out.
+                alpha = img.split()[3]
+                keyed_alpha = alpha.point(lambda a: 0 if a < 30 else a)
+                img.putalpha(keyed_alpha)
                 bg = Image.new("RGBA", img.size, (0, 0, 1, 255))
                 composed = Image.alpha_composite(bg, img).convert("RGB")
                 return ImageTk.PhotoImage(composed)
