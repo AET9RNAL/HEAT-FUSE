@@ -21,6 +21,12 @@ except ImportError:
     PIL_OK = False
 
 try:
+    from utils.layered_window import LayeredWindow
+    LAYERED_OK = True
+except ImportError:
+    LAYERED_OK = False
+
+try:
     from pynput import mouse as pynmouse, keyboard as pynkeyboard
     PYNPUT_OK = True
 except ImportError:
@@ -95,12 +101,15 @@ class BaseSACLOSOverlay(OCRUiMixin, RangefinderUiMixin, HudUiMixin):
         self.status_lbl = tk.Label(
             self.bar,
             text="CALIBRATE  |  T=OCR region  |  Ctrl+L = lock    Ctrl+P = quit",
-            bg="#111111", fg="#555", font=("Courier", 9)
+            bg="#111111", fg="#555", font=("Montserrat", 9)
         )
         self.status_lbl.pack(side=tk.LEFT, padx=10)
 
         self.img_normal = None
         self.img_tracking = None
+        self.img_normal_pil = None      # Raw RGBA for LayeredWindow
+        self.img_tracking_pil = None    # Raw RGBA for LayeredWindow
+        self.locked_win = None           # LayeredWindow for locked mode
         self.img_id = None
         self.boundary_box_id = None
         self.corner_handles = []
@@ -251,6 +260,7 @@ class BaseSACLOSOverlay(OCRUiMixin, RangefinderUiMixin, HudUiMixin):
         
         img = Image.open(normal_path).convert("RGBA")
         self.img_w, self.img_h = img.size
+        self.img_normal_pil = img  # Store raw RGBA for LayeredWindow
         bg = Image.new("RGBA", img.size, (0, 0, 1, 255))
         composed = Image.alpha_composite(bg, img).convert("RGB")
         self.img_normal = ImageTk.PhotoImage(composed)
@@ -259,9 +269,11 @@ class BaseSACLOSOverlay(OCRUiMixin, RangefinderUiMixin, HudUiMixin):
             tracking_img = Image.open(tracking_path).convert("RGBA")
             if tracking_img.size != (self.img_w, self.img_h):
                 tracking_img = tracking_img.resize((self.img_w, self.img_h), Image.Resampling.LANCZOS)
+            self.img_tracking_pil = tracking_img  # Store raw RGBA
             bg_tracking = Image.new("RGBA", tracking_img.size, (0, 0, 1, 255))
             self.img_tracking = ImageTk.PhotoImage(Image.alpha_composite(bg_tracking, tracking_img).convert("RGB"))
         else:
+            self.img_tracking_pil = self.img_normal_pil
             self.img_tracking = self.img_normal
 
         bar_h = 28
@@ -278,7 +290,7 @@ class BaseSACLOSOverlay(OCRUiMixin, RangefinderUiMixin, HudUiMixin):
         cx, cy = 200, 200
         r = 80
         self.canvas.create_oval(cx-r, cy-r, cx+r, cy+r, outline="#1d9e75", width=1)
-        self.canvas.create_text(cx, cy + r + 24, text="No image — press O to open", fill="#444", font=("Courier", 10))
+        self.canvas.create_text(cx, cy + r + 24, text="No image — press O to open", fill="#444", font=("Montserrat", 10))
 
     def _open_image(self):
         self.root.overrideredirect(False)
@@ -293,6 +305,11 @@ class BaseSACLOSOverlay(OCRUiMixin, RangefinderUiMixin, HudUiMixin):
             self._load_images(path, tracking_path if tracking_path else None)
 
     def _apply_geometry(self):
+        # Use LayeredWindow in locked mode if available
+        lw = getattr(self, 'locked_win', None)
+        if lw and lw.is_created:
+            self.locked_win.move(int(self.win_x), int(self.win_y))
+            return
         try:
             import ctypes
             if self.hwnd is None:
@@ -464,8 +481,14 @@ class BaseSACLOSOverlay(OCRUiMixin, RangefinderUiMixin, HudUiMixin):
         self.corner_handles.clear()
 
         self.bar.pack_forget()
-        self.root.geometry(f"{self.img_w}x{self.img_h}")
-        self._set_clickthrough(True)
+
+        # Switch to LayeredWindow for per-pixel alpha in locked mode
+        if LAYERED_OK and self.img_normal_pil:
+            self._create_locked_overlay()
+            self.root.withdraw()  # Hide tkinter window
+        else:
+            self.root.geometry(f"{self.img_w}x{self.img_h}")
+            self._set_clickthrough(True)
 
         if getattr(self, "ocr_setup_visible", False): self._hide_ocr_setup()
         if self.ocr_enabled and getattr(self, "ocr_region", None) and TESSERACT_OK:
@@ -482,7 +505,10 @@ class BaseSACLOSOverlay(OCRUiMixin, RangefinderUiMixin, HudUiMixin):
         self.tracking_active = True
         self.bar.pack_forget()
 
-        if self.img_tracking and self.img_id:
+        # Swap to tracking image
+        if self.locked_win and self.locked_win.is_created and self.img_tracking_pil:
+            self.locked_win.update_image(self.img_tracking_pil)
+        elif self.img_tracking and self.img_id:
             self.canvas.itemconfig(self.img_id, image=self.img_tracking)
 
         self.mouse_start_x, self.mouse_start_y = None, None
@@ -490,12 +516,14 @@ class BaseSACLOSOverlay(OCRUiMixin, RangefinderUiMixin, HudUiMixin):
 
         with self.position_lock: self.position_queue.clear()
 
-        try:
-            import ctypes
-            if self.hwnd is None: self.hwnd = ctypes.windll.user32.FindWindowW(None, "SACLOS Overlay")
-            if self.hwnd: ctypes.windll.user32.SetWindowPos(self.hwnd, 0, 0, 0, self.img_w, self.img_h, 0x0002 | 0x0004 | 0x0010)
-        except Exception:
-            self.root.geometry(f"{self.img_w}x{self.img_h}")
+        # Resize tkinter window only if not using LayeredWindow
+        if not (self.locked_win and self.locked_win.is_created):
+            try:
+                import ctypes
+                if self.hwnd is None: self.hwnd = ctypes.windll.user32.FindWindowW(None, "SACLOS Overlay")
+                if self.hwnd: ctypes.windll.user32.SetWindowPos(self.hwnd, 0, 0, 0, self.img_w, self.img_h, 0x0002 | 0x0004 | 0x0010)
+            except Exception:
+                self.root.geometry(f"{self.img_w}x{self.img_h}")
 
         self.mouse_listener = pynmouse.Listener(on_move=self._on_mouse_move)
         self.mouse_listener.start()
@@ -545,7 +573,9 @@ class BaseSACLOSOverlay(OCRUiMixin, RangefinderUiMixin, HudUiMixin):
         self.win_start_y = None
 
         # Swap back to normal image
-        if self.img_normal and self.img_id:
+        if self.locked_win and self.locked_win.is_created and self.img_normal_pil:
+            self.locked_win.update_image(self.img_normal_pil)
+        elif self.img_normal and self.img_id:
             self.canvas.itemconfig(self.img_id, image=self.img_normal)
 
         self._update_hud_status("idle")
@@ -554,6 +584,23 @@ class BaseSACLOSOverlay(OCRUiMixin, RangefinderUiMixin, HudUiMixin):
         self.win_x = self.calibrated_x
         self.win_y = self.calibrated_y
         self._apply_geometry()
+
+    def _create_locked_overlay(self):
+        """Create a LayeredWindow overlay for locked mode."""
+        if self.locked_win:
+            self.locked_win.destroy()
+        self.locked_win = LayeredWindow("SACLOS Locked Overlay",
+                                        x=int(self.win_x), y=int(self.win_y),
+                                        draggable=False)
+        self.locked_win.create(self.img_normal_pil)
+        self.locked_win.set_click_through(True)
+        self.locked_win.show()
+
+    def _destroy_locked_overlay(self):
+        """Destroy the locked-mode LayeredWindow."""
+        if self.locked_win:
+            self.locked_win.destroy()
+            self.locked_win = None
 
     def _exit_to_calibrate(self):
         if self.rf_visible: self._hide_rangefinder()
@@ -578,6 +625,11 @@ class BaseSACLOSOverlay(OCRUiMixin, RangefinderUiMixin, HudUiMixin):
 
         with self.position_lock: self.position_queue.clear()
         self.tracking_win_x, self.tracking_win_y = None, None
+
+        # Destroy LayeredWindow and restore tkinter
+        self._destroy_locked_overlay()
+        self.root.deiconify()
+        self.root.attributes("-topmost", True)
 
         self._set_clickthrough(False)
         self.root.geometry(f"{self.img_w}x{self.img_h + 28}")
@@ -764,6 +816,7 @@ class BaseSACLOSOverlay(OCRUiMixin, RangefinderUiMixin, HudUiMixin):
             self.ocr_display_win.destroy()
 
         self._cleanup_hud()
+        self._destroy_locked_overlay()
 
         try:
             from utils.hardware_inject import disable_hires_timer

@@ -1,38 +1,79 @@
 """
 HudUiMixin - HUD overlay system for SACLOS.
 
+Uses Win32 LayeredWindow for true per-pixel alpha transparency.
+No chroma-key, no grey borders, no drop shadows.
+
 Provides configurable HUD elements:
-  - Name overlay: Static image (predictor.png)
+  - Name overlay: Spinning logo + static image (predictor.png)
   - Descriptor overlay: Static image (interceptSystem.png)
-  - Range overlay: Static image + dynamic text
+  - Range overlay: Static image + dynamic text (PIL-rendered)
   - Status overlay: Static image + conditional status images
   - Designator overlay: Animated crosshair at target position
 """
 
 import os
 import math
+import time
 import tkinter as tk
 from loguru import logger
 
 try:
-    from PIL import Image, ImageTk
+    from PIL import Image, ImageDraw, ImageFont
     PIL_OK = True
 except ImportError:
     PIL_OK = False
 
 try:
-    from utils.window_utils import set_window_clickthrough
-    WINDOW_UTILS_OK = True
+    from utils.layered_window import LayeredWindow
+    LAYERED_OK = True
 except ImportError:
-    WINDOW_UTILS_OK = False
+    LAYERED_OK = False
+
+# Shared HUD font — loaded once
+_HUD_FONT = None
+_HUD_FONT_SMALL = None
+
+def _get_hud_font(size=16):
+    """Get a PIL TrueType font, falling back to default."""
+    import os
+    # Variable font — request Bold weight via variation axis
+    _candidates = [
+        "Montserrat-VariableFont_wght.ttf",
+        os.path.join(os.environ.get("LOCALAPPDATA", ""),
+                     "Microsoft", "Windows", "Fonts",
+                     "Montserrat-VariableFont_wght.ttf"),
+        os.path.join(os.environ.get("WINDIR", "C:\\Windows"),
+                     "Fonts", "Montserrat-VariableFont_wght.ttf"),
+    ]
+    for path in _candidates:
+        try:
+            font = ImageFont.truetype(path, size)
+            try:
+                font.set_variation_by_axes([600])  # 600 = Semi Bold weight
+            except Exception:
+                pass
+            return font
+        except Exception:
+            continue
+    return ImageFont.load_default()
+
+
+def _get_hud_fonts():
+    """Initialize shared HUD fonts."""
+    global _HUD_FONT, _HUD_FONT_SMALL
+    if _HUD_FONT is None:
+        _HUD_FONT = _get_hud_font(16)
+        _HUD_FONT_SMALL = _get_hud_font(12)
+    return _HUD_FONT, _HUD_FONT_SMALL
 
 
 class HudUiMixin:
-    """Mixin for HUD overlay windows."""
+    """Mixin for HUD overlay windows (Win32 LayeredWindow)."""
 
     # HUD color matching game UI
     HUD_GREEN = "#77ffaa"
-    HUD_BG = "#000001"  # Transparent color
+    HUD_BG = "#000001"  # Kept for QL HUD tkinter windows
 
     def _init_hud(self):
         """Initialize HUD state and windows."""
@@ -49,7 +90,7 @@ class HudUiMixin:
         self.hud_designator_intercept = "designatorIntercept.png"
         self.hud_logo_image = "logo.png"
 
-        # Loaded images
+        # Raw PIL RGBA images (no chroma-key needed)
         self.hud_img_name = None
         self.hud_img_descriptor = None
         self.hud_img_range = None
@@ -59,29 +100,18 @@ class HudUiMixin:
         self.hud_img_status_intercept = None
         self.hud_img_designator_predict = None
         self.hud_img_designator_intercept = None
-        self.hud_img_logo_raw = None       # Raw RGBA for rotation
-        self.hud_logo_frames = []          # Pre-rendered rotation PhotoImages
+        self.hud_img_logo_raw = None
+        self.hud_logo_frames = []          # Pre-rendered RGBA rotation frames
         self.hud_logo_frame_index = 0
         self.hud_logo_anim_id = None
-        self.hud_logo_label = None
 
-        # Window handles
+        # LayeredWindow handles
         self.hud_name_win = None
         self.hud_descriptor_win = None
         self.hud_range_win = None
-        self.hud_range_text = None
         self.hud_status_win = None
-        self.hud_status_label = None
         self.hud_designator_predict_win = None
         self.hud_designator_intercept_win = None
-
-        # Window HWNDs for click-through
-        self.hud_name_hwnd = None
-        self.hud_descriptor_hwnd = None
-        self.hud_range_hwnd = None
-        self.hud_status_hwnd = None
-        self.hud_designator_predict_hwnd = None
-        self.hud_designator_intercept_hwnd = None
 
         # State
         self.hud_status = "idle"  # idle, predict, intercept
@@ -96,8 +126,6 @@ class HudUiMixin:
         # Predict status blink animation
         self.hud_predict_blink_id = None
         self.hud_predict_blink_visible = True
-        self.hud_img_status_predict_blank = None
-        self.hud_status_canvas_item = None
 
         # Default positions (screen coordinates)
         sw = self.root.winfo_screenwidth()
@@ -108,12 +136,13 @@ class HudUiMixin:
         self.hud_status_pos = [sw - 250, sh // 2 + 50]
 
         # Load images and create windows
-        if PIL_OK:
+        if PIL_OK and LAYERED_OK:
+            _get_hud_fonts()
             self._load_hud_images()
             self._create_hud_windows()
 
     def _load_hud_images(self):
-        """Load all HUD images from assets directory."""
+        """Load all HUD images as raw PIL RGBA — no chroma-key needed."""
         assets_base = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), self.hud_assets_dir)
 
         def load_png(name):
@@ -122,17 +151,7 @@ class HudUiMixin:
                 logger.warning(f"HUD image not found: {path}")
                 return None
             try:
-                img = Image.open(path).convert("RGBA")
-                # Composite against the transparency key so anti-aliased edges
-                # blend toward #000001 (invisible on dark backgrounds).
-                # Snap pixels below alpha=30 hard to key color so intentional
-                # transparent areas (e.g. 10% opacity background) are keyed out.
-                alpha = img.split()[3]
-                keyed_alpha = alpha.point(lambda a: 0 if a < 30 else a)
-                img.putalpha(keyed_alpha)
-                bg = Image.new("RGBA", img.size, (0, 0, 1, 255))
-                composed = Image.alpha_composite(bg, img).convert("RGB")
-                return ImageTk.PhotoImage(composed)
+                return Image.open(path).convert("RGBA")
             except Exception as e:
                 logger.warning(f"Could not load HUD image {name}: {e}")
                 return None
@@ -143,11 +162,6 @@ class HudUiMixin:
         self.hud_img_status = load_png(self.hud_status_image)
         self.hud_img_status_idle = load_png(self.hud_status_idle)
         self.hud_img_status_predict = load_png(self.hud_status_predict)
-        if self.hud_img_status_predict:
-            _bw = self.hud_img_status_predict.width()
-            _bh = self.hud_img_status_predict.height()
-            _blank = Image.new("RGB", (_bw, _bh), (0, 0, 1))
-            self.hud_img_status_predict_blank = ImageTk.PhotoImage(_blank)
         self.hud_img_status_intercept = load_png(self.hud_status_intercept)
         self.hud_img_designator_predict = load_png(self.hud_designator_predict)
         self.hud_img_designator_intercept = load_png(self.hud_designator_intercept)
@@ -162,7 +176,7 @@ class HudUiMixin:
                 logger.warning(f"Could not load logo: {e}")
 
     def _prerender_logo_frames(self):
-        """Pre-render rotated logo frames for spin animation.
+        """Pre-render rotated logo frames as PIL RGBA for spin animation.
         Rotates around the center of mass of opaque pixels so the
         visual pivot matches the perceived center of the logo."""
         if not self.hud_img_logo_raw:
@@ -198,203 +212,150 @@ class HudUiMixin:
         offset_x = int(canvas_size / 2 - com_x)
         offset_y = int(canvas_size / 2 - com_y)
         padded = Image.new("RGBA", (canvas_size, canvas_size), (0, 0, 0, 0))
-        padded.paste(raw, (offset_x, offset_y), raw)
+        padded.paste(raw, (offset_x, offset_y))  # straight copy, no mask → preserves alpha
 
         self.hud_logo_frames = []
         for angle in range(0, 360, 10):
             rotated = padded.rotate(angle, resample=Image.Resampling.BICUBIC, expand=False)
-            bg = Image.new("RGBA", (canvas_size, canvas_size), (0, 0, 1, 255))
-            bg.paste(rotated, (0, 0), rotated)
-            self.hud_logo_frames.append(ImageTk.PhotoImage(bg.convert("RGB")))
+            self.hud_logo_frames.append(rotated)
+
+    # ── Compositing helpers ──────────────────────────────────────────
+
+    @staticmethod
+    def _paste_alpha(dst, src, xy):
+        """Alpha-composite *src* onto *dst* at offset *xy*.
+        Unlike Image.paste(src, xy, src), this does NOT square the alpha."""
+        tmp = Image.new("RGBA", dst.size, (0, 0, 0, 0))
+        tmp.paste(src, xy)                    # straight copy (no mask)
+        return Image.alpha_composite(dst, tmp)
+
+    def _compose_name_image(self, logo_frame_index=0):
+        """Compose name window image: logo frame + spacer + name image."""
+        parts = []
+        if self.hud_logo_frames:
+            parts.append(self.hud_logo_frames[logo_frame_index])
+        if self.hud_img_name:
+            parts.append(self.hud_img_name)
+        if not parts:
+            return self._make_text_image("H.E.A.T", (119, 255, 170, 255), 16)
+        spacer_w = 4
+        total_w = sum(p.width for p in parts) + spacer_w * (len(parts) - 1)
+        max_h = max(p.height for p in parts)
+        img = Image.new("RGBA", (total_w, max_h), (0, 0, 0, 0))
+        x = 0
+        for i, part in enumerate(parts):
+            y_off = (max_h - part.height) // 2
+            img = self._paste_alpha(img, part, (x, y_off))
+            x += part.width + spacer_w
+        return img
+
+    def _compose_range_image(self, range_m=None):
+        """Compose range window: range.png + text."""
+        if range_m is None:
+            range_m = getattr(self, 'target_range_m', 200.0)
+        text = f"{int(range_m)} m"
+        text_img = self._make_text_image(text, (119, 255, 170, 255), 16)
+        if not self.hud_img_range:
+            return text_img
+        spacer_w = 8
+        total_w = self.hud_img_range.width + spacer_w + text_img.width
+        max_h = max(self.hud_img_range.height, text_img.height)
+        img = Image.new("RGBA", (total_w, max_h), (0, 0, 0, 0))
+        img = self._paste_alpha(img, self.hud_img_range, (0, (max_h - self.hud_img_range.height) // 2))
+        img = self._paste_alpha(img, text_img, (self.hud_img_range.width + spacer_w, (max_h - text_img.height) // 2))
+        return img
+
+    def _compose_status_image(self, status=None):
+        """Compose status window: status.png + statusXxx.png."""
+        if status is None:
+            status = self.hud_status
+        status_map = {
+            "idle": self.hud_img_status_idle,
+            "predict": self.hud_img_status_predict,
+            "intercept": self.hud_img_status_intercept,
+        }
+        status_img = status_map.get(status, self.hud_img_status_idle)
+        if not self.hud_img_status and not status_img:
+            text_map = {"idle": "IDLE", "predict": "PREDICT", "intercept": "INTERCEPT"}
+            return self._make_text_image(f"STATUS: {text_map.get(status, 'IDLE')}", (119, 255, 170, 255), 14)
+        parts = []
+        if self.hud_img_status:
+            parts.append(self.hud_img_status)
+        if status_img:
+            parts.append(status_img)
+        if not parts:
+            return self._make_text_image("STATUS", (119, 255, 170, 255), 14)
+        spacer_w = 8
+        total_w = sum(p.width for p in parts) + spacer_w * max(len(parts) - 1, 0)
+        max_h = max(p.height for p in parts)
+        img = Image.new("RGBA", (total_w, max_h), (0, 0, 0, 0))
+        x = 0
+        for i, part in enumerate(parts):
+            y_off = (max_h - part.height) // 2
+            img = self._paste_alpha(img, part, (x, y_off))
+            x += part.width + spacer_w
+        return img
+
+    def _make_text_image(self, text, color_rgba, font_size=16):
+        """Render text to a PIL RGBA image with transparent background."""
+        font = _get_hud_font(font_size)
+        # Measure text size
+        dummy = Image.new("RGBA", (1, 1))
+        draw = ImageDraw.Draw(dummy)
+        bbox = draw.textbbox((0, 0), text, font=font)
+        tw = bbox[2] - bbox[0] + 4
+        th = bbox[3] - bbox[1] + 4
+        img = Image.new("RGBA", (tw, th), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(img)
+        draw.text((2, 2 - bbox[1]), text, fill=color_rgba, font=font)
+        return img
+
+    # ── Window creation ──────────────────────────────────────────────
 
     def _create_hud_windows(self):
-        """Create all HUD windows."""
-        # Name window (spinning logo + predictor.png in row)
-        self.hud_name_win = tk.Toplevel(self.root)
-        self.hud_name_win.title("SACLOS HUD Name")
-        self.hud_name_win.overrideredirect(True)
-        self.hud_name_win.attributes("-topmost", True)
-        self.hud_name_win.attributes("-transparentcolor", self.HUD_BG)
-        self.hud_name_win.configure(bg=self.HUD_BG)
-
-        name_frame = tk.Frame(self.hud_name_win, bg=self.HUD_BG)
-        name_frame.pack()
-
-        # Spinning logo
-        if self.hud_logo_frames:
-            self.hud_logo_label = tk.Label(name_frame, image=self.hud_logo_frames[0], bg=self.HUD_BG)
-            self.hud_logo_label.pack(side=tk.LEFT)
-            tk.Frame(name_frame, width=4, bg=self.HUD_BG).pack(side=tk.LEFT)
-            self._make_draggable(self.hud_logo_label)
-
-        # Predictor name image
-        name_label = tk.Label(name_frame, bg=self.HUD_BG)
-        if self.hud_img_name:
-            name_label.config(image=self.hud_img_name)
-        else:
-            name_label.config(text="H.E.A.T", fg=self.HUD_GREEN, bg="#111111", font=("Courier", 12, "bold"))
-        name_label.pack(side=tk.LEFT)
-
-        self.root.update_idletasks()
-        self.hud_name_win.geometry(f"{name_frame.winfo_reqwidth()}x{name_frame.winfo_reqheight()}")
-
-        self._make_draggable(self.hud_name_win)
-        self._make_draggable(name_label)
-        self.hud_name_win.withdraw()
+        """Create all HUD LayeredWindow instances."""
+        # Name window (logo + predictor.png)
+        name_img = self._compose_name_image(0)
+        self.hud_name_win = LayeredWindow("SACLOS HUD Name",
+                                          x=self.hud_name_pos[0], y=self.hud_name_pos[1],
+                                          draggable=True)
+        self.hud_name_win.create(name_img)
 
         # Descriptor window
-        self.hud_descriptor_win = tk.Toplevel(self.root)
-        self.hud_descriptor_win.title("SACLOS HUD Descriptor")
-        self.hud_descriptor_win.overrideredirect(True)
-        self.hud_descriptor_win.attributes("-topmost", True)
-        self.hud_descriptor_win.attributes("-transparentcolor", self.HUD_BG)
-        self.hud_descriptor_win.configure(bg=self.HUD_BG)
+        desc_img = self.hud_img_descriptor or self._make_text_image("INTERCEPT", (119, 255, 170, 255), 16)
+        self.hud_descriptor_win = LayeredWindow("SACLOS HUD Descriptor",
+                                                x=self.hud_descriptor_pos[0], y=self.hud_descriptor_pos[1],
+                                                draggable=True)
+        self.hud_descriptor_win.create(desc_img)
 
-        desc_label = tk.Label(self.hud_descriptor_win, bg=self.HUD_BG)
-        if self.hud_img_descriptor:
-            desc_label.config(image=self.hud_img_descriptor)
-            desc_label.pack()
-            self.hud_descriptor_win.geometry(f"{self.hud_img_descriptor.width()}x{self.hud_img_descriptor.height()}")
-        else:
-            desc_label.config(text="INTERCEPT", fg=self.HUD_GREEN, bg="#111111", font=("Courier", 12, "bold"))
-            desc_label.pack()
-            self.hud_descriptor_win.geometry(f"+{self.hud_descriptor_pos[0]}+{self.hud_descriptor_pos[1]}")
-        self._make_draggable(self.hud_descriptor_win)
-        self.hud_descriptor_win.withdraw()
+        # Range window (image + text)
+        range_img = self._compose_range_image()
+        self.hud_range_win = LayeredWindow("SACLOS HUD Range",
+                                           x=self.hud_range_pos[0], y=self.hud_range_pos[1],
+                                           draggable=True)
+        self.hud_range_win.create(range_img)
 
-        # Range window (image + text in row)
-        self.hud_range_win = tk.Toplevel(self.root)
-        self.hud_range_win.title("SACLOS HUD Range")
-        self.hud_range_win.overrideredirect(True)
-        self.hud_range_win.attributes("-topmost", True)
-        self.hud_range_win.attributes("-transparentcolor", self.HUD_BG)
-        self.hud_range_win.configure(bg=self.HUD_BG)
+        # Status window (image + status image)
+        status_img = self._compose_status_image()
+        self.hud_status_win = LayeredWindow("SACLOS HUD Status",
+                                            x=self.hud_status_pos[0], y=self.hud_status_pos[1],
+                                            draggable=True)
+        self.hud_status_win.create(status_img)
 
-        range_frame = tk.Frame(self.hud_range_win, bg=self.HUD_BG)
-        range_frame.pack()
+        # Designator predict (animated crosshair)
+        pred_img = self.hud_img_designator_predict or self._make_text_image("+", (119, 255, 170, 255), 24)
+        self.hud_designator_predict_win = LayeredWindow("SACLOS Designator Predict", draggable=False)
+        self.hud_designator_predict_win.create(pred_img)
 
-        if self.hud_img_range:
-            range_img_label = tk.Label(range_frame, image=self.hud_img_range, bg=self.HUD_BG)
-            range_img_label.pack(side=tk.LEFT)
-            spacer = tk.Label(range_frame, width=4, bg=self.HUD_BG)
-            spacer.pack(side=tk.LEFT)
-            self.hud_range_text = tk.Label(
-                range_frame,
-                text="--- m",
-                fg=self.HUD_GREEN,
-                bg=self.HUD_BG,
-                font=("Consolas", 12, "bold")
-            )
-            self.hud_range_text.pack(side=tk.LEFT)
-            # Update window geometry after packing
-            self.root.update_idletasks()
-            self.hud_range_win.geometry(f"{range_frame.winfo_reqwidth()}x{range_frame.winfo_reqheight()}")
-        else:
-            self.hud_range_text = tk.Label(
-                range_frame,
-                text="RANGE: --- m",
-                fg=self.HUD_GREEN,
-                bg="#111111",
-                font=("Consolas", 12, "bold"),
-                padx=4, pady=2
-            )
-            self.hud_range_text.pack()
-            self.hud_range_win.geometry("150x24")
+        # Designator intercept (triangle)
+        int_img = self.hud_img_designator_intercept or self._make_text_image("▲", (0, 255, 0, 255), 24)
+        self.hud_designator_intercept_win = LayeredWindow("SACLOS Designator Intercept", draggable=False)
+        self.hud_designator_intercept_win.create(int_img)
 
-        self._make_draggable(self.hud_range_win)
-        self._make_draggable(self.hud_range_text)
-        self.hud_range_win.withdraw()
-
-        # Status window (image + conditional status image in row)
-        self.hud_status_win = tk.Toplevel(self.root)
-        self.hud_status_win.title("SACLOS HUD Status")
-        self.hud_status_win.overrideredirect(True)
-        self.hud_status_win.attributes("-topmost", True)
-        self.hud_status_win.attributes("-transparentcolor", self.HUD_BG)
-        self.hud_status_win.configure(bg=self.HUD_BG)
-
-        status_frame = tk.Frame(self.hud_status_win, bg=self.HUD_BG)
-        status_frame.pack()
-
-        if self.hud_img_status:
-            status_img_label = tk.Label(status_frame, image=self.hud_img_status, bg=self.HUD_BG)
-            status_img_label.pack(side=tk.LEFT)
-            spacer = tk.Label(status_frame, width=4, bg=self.HUD_BG)
-            spacer.pack(side=tk.LEFT)
-            status_img = self.hud_img_status_idle
-            _status_imgs = [i for i in [self.hud_img_status_idle, self.hud_img_status_predict,
-                                         self.hud_img_status_intercept] if i]
-            _slw = max((i.width() for i in _status_imgs), default=60)
-            _slh = max((i.height() for i in _status_imgs), default=20)
-            self.hud_status_label = tk.Canvas(status_frame, width=_slw, height=_slh,
-                                              bg=self.HUD_BG, highlightthickness=0, bd=0)
-            self.hud_status_canvas_item = self.hud_status_label.create_image(
-                0, 0, anchor='nw', image=status_img or ''
-            )
-            self.hud_status_label.pack(side=tk.LEFT)
-            # Update window geometry after packing
-            self.root.update_idletasks()
-            self.hud_status_win.geometry(f"{status_frame.winfo_reqwidth()}x{status_frame.winfo_reqheight()}")
-        else:
-            self.hud_status_label = tk.Label(
-                status_frame,
-                text="STATUS: IDLE",
-                fg=self.HUD_GREEN,
-                bg="#111111",
-                font=("Consolas", 12, "bold"),
-                padx=4, pady=2
-            )
-            self.hud_status_label.pack()
-            self.hud_status_win.geometry("180x24")
-
-        self._make_draggable(self.hud_status_win)
-        self._make_draggable(self.hud_status_label)
-        self.hud_status_win.withdraw()
-
-        # Designator predict window (animated crosshair)
-        self.hud_designator_predict_win = tk.Toplevel(self.root)
-        self.hud_designator_predict_win.title("SACLOS Designator Predict")
-        self.hud_designator_predict_win.overrideredirect(True)
-        self.hud_designator_predict_win.attributes("-topmost", True)
-        self.hud_designator_predict_win.attributes("-transparentcolor", self.HUD_BG)
-        self.hud_designator_predict_win.configure(bg=self.HUD_BG)
-
-        designator_predict_label = tk.Label(self.hud_designator_predict_win, bg=self.HUD_BG)
-        if self.hud_img_designator_predict:
-            designator_predict_label.config(image=self.hud_img_designator_predict)
-            designator_predict_label.pack()
-            self.hud_designator_predict_win.geometry(
-                f"{self.hud_img_designator_predict.width()}x{self.hud_img_designator_predict.height()}"
-            )
-        else:
-            designator_predict_label.config(text="+", fg=self.HUD_GREEN, bg=self.HUD_BG, font=("Courier", 24))
-            designator_predict_label.pack()
-            self.hud_designator_predict_win.geometry("30x30")
-        self.hud_designator_predict_win.withdraw()
-
-        # Designator intercept window (triangle overlay)
-        self.hud_designator_intercept_win = tk.Toplevel(self.root)
-        self.hud_designator_intercept_win.title("SACLOS Designator Intercept")
-        self.hud_designator_intercept_win.overrideredirect(True)
-        self.hud_designator_intercept_win.attributes("-topmost", True)
-        self.hud_designator_intercept_win.attributes("-transparentcolor", self.HUD_BG)
-        self.hud_designator_intercept_win.configure(bg=self.HUD_BG)
-
-        designator_intercept_label = tk.Label(self.hud_designator_intercept_win, bg=self.HUD_BG)
-        if self.hud_img_designator_intercept:
-            designator_intercept_label.config(image=self.hud_img_designator_intercept)
-            designator_intercept_label.pack()
-            self.hud_designator_intercept_win.geometry(
-                f"{self.hud_img_designator_intercept.width()}x{self.hud_img_designator_intercept.height()}"
-            )
-        else:
-            designator_intercept_label.config(text="▲", fg="#00ff00", bg=self.HUD_BG, font=("Courier", 24))
-            designator_intercept_label.pack()
-            self.hud_designator_intercept_win.geometry("30x30")
-        self.hud_designator_intercept_win.withdraw()
+    # ── _make_draggable kept for QL HUD tkinter windows ──────────────
 
     def _make_draggable(self, widget_or_window):
-        """Make a widget or window draggable for HUD setup."""
+        """Make a tkinter widget or window draggable for HUD setup."""
         if isinstance(widget_or_window, tk.Toplevel):
             win = widget_or_window
             widget = widget_or_window
@@ -411,7 +372,6 @@ class HudUiMixin:
             widget.bind("<ButtonPress-1>", on_press)
             widget.bind("<B1-Motion>", on_drag)
         else:
-            # Widget inside a window
             widget = widget_or_window
             win = widget.winfo_toplevel()
 
@@ -427,6 +387,8 @@ class HudUiMixin:
             widget.bind("<ButtonPress-1>", on_press)
             widget.bind("<B1-Motion>", on_drag)
 
+    # ── Logo animation ───────────────────────────────────────────────
+
     def _start_logo_animation(self):
         """Start the continuous spinning logo animation."""
         if not self.hud_logo_frames:
@@ -441,100 +403,66 @@ class HudUiMixin:
             self.hud_logo_anim_id = None
 
     def _animate_logo(self):
-        """Animation step for rotating logo."""
-        if not self.hud_logo_frames or not self.hud_logo_label:
+        """Animation step for rotating logo — recomposites name window."""
+        if not self.hud_logo_frames or not self.hud_name_win:
             return
         self.hud_logo_frame_index = (self.hud_logo_frame_index + 1) % len(self.hud_logo_frames)
         try:
-            self.hud_logo_label.config(image=self.hud_logo_frames[self.hud_logo_frame_index])
+            name_img = self._compose_name_image(self.hud_logo_frame_index)
+            self.hud_name_win.update_image(name_img)
         except Exception:
             return
         self.hud_logo_anim_id = self.root.after(33, self._animate_logo)
 
+    # ── Status image update ──────────────────────────────────────────
+
     def _update_status_image(self):
-        """Update the status label image based on current status."""
-        if not self.hud_status_label:
+        """Recomposite and push the status window image."""
+        if not self.hud_status_win or not self.hud_status_win.is_created:
             return
+        status_img = self._compose_status_image()
+        self.hud_status_win.update_image(status_img)
 
-        img_map = {
-            "idle": self.hud_img_status_idle,
-            "predict": self.hud_img_status_predict,
-            "intercept": self.hud_img_status_intercept,
-        }
-        img = img_map.get(self.hud_status, self.hud_img_status_idle)
-
-        if img:
-            if self.hud_status_canvas_item is not None:
-                self.hud_status_label.itemconfigure(self.hud_status_canvas_item, image=img, state='normal')
-            else:
-                self.hud_status_label.config(image=img, bg=self.HUD_BG)
-            # Update window geometry if HUD is visible (in case image sizes differ)
-            if self.hud_visible and self.hud_status_win:
-                self.root.update_idletasks()
-                status_frame = self.hud_status_label.master
-                self.hud_status_win.geometry(f"{status_frame.winfo_reqwidth()}x{status_frame.winfo_reqheight()}")
-        else:
-            text_map = {
-                "idle": "IDLE",
-                "predict": "PREDICT",
-                "intercept": "INTERCEPT",
-            }
-            self.hud_status_label.config(
-                text=text_map.get(self.hud_status, "IDLE"),
-                fg=self.HUD_GREEN,
-                bg="#111111",
-                font=("Consolas", 10, "bold")
-            )
+    # ── Show / hide ──────────────────────────────────────────────────
 
     def _show_hud_setup(self):
         """Show HUD windows in draggable setup mode."""
         self.hud_locked = False
 
-        # Update content while still withdrawn (hud_visible is False)
-        self._update_hud_range_text()
-        self._update_status_image()
-
-        # Position BEFORE deiconify (matches working OCR pattern)
         self._position_hud_windows()
 
-        # Now deiconify — windows appear at the correct saved position
         for win in [self.hud_name_win, self.hud_descriptor_win,
                     self.hud_range_win, self.hud_status_win]:
             if win:
-                win.deiconify()
-                win.attributes("-topmost", True)
-                win.lift()
+                win.set_draggable(True)
+                win.set_click_through(False)
+                win.show()
 
         self.hud_visible = True
+
+        # Refresh content
+        self._update_hud_range_text()
+        self._update_status_image()
         self._start_logo_animation()
 
     def _show_hud_locked(self):
         """Show HUD windows in locked (click-through) mode."""
         self.hud_locked = True
 
-        # Update content while still withdrawn (hud_visible is False)
-        self._update_hud_range_text()
-        self._update_status_image()
-
-        # Position BEFORE deiconify (matches working OCR pattern)
         self._position_hud_windows()
 
-        # Now deiconify — windows appear at the correct saved position
         for win in [self.hud_name_win, self.hud_descriptor_win,
                     self.hud_range_win, self.hud_status_win]:
             if win:
-                win.deiconify()
-                win.attributes("-topmost", True)
+                win.set_draggable(False)
+                win.show()
+                win.set_click_through(True)
 
         self.hud_visible = True
 
-        # Set click-through on all HUD windows
-        self.root.update_idletasks()
-        for win in [self.hud_name_win, self.hud_descriptor_win,
-                    self.hud_range_win, self.hud_status_win]:
-            if win:
-                self._set_hud_clickthrough(win, True)
-
+        # Refresh content
+        self._update_hud_range_text()
+        self._update_status_image()
         self._start_logo_animation()
 
     def _hide_hud(self):
@@ -552,37 +480,33 @@ class HudUiMixin:
                     self.hud_range_win, self.hud_status_win,
                     self.hud_designator_predict_win, self.hud_designator_intercept_win]:
             if win:
-                win.withdraw()
+                win.hide()
 
     def _position_hud_windows(self):
-        """Position HUD windows from saved config using full WxH+X+Y geometry.
-        Clamps positions to visible screen area to prevent off-screen windows."""
-        self.root.update_idletasks()
+        """Position HUD windows from saved config.
+        Clamps positions to visible screen area."""
         sw = self.root.winfo_screenwidth()
         sh = self.root.winfo_screenheight()
         for win, pos in [(self.hud_name_win, self.hud_name_pos),
                          (self.hud_descriptor_win, self.hud_descriptor_pos),
                          (self.hud_range_win, self.hud_range_pos),
                          (self.hud_status_win, self.hud_status_pos)]:
-            if win and pos:
-                w = max(1, win.winfo_reqwidth())
-                h = max(1, win.winfo_reqheight())
+            if win and pos and win.is_created:
+                w, h = win.get_size()
                 x = max(0, min(int(pos[0]), sw - w))
                 y = max(0, min(int(pos[1]), sh - h))
-                win.geometry(f"{w}x{h}+{x}+{y}")
+                win.move(x, y)
+
+    # ── Range text ───────────────────────────────────────────────────
 
     def _update_hud_range_text(self, range_m=None):
-        """Update the range text display."""
-        if range_m is None:
-            range_m = getattr(self, 'target_range_m', 200.0)
+        """Recomposite and push the range window image with new text."""
+        if not self.hud_range_win or not self.hud_range_win.is_created:
+            return
+        range_img = self._compose_range_image(range_m)
+        self.hud_range_win.update_image(range_img)
 
-        if self.hud_range_text:
-            self.hud_range_text.config(text=f"{int(range_m)} m")
-            # Update window geometry if HUD is visible (in case text width changes)
-            if self.hud_visible and self.hud_range_win:
-                self.root.update_idletasks()
-                range_frame = self.hud_range_text.master
-                self.hud_range_win.geometry(f"{range_frame.winfo_reqwidth()}x{range_frame.winfo_reqheight()}")
+    # ── Status updates ───────────────────────────────────────────────
 
     def _update_hud_status(self, status):
         """
@@ -615,82 +539,64 @@ class HudUiMixin:
         elif status == "intercept":
             self._show_intercept_designator()
 
+    # ── Designators ──────────────────────────────────────────────────
+
     def _hide_designators(self):
         """Hide both designator windows."""
         self._stop_designator_animation()
         if self.hud_designator_predict_win:
-            self.hud_designator_predict_win.withdraw()
+            self.hud_designator_predict_win.hide()
         if self.hud_designator_intercept_win:
-            self.hud_designator_intercept_win.withdraw()
+            self.hud_designator_intercept_win.hide()
 
     def _show_predict_designator(self):
         """Show predict designator with fade animation."""
         if not self.hud_designator_predict_win:
             return
 
-        # Position at overlay center
         self._position_designators()
 
-        # Hide intercept, show predict
         if self.hud_designator_intercept_win:
-            self.hud_designator_intercept_win.withdraw()
+            self.hud_designator_intercept_win.hide()
 
-        self.hud_designator_predict_win.deiconify()
-        self.hud_designator_predict_win.attributes("-topmost", True)
-
-        # Start fade animation
-        self._start_designator_animation()
-
-        # Set click-through based on HUD mode
+        self.hud_designator_predict_win.show()
         if self.hud_locked:
-            self._set_hud_clickthrough(self.hud_designator_predict_win, True)
+            self.hud_designator_predict_win.set_click_through(True)
+
+        self._start_designator_animation()
 
     def _show_intercept_designator(self):
         """Show intercept designator (over predict)."""
         if not self.hud_designator_intercept_win:
             return
 
-        # Position at overlay center
         self._position_designators()
 
-        # Show both designators (intercept overlays predict)
         if self.hud_designator_predict_win:
-            self.hud_designator_predict_win.deiconify()
+            self.hud_designator_predict_win.show()
         if self.hud_designator_intercept_win:
-            self.hud_designator_intercept_win.deiconify()
-            self.hud_designator_intercept_win.attributes("-topmost", True)
+            self.hud_designator_intercept_win.show()
 
-        # Keep animation running on predict
-        # (don't stop it)
-
-        # Set click-through based on HUD mode
         if self.hud_locked:
             if self.hud_designator_predict_win:
-                self._set_hud_clickthrough(self.hud_designator_predict_win, True)
+                self.hud_designator_predict_win.set_click_through(True)
             if self.hud_designator_intercept_win:
-                self._set_hud_clickthrough(self.hud_designator_intercept_win, True)
+                self.hud_designator_intercept_win.set_click_through(True)
 
     def _position_designators(self):
-        """Position designators at the current overlay center (follows tracking)."""
+        """Position designators at the current overlay center."""
         overlay_cx = self.win_x + self.img_w / 2
         overlay_cy = self.win_y + self.img_h / 2
 
-        # Center designator on this point
-        pred_w = self.hud_img_designator_predict.width() if self.hud_img_designator_predict else 30
-        pred_h = self.hud_img_designator_predict.height() if self.hud_img_designator_predict else 30
+        if self.hud_designator_predict_win and self.hud_designator_predict_win.is_created:
+            pw, ph = self.hud_designator_predict_win.get_size()
+            self.hud_designator_predict_win.move(int(overlay_cx - pw / 2), int(overlay_cy - ph / 2))
 
-        pred_x = int(overlay_cx - pred_w / 2)
-        pred_y = int(overlay_cy - pred_h / 2)
+        if self.hud_designator_intercept_win and self.hud_designator_intercept_win.is_created:
+            iw, ih = self.hud_designator_intercept_win.get_size()
+            self.hud_designator_intercept_win.move(int(overlay_cx - iw / 2), int(overlay_cy - ih / 2))
 
-        if self.hud_designator_predict_win:
-            self.hud_designator_predict_win.geometry(f"+{pred_x}+{pred_y}")
-
-        if self.hud_designator_intercept_win:
-            int_w = self.hud_img_designator_intercept.width() if self.hud_img_designator_intercept else 30
-            int_h = self.hud_img_designator_intercept.height() if self.hud_img_designator_intercept else 30
-            int_x = int(overlay_cx - int_w / 2)
-            int_y = int(overlay_cy - int_h / 2)
-            self.hud_designator_intercept_win.geometry(f"+{int_x}+{int_y}")
+    # ── Designator animation ─────────────────────────────────────────
 
     def _start_designator_animation(self):
         """Start the fade-in-out animation for predict designator."""
@@ -699,9 +605,7 @@ class HudUiMixin:
         self._animate_designator()
 
     def _animate_designator(self):
-        """Animation loop for designator fade."""
-        import time
-
+        """Animation loop for designator fade — uses per-pixel alpha scaling."""
         if self.hud_designator_anim_start == 0:
             self.hud_designator_anim_start = time.perf_counter()
 
@@ -711,14 +615,21 @@ class HudUiMixin:
         alpha = max(0.15, min(1.0, alpha))
 
         if self.hud_designator_predict_win:
-            try:
-                self.hud_designator_predict_win.attributes("-alpha", alpha)
-            except Exception:
-                pass
+            self.hud_designator_predict_win.set_alpha(int(alpha * 255))
 
         # Continue animation
         if self.hud_status == "predict":
             self.hud_designator_anim_id = self.root.after(50, self._animate_designator)
+
+    def _stop_designator_animation(self):
+        """Stop the designator animation."""
+        if self.hud_designator_anim_id:
+            self.root.after_cancel(self.hud_designator_anim_id)
+            self.hud_designator_anim_id = None
+        if self.hud_designator_predict_win:
+            self.hud_designator_predict_win.set_alpha(255)
+
+    # ── Predict blink ────────────────────────────────────────────────
 
     def _start_predict_blink(self):
         """Start square-wave blink on the predict status image."""
@@ -727,74 +638,74 @@ class HudUiMixin:
         self._animate_predict_blink()
 
     def _stop_predict_blink(self):
-        """Stop predict blink and restore the image to fully visible."""
+        """Stop predict blink and restore status image."""
         if self.hud_predict_blink_id:
             self.root.after_cancel(self.hud_predict_blink_id)
             self.hud_predict_blink_id = None
-        if self.hud_status_label and self.hud_img_status_predict:
-            try:
-                if self.hud_status_canvas_item is not None:
-                    self.hud_status_label.itemconfigure(self.hud_status_canvas_item, state='normal')
-                else:
-                    self.hud_status_label.config(image=self.hud_img_status_predict)
-            except Exception:
-                pass
+        # Restore full status image
+        self._update_status_image()
 
     def _animate_predict_blink(self):
-        """Toggle predict status image on/off (hold keyframes, no easing)."""
-        if not self.hud_status_label:
+        """Toggle status window visibility for blink effect."""
+        if not self.hud_status_win or not self.hud_status_win.is_created:
             return
         try:
-            if self.hud_status_canvas_item is not None:
-                state = 'normal' if self.hud_predict_blink_visible else 'hidden'
-                self.hud_status_label.itemconfigure(self.hud_status_canvas_item, state=state)
+            if self.hud_predict_blink_visible:
+                self._update_status_image()
             else:
-                img = (
-                    self.hud_img_status_predict
-                    if self.hud_predict_blink_visible
-                    else (self.hud_img_status_predict_blank or self.hud_img_status_predict)
-                )
-                self.hud_status_label.config(image=img)
+                # Compose with blank status indicator
+                if self.hud_img_status:
+                    blank_w = max(
+                        (img.width for img in [self.hud_img_status_idle, self.hud_img_status_predict,
+                                               self.hud_img_status_intercept] if img),
+                        default=60)
+                    blank_h = max(
+                        (img.height for img in [self.hud_img_status_idle, self.hud_img_status_predict,
+                                                self.hud_img_status_intercept] if img),
+                        default=20)
+                    spacer_w = 8
+                    total_w = self.hud_img_status.width + spacer_w + blank_w
+                    max_h = max(self.hud_img_status.height, blank_h)
+                    img = Image.new("RGBA", (total_w, max_h), (0, 0, 0, 0))
+                    img.paste(self.hud_img_status,
+                              (0, (max_h - self.hud_img_status.height) // 2),
+                              self.hud_img_status)
+                    self.hud_status_win.update_image(img)
+                else:
+                    self.hud_status_win.set_alpha(30 if not self.hud_predict_blink_visible else 255)
         except Exception:
             return
         self.hud_predict_blink_visible = not self.hud_predict_blink_visible
         if self.hud_status == "predict":
             self.hud_predict_blink_id = self.root.after(500, self._animate_predict_blink)
 
-    def _stop_designator_animation(self):
-        """Stop the designator animation."""
-        if self.hud_designator_anim_id:
-            self.root.after_cancel(self.hud_designator_anim_id)
-            self.hud_designator_anim_id = None
-        if self.hud_designator_predict_win:
+    # ── Click-through (kept for QL HUD tkinter windows) ──────────────
+
+    def _set_hud_clickthrough(self, win, enable):
+        """Set click-through for a HUD window (LayeredWindow or tkinter)."""
+        if isinstance(win, LayeredWindow):
+            win.set_click_through(enable)
+        else:
+            # Fallback for tkinter Toplevel (used by QL HUD)
             try:
-                self.hud_designator_predict_win.attributes("-alpha", 1.0)
+                import ctypes
+                from utils.window_utils import set_window_clickthrough
+                hwnd = ctypes.windll.user32.FindWindowW(None, win.title())
+                if hwnd:
+                    set_window_clickthrough(hwnd, enable)
             except Exception:
                 pass
 
-    def _set_hud_clickthrough(self, win, enable):
-        """Set click-through for a HUD window."""
-        if not WINDOW_UTILS_OK:
-            return
-        try:
-            import ctypes
-            # Always re-lookup HWND to ensure we have a valid handle
-            hwnd = ctypes.windll.user32.FindWindowW(None, win.title())
-            if hwnd:
-                set_window_clickthrough(hwnd, enable)
-        except Exception:
-            pass
+    # ── Position capture / config ────────────────────────────────────
 
     def _capture_hud_positions(self):
-        """Capture current HUD window positions from screen coordinates."""
-        if self.hud_name_win and self.hud_name_win.winfo_viewable():
-            self.hud_name_pos = [self.hud_name_win.winfo_x(), self.hud_name_win.winfo_y()]
-        if self.hud_descriptor_win and self.hud_descriptor_win.winfo_viewable():
-            self.hud_descriptor_pos = [self.hud_descriptor_win.winfo_x(), self.hud_descriptor_win.winfo_y()]
-        if self.hud_range_win and self.hud_range_win.winfo_viewable():
-            self.hud_range_pos = [self.hud_range_win.winfo_x(), self.hud_range_win.winfo_y()]
-        if self.hud_status_win and self.hud_status_win.winfo_viewable():
-            self.hud_status_pos = [self.hud_status_win.winfo_x(), self.hud_status_win.winfo_y()]
+        """Capture current HUD window positions from OS."""
+        for win, attr in [(self.hud_name_win, 'hud_name_pos'),
+                          (self.hud_descriptor_win, 'hud_descriptor_pos'),
+                          (self.hud_range_win, 'hud_range_pos'),
+                          (self.hud_status_win, 'hud_status_pos')]:
+            if win and win.is_created and win.visible:
+                setattr(self, attr, win.get_position())
 
     def _save_hud_config(self, config_dict):
         """Save HUD positions and asset paths to config."""

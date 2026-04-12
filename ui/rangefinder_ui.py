@@ -1,13 +1,50 @@
-import tkinter as tk
 try:
     from pynput import mouse as pynmouse
     PYNPUT_OK = True
 except ImportError:
     PYNPUT_OK = False
+
+try:
+    from PIL import Image, ImageDraw, ImageFont
+    PIL_OK = True
+except ImportError:
+    PIL_OK = False
+
+try:
+    from utils.layered_window import LayeredWindow
+    LAYERED_OK = True
+except ImportError:
+    LAYERED_OK = False
+
 from utils.ocr_reader import reset_ocr_filter
 
+
+def _rf_font(size=14):
+    """Get rangefinder font."""
+    import os
+    _candidates = [
+        "Montserrat-VariableFont_wght.ttf",
+        os.path.join(os.environ.get("LOCALAPPDATA", ""),
+                     "Microsoft", "Windows", "Fonts",
+                     "Montserrat-VariableFont_wght.ttf"),
+        os.path.join(os.environ.get("WINDIR", "C:\\Windows"),
+                     "Fonts", "Montserrat-VariableFont_wght.ttf"),
+    ]
+    for path in _candidates:
+        try:
+            font = ImageFont.truetype(path, size)
+            try:
+                font.set_variation_by_axes([600])  # Semi Bold
+            except Exception:
+                pass
+            return font
+        except Exception:
+            continue
+    return ImageFont.load_default()
+
+
 class RangefinderUiMixin:
-    """Mixin for the SACLOS Rangefinder UI component."""
+    """Mixin for the SACLOS Rangefinder UI component (Win32 LayeredWindow)."""
 
     def _init_rangefinder(self):
         # Range finder state
@@ -19,7 +56,6 @@ class RangefinderUiMixin:
         self.rf_update_timer = None
         self.rf_mouse_y_anchor = None
         self.rf_range_anchor = None
-        self.rf_hwnd = None
 
         # Constants
         self.RF_WIDTH = 80
@@ -28,107 +64,102 @@ class RangefinderUiMixin:
         self.RF_SCALE_BOTTOM = 280  # 70m
         self.RF_RANGE_MIN = 20.0
         self.RF_RANGE_MAX = 900.0
-        self.RF_COLOR = "#84FFB1"
+        self.RF_COLOR = (132, 255, 177, 255)  # #84FFB1 as RGBA
+        self.RF_COLOR_HEX = "#84FFB1"
 
         self._create_rangefinder_window()
 
     def _create_rangefinder_window(self):
-        self.rf_win = tk.Toplevel(self.root)
-        self.rf_win.title("SACLOS RangeFinder")
-        self.rf_win.overrideredirect(True)
-        self.rf_win.attributes("-topmost", True)
-        self.rf_win.attributes("-transparentcolor", "#000001")
-        self.rf_win.configure(bg="#000001")
-        self.rf_win.geometry(f"{self.RF_WIDTH}x{self.RF_HEIGHT}")
-        self.rf_win.withdraw()
-
-        self.rf_canvas = tk.Canvas(
-            self.rf_win, width=self.RF_WIDTH, height=self.RF_HEIGHT,
-            bg="#000001", highlightthickness=0
-        )
-        self.rf_canvas.pack()
+        if not (PIL_OK and LAYERED_OK):
+            self.rf_win = None
+            return
+        self.rf_win = LayeredWindow("SACLOS RangeFinder", draggable=False)
+        img = self._render_rangefinder()
+        self.rf_win.create(img)
 
     def _range_to_canvas_y(self, range_m):
         range_m = max(self.RF_RANGE_MIN, min(range_m, self.RF_RANGE_MAX))
         fraction = (self.RF_RANGE_MAX - range_m) / (self.RF_RANGE_MAX - self.RF_RANGE_MIN)
         return self.RF_SCALE_TOP + fraction * (self.RF_SCALE_BOTTOM - self.RF_SCALE_TOP)
 
-    def _draw_rangefinder(self):
-        c = self.rf_canvas
-        c.delete("all")
-
-        color = self.RF_COLOR
+    def _render_rangefinder(self):
+        """Render rangefinder to PIL RGBA image."""
         w = self.RF_WIDTH
-        cx = w // 2
+        h = self.RF_HEIGHT
+        img = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(img)
+        color = self.RF_COLOR
 
         # Beveled bracket geometry (matches rangeFinder.svg)
-        gap_l, gap_r = 30, 50          # center gap
-        arm_l, arm_r = 18, 62          # horizontal arm ends
-        edge_l, edge_r = 4, 76         # outer vertical edges
-        bv = 7                          # bevel segment size
-        y_top, y_bot = 2, self.RF_HEIGHT - 2
-        bv_top = y_top + 2 * bv         # 16
-        bv_bot = y_bot - 2 * bv         # 284
+        gap_l, gap_r = 30, 50
+        arm_l, arm_r = 18, 62
+        edge_l, edge_r = 4, 76
+        bv = 7
+        y_top, y_bot = 2, h - 2
+        bv_top = y_top + 2 * bv
+        bv_bot = y_bot - 2 * bv
 
         # Right bracket ]
-        c.create_line(
-            gap_r, y_top, arm_r, y_top,
-            arm_r + bv, y_top + bv, edge_r, bv_top,
-            edge_r, bv_bot,
-            edge_r - bv, y_bot - bv, arm_r, y_bot,
-            gap_r, y_bot,
-            fill=color, width=3, joinstyle='bevel'
-        )
+        right_pts = [
+            (gap_r, y_top), (arm_r, y_top),
+            (arm_r + bv, y_top + bv), (edge_r, bv_top),
+            (edge_r, bv_bot),
+            (edge_r - bv, y_bot - bv), (arm_r, y_bot),
+            (gap_r, y_bot),
+        ]
+        draw.line(right_pts, fill=color, width=3, joint="curve")
 
         # Left bracket [
-        c.create_line(
-            gap_l, y_top, arm_l, y_top,
-            arm_l - bv, y_top + bv, edge_l, bv_top,
-            edge_l, bv_bot,
-            edge_l + bv, y_bot - bv, arm_l, y_bot,
-            gap_l, y_bot,
-            fill=color, width=3, joinstyle='bevel'
-        )
+        left_pts = [
+            (gap_l, y_top), (arm_l, y_top),
+            (arm_l - bv, y_top + bv), (edge_l, bv_top),
+            (edge_l, bv_bot),
+            (edge_l + bv, y_bot - bv), (arm_l, y_bot),
+            (gap_l, y_bot),
+        ]
+        draw.line(left_pts, fill=color, width=3, joint="curve")
 
         # Range text
-        c.create_text(cx, 15, text=f"{int(self.target_range_m)}m",
-                      fill="#ffffff", font=("Courier", 11, "bold"), anchor=tk.CENTER,
-                      tags="rf_text")
+        font = _rf_font(14)
+        text = f"{int(self.target_range_m)}m"
+        bbox = draw.textbbox((0, 0), text, font=font)
+        tw = bbox[2] - bbox[0]
+        tx = (w - tw) // 2
+        draw.text((tx, 5), text, fill=(255, 255, 255, 255), font=font)
 
-        # Scale ticks along bracket edges
-        notch_step = 55  # 16 steps of 55m = 880m = RF_RANGE_MAX - RF_RANGE_MIN
+        # Scale ticks
+        notch_step = 55
         notch_count = round((self.RF_RANGE_MAX - self.RF_RANGE_MIN) / notch_step)
         for i in range(notch_count + 1):
             range_val = self.RF_RANGE_MIN + i * notch_step
-            y = self._range_to_canvas_y(range_val)
-            if i % 4 == 0:  # Long: 20, 240, 460, 680, 900m
-                c.create_line(edge_l, y, edge_l + 10, y, fill=color, width=2)
-                c.create_line(edge_r - 10, y, edge_r, y, fill=color, width=2)
+            y = int(self._range_to_canvas_y(range_val))
+            if i % 4 == 0:
+                draw.line([(edge_l, y), (edge_l + 10, y)], fill=color, width=2)
+                draw.line([(edge_r - 10, y), (edge_r, y)], fill=color, width=2)
             else:
-                c.create_line(edge_l, y, edge_l + 5, y, fill=color, width=1)
-                c.create_line(edge_r - 5, y, edge_r, y, fill=color, width=1)
+                draw.line([(edge_l, y), (edge_l + 5, y)], fill=color, width=1)
+                draw.line([(edge_r - 5, y), (edge_r, y)], fill=color, width=1)
 
         # Range notch indicator
-        notch_y = self._range_to_canvas_y(self.target_range_m)
-        c.create_line(15, notch_y, 28, notch_y, fill=color, width=3, tags="rf_notch")
-        c.create_line(52, notch_y, 65, notch_y, fill=color, width=3, tags="rf_notch")
+        notch_y = int(self._range_to_canvas_y(self.target_range_m))
+        draw.line([(15, notch_y), (28, notch_y)], fill=color, width=3)
+        draw.line([(52, notch_y), (65, notch_y)], fill=color, width=3)
+
+        return img
+
+    def _draw_rangefinder(self):
+        """Re-render and push rangefinder image."""
+        if not self.rf_win or not self.rf_win.is_created:
+            return
+        img = self._render_rangefinder()
+        self.rf_win.update_image(img)
 
     def _update_rangefinder_notch(self):
-        c = self.rf_canvas
-        c.delete("rf_notch")
-        c.delete("rf_text")
-
-        c.create_text(self.RF_WIDTH // 2, 15,
-                      text=f"{int(self.target_range_m)}m",
-                      fill="#ffffff", font=("Courier", 11, "bold"),
-                      anchor=tk.CENTER, tags="rf_text")
-
-        notch_y = self._range_to_canvas_y(self.target_range_m)
-        c.create_line(15, notch_y, 28, notch_y, fill=self.RF_COLOR, width=3, tags="rf_notch")
-        c.create_line(52, notch_y, 65, notch_y, fill=self.RF_COLOR, width=3, tags="rf_notch")
+        """Re-render rangefinder with updated range."""
+        self._draw_rangefinder()
 
     def _show_rangefinder(self):
-        if self.rf_visible or self.tracking_active:
+        if not self.rf_win or self.rf_visible or self.tracking_active:
             return
 
         self.rf_visible = True
@@ -144,11 +175,10 @@ class RangefinderUiMixin:
         rf_x = int(overlay_cx - self.RF_WIDTH / 2)
         rf_y = int(overlay_cy - self.RF_HEIGHT / 2)
 
-        self.rf_win.geometry(f"{self.RF_WIDTH}x{self.RF_HEIGHT}+{rf_x}+{rf_y}")
         self._draw_rangefinder()
-        self.rf_win.deiconify()
-        self.rf_win.attributes("-topmost", True)
-        self.rf_win.after(50, lambda: self._set_rf_clickthrough(True))
+        self.rf_win.move(rf_x, rf_y)
+        self.rf_win.show()
+        self.rf_win.set_click_through(True)
 
         self.rf_mouse_y_anchor = None
         self.rf_range_anchor = self.target_range_m
@@ -180,7 +210,8 @@ class RangefinderUiMixin:
             self.root.after_cancel(self.rf_update_timer)
             self.rf_update_timer = None
 
-        self.rf_win.withdraw()
+        if self.rf_win:
+            self.rf_win.hide()
         self._save_config_partial()
 
     def _on_rf_mouse_move(self, x, y):
@@ -220,12 +251,6 @@ class RangefinderUiMixin:
         self.rf_update_timer = self.root.after(16, self._process_rf_updates)
 
     def _set_rf_clickthrough(self, enable):
-        try:
-            from utils.window_utils import set_window_clickthrough
-            import ctypes
-            if self.rf_hwnd is None:
-                self.rf_hwnd = ctypes.windll.user32.FindWindowW(None, "SACLOS RangeFinder")
-            if self.rf_hwnd:
-                set_window_clickthrough(self.rf_hwnd, enable)
-        except Exception:
-            pass
+        """Set click-through on rangefinder window."""
+        if self.rf_win:
+            self.rf_win.set_click_through(enable)
