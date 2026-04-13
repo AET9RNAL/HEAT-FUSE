@@ -18,7 +18,7 @@ import tkinter as tk
 from loguru import logger
 
 from predictor.auto_overlay import AutoOverlay
-from utils.hardware_inject import is_admin
+from utils.hardware_inject_router import is_admin
 
 
 def main():

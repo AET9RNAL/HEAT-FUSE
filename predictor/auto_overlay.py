@@ -30,7 +30,7 @@ except ImportError:
 
 from ui.base_overlay import BaseSACLOSOverlay
 from predictor.ql_hud import QuickLabelHudMixin
-from utils.hardware_inject import inject_mouse_movement, inject_mouse_click
+from utils.hardware_inject_router import inject_mouse_movement, inject_mouse_click
 
 
 class AutoOverlay(QuickLabelHudMixin, BaseSACLOSOverlay):

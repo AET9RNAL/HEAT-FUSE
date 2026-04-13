@@ -819,7 +819,7 @@ class BaseSACLOSOverlay(OCRUiMixin, RangefinderUiMixin, HudUiMixin):
         self._destroy_locked_overlay()
 
         try:
-            from utils.hardware_inject import disable_hires_timer
+            from utils.hardware_inject_router import disable_hires_timer
             disable_hires_timer()
         except Exception:
             pass

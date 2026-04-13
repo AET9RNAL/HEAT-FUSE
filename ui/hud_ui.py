@@ -667,9 +667,8 @@ class HudUiMixin:
                     total_w = self.hud_img_status.width + spacer_w + blank_w
                     max_h = max(self.hud_img_status.height, blank_h)
                     img = Image.new("RGBA", (total_w, max_h), (0, 0, 0, 0))
-                    img.paste(self.hud_img_status,
-                              (0, (max_h - self.hud_img_status.height) // 2),
-                              self.hud_img_status)
+                    img = self._paste_alpha(img, self.hud_img_status,
+                              (0, (max_h - self.hud_img_status.height) // 2))
                     self.hud_status_win.update_image(img)
                 else:
                     self.hud_status_win.set_alpha(30 if not self.hud_predict_blink_visible else 255)
