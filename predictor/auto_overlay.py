@@ -113,7 +113,6 @@ class AutoOverlay(QuickLabelHudMixin, BaseSACLOSOverlay):
     def _add_extra_config(self, config_dict):
         config_dict.update({
             "correction_enabled": self.correction_enabled,
-            "target_range_m": self.target_range_m,
             "correction_min_threshold_px": self.correction_min_threshold_px,
             "correction_speed_multiplier": self.correction_speed_multiplier,
             "turret_traverse_speed_deg_s": self.turret_traverse_speed_deg_s,
@@ -293,6 +292,20 @@ class AutoOverlay(QuickLabelHudMixin, BaseSACLOSOverlay):
 
     def _start_tracking(self):
         """Override: reset pre-fire state before starting tracking."""
+        # Interrupt running correction from previous session to prevent
+        # injected mouse deltas from bleeding into the new tracking session.
+        if self.correction_active:
+            self.correction_interrupted.set()
+            self.correction_active = False
+
+        # Exit QL mode so the tracking key isn't swallowed.
+        if self._ql_active:
+            if self._ql_replay_thread and self._ql_replay_thread.is_alive():
+                self._ql_replay_abort.set()
+            self._ql_active = False
+            self._ql_state = None
+            self._ql_context = None
+
         self._prefire_deltas = []
         self._prefire_start_time = None
         self._prefire_last_x = None
@@ -351,6 +364,7 @@ class AutoOverlay(QuickLabelHudMixin, BaseSACLOSOverlay):
         # Only trigger correction if displacement exceeds threshold
         if self.correction_enabled and distance_px > self.correction_min_threshold_px:
             angle_rad = math.atan2(displacement_y, displacement_x)
+            self._reset_to_calibrated_position()
             self.root.after(0, lambda: self._start_auto_correction(distance_px, angle_rad))
         else:
             # Still fire the missile even if no movement needed
@@ -371,6 +385,7 @@ class AutoOverlay(QuickLabelHudMixin, BaseSACLOSOverlay):
         - Formula mode (deprecated): Uses physics-based heuristic
         """
         if self.correction_active:
+            self._reset_to_calibrated_position()
             return
 
         # Clear any stale context
@@ -615,6 +630,13 @@ class AutoOverlay(QuickLabelHudMixin, BaseSACLOSOverlay):
     def _catch_kbd_press(self, key):
         """Override: intercept QL keys when active, then fall through to base."""
         if self._ql_active:
+            # Let the tracking key pass through — _start_tracking will exit QL.
+            if self.tracking_key is not None:
+                char_t = getattr(key, 'char', None)
+                is_tracking = (char_t and char_t.lower() == self.tracking_key.lower()) if isinstance(self.tracking_key, str) else (key == self.tracking_key)
+                if is_tracking:
+                    return super()._catch_kbd_press(key)
+
             char = getattr(key, 'char', None)
             name = getattr(key, 'name', None)
             if char:

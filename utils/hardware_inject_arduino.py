@@ -24,7 +24,7 @@ CMD byte:
 import struct
 import time
 import ctypes
-import logging
+from loguru import logger as log
 
 try:
     import serial
@@ -33,9 +33,7 @@ try:
 except ImportError:
     _HAS_SERIAL = False
 
-log = logging.getLogger(__name__)
 
-# ── Protocol constants ──────────────────────────────────────────────
 CMD_MOVE       = 0x01
 CMD_CLICK      = 0x02
 CMD_LEFT_DOWN  = 0x03
@@ -43,10 +41,9 @@ CMD_LEFT_UP    = 0x04
 PACKET_FMT     = '<Bhh'        # CMD(uint8) + X(int16) + Y(int16) = 5 bytes
 BAUD_RATE      = 115200
 
-# ── Module state ────────────────────────────────────────────────────
-_ser = None  # serial.Serial instance when connected
 
-# ── High-resolution timer (kept for Python-side timing) ─────────────
+_ser = None  
+
 _timer_active = False
 def enable_hires_timer():
     global _timer_active
@@ -60,17 +57,24 @@ def disable_hires_timer():
         ctypes.windll.winmm.timeEndPeriod(1)
         _timer_active = False
 
-# ── Connection ──────────────────────────────────────────────────────
 def _auto_detect_port():
     """Find first COM port with VID matching Arduino/SparkFun ATmega32U4."""
     if not _HAS_SERIAL:
         return None
-    KNOWN_VIDS = {0x2341, 0x1B4F, 0x1A86, 0x2A03}   # Arduino, SparkFun, CH340, Arduino.org
+    KNOWN_VIDS = {'2341', '1b4f', '1a86', '2a03', '1532'}   # Arduino, SparkFun, CH340, Arduino.org, Razer (spoofed)
     for info in serial.tools.list_ports.comports():
-        if info.vid in KNOWN_VIDS:
-            log.info("Auto-detected Arduino on %s (VID=0x%04X PID=0x%04X)",
-                     info.device, info.vid, info.pid)
+        # Primary: parsed vid field (may be None on Windows composite devices)
+        if info.vid is not None and f'{info.vid:04x}' in KNOWN_VIDS:
+            log.info("Auto-detected Arduino on {} (VID=0x{:04X} PID=0x{:04X})",
+                     info.device, info.vid, info.pid or 0)
             return info.device
+        # Fallback: scan hwid string (e.g. 'USB VID:PID=2341:8036')
+        hwid = (info.hwid or '').lower()
+        if any(f'vid_{v}' in hwid or f'vid:pid={v}' in hwid for v in KNOWN_VIDS):
+            log.info("Auto-detected Arduino on {} via hwid: {}", info.device, info.hwid)
+            return info.device
+    log.error("No Arduino detected. Available ports: {}",
+               [(i.device, i.hwid) for i in serial.tools.list_ports.comports()])
     return None
 
 def connect(port=None, baud=BAUD_RATE, timeout=2.0):
@@ -94,10 +98,10 @@ def connect(port=None, baud=BAUD_RATE, timeout=2.0):
         # Arduino resets on serial open — wait for bootloader
         time.sleep(2.0)
         _ser.reset_input_buffer()
-        log.info("Connected to Arduino on %s @ %d baud", port, baud)
+        log.info("Connected to Arduino on {} @ {} baud", port, baud)
         return True
     except serial.SerialException as e:
-        log.error("Failed to open %s: %s", port, e)
+        log.error("Failed to open {}: {}", port, e)
         _ser = None
         return False
 
@@ -115,7 +119,6 @@ def disconnect():
 def is_connected() -> bool:
     return _ser is not None and _ser.is_open
 
-# ── Low-level send ──────────────────────────────────────────────────
 def _send(cmd: int, x: int = 0, y: int = 0):
     """Pack and send a 5-byte command packet."""
     if _ser is None or not _ser.is_open:
@@ -126,7 +129,6 @@ def _send(cmd: int, x: int = 0, y: int = 0):
     y = max(-32768, min(32767, int(y)))
     _ser.write(struct.pack(PACKET_FMT, cmd, x, y))
 
-# ── Public API (matches hardware_inject.py) ─────────────────────────
 def inject_mouse_movement(dx, dy):
     """Inject relative mouse movement via Arduino HID."""
     enable_hires_timer()

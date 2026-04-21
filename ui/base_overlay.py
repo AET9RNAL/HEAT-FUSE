@@ -68,8 +68,10 @@ class BaseSACLOSOverlay(OCRUiMixin, RangefinderUiMixin, HudUiMixin):
         self.position_lock = threading.Lock()
         self.update_timer_id = None
         self.hwnd = None
+        self._config_dirty = False
 
-        self.target_range_m = 200.0
+        self.target_range_m = 70.0
+        self.input_backend = "arduino"
 
         # Run mixin initializations
         self._init_rangefinder()
@@ -153,6 +155,10 @@ class BaseSACLOSOverlay(OCRUiMixin, RangefinderUiMixin, HudUiMixin):
         self._save_config()
 
     def _save_config(self):
+        if self.tracking_active:
+            self._config_dirty = True
+            return
+        self._config_dirty = False
         config_dict = {
             "calibrated_x": self.calibrated_x,
             "calibrated_y": self.calibrated_y,
@@ -168,7 +174,7 @@ class BaseSACLOSOverlay(OCRUiMixin, RangefinderUiMixin, HudUiMixin):
             "ocr_enabled": self.ocr_enabled,
             "ocr_poll_interval_ms": self.ocr_poll_interval_ms,
             "ocr_display_pos": self.ocr_display_pos,
-            "target_range_m": self.target_range_m
+            "input_backend": self.input_backend,
         }
 
         # Merge with generic config manager rules
@@ -196,8 +202,6 @@ class BaseSACLOSOverlay(OCRUiMixin, RangefinderUiMixin, HudUiMixin):
         self.origin_y = config.get("origin_y")
         self.margin_x = config.get("margin_x", 200)
         self.margin_y = config.get("margin_y", 200)
-        self.target_range_m = config.get("target_range_m", 200.0)
-
         self.tracking_key_name = config.get("tracking_key_name", "Space")
         self._update_tracking_key_from_name()
 
@@ -208,6 +212,7 @@ class BaseSACLOSOverlay(OCRUiMixin, RangefinderUiMixin, HudUiMixin):
         self.ocr_enabled = config.get("ocr_enabled", False)
         self.ocr_poll_interval_ms = config.get("ocr_poll_interval_ms", 350)
         self.ocr_display_pos = config.get("ocr_display_pos", None)
+        self.input_backend = config.get("input_backend", "arduino")
 
         self._load_hud_config(config)
 
@@ -579,6 +584,10 @@ class BaseSACLOSOverlay(OCRUiMixin, RangefinderUiMixin, HudUiMixin):
             self.canvas.itemconfig(self.img_id, image=self.img_normal)
 
         self._update_hud_status("idle")
+
+        if self._config_dirty:
+            self._config_dirty = False
+            self.root.after(0, self._save_config)
 
     def _reset_to_calibrated_position(self):
         self.win_x = self.calibrated_x

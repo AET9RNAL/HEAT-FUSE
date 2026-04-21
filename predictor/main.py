@@ -18,7 +18,7 @@ import tkinter as tk
 from loguru import logger
 
 from predictor.auto_overlay import AutoOverlay
-from utils.hardware_inject_router import is_admin
+from utils.hardware_inject_router import is_admin, connect, disconnect
 
 
 def main():
@@ -31,8 +31,8 @@ def main():
                         help="Optional separate image for tracking mode")
     parser.add_argument("--setup-tracking-key", action="store_true",
                         help="Prompt to reconfigure the tracking key")
-    parser.add_argument("--range", type=float, default=200.0,
-                        help="Range to target in meters (default: 200)")
+    parser.add_argument("--range", type=float, default=70.0,
+                        help="Range to target in meters (default: 70)")
     parser.add_argument("--disable-correction", action="store_true",
                         help="Disable auto-correction on tracking key release")
     parser.add_argument("--correction-speed", type=float, default=1.0,
@@ -63,6 +63,8 @@ def main():
             "If mouse clicks / movements are ignored in-game, "
             "re-launch this script with 'Run as administrator'."
         )
+
+    connect()
 
     root = tk.Tk()
     app = AutoOverlay(root, image_path=args.image,
@@ -110,6 +112,7 @@ def main():
         app.root.after(500, app._prompt_for_tracking_key)
 
     root.mainloop()
+    disconnect()
 
 
 if __name__ == "__main__":

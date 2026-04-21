@@ -23,6 +23,7 @@ from loguru import logger
 
 from trainer.training_overlay import TrainingOverlay
 from trainer.correction_learner import CorrectionLearner
+from utils.hardware_inject_router import connect, disconnect
 
 
 def main():
@@ -37,8 +38,8 @@ def main():
                         help="Separate image shown while tracking")
     parser.add_argument("--setup-tracking-key", action="store_true",
                         help="Re-prompt for tracking key binding")
-    parser.add_argument("--range", type=float, default=200.0,
-                        help="Initial range to target in metres (default 200)")
+    parser.add_argument("--range", type=float, default=70.0,
+                        help="Initial range to target in metres (default 70)")
     parser.add_argument("--mouse-scale", type=float, default=1.0,
                         help="Mouse sensitivity scale (default 1.0)")
     parser.add_argument("--reset", action="store_true",
@@ -79,6 +80,8 @@ def main():
                             f"{info['hits']:>3d} hits ({pct:.0f}%)")
         return
 
+    connect()
+
     root = tk.Tk()
     app = TrainingOverlay(
         root,
@@ -97,6 +100,7 @@ def main():
         app.root.after(500, app._prompt_for_tracking_key)
 
     root.mainloop()
+    disconnect()
 
 
 if __name__ == "__main__":
