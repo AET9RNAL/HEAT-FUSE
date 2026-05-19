@@ -28,6 +28,29 @@ except ImportError:
     _LOCK_SOUND = None
     _INTERCEPT_SOUND = None
 
+# Preload WAV files into memory so playback never touches disk.
+_LOCK_SOUND_BUF = None
+_INTERCEPT_SOUND_BUF = None
+if _winsound:
+    for _path, _attr in [(_LOCK_SOUND, '_LOCK_SOUND_BUF'),
+                          (_INTERCEPT_SOUND, '_INTERCEPT_SOUND_BUF')]:
+        try:
+            if _path and os.path.exists(_path):
+                with open(_path, 'rb') as _f:
+                    globals()[_attr] = _f.read()
+        except Exception:
+            pass
+
+
+def _play_sound_async(buf):
+    """Play a preloaded WAV buffer on a daemon thread (zero main-thread cost)."""
+    if buf and _winsound:
+        threading.Thread(
+            target=_winsound.PlaySound,
+            args=(buf, _winsound.SND_MEMORY),
+            daemon=True,
+        ).start()
+
 from ui.base_overlay import BaseSACLOSOverlay
 from predictor.ql_hud import QuickLabelHudMixin
 from utils.hardware_inject_router import inject_mouse_movement, inject_mouse_click
@@ -314,11 +337,7 @@ class AutoOverlay(QuickLabelHudMixin, BaseSACLOSOverlay):
         super()._start_tracking()
         if self.tracking_active:
             self._prefire_start_time = time.perf_counter()
-            if _winsound and _LOCK_SOUND and os.path.exists(_LOCK_SOUND):
-                try:
-                    _winsound.PlaySound(_LOCK_SOUND, _winsound.SND_FILENAME | _winsound.SND_ASYNC)
-                except Exception:
-                    pass
+            _play_sound_async(_LOCK_SOUND_BUF)
 
     def _on_mouse_move(self, x, y):
         """Override: record pre-fire aiming deltas during tracking."""
@@ -338,11 +357,8 @@ class AutoOverlay(QuickLabelHudMixin, BaseSACLOSOverlay):
 
     def _stop_tracking(self):
         """Override: common teardown, then calculate displacement and trigger correction."""
-        if self.tracking_active and _winsound and _INTERCEPT_SOUND and os.path.exists(_INTERCEPT_SOUND):
-            try:
-                _winsound.PlaySound(_INTERCEPT_SOUND, _winsound.SND_FILENAME | _winsound.SND_ASYNC)
-            except Exception:
-                pass
+        if self.tracking_active:
+            _play_sound_async(_INTERCEPT_SOUND_BUF)
         was_tracking = self.tracking_active
         # Capture cursor start pos before super() clears mouse_start_x/y
         if was_tracking and self._replay_cursor_pos is None and self.mouse_start_x is not None:

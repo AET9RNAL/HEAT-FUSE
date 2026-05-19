@@ -239,14 +239,20 @@ class LayeredWindow:
             self._push_layered()
 
     def move(self, x: int, y: int):
-        """Reposition the window."""
+        """Reposition the window.
+
+        SetWindowPos (synchronous) updates the window rect so that
+        GetWindowRect / dragging work correctly.  _push_layered then
+        updates the DWM composited render position to match.
+        No SWP_ASYNCWINDOWPOS — that caused a race where the deferred
+        SetWindowPos could overwrite the ULW position, producing jitter.
+        """
         self.x = int(x)
         self.y = int(y)
         if self.hwnd:
             user32.SetWindowPos(
                 self.hwnd, HWND_TOPMOST, self.x, self.y, 0, 0,
-                SWP_NOSIZE | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS)
-            # Also need to re-push layered with new position
+                SWP_NOSIZE | SWP_NOACTIVATE)
             if self._hdc_mem:
                 self._push_layered()
 

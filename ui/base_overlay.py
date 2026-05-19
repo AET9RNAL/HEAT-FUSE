@@ -802,6 +802,7 @@ class BaseSACLOSOverlay(OCRUiMixin, RangefinderUiMixin, HudUiMixin):
         self.ocr_update_timer = self.root.after(200, self._process_ocr_updates)
 
     def _quit(self):
+        self._capture_hud_positions()
         self._save_config()
         if self.update_timer_id is not None:
             self.root.after_cancel(self.update_timer_id)
