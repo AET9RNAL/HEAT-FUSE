@@ -5,8 +5,8 @@
   "origin_y": 529.0,
   "margin_x": 2000.0,
   "margin_y": 2000.0,
-  "image_path": "C:/Users/maksg/Desktop/Ballistic Drop Compensator-01.png",
-  "tracking_image_path": "C:/Users/maksg/Desktop/Ballistic Drop Compensator-02.png",
+  "image_path": "assets/Ballistic Drop Compensator-01.png",
+  "tracking_image_path": "assets/Ballistic Drop Compensator-02.png",
   "tracking_key_name": "Q",
   "rf_key_name": "r",
   "ocr_region": [
