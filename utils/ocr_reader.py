@@ -5,6 +5,9 @@ import re
 import numpy as np
 from loguru import logger
 
+OCR_MIN_RANGE_M = 20.0
+OCR_MAX_RANGE_M = 900.0
+
 try:
     from PIL import Image, ImageGrab
     PIL_OK = True
@@ -226,7 +229,7 @@ def ocr_capture_range(ocr_region):
         match = re.search(r'(\d+)', text.strip())
         if match:
             raw_val = float(match.group(1))
-            in_range = 20 <= raw_val <= 900
+            in_range = OCR_MIN_RANGE_M <= raw_val <= OCR_MAX_RANGE_M
             if OCR_DEBUG:
                 logger.debug(f"[OCR] Parsed raw_val={raw_val} in_range={in_range} -> filter={_temporal_filter._last_confirmed}")
             if in_range:

@@ -52,8 +52,10 @@ def _play_sound_async(buf):
         ).start()
 
 from ui.base_overlay import BaseSACLOSOverlay
+from ui.tce import TCE
 from predictor.ql_hud import QuickLabelHudMixin
 from utils.hardware_inject_router import inject_mouse_movement, inject_mouse_click
+from utils.ocr_reader import OCR_MIN_RANGE_M, OCR_MAX_RANGE_M
 
 
 class AutoOverlay(QuickLabelHudMixin, BaseSACLOSOverlay):
@@ -114,6 +116,22 @@ class AutoOverlay(QuickLabelHudMixin, BaseSACLOSOverlay):
 
         self.mouse_sensitivity_scale = 1.0
 
+        # TORC Capture Envelope (TCE) — recovery boundary visualization.
+        # Config keys keep the `envelope_*` prefix for back-compat with
+        # already-tuned saclos_config.json files.
+        self.envelope_enabled = True
+        self.envelope_d_max_px = None
+        self.envelope_n_max_deg = None
+        self.envelope_d_base_px = 24.0
+        self.envelope_d_per_meter_px = 0.45
+        self.envelope_d_min_px = 20.0
+        self.envelope_d_max_cap_px = 220.0
+        self.envelope_offset_x = 0.0
+        self.envelope_offset_y = 0.0
+        # Constant pixel arc length (None falls back to envelope_n_max_deg).
+        self.envelope_arc_length_px = 60.0
+        self.tce = None
+
         self.lead_alpha = 1.0
         self.lead_beta = 0.5
         self.lead_gamma = 0.3
@@ -156,6 +174,16 @@ class AutoOverlay(QuickLabelHudMixin, BaseSACLOSOverlay):
             "attn_n_buckets": self.attn_n_buckets,
             "torc_quality_weight": self.torc_quality_weight,
             "quick_label_enabled": self.quick_label_enabled,
+            "envelope_enabled": self.envelope_enabled,
+            "envelope_d_max_px": self.envelope_d_max_px,
+            "envelope_n_max_deg": self.envelope_n_max_deg,
+            "envelope_d_base_px": self.envelope_d_base_px,
+            "envelope_d_per_meter_px": self.envelope_d_per_meter_px,
+            "envelope_d_min_px": self.envelope_d_min_px,
+            "envelope_d_max_cap_px": self.envelope_d_max_cap_px,
+            "envelope_offset_x": self.envelope_offset_x,
+            "envelope_offset_y": self.envelope_offset_y,
+            "envelope_arc_length_px": self.envelope_arc_length_px,
         })
         self._ql_capture_positions()
         self._ql_save_config(config_dict)
@@ -187,6 +215,18 @@ class AutoOverlay(QuickLabelHudMixin, BaseSACLOSOverlay):
         # Quick-label config
         self.quick_label_enabled = config.get("quick_label_enabled", True)
         self._ql_load_config(config)
+
+        # Envelope arc config
+        self.envelope_enabled = config.get("envelope_enabled", True)
+        self.envelope_d_max_px = config.get("envelope_d_max_px", None)
+        self.envelope_n_max_deg = config.get("envelope_n_max_deg", None)
+        self.envelope_d_base_px = config.get("envelope_d_base_px", 24.0)
+        self.envelope_d_per_meter_px = config.get("envelope_d_per_meter_px", 0.45)
+        self.envelope_d_min_px = config.get("envelope_d_min_px", 20.0)
+        self.envelope_d_max_cap_px = config.get("envelope_d_max_cap_px", 220.0)
+        self.envelope_offset_x = config.get("envelope_offset_x", 0.0)
+        self.envelope_offset_y = config.get("envelope_offset_y", 0.0)
+        self.envelope_arc_length_px = config.get("envelope_arc_length_px", 60.0)
 
         # Auto-load learner if ml_enabled from config and not already set
         if self.ml_enabled and self.learner is None:
@@ -231,6 +271,7 @@ class AutoOverlay(QuickLabelHudMixin, BaseSACLOSOverlay):
             "[H] HIT  [M] MISS  [E] Editor  [Esc] Discard"
         )
         self._ql_show_placeholder_graphs()
+        self._tce_show_setup()
 
     def _show_hud_locked(self):
         """In locked mode, keep QL overlays visible during online learning."""
@@ -244,11 +285,98 @@ class AutoOverlay(QuickLabelHudMixin, BaseSACLOSOverlay):
         else:
             # Keep overlays shown with idle prompt
             self._ql_show_idle()
+        self._tce_show()
 
     def _hide_hud(self):
         """Hide all HUD windows including QL overlays."""
         super()._hide_hud()
         self._ql_hide_all()
+        self._tce_hide()
+
+    # ----------------------------------------------------------------
+    #  TCE (TORC Capture Envelope) lifecycle + feature mapping
+    # ----------------------------------------------------------------
+
+    def _tce_ensure(self):
+        if self.tce is not None:
+            return self.tce
+        try:
+            self.tce = TCE(
+                self.root,
+                get_origin=self._tce_get_origin,
+                get_envelope=self._tce_compute,
+                on_origin_drag=self._tce_on_origin_drag,
+            )
+        except Exception as e:
+            logger.warning(f"TCE init failed: {e}")
+            self.tce = None
+        return self.tce
+
+    def _tce_show(self):
+        if not self.envelope_enabled:
+            return
+        tce = self._tce_ensure()
+        if tce is None:
+            return
+        tce.set_mode("arc")
+        tce.show()
+
+    def _tce_show_setup(self):
+        if not self.envelope_enabled:
+            return
+        tce = self._tce_ensure()
+        if tce is None:
+            return
+        tce.set_mode("ring")
+        tce.show()
+
+    def _tce_hide(self):
+        if self.tce is not None:
+            self.tce.hide()
+
+    def _tce_destroy(self):
+        if self.tce is not None:
+            self.tce.destroy()
+            self.tce = None
+
+    def _tce_get_origin(self):
+        if self.state not in ("locked", "adjust_bounds"):
+            return None
+        if self.origin_x is None or self.origin_y is None:
+            return None
+        return (self.origin_x + self.envelope_offset_x,
+                self.origin_y + self.envelope_offset_y)
+
+    def _tce_compute(self):
+        """Map current input features -> (d_max_px, n_max_rad)."""
+        if self.envelope_d_max_px is not None:
+            d_max = float(self.envelope_d_max_px)
+        else:
+            # Clamp to OCR domain so the radius floor is naturally
+            # base + OCR_MIN_RANGE_M*slope rather than a magic constant.
+            r = max(OCR_MIN_RANGE_M,
+                    min(OCR_MAX_RANGE_M, float(self.target_range_m)))
+            d_max = self.envelope_d_base_px + r * self.envelope_d_per_meter_px
+            d_max = max(float(self.envelope_d_min_px),
+                        min(float(self.envelope_d_max_cap_px), d_max))
+
+        # Constant-pixel-length wins; preserves visual sweep size as
+        # the radius grows. n_max = arc_length / (2 * d_max).
+        if self.envelope_arc_length_px is not None and d_max > 0:
+            n_max_rad = float(self.envelope_arc_length_px) / (2.0 * d_max)
+            n_max_rad = min(n_max_rad, math.pi - 1e-3)
+            return d_max, n_max_rad
+
+        n_deg = (float(self.envelope_n_max_deg)
+                 if self.envelope_n_max_deg is not None else 25.0)
+        return d_max, math.radians(n_deg)
+
+    def _tce_on_origin_drag(self, new_center_x, new_center_y):
+        if self.origin_x is None or self.origin_y is None:
+            return
+        self.envelope_offset_x = float(new_center_x) - float(self.origin_x)
+        self.envelope_offset_y = float(new_center_y) - float(self.origin_y)
+        self._save_config()
 
     def _capture_hud_positions(self):
         """Capture HUD positions including QL overlays."""
