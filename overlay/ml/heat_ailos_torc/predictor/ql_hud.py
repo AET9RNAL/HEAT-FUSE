@@ -633,7 +633,7 @@ class QuickLabelHudMixin:
         entry = session.get_active_entry() if session else None
         traj = copy.deepcopy(trajectory)
         if entry:
-            from trainer.correction_session import CorrectionSession
+            from overlay.ml.heat_ailos_torc.trainer.correction_session import CorrectionSession
             CorrectionSession.apply_bias_to_trajectory(
                 traj, entry['timing_factor'], entry['magnitude_factor'],
                 entry.get('time_shift', 0.0))

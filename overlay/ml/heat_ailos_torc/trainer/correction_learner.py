@@ -14,17 +14,34 @@ import math
 import os
 import random
 
-from trainer.torc_quality import estimate_torc_quality
-from trainer.trajectory_attentioner import TrajectoryAttentioner
+from overlay.ml.heat_ailos_torc.trainer.torc_quality import estimate_torc_quality
+from overlay.ml.heat_ailos_torc.trainer.trajectory_attentioner import TrajectoryAttentioner
+
+
+def _resolve_paths(profile, data_file, attn_weights_file):
+    """Resolve dataset + attention-weights paths from explicit args or profile.
+
+    Precedence: explicit *data_file* > *profile* > registry default.
+    """
+    if data_file is not None:
+        if attn_weights_file is None:
+            attn_weights_file = os.path.splitext(data_file)[0] + '_attn_weights.json'
+        return data_file, attn_weights_file
+    if profile is None:
+        from overlay.ml.heat_ailos_torc.profiles import (
+            default_profile_name, load_profile)
+        profile = load_profile(default_profile_name())
+    return profile.dataset, attn_weights_file or profile.attn_weights
 
 
 class CorrectionLearner:
     """Stores human-guided missile correction trajectories and predicts via KNN."""
 
-    def __init__(self, data_file='saclos_ml_data.json', k=5,
-                 attn_enabled=True, attn_lr=0.02, attn_n_buckets=10,
+    def __init__(self, profile=None, data_file=None, attn_weights_file=None,
+                 k=5, attn_enabled=True, attn_lr=0.02, attn_n_buckets=10,
                  torc_quality_weight=0.5):
-        self.data_file = data_file
+        self.data_file, weights_file = _resolve_paths(
+            profile, data_file, attn_weights_file)
         self.k = k
         self.samples = []
 
@@ -34,7 +51,6 @@ class CorrectionLearner:
         self.attentioner = None
 
         if attn_enabled:
-            weights_file = os.path.splitext(data_file)[0] + '_attn_weights.json'
             self.attentioner = TrajectoryAttentioner(
                 n_buckets=attn_n_buckets,
                 lr=attn_lr,

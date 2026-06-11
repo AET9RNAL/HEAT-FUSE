@@ -51,7 +51,7 @@ class TrainingQuickLabelMixin:
             Keys: displacement_px, angle_rad, range_m, trajectory,
                   pre_trajectory (optional).
         """
-        from trainer.correction_session import CorrectionSession
+        from overlay.ml.heat_ailos_torc.trainer.correction_session import CorrectionSession
 
         self._tql_active = True
         self._tql_state = 'prompt'
@@ -215,7 +215,7 @@ class TrainingQuickLabelMixin:
         traj = self._tql_context.get('trajectory')
         angle = self._tql_context.get('angle_rad', 0)
         if traj:
-            from trainer.torc_quality import estimate_torc_quality
+            from overlay.ml.heat_ailos_torc.trainer.torc_quality import estimate_torc_quality
             self._tql_torc_quality = estimate_torc_quality(traj, angle)
         else:
             self._tql_torc_quality = 0.0
@@ -340,7 +340,7 @@ class TrainingQuickLabelMixin:
         # Apply accumulated bias
         entry = self._tql_session.get_active_entry() if self._tql_session else None
         if entry:
-            from trainer.correction_session import CorrectionSession
+            from overlay.ml.heat_ailos_torc.trainer.correction_session import CorrectionSession
             tf = entry['timing_factor']
             mf = entry['magnitude_factor']
             ts = entry.get('time_shift', 0.0)
@@ -404,7 +404,7 @@ class TrainingQuickLabelMixin:
     def _tql_replay_thread_func(self, return_state):
         """Replay: countdown → teleport → pre-fire → click → biased trajectory."""
         from utils.trajectory_replay import replay_full_scenario
-        from trainer.correction_session import CorrectionSession
+        from overlay.ml.heat_ailos_torc.trainer.correction_session import CorrectionSession
 
         ctx = self._tql_context
         if ctx is None:

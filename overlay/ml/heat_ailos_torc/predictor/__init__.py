@@ -1,1 +1,1 @@
-from predictor.auto_overlay import AutoOverlay
+from overlay.ml.heat_ailos_torc.predictor.auto_overlay import AutoOverlay

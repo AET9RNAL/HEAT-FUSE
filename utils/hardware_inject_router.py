@@ -1,5 +1,5 @@
 """
-Hardware injection router — picks backend based on saclos_config.json.
+Hardware injection router — picks backend based on heat_ailos_torc.json.
 
 Config key:  "input_backend": "arduino" | "sendinput"
 Default:     "arduino"
@@ -22,8 +22,9 @@ import json
 import os
 from loguru import logger
 
-_CONFIG_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                            'saclos_config.json')
+from utils.paths import resolve_config
+
+_CONFIG_PATH = resolve_config('heat_ailos_torc.json')
 
 def _read_backend() -> str:
     try:

@@ -53,7 +53,7 @@ def _play_sound_async(buf):
 
 from ui.base_overlay import BaseSACLOSOverlay
 from ui.tce import TCE
-from predictor.ql_hud import QuickLabelHudMixin
+from overlay.ml.heat_ailos_torc.predictor.ql_hud import QuickLabelHudMixin
 from utils.hardware_inject_router import inject_mouse_movement, inject_mouse_click
 from utils.ocr_reader import OCR_MIN_RANGE_M, OCR_MAX_RANGE_M
 
@@ -62,6 +62,9 @@ class AutoOverlay(QuickLabelHudMixin, BaseSACLOSOverlay):
     """Production overlay that auto-corrects missile trajectory after tracking."""
 
     def __init__(self, root, *args, **kwargs):
+        # ML profile injection — pop before forwarding kwargs to base overlay.
+        self.ml_profile = kwargs.pop("ml_profile", None)
+
         # Init predictor-specific state BEFORE super().__init__()
         # because _load_config -> _load_extra_config runs inside it.
         self.correction_active = False
@@ -231,8 +234,9 @@ class AutoOverlay(QuickLabelHudMixin, BaseSACLOSOverlay):
         # Auto-load learner if ml_enabled from config and not already set
         if self.ml_enabled and self.learner is None:
             try:
-                from trainer.correction_learner import CorrectionLearner
+                from overlay.ml.heat_ailos_torc.trainer.correction_learner import CorrectionLearner
                 self.learner = CorrectionLearner(
+                    profile=self.ml_profile,
                     attn_enabled=self.attn_enabled,
                     attn_lr=self.attn_lr,
                     attn_n_buckets=self.attn_n_buckets,
@@ -274,17 +278,17 @@ class AutoOverlay(QuickLabelHudMixin, BaseSACLOSOverlay):
         self._tce_show_setup()
 
     def _show_hud_locked(self):
-        """In locked mode, keep QL overlays visible during online learning."""
+        """In locked mode, hide QL overlays until the first engagement.
+
+        Empty QL widgets at startup were confusing in predictor mode (looked
+        like the training overlay). They reappear after the first QL exit via
+        ``_ql_show_idle`` when online-learning is on; when online-learning is
+        off they stay hidden.
+        """
         super()._show_hud_locked()
         self._ql_capture_positions()
         self._ql_set_draggable(False)
-        # During online learning, keep QL overlays visible so user sees
-        # them between engagements. Only hide when online learning is off.
-        if not getattr(self, 'ml_online_learning', True):
-            self._ql_hide_all()
-        else:
-            # Keep overlays shown with idle prompt
-            self._ql_show_idle()
+        self._ql_hide_all()
         self._tce_show()
 
     def _hide_hud(self):
@@ -402,7 +406,7 @@ class AutoOverlay(QuickLabelHudMixin, BaseSACLOSOverlay):
             )
         if self._ql_sim_canvas:
             # Draw a sample trajectory path
-            from predictor.ql_hud import _traj_to_cumulative
+            from overlay.ml.heat_ailos_torc.predictor.ql_hud import _traj_to_cumulative
             sample_traj = [
                 {'t': 0.0, 'dx': 0, 'dy': 0},
                 {'t': 0.05, 'dx': 3, 'dy': -1},
@@ -552,7 +556,7 @@ class AutoOverlay(QuickLabelHudMixin, BaseSACLOSOverlay):
                         entry = self._correction_session.get_active_entry()
                         ts = entry.get('time_shift', 0.0) if entry else 0.0
                         if tf != 1.0 or mf != 1.0 or ts != 0.0:
-                            from trainer.correction_session import CorrectionSession
+                            from overlay.ml.heat_ailos_torc.trainer.correction_session import CorrectionSession
                             ml_trajectory = copy.deepcopy(ml_trajectory)
                             CorrectionSession.apply_bias_to_trajectory(
                                 ml_trajectory, tf, mf, ts)
@@ -627,13 +631,14 @@ class AutoOverlay(QuickLabelHudMixin, BaseSACLOSOverlay):
         logger.info(f"Auto-correction complete [ML] (took {elapsed:.2f}s, "
                     f"injected {injected_dx}dx {injected_dy}dy)")
 
-        # Online learning: quick-label or full visual editor
-        if getattr(self, 'ml_online_learning', True) and self._ml_last_context is not None:
+        # Online learning: quick-label only. The standalone trajectory
+        # refiner is a training/curation tool launched from the AILOS-TORC
+        # picker — never auto-popped in live predictor mode.
+        if (getattr(self, 'ml_online_learning', True)
+                and self.quick_label_enabled
+                and self._ml_last_context is not None):
             ctx = self._ml_last_context
-            if self.quick_label_enabled:
-                self.root.after(50, lambda c=ctx: self._enter_quick_label(c))
-            else:
-                self.root.after(50, lambda c=ctx: self._open_refiner(c))
+            self.root.after(50, lambda c=ctx: self._enter_quick_label(c))
 
         self.root.after(0, self._finish_correction)
 
@@ -695,7 +700,7 @@ class AutoOverlay(QuickLabelHudMixin, BaseSACLOSOverlay):
 
     def _open_refiner(self, context):
         """Open the trajectory editor for visual review/edit before saving."""
-        from refiner.trajectory_editor import TrajectoryEditorWindow
+        from overlay.ml.heat_ailos_torc.refiner.trajectory_editor import TrajectoryEditorWindow
 
         # Close any existing editor
         if self._refiner_win is not None:
@@ -715,7 +720,7 @@ class AutoOverlay(QuickLabelHudMixin, BaseSACLOSOverlay):
                     )
                     q_str = ""
                     if sample.get('traj') and sample.get('angle') is not None:
-                        from trainer.torc_quality import estimate_torc_quality
+                        from overlay.ml.heat_ailos_torc.trainer.torc_quality import estimate_torc_quality
                         q = estimate_torc_quality(sample['traj'], sample['angle'])
                         q_str = f" | TORC Q: {q:.3f}"
                     label = "HIT" if sample.get('hit') else "MISS"
@@ -740,8 +745,8 @@ class AutoOverlay(QuickLabelHudMixin, BaseSACLOSOverlay):
     def _ensure_correction_session(self):
         """Lazy-init the CorrectionSession."""
         if self._correction_session is None:
-            from trainer.correction_session import CorrectionSession
-            self._correction_session = CorrectionSession()
+            from overlay.ml.heat_ailos_torc.trainer.correction_session import CorrectionSession
+            self._correction_session = CorrectionSession(profile=self.ml_profile)
 
     def _enter_quick_label(self, context):
         """Enter quick-label mode after ML trajectory execution."""
@@ -924,7 +929,7 @@ class AutoOverlay(QuickLabelHudMixin, BaseSACLOSOverlay):
         traj = self._ql_context.get('trajectory')
         angle = self._ql_context.get('angle_rad', 0)
         if traj:
-            from trainer.torc_quality import estimate_torc_quality
+            from overlay.ml.heat_ailos_torc.trainer.torc_quality import estimate_torc_quality
             self._ql_torc_quality = estimate_torc_quality(traj, angle)
         else:
             self._ql_torc_quality = 0.0
@@ -1047,7 +1052,7 @@ class AutoOverlay(QuickLabelHudMixin, BaseSACLOSOverlay):
         # Apply accumulated bias
         entry = self._correction_session.get_active_entry()
         if entry:
-            from trainer.correction_session import CorrectionSession
+            from overlay.ml.heat_ailos_torc.trainer.correction_session import CorrectionSession
             CorrectionSession.apply_bias_to_trajectory(
                 traj, entry['timing_factor'], entry['magnitude_factor'],
                 entry.get('time_shift', 0.0))
@@ -1118,7 +1123,7 @@ class AutoOverlay(QuickLabelHudMixin, BaseSACLOSOverlay):
         entry = self._correction_session.get_active_entry() if self._correction_session else None
         if entry and (entry['timing_factor'] != 1.0 or entry['magnitude_factor'] != 1.0
                        or entry.get('time_shift', 0.0) != 0.0):
-            from trainer.correction_session import CorrectionSession
+            from overlay.ml.heat_ailos_torc.trainer.correction_session import CorrectionSession
             CorrectionSession.apply_bias_to_trajectory(
                 traj, entry['timing_factor'], entry['magnitude_factor'],
                 entry.get('time_shift', 0.0))

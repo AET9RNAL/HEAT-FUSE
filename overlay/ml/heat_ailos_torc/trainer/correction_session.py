@@ -2,9 +2,9 @@
 CorrectionSession — Stores per-geometry correction biases for rapid iteration.
 
 Biases are parametric (timing_factor, magnitude_factor, time_shift) and
-compound across iterations. They live in saclos_correction_biases.json,
-completely separate from the training dataset. Supports checkpointing
-with rollback.
+compound across iterations. They live in the active ML profile's
+``biases`` file (see :mod:`overlay.ml.heat_ailos_torc.profiles`), completely
+separate from the training dataset. Supports checkpointing with rollback.
 """
 
 import json
@@ -30,8 +30,14 @@ class CorrectionSession:
     MIN_SHIFT_STEP = 0.005
     MAX_SHIFT_STEP = 0.200
 
-    def __init__(self, bias_file='saclos_correction_biases.json',
+    def __init__(self, bias_file=None, profile=None,
                  proximity_radius=None):
+        if bias_file is None:
+            if profile is None:
+                from overlay.ml.heat_ailos_torc.profiles import (
+                    default_profile_name, load_profile)
+                profile = load_profile(default_profile_name())
+            bias_file = profile.biases
         self.bias_file = bias_file
         self.proximity_radius = proximity_radius or self.DEFAULT_RADIUS
         self.biases = []
@@ -45,8 +51,8 @@ class CorrectionSession:
             return None
         if os.path.isabs(self.bias_file):
             return self.bias_file
-        base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        return os.path.join(base, self.bias_file)
+        from utils.paths import REPO_ROOT
+        return os.path.join(str(REPO_ROOT), self.bias_file)
 
     def _load(self):
         path = self._resolve_path()

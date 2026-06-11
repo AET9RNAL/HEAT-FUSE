@@ -1,2 +1,2 @@
-from trainer.correction_learner import CorrectionLearner
-from trainer.training_overlay import TrainingOverlay
+from overlay.ml.heat_ailos_torc.trainer.correction_learner import CorrectionLearner
+from overlay.ml.heat_ailos_torc.trainer.training_overlay import TrainingOverlay

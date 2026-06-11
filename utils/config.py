@@ -3,11 +3,20 @@ import json
 
 from loguru import logger
 
+from utils.paths import resolve_config
+
+
 class ConfigManager:
-    """Manages loading and saving application configuration."""
-    
-    def __init__(self, filename="saclos_config.json"):
-        self.config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), filename)
+    """Manages loading and saving application configuration.
+
+    Bare filenames are resolved under ``data/configs/``. Paths containing a
+    separator (or absolute paths) are used verbatim so callers may opt out
+    of the convention.
+    """
+
+    def __init__(self, filename="heat_ailos_torc.json"):
+        self.config_path = resolve_config(filename)
+        os.makedirs(os.path.dirname(self.config_path), exist_ok=True)
     
     def load(self, defaults=None):
         """Load configuration from JSON file. Returns dictionary."""

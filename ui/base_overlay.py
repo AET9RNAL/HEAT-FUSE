@@ -34,7 +34,7 @@ except ImportError:
 
 class BaseSACLOSOverlay(OCRUiMixin, RangefinderUiMixin, HudUiMixin):
     def __init__(self, root, image_path=None, tracking_image_path=None, margin_x=200, margin_y=200,
-                 config_filename="saclos_config.json"):
+                 config_filename="heat_ailos_torc.json"):
         self.root = root
         self.root.title("SACLOS Overlay")
         self.config_mgr = ConfigManager(filename=config_filename)

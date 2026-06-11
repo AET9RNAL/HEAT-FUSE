@@ -20,9 +20,9 @@ except ImportError:
     PYNPUT_OK = False
 
 from ui.base_overlay import BaseSACLOSOverlay
-from predictor.ql_hud import QuickLabelHudMixin
-from trainer.training_ql import TrainingQuickLabelMixin
-from trainer.correction_learner import CorrectionLearner
+from overlay.ml.heat_ailos_torc.predictor.ql_hud import QuickLabelHudMixin
+from overlay.ml.heat_ailos_torc.trainer.training_ql import TrainingQuickLabelMixin
+from overlay.ml.heat_ailos_torc.trainer.correction_learner import CorrectionLearner
 
 
 class TrainingOverlay(TrainingQuickLabelMixin, QuickLabelHudMixin, BaseSACLOSOverlay):
@@ -34,6 +34,9 @@ class TrainingOverlay(TrainingQuickLabelMixin, QuickLabelHudMixin, BaseSACLOSOve
     """
 
     def __init__(self, root, *args, **kwargs):
+        # ML profile injection — pop before forwarding kwargs to base overlay.
+        self.ml_profile = kwargs.pop("ml_profile", None)
+
         # Init HUD and QL state BEFORE super().__init__()
         self._init_ql_hud()
         self._init_training_ql()
@@ -44,7 +47,7 @@ class TrainingOverlay(TrainingQuickLabelMixin, QuickLabelHudMixin, BaseSACLOSOve
         self.correction_enabled = False
 
         # ML learner
-        self.learner = CorrectionLearner()
+        self.learner = CorrectionLearner(profile=self.ml_profile)
 
         # Training-cycle state (reset every tracking cycle)
         self._train_click_listener = None
@@ -148,7 +151,7 @@ class TrainingOverlay(TrainingQuickLabelMixin, QuickLabelHudMixin, BaseSACLOSOve
                 ["T Step", "M Step"],
             )
         if self._ql_sim_canvas:
-            from predictor.ql_hud import _traj_to_cumulative
+            from overlay.ml.heat_ailos_torc.predictor.ql_hud import _traj_to_cumulative
             sample_traj = [
                 {'t': 0.0, 'dx': 0, 'dy': 0},
                 {'t': 0.05, 'dx': 3, 'dy': -1},
@@ -354,7 +357,7 @@ class TrainingOverlay(TrainingQuickLabelMixin, QuickLabelHudMixin, BaseSACLOSOve
 
     def _open_refiner(self, capture):
         """Open the trajectory editor for visual review/edit before saving."""
-        from refiner.trajectory_editor import TrajectoryEditorWindow
+        from overlay.ml.heat_ailos_torc.refiner.trajectory_editor import TrajectoryEditorWindow
 
         # Close any existing editor
         if self._refiner_win is not None:

@@ -1,0 +1,17 @@
+{
+  "name": "energy_bar",
+  "version": "1.0",
+  "description": "OCR-driven energy / progress scale HUD (composited bg + clipped foreground).",
+  "entry": "plugin:EnergyBarPlugin",
+  "hotkeys": {
+    "toggle_setup": "t"
+  },
+  "default_config": {
+    "ocr_region": null,
+    "ocr_poll_interval_ms": 100,
+    "bar_pos_mode": "custom",
+    "bar_custom_pos": null,
+    "bg_image": "bg_progress.png",
+    "fg_image": "progress.png"
+  }
+}

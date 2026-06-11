@@ -72,8 +72,8 @@ def main():
     # Mode
     parser.add_argument('--knn',    action='store_true',
                         help='Pre-load nearest KNN trajectory from dataset')
-    parser.add_argument('--data',   type=str, default='saclos_ml_data.json',
-                        help='Path to ML data file  [default: saclos_ml_data.json]')
+    parser.add_argument('--data',   type=str, default=None,
+                        help='Path to ML dataset file (defaults to active ML profile)')
 
     args = parser.parse_args()
 

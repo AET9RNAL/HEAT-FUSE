@@ -74,49 +74,39 @@ if errorlevel 1 (
 :menu
 echo.
 echo ======================================================
-echo   HEAT SACLOS - Environment "%ENV_NAME%" is ready
+echo   HEAT - Environment "%ENV_NAME%" is ready
 echo ======================================================
 echo.
-echo   [1] Run Predictor   (run_predictor.py)
-echo   [2] Run Trainer     (run_trainer.py)
-echo   [3] Run Refiner     (run_refiner.py)
-echo   [4] Open shell in environment
-echo   [5] Exit
+echo   [1] HEAT AILOS-TORC   (ML predictor / trainer / refiner)
+echo   [2] HEAT Overlay      (universal, plugin-based HUD)
+echo   [3] Open shell in environment
+echo   [4] Exit
 echo.
 echo   NOTE: For OCR features, install Tesseract separately:
 echo         https://github.com/tesseract-ocr/tesseract
 echo ======================================================
 echo.
-choice /c 12345 /n /m "Select option [1-5]: "
-if errorlevel 5 goto quit
-if errorlevel 4 goto open_shell
-if errorlevel 3 goto run_refiner
-if errorlevel 2 goto run_trainer
-if errorlevel 1 goto run_predictor
+choice /c 1234 /n /m "Select option [1-4]: "
+if errorlevel 4 goto quit
+if errorlevel 3 goto open_shell
+if errorlevel 2 goto run_heat_overlay
+if errorlevel 1 goto run_heat_ailos_torc
 goto menu
 
-:run_predictor
+:run_heat_ailos_torc
 echo.
-echo Starting Predictor ...
-python "%~dp0run_predictor.py"
+echo Starting HEAT AILOS-TORC launcher ...
+python "%~dp0run_heat_ailos_torc.py"
 echo.
-echo Predictor exited.
+echo HEAT AILOS-TORC exited.
 goto menu
 
-:run_trainer
+:run_heat_overlay
 echo.
-echo Starting Trainer ...
-python "%~dp0run_trainer.py"
+echo Starting HEAT Overlay ...
+python "%~dp0run_heat_overlay.py"
 echo.
-echo Trainer exited.
-goto menu
-
-:run_refiner
-echo.
-echo Starting Refiner ...
-python "%~dp0run_refiner.py"
-echo.
-echo Refiner exited.
+echo HEAT Overlay exited.
 goto menu
 
 :open_shell

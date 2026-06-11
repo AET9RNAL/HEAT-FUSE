@@ -1,22 +1,19 @@
 """
-SACLOS Trajectory Refiner — Standalone Browse Mode
----------------------------------------------------
-Browse, visually edit, replay, and overwrite existing dataset records.
-
-Usage:
-    python run_refiner.py [--data saclos_ml_data.json]
+HEAT AILOS-TORC Refiner entry-point
+------------------------------------
+Browse, visually edit, replay, and overwrite existing dataset records for
+the active ML profile.
 """
-
 import argparse
 import json
 import tkinter as tk
 from loguru import logger
 
-from refiner.trajectory_editor import TrajectoryEditorWindow
+from overlay.ml.heat_ailos_torc.profiles import MLProfile, default_profile_name, load_profile
+from overlay.ml.heat_ailos_torc.refiner.trajectory_editor import TrajectoryEditorWindow
 
 
 def _load_samples(data_file):
-    """Load all samples from a JSONL file."""
     samples = []
     try:
         with open(data_file, 'r') as f:
@@ -31,23 +28,32 @@ def _load_samples(data_file):
     return samples
 
 
-def main():
-    parser = argparse.ArgumentParser(description="SACLOS Trajectory Refiner")
-    parser.add_argument("--data", type=str, default="saclos_ml_data.json",
-                        help="Path to JSONL training data file")
-    args = parser.parse_args()
+def _build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="HEAT AILOS-TORC Refiner")
+    parser.add_argument(
+        "--data", type=str, default=None,
+        help="Override path to JSONL training data file (defaults to active profile dataset)")
+    return parser
 
-    samples = _load_samples(args.data)
+
+def main(profile: MLProfile | None = None, argv: list[str] | None = None) -> None:
+    if profile is None:
+        profile = load_profile(default_profile_name())
+
+    args = _build_parser().parse_args(argv)
+    data_file = args.data or profile.dataset
+
+    samples = _load_samples(data_file)
     if not samples:
         logger.error("No samples found. Nothing to refine.")
         return
 
-    logger.info(f"Loaded {len(samples)} records from {args.data}")
+    logger.info(f"Loaded {len(samples)} records from {data_file} "
+                f"(profile: {profile.name})")
 
     root = tk.Tk()
     root.withdraw()
 
-    # Open editor with the first record, in browse mode
     first_traj = samples[0].get('traj', [])
     editor = TrajectoryEditorWindow(
         root,
@@ -60,11 +66,10 @@ def main():
         record_index=0,
         mode='browse',
         all_samples=samples,
-        data_file=args.data,
+        data_file=data_file,
         on_discard=lambda: root.quit(),
     )
 
-    # When editor closes, quit the app
     def on_editor_destroy(event):
         if event.widget == editor:
             root.quit()
