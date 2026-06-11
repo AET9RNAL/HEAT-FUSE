@@ -41,6 +41,7 @@ class DiscoveredPlugin:
     version: str
     description: str
     package: str          # e.g. "overlay.heat.plugins.energy_bar"
+    package_dir: Path     # filesystem path to the plugin package directory
     cls: Type[HeatPlugin]
     manifest: dict
 
@@ -98,6 +99,7 @@ def discover() -> List[DiscoveredPlugin]:
                 version=cls.version,
                 description=cls.description,
                 package=package,
+                package_dir=entry.resolve(),
                 cls=cls,
                 manifest=manifest,
             )

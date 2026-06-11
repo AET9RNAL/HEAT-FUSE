@@ -19,7 +19,7 @@ try:
 except ImportError:
     PYNPUT_OK = False
 
-from ui.base_overlay import BaseSACLOSOverlay
+from overlay.ml.heat_ailos_torc.ui.base_overlay import BaseSACLOSOverlay
 from overlay.ml.heat_ailos_torc.predictor.ql_hud import QuickLabelHudMixin
 from overlay.ml.heat_ailos_torc.trainer.training_ql import TrainingQuickLabelMixin
 from overlay.ml.heat_ailos_torc.trainer.correction_learner import CorrectionLearner

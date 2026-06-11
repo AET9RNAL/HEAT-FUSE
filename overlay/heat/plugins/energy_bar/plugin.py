@@ -24,7 +24,7 @@ from PIL import Image, ImageDraw
 
 from overlay.heat.plugin_api import HeatContext, HeatPlugin
 from utils.layered_window import LayeredWindow
-from utils.ocr_reader import scan_bar_fill_pct, reset_bar_filter
+from overlay.heat.plugins.energy_bar.ocr_bar import scan_bar_fill_pct, reset_bar_filter
 
 try:
     from pynput import mouse as pynmouse

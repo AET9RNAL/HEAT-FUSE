@@ -16,7 +16,7 @@ try:
 except ImportError:
     LAYERED_OK = False
 
-from utils.ocr_reader import reset_ocr_filter
+from overlay.ml.heat_ailos_torc.ocr.range_ocr import reset_ocr_filter
 
 
 def _rf_font(size=14):

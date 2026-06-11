@@ -13,7 +13,7 @@ Owns:
 from __future__ import annotations
 
 import time
-from pathlib import Path
+from pathlib import Path  # noqa: F401 — used inside _instantiate
 from typing import Callable, List, Optional
 
 import tkinter as tk
@@ -26,7 +26,6 @@ except ImportError:  # pragma: no cover
     PYNPUT_OK = False
 
 from utils.config import ConfigManager
-from utils.paths import ASSETS_DIR
 
 from overlay.heat.plugin_api import HeatContext, HeatPlugin, HotkeyRegistry
 from overlay.heat.discovery import discover, DiscoveredPlugin
@@ -80,11 +79,14 @@ class PluginHost:
 
     def _instantiate(self, spec: DiscoveredPlugin) -> None:
         plugin = spec.cls()
+        # Each plugin owns its own ``assets/`` directory next to its package,
+        # so the universal core never carries plugin media.
+        plugin_assets_dir = Path(spec.package_dir) / "assets"
         ctx = HeatContext(
             tk_root=self.root,
             config=ConfigManager(filename=f"heat_{spec.name}.json"),
             hotkeys=self.hotkeys,
-            assets_dir=ASSETS_DIR,
+            assets_dir=plugin_assets_dir,
             host=self,
             state=self._state,
         )
@@ -157,12 +159,29 @@ class PluginHost:
                     self._mods.add("shift"); return
                 if key in ALT:
                     self._mods.add("alt"); return
+
+                # Resolve the printable letter for the keypress.
+                # Under Ctrl, Windows yields ASCII control codes (Ctrl+L = 0x0c)
+                # rather than the letter, so we prefer the virtual-key code
+                # whenever Ctrl is held; we additionally translate raw control
+                # codes 0x01..0x1A back to their A..Z letters as a fallback.
+                vk = getattr(key, "vk", None)
                 char = getattr(key, "char", None)
-                if not char:
+                resolved = None
+                if "ctrl" in self._mods and vk is not None and 0x41 <= vk <= 0x5A:
+                    resolved = chr(vk).lower()
+                elif char:
+                    o = ord(char)
+                    if 1 <= o <= 26:
+                        resolved = chr(o + 0x60)
+                    else:
+                        resolved = char.lower()
+                if not resolved:
                     return
+
                 mods = frozenset(self._mods)
                 # Dispatch on the Tk thread so handlers can mutate widgets.
-                self.root.after(0, lambda m=mods, c=char.lower():
+                self.root.after(0, lambda m=mods, c=resolved:
                                 self.hotkeys.dispatch(m, c))
             except Exception:
                 pass

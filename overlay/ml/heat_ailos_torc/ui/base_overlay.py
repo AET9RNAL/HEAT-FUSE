@@ -9,10 +9,30 @@ import traceback
 
 from utils.config import ConfigManager
 from utils.window_utils import apply_geometry_fast, set_window_clickthrough, force_focus
-from utils.ocr_reader import TESSERACT_OK, ocr_capture_range
-from ui.ocr_ui import OCRUiMixin
-from ui.rangefinder_ui import RangefinderUiMixin
-from ui.hud_ui import HudUiMixin
+from overlay.ml.heat_ailos_torc import ASSETS_DIR as _AILOS_ASSETS_DIR
+from overlay.ml.heat_ailos_torc.ocr.range_ocr import TESSERACT_OK, ocr_capture_range
+from overlay.ml.heat_ailos_torc.ocr.ocr_ui import OCRUiMixin
+from overlay.ml.heat_ailos_torc.ocr.rangefinder_ui import RangefinderUiMixin
+from overlay.ml.heat_ailos_torc.ui.hud_ui import HudUiMixin
+
+
+def _resolve_overlay_image(path):
+    """Resolve a calibration overlay image path.
+
+    Accepts absolute paths verbatim. Bare filenames or relative paths are
+    interpreted against the AILOS-TORC vertical's package-local
+    ``assets/`` directory.
+    """
+    if not path:
+        return None
+    if os.path.isabs(path) and os.path.exists(path):
+        return path
+    candidate = _AILOS_ASSETS_DIR / os.path.basename(path)
+    if candidate.exists():
+        return str(candidate)
+    # Last-resort: honour the literal value (legacy configs that point
+    # somewhere outside the vertical).
+    return path if os.path.exists(path) else None
 
 try:
     from PIL import Image, ImageTk
@@ -123,8 +143,10 @@ class BaseSACLOSOverlay(OCRUiMixin, RangefinderUiMixin, HudUiMixin):
         self.img_w = 400
         self.img_h = 400
 
-        if image_path and os.path.exists(image_path):
-            self._load_images(image_path, tracking_image_path)
+        resolved_img = _resolve_overlay_image(image_path)
+        resolved_track = _resolve_overlay_image(tracking_image_path)
+        if resolved_img:
+            self._load_images(resolved_img, resolved_track)
         else:
             self._draw_placeholder()
 
@@ -192,9 +214,9 @@ class BaseSACLOSOverlay(OCRUiMixin, RangefinderUiMixin, HudUiMixin):
         config = self.config_mgr.load()
         if not config: return
 
-        ip = config.get("image_path")
-        tip = config.get("tracking_image_path")
-        if ip and os.path.exists(ip):
+        ip = _resolve_overlay_image(config.get("image_path"))
+        tip = _resolve_overlay_image(config.get("tracking_image_path"))
+        if ip:
             self._load_images(ip, tip)
 
         self.calibrated_x = config.get("calibrated_x")

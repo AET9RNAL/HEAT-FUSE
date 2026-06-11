@@ -142,8 +142,21 @@ class HudUiMixin:
             self._create_hud_windows()
 
     def _load_hud_images(self):
-        """Load all HUD images as raw PIL RGBA — no chroma-key needed."""
-        assets_base = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), self.hud_assets_dir)
+        """Load all HUD images as raw PIL RGBA — no chroma-key needed.
+
+        Asset resolution:
+          * an absolute ``hud_assets_dir`` is honoured verbatim;
+          * any other value is treated as a directory **inside** the
+            AILOS-TORC vertical's package-local ``assets/`` folder. This
+            keeps HUD media co-located with the code that owns it.
+        """
+        from overlay.ml.heat_ailos_torc import ASSETS_DIR as _AILOS_ASSETS_DIR
+        if os.path.isabs(self.hud_assets_dir):
+            assets_base = self.hud_assets_dir
+        elif self.hud_assets_dir in ("", ".", "assets"):
+            assets_base = str(_AILOS_ASSETS_DIR)
+        else:
+            assets_base = str(_AILOS_ASSETS_DIR / self.hud_assets_dir)
 
         def load_png(name):
             path = os.path.join(assets_base, name)

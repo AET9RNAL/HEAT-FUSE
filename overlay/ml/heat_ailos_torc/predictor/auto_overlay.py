@@ -19,10 +19,10 @@ from loguru import logger
 
 try:
     import winsound as _winsound
-    _SOUNDS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                               'assets', 'sounds')
-    _LOCK_SOUND = os.path.join(_SOUNDS_DIR, 'lock.wav')
-    _INTERCEPT_SOUND = os.path.join(_SOUNDS_DIR, 'intercept.wav')
+    from overlay.ml.heat_ailos_torc import ASSETS_DIR as _ASSETS_DIR
+    _SOUNDS_DIR = _ASSETS_DIR / 'sounds'
+    _LOCK_SOUND = str(_SOUNDS_DIR / 'lock.wav')
+    _INTERCEPT_SOUND = str(_SOUNDS_DIR / 'intercept.wav')
 except ImportError:
     _winsound = None
     _LOCK_SOUND = None
@@ -51,11 +51,11 @@ def _play_sound_async(buf):
             daemon=True,
         ).start()
 
-from ui.base_overlay import BaseSACLOSOverlay
-from ui.tce import TCE
+from overlay.ml.heat_ailos_torc.ui.base_overlay import BaseSACLOSOverlay
+from overlay.ml.heat_ailos_torc.ui.tce import TCE
 from overlay.ml.heat_ailos_torc.predictor.ql_hud import QuickLabelHudMixin
 from utils.hardware_inject_router import inject_mouse_movement, inject_mouse_click
-from utils.ocr_reader import OCR_MIN_RANGE_M, OCR_MAX_RANGE_M
+from overlay.ml.heat_ailos_torc.ocr.range_ocr import OCR_MIN_RANGE_M, OCR_MAX_RANGE_M
 
 
 class AutoOverlay(QuickLabelHudMixin, BaseSACLOSOverlay):

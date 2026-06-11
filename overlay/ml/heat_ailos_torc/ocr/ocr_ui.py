@@ -1,6 +1,6 @@
 import tkinter as tk
 from loguru import logger
-from utils.ocr_reader import TESSERACT_OK
+from overlay.ml.heat_ailos_torc.ocr.range_ocr import TESSERACT_OK
 
 class OCRUiMixin:
     """Mixin for the SACLOS OCR setup and display UI components."""

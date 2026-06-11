@@ -18,7 +18,10 @@ CONFIGS_DIR: Path = DATA_DIR / "configs"
 ML_DIR: Path = DATA_DIR / "ml"
 ML_PROFILES_DIR: Path = ML_DIR / "profiles"
 ML_PROFILES_REGISTRY: Path = ML_DIR / "ml_profiles.json"
-ASSETS_DIR: Path = REPO_ROOT / "assets"
+
+# NOTE: there is no global ASSETS_DIR. Each vertical / plugin owns its own
+# `assets/` subdirectory next to its package, so the universal core never
+# needs to know about plugin-specific media.
 
 
 def resolve_config(filename: str) -> str:
@@ -46,7 +49,6 @@ __all__ = [
     "ML_DIR",
     "ML_PROFILES_DIR",
     "ML_PROFILES_REGISTRY",
-    "ASSETS_DIR",
     "resolve_config",
     "resolve_data",
 ]
