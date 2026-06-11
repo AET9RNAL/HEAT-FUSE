@@ -3,3 +3,6 @@ untracked/
 .windsurf
 tools/
 arduino/
+.claude
+.devin
+.qwen
