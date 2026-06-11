@@ -33,10 +33,11 @@ except ImportError:
     PYNPUT_OK = False
 
 class BaseSACLOSOverlay(OCRUiMixin, RangefinderUiMixin, HudUiMixin):
-    def __init__(self, root, image_path=None, tracking_image_path=None, margin_x=200, margin_y=200):
+    def __init__(self, root, image_path=None, tracking_image_path=None, margin_x=200, margin_y=200,
+                 config_filename="saclos_config.json"):
         self.root = root
         self.root.title("SACLOS Overlay")
-        self.config_mgr = ConfigManager()
+        self.config_mgr = ConfigManager(filename=config_filename)
 
         self.state = "calibrate"
         self.mouse_listener = None

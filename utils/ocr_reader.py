@@ -9,7 +9,7 @@ OCR_MIN_RANGE_M = 20.0
 OCR_MAX_RANGE_M = 900.0
 
 try:
-    from PIL import Image, ImageGrab
+    from PIL import Image, ImageGrab, ImageFilter
     PIL_OK = True
 except ImportError:
     PIL_OK = False
@@ -246,3 +246,243 @@ def ocr_capture_range(ocr_region):
     except Exception as e:
         logger.error(f"OCR Exception: {e}")
         return None
+
+
+def _otsu_threshold(gray):
+    """Compute Otsu threshold for a uint8 grayscale array."""
+    hist, _ = np.histogram(gray, bins=256, range=(0, 256))
+    total = gray.size
+    sum_total = float((np.arange(256) * hist).sum())
+    sum_bg = 0.0
+    w_bg = 0
+    max_var = 0.0
+    threshold = 127
+    for t in range(256):
+        w_bg += hist[t]
+        if w_bg == 0:
+            continue
+        w_fg = total - w_bg
+        if w_fg == 0:
+            break
+        sum_bg += t * hist[t]
+        mean_bg = sum_bg / w_bg
+        mean_fg = (sum_total - sum_bg) / w_fg
+        var = w_bg * w_fg * (mean_bg - mean_fg) ** 2
+        if var > max_var:
+            max_var = var
+            threshold = t
+    return threshold
+
+
+class _IntHysteresisFilter:
+    """Reliability-oriented filter for monotonic-ish UI integers.
+
+    Rules:
+      - First confirmed value: requires 2 consecutive identical raw reads.
+      - Subsequent updates: accept immediately if |new - last| <= jump_tol.
+      - Larger jumps require the same new value twice in a row (pending slot)
+        before becoming the new confirmed value. Single-frame OCR glitches
+        therefore can never push the displayed value.
+      - None / low-confidence reads do not affect the confirmed value.
+    """
+    def __init__(self, jump_tol=12):
+        self._last_confirmed = None
+        self._pending = None
+        self._pending_count = 0
+        self._jump_tol = jump_tol
+
+    def update(self, raw):
+        if raw is None:
+            return self._last_confirmed
+
+        if self._last_confirmed is None:
+            # Bootstrap: trust the first valid read so the bar updates promptly.
+            self._last_confirmed = raw
+            self._pending = None
+            self._pending_count = 0
+            return self._last_confirmed
+
+        # Have a confirmed value already.
+        if abs(raw - self._last_confirmed) <= self._jump_tol:
+            self._last_confirmed = raw
+            self._pending = None
+            self._pending_count = 0
+        else:
+            # Suspicious jump — require a second matching read.
+            if self._pending == raw:
+                self._pending_count += 1
+                if self._pending_count >= 2:
+                    self._last_confirmed = raw
+                    self._pending = None
+                    self._pending_count = 0
+            else:
+                self._pending = raw
+                self._pending_count = 1
+        return self._last_confirmed
+
+    def current(self):
+        return self._last_confirmed
+
+    def reset(self):
+        self._last_confirmed = None
+        self._pending = None
+        self._pending_count = 0
+
+
+_int_filter = _IntHysteresisFilter(jump_tol=12)
+
+
+def _binarize_bright_text(img_rgb_np, brightness=170):
+    """Fast bright-text isolation: returns uint8 mask (text=0, bg=255)."""
+    r = img_rgb_np[:, :, 0]
+    g = img_rgb_np[:, :, 1]
+    b = img_rgb_np[:, :, 2]
+    bright = (r >= brightness) & (g >= brightness) & (b >= brightness)
+    return np.where(bright, 0, 255).astype(np.uint8), int(bright.sum())
+
+
+OCR_INT_DEBUG_DIR = None  # Set to a folder path to dump per-poll debug images.
+
+
+def _ocr_try_pass(pil_mask, psm):
+    """Run one Tesseract pass; return parsed int or None."""
+    try:
+        text = pytesseract.image_to_string(
+            pil_mask,
+            config=f'--psm {psm} --oem 1 -c tessedit_char_whitelist=0123456789'
+        )
+    except Exception:
+        return None, ""
+    m = re.search(r'(\d+)', (text or "").strip())
+    return (int(m.group(1)) if m else None), (text or "").strip()
+
+
+def ocr_capture_int(ocr_region, min_val=0, max_val=100):
+    """Integer OCR for bright game-UI digits. Returns filtered int or None.
+
+    Multiple brightness thresholds tried + multiple PSMs. First in-range
+    parse wins. Hysteresis filter rejects single-frame glitches.
+
+    Set OCR_INT_DEBUG_DIR to dump the raw region + each mask to PNG.
+    """
+    if not ocr_region or not TESSERACT_OK:
+        return None
+    try:
+        img_rgb_np = _grab_region_np(ocr_region)
+        if img_rgb_np is None or img_rgb_np.size == 0:
+            return _int_filter.current()
+
+        if OCR_INT_DEBUG_DIR:
+            try:
+                import os as _os
+                _os.makedirs(OCR_INT_DEBUG_DIR, exist_ok=True)
+                Image.fromarray(img_rgb_np, mode='RGB').save(
+                    _os.path.join(OCR_INT_DEBUG_DIR, "00_raw.png"))
+            except Exception:
+                pass
+
+        attempts = []
+        # Try several brightness thresholds for bright text on dark bg.
+        for thresh in (180, 150, 120, 90):
+            binary, hits = _binarize_bright_text(img_rgb_np, brightness=thresh)
+            if hits < 4:
+                continue
+            attempts.append((f"bright{thresh}", binary))
+
+        # Also try Otsu as a generic fallback.
+        gray = (0.299 * img_rgb_np[:, :, 0]
+                + 0.587 * img_rgb_np[:, :, 1]
+                + 0.114 * img_rgb_np[:, :, 2]).astype(np.uint8)
+        ot = _otsu_threshold(gray)
+        otsu_hi = (gray > ot)
+        if otsu_hi.sum() < gray.size / 2:
+            otsu_text = otsu_hi
+        else:
+            otsu_text = ~otsu_hi
+        attempts.append(("otsu", np.where(otsu_text, 0, 255).astype(np.uint8)))
+
+        if not attempts:
+            logger.info("[OCR int] no usable mask (no bright pixels)")
+            return _int_filter.update(None)
+
+        for idx, (tag, binary) in enumerate(attempts):
+            pil_mask = Image.fromarray(binary, mode='L')
+            # Upscale, then re-threshold to crisp edges.
+            w, h = pil_mask.size
+            pil_mask = pil_mask.resize((w * 5, h * 5), Image.Resampling.BILINEAR)
+            arr = np.asarray(pil_mask, dtype=np.uint8)
+            arr = np.where(arr < 100, 0, 255).astype(np.uint8)
+            pil_mask = Image.fromarray(arr, mode='L')
+
+            if OCR_INT_DEBUG_DIR:
+                try:
+                    import os as _os
+                    pil_mask.save(_os.path.join(OCR_INT_DEBUG_DIR, f"{idx:02d}_{tag}.png"))
+                except Exception:
+                    pass
+
+            for psm in (7, 8, 13, 6):
+                val, raw_text = _ocr_try_pass(pil_mask, psm)
+                if val is None:
+                    continue
+                if min_val <= val <= max_val:
+                    out = _int_filter.update(val)
+                    logger.info(f"[OCR int] {tag}/psm{psm} raw='{raw_text}' -> {val} (filtered={out})")
+                    return out
+
+        logger.info("[OCR int] no in-range digit across all attempts")
+        return _int_filter.update(None)
+    except Exception as e:
+        logger.error(f"OCR int Exception: {e}")
+        return _int_filter.current()
+
+
+def reset_ocr_int_filter():
+    """Reset the int-OCR hysteresis filter. Call when the region changes."""
+    _int_filter.reset()
+
+
+_bar_filter = _IntHysteresisFilter(jump_tol=8)
+
+
+def scan_bar_fill_pct(region):
+    """Read fill % of a left-to-right white-fill bar on a dark background.
+
+    Scans each column: a column is "filled" when >40% of its middle rows are
+    bright (R+G+B > 500). Returns the rightmost filled column position as a
+    0–100 float, filtered through a hysteresis smoother.
+    Returns None on capture failure.
+    """
+    if not region:
+        return None
+    try:
+        img = _grab_region_np(region)
+        if img is None or img.size == 0:
+            return _bar_filter.current()
+
+        h, w, _ = img.shape
+        y0 = h // 4
+        y1 = 3 * h // 4
+        if y1 <= y0:
+            y0, y1 = 0, h
+
+        strip = img[y0:y1].astype(np.int32)
+        bright = (strip[:, :, 0] + strip[:, :, 1] + strip[:, :, 2]) > 500
+        col_bright = bright.mean(axis=0) > 0.40
+
+        bright_cols = np.where(col_bright)[0]
+        if len(bright_cols) == 0:
+            raw_pct = 0
+        else:
+            raw_pct = int(round((int(bright_cols[-1]) + 1) / w * 100))
+
+        out = _bar_filter.update(raw_pct)
+        logger.info(f"[bar fill] raw={raw_pct}% -> filtered={out}%")
+        return out
+    except Exception as e:
+        logger.error(f"scan_bar_fill_pct error: {e}")
+        return _bar_filter.current()
+
+
+def reset_bar_filter():
+    _bar_filter.reset()

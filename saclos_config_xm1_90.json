@@ -1,0 +1,14 @@
+{
+  "ocr_region": [
+    176,
+    1272,
+    517,
+    1299
+  ],
+  "ocr_poll_interval_ms": 200,
+  "bar_pos_mode": "custom",
+  "bar_custom_pos": [
+    768,
+    307
+  ]
+}
