@@ -1,0 +1,18 @@
+{
+  "_comment": "Pointer chains for HEAT memory mod API. Each entry maps a friendly name to a module + offsets.",
+  "_howto": "To populate: find base pointer in CE, copy module+offset chain here, then restart overlay.",
+
+  "energy": {
+    "module": "cohtml.WindowsDesktop.dll",
+    "offsets": [6607384, 16, 72, 128, 8, 200, 16, 1984],
+    "dtype": "uint32",
+    "readonly": false
+  },
+
+  "health": {
+    "module": "plugin_hud_battle.dll",
+    "offsets": [0, 0, 0, 0, 0, 0, 0],
+    "dtype": "float",
+    "readonly": false
+  }
+}

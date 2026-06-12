@@ -1,22 +1,22 @@
-"""Plugin contract for the universal HEAT overlay.
+"""Plugin contract for the FUSE mod loader.
 
-Every plugin subclasses :class:`HeatPlugin` and is handed a
-:class:`HeatContext` instance during :meth:`HeatPlugin.setup`. The context
+Every plugin subclasses :class:`FusePlugin` and is handed a
+:class:`FuseContext` instance during :meth:`FusePlugin.setup`. The context
 owns shared infrastructure (the Tk root, hotkey registry, per-plugin
-:class:`~utils.config.ConfigManager`, assets directory) so plugins never
-create global state on their own.
+:class:`~utils.config.ConfigManager`, assets directory, event bus, service
+registry) so plugins never create global state on their own.
 """
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, Dict, List, Optional
+from typing import Callable, Dict, Optional
 
 import tkinter as tk
 from loguru import logger
 
-from utils.config import ConfigManager
+from fuse.utils.config import ConfigManager
 
 
 class HotkeyRegistry:
@@ -27,7 +27,6 @@ class HotkeyRegistry:
     """
 
     def __init__(self) -> None:
-        # key: (frozenset({"ctrl"}, ...), "l")
         self._bindings: Dict[tuple, Callable[[], None]] = {}
 
     @staticmethod
@@ -58,22 +57,40 @@ class HotkeyRegistry:
 
 
 @dataclass
-class HeatContext:
-    """Runtime context handed to every plugin."""
+class FuseContext:
+    """Runtime context handed to every plugin during setup."""
 
     tk_root: tk.Tk
     config: ConfigManager
     hotkeys: HotkeyRegistry
     assets_dir: Path
-    host: "PluginHost"  # noqa: F821 — forward reference, resolved at runtime
+    host: "PluginHost"  # noqa: F821
     state: str = "calibrate"  # "calibrate" | "locked"
+
+    # Cross-plugin event bus.
+    events: Optional["EventBus"] = None  # noqa: F821
+
+    # Named service registry — expose and consume inter-plugin APIs.
+    services: Optional["ServiceRegistry"] = None  # noqa: F821
+
+    # Hotkey defaults declared in manifest.json → {"logical_name": "combo"}.
+    manifest_hotkeys: Dict[str, str] = field(default_factory=dict)
 
     # Plugin-private storage (the host never touches this).
     extras: Dict[str, object] = field(default_factory=dict)
 
+    def hotkey_for(self, name: str, fallback: str = "") -> str:
+        """Return the configured combo for logical hotkey *name*.
 
-class HeatPlugin(ABC):
-    """Abstract base class every HEAT plugin must subclass."""
+        Plugins call this in ``setup()`` and pass the result to
+        ``ctx.hotkeys.register()``, enabling future user remapping via
+        manifest edits without touching plugin code.
+        """
+        return self.manifest_hotkeys.get(name, fallback)
+
+
+class FusePlugin(ABC):
+    """Abstract base class every FUSE plugin must subclass."""
 
     #: Populated by the host from the plugin's manifest.json.
     name: str = ""
@@ -81,20 +98,20 @@ class HeatPlugin(ABC):
     description: str = ""
 
     @abstractmethod
-    def setup(self, ctx: HeatContext) -> None:
+    def setup(self, ctx: FuseContext) -> None:
         """Construct widgets, load config, register hotkeys."""
 
-    def enter_calibrate(self) -> None:  # pragma: no cover - optional
+    def enter_calibrate(self) -> None:  # pragma: no cover
         """Switch the plugin into calibrate mode (interactive)."""
 
-    def enter_locked(self) -> None:  # pragma: no cover - optional
+    def enter_locked(self) -> None:  # pragma: no cover
         """Switch the plugin into locked mode (click-through, scanning)."""
 
-    def tick(self, dt: float) -> None:  # pragma: no cover - optional
+    def tick(self, dt: float) -> None:  # pragma: no cover
         """Called from the host idle loop every ~50 ms."""
 
-    def teardown(self) -> None:  # pragma: no cover - optional
+    def teardown(self) -> None:  # pragma: no cover
         """Persist state and release resources."""
 
 
-__all__ = ["HeatPlugin", "HeatContext", "HotkeyRegistry"]
+__all__ = ["FusePlugin", "FuseContext", "HotkeyRegistry"]

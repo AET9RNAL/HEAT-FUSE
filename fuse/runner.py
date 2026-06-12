@@ -1,18 +1,21 @@
-"""Entry point for the universal HEAT overlay."""
+"""Entry point for the FUSE mod loader."""
 from __future__ import annotations
 
 import tkinter as tk
 from loguru import logger
 
-from overlay.heat.host import PluginHost
+from fuse.host import PluginHost
 
 
-def run(argv: list[str] | None = None) -> None:
-    """Boot the universal HEAT overlay with all enabled plugins."""
+def run(
+    argv: list[str] | None = None,
+    extra_plugin_dirs: list[str] | None = None,
+) -> None:
+    """Boot FUSE with all enabled plugins."""
     del argv  # reserved for future CLI flags
     root = tk.Tk()
     host = PluginHost(root)
-    host.load_plugins()
+    host.load_plugins(extra_plugin_dirs=extra_plugin_dirs)
     if not host.plugins:
         logger.error("No plugins discovered — aborting.")
         return

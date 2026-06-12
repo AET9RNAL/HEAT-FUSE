@@ -12,7 +12,7 @@ from typing import Optional, Sequence
 import numpy as np
 from loguru import logger
 
-from utils.screen_capture import grab_region_np
+from fuse.utils.screen_capture import grab_region_np
 
 
 class _IntHysteresisFilter:
