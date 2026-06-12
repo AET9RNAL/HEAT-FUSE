@@ -952,6 +952,12 @@ class BaseSACLOSOverlay(OCRUiMixin, RangefinderUiMixin, HudUiMixin):
                 self.ocr_display_win.destroy()
             except Exception:
                 pass
+        _tce_destroy = getattr(self, "_tce_destroy", None)
+        if callable(_tce_destroy):
+            try:
+                _tce_destroy()
+            except Exception:
+                pass
         self._cleanup_hud()
         self._destroy_locked_overlay()
         try:

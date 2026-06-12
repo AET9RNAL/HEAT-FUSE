@@ -29,6 +29,8 @@ class HotkeyRegistry:
 
     def __init__(self) -> None:
         self._bindings: Dict[tuple, Callable[[], None]] = {}
+        self._labels: Dict[tuple, str] = {}   # binding -> display label
+        self._combos: Dict[tuple, str] = {}   # binding -> "ctrl+l" string
 
     @staticmethod
     def _parse(combo: str) -> tuple:
@@ -39,12 +41,58 @@ class HotkeyRegistry:
         mods = frozenset(parts[:-1])
         return mods, key
 
-    def register(self, combo: str, callback: Callable[[], None]) -> None:
+    def register(self, combo: str, callback: Callable[[], None], label: str = "") -> None:
         binding = self._parse(combo)
         if binding in self._bindings:
             logger.warning(f"Hotkey {combo!r} re-registered (overwriting).")
         self._bindings[binding] = callback
+        self._labels[binding] = label or combo
+        self._combos[binding] = combo
         logger.debug(f"Hotkey bound: {combo!r}")
+
+    def unregister(self, combo: str) -> bool:
+        """Remove a binding. Returns True if it existed."""
+        binding = self._parse(combo)
+        existed = binding in self._bindings
+        self._bindings.pop(binding, None)
+        self._labels.pop(binding, None)
+        self._combos.pop(binding, None)
+        return existed
+
+    def reregister(self, old_mods: frozenset, old_key: str, new_combo: str) -> bool:
+        """Move an existing binding to a new combo.  Returns False on conflict."""
+        old_binding = (old_mods, old_key)
+        callback = self._bindings.get(old_binding)
+        if callback is None:
+            return False
+        new_binding = self._parse(new_combo)
+        if new_binding in self._bindings and new_binding != old_binding:
+            logger.warning(f"Rebind conflict: {new_combo!r} already bound.")
+            return False
+        label    = self._labels.get(old_binding, new_combo)
+        old_repr = self._combos.get(old_binding, repr(old_binding))
+        # Remove old
+        self._bindings.pop(old_binding, None)
+        self._labels.pop(old_binding, None)
+        self._combos.pop(old_binding, None)
+        # Register new
+        self._bindings[new_binding] = callback
+        self._labels[new_binding] = label
+        self._combos[new_binding] = new_combo
+        logger.info(f"Hotkey rebound: {old_repr!r} -> {new_combo!r}")
+        return True
+
+    def list_bindings(self) -> list:
+        """Return all registered bindings as dicts for display in the manager UI."""
+        result = []
+        for (mods, key), cb in self._bindings.items():
+            result.append({
+                "mods":  mods,
+                "key":   key,
+                "combo": self._combos.get((mods, key), key),
+                "label": self._labels.get((mods, key), key),
+            })
+        return sorted(result, key=lambda b: b["label"])
 
     def dispatch(self, mods: frozenset, key: str) -> bool:
         cb = self._bindings.get((mods, key))

@@ -13,6 +13,7 @@ import tkinter as tk
 from typing import TYPE_CHECKING
 
 from fuse.api import FuseContext, FusePlugin
+from fuse.ui.config_schema import ConfigCategory, ConfigEntry
 
 if TYPE_CHECKING:
     from overlay.heat.plugins.heat_ailos_torc.ui.base_overlay import BaseSACLOSOverlay
@@ -26,6 +27,38 @@ class HeatAilosTorcPlugin(FusePlugin):
     def setup(self, ctx: FuseContext) -> None:
         # Host pre-seeds manifest default_config; load merges with on-disk.
         ctx.config.load()
+
+        ctx.config.schema([
+            ConfigCategory("ML", [
+                ConfigEntry("ml_enabled",              "ML Enabled",            type="bool"),
+                ConfigEntry("ml_confidence_threshold", "Confidence Threshold",  type="float", min=0.0, max=1.0),
+                ConfigEntry("ml_online_learning",      "Online Learning",       type="bool"),
+                ConfigEntry("attn_enabled",            "Attention Enabled",     type="bool"),
+                ConfigEntry("attn_lr",                 "Attention LR",          type="float", min=0.001, max=1.0),
+            ]),
+            ConfigCategory("Correction", [
+                ConfigEntry("correction_enabled",              "Correction Enabled",     type="bool"),
+                ConfigEntry("correction_speed_multiplier",     "Speed Multiplier",       type="float", min=0.1, max=5.0),
+                ConfigEntry("correction_min_threshold_px",    "Min Threshold (px)",     type="float", min=0.0, max=50.0),
+                ConfigEntry("mouse_sensitivity_scale",         "Mouse Sensitivity",      type="float", min=0.1, max=5.0),
+            ]),
+            ConfigCategory("Turret", [
+                ConfigEntry("turret_traverse_speed_deg_s", "Traverse Speed (°/s)", type="float", min=1.0, max=360.0),
+                ConfigEntry("pixels_per_degree",           "Pixels per Degree",    type="float", min=1.0, max=100.0),
+            ]),
+            ConfigCategory("Input", [
+                ConfigEntry("input_backend", "Input Backend", type="choice",
+                            choices=["arduino", "sendinput", "none"]),
+                ConfigEntry("tracking_key_name", "Track Key",    type="str"),
+                ConfigEntry("rf_key_name",        "Rangefinder Key", type="str"),
+            ]),
+            ConfigCategory("HUD Positions", [
+                ConfigEntry("hud_name_pos",       "Name",       type="position"),
+                ConfigEntry("hud_descriptor_pos", "Descriptor", type="position"),
+                ConfigEntry("hud_range_pos",      "Range",      type="position"),
+                ConfigEntry("hud_status_pos",     "Status",     type="position"),
+            ]),
+        ])
 
         from fuse.utils.hardware_inject_router import is_admin, connect
         if not is_admin():

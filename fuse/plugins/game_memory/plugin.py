@@ -20,6 +20,7 @@ from loguru import logger
 from fuse.api import FuseContext, FusePlugin
 from fuse.utils.game_memory import GameMemory
 from fuse.utils.paths import resolve_data
+from fuse.ui.config_schema import ConfigCategory, ConfigEntry
 
 
 class GameMemoryPlugin(FusePlugin):
@@ -31,6 +32,14 @@ class GameMemoryPlugin(FusePlugin):
             chains_file="assets/pointer_chains.json",
             reconnect_interval_s=5.0,
         ).load()
+
+        ctx.config.schema([
+            ConfigCategory("Process", [
+                ConfigEntry("process_name",        "Process Name",         type="str"),
+                ConfigEntry("chains_file",         "Pointer Chains File",  type="str"),
+                ConfigEntry("reconnect_interval_s","Reconnect Interval (s)", type="float", min=1.0, max=60.0),
+            ]),
+        ])
 
         chains_path = resolve_data(ctx.config.get("chains_file"))
         self._memory = GameMemory(ctx.config.get("process_name"), chains_path)

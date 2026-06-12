@@ -41,6 +41,7 @@ from fuse.discovery import DiscoveredPlugin, discover
 from fuse.resolver import resolve_load_order
 from fuse.events import EventBus
 from fuse.services import ServiceRegistry
+from fuse.ui.manager import FuseManager
 
 # Bump when the plugin API surface changes in a breaking way.
 HOST_VERSION = "1.0"
@@ -108,6 +109,7 @@ class PluginHost:
         self._last_lock_toggle = 0.0
         self._last_tick = time.perf_counter()
         self._quitting = False
+        self._capturing_rebind = False  # suppresses pynput dispatch during key capture
 
         self._mods: set[str] = set()
         self._mouse_subscribers: List[MouseCallback] = []
@@ -115,6 +117,8 @@ class PluginHost:
         # Setup queue — plugins are instantiated one at a time.
         self._setup_pending: List[DiscoveredPlugin] = []
         self._setup_active: Optional[DiscoveredPlugin] = None  # currently being calibrated
+
+        self._manager: Optional["FuseManager"] = None
 
         self._register_global_hotkeys()
 
@@ -300,13 +304,66 @@ class PluginHost:
         return result
 
     def disable_plugin(self, name: str) -> None:
-        """Persist *name* to the disabled list in ``fuse_host.json``."""
+        """Tear down an active plugin and persist it to the disabled list."""
         disabled = list(self.host_state.get("disabled_plugins", []))
         if name not in disabled:
             disabled.append(name)
             self.host_state["disabled_plugins"] = disabled
             self.host_config.save(self.host_state)
         self._plugin_states[name] = PluginState.DISABLED
+
+        # Tear down if currently active.
+        plugin = self._plugin_map.pop(name, None)
+        if plugin is not None:
+            ctx = self._context_map.pop(name, None)
+            if plugin in self.plugins:
+                self.plugins.remove(plugin)
+            if ctx in self.contexts:
+                self.contexts.remove(ctx)
+            try:
+                plugin.teardown()
+            except Exception as e:
+                _root_logger.exception(f"{name}: teardown during disable failed: {e}")
+            _root_logger.info(f"Plugin {name!r} disabled and torn down.")
+
+    def enable_plugin(self, name: str) -> None:
+        """Re-enable a disabled plugin at runtime without restarting the setup queue.
+
+        The plugin enters whatever state the host is currently in (locked or
+        calibrate) so existing running plugins are not disrupted.  If the plugin
+        needs calibration, the user can still press Ctrl+L to toggle it.
+        """
+        # Remove from disabled list.
+        disabled = list(self.host_state.get("disabled_plugins", []))
+        if name in disabled:
+            disabled.remove(name)
+            self.host_state["disabled_plugins"] = disabled
+            self.host_config.save(self.host_state)
+
+        if self._plugin_states.get(name) == PluginState.ACTIVE:
+            return  # already running
+
+        spec = self._discovered.get(name)
+        if spec is None:
+            _root_logger.warning(f"enable_plugin: {name!r} not in discovered set.")
+            return
+
+        self._instantiate(spec)
+
+        if self._plugin_states.get(name) != PluginState.ACTIVE:
+            return  # instantiation failed
+
+        plugin = self._plugin_map[name]
+        ctx = self._context_map[name]
+        ctx.state = self._state
+        try:
+            if self._state == "locked":
+                plugin.enter_locked()
+            else:
+                plugin.enter_calibrate()
+        except Exception as e:
+            _root_logger.exception(f"{name}: state entry on enable failed: {e}")
+        _root_logger.info(f"Plugin {name!r} enabled at runtime (state={self._state}).")
 
     # ------------------------------------------------------------------
     # State machine
@@ -368,8 +425,14 @@ class PluginHost:
     # ------------------------------------------------------------------
 
     def _register_global_hotkeys(self) -> None:
-        self.hotkeys.register("ctrl+l", self.toggle_lock)
-        self.hotkeys.register("ctrl+p", self.quit)
+        self.hotkeys.register("ctrl+l", self.toggle_lock,    label="Toggle Calibrate/Lock")
+        self.hotkeys.register("ctrl+p", self.quit,           label="Quit FUSE")
+        self.hotkeys.register("ctrl+m", self._open_manager,  label="Open Plugin Manager")
+
+    def _open_manager(self) -> None:
+        if self._manager is None:
+            self._manager = FuseManager(self.root, self)
+        self._manager.toggle()
 
     def subscribe_mouse(self, cb: MouseCallback) -> None:
         self._mouse_subscribers.append(cb)
@@ -407,8 +470,9 @@ class PluginHost:
                     return
 
                 mods = frozenset(self._mods)
-                self.root.after(0, lambda m=mods, c=resolved:
-                                self.hotkeys.dispatch(m, c))
+                if not self._capturing_rebind:
+                    self.root.after(0, lambda m=mods, c=resolved:
+                                    self.hotkeys.dispatch(m, c))
             except Exception:
                 pass
 
