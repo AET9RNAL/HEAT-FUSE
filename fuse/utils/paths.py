@@ -19,6 +19,7 @@ CONFIGS_DIR: Path = DATA_DIR / "configs"
 ML_DIR: Path = DATA_DIR / "ml"
 ML_PROFILES_DIR: Path = ML_DIR / "profiles"
 ML_PROFILES_REGISTRY: Path = ML_DIR / "ml_profiles.json"
+LOGS_DIR: Path = REPO_ROOT / "logs"
 
 # NOTE: there is no global ASSETS_DIR. Each vertical / plugin owns its own
 # `assets/` subdirectory next to its package, so the universal core never
@@ -50,6 +51,7 @@ __all__ = [
     "ML_DIR",
     "ML_PROFILES_DIR",
     "ML_PROFILES_REGISTRY",
+    "LOGS_DIR",
     "resolve_config",
     "resolve_data",
 ]

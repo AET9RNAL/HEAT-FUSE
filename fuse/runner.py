@@ -4,6 +4,7 @@ from __future__ import annotations
 import tkinter as tk
 from loguru import logger
 
+from fuse.log import setup as _setup_logging
 from fuse.host import PluginHost
 
 
@@ -13,6 +14,7 @@ def run(
 ) -> None:
     """Boot FUSE with all enabled plugins."""
     del argv  # reserved for future CLI flags
+    _setup_logging()
     root = tk.Tk()
     host = PluginHost(root)
     host.load_plugins(extra_plugin_dirs=extra_plugin_dirs)

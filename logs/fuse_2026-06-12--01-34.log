@@ -1,0 +1,24 @@
+2026-06-12 01:34:09.417 | INFO     | fuse                 | Session log: C:\Users\maksg\Documents\GitHub\HEAT_SACLOS\logs\fuse_2026-06-12--01-34.log
+2026-06-12 01:34:09.493 | DEBUG    | fuse                 | Hotkey bound: 'ctrl+l'
+2026-06-12 01:34:09.493 | DEBUG    | fuse                 | Hotkey bound: 'ctrl+p'
+2026-06-12 01:34:09.499 | INFO     | fuse                 | Discovered plugin (built-in): game_memory v1.0
+2026-06-12 01:34:09.500 | DEBUG    | fuse                 | External plugin path added to sys.path: C:\Users\maksg\Documents\GitHub\HEAT_SACLOS\overlay\heat\plugins
+2026-06-12 01:34:09.597 | INFO     | fuse                 | Discovered plugin (external): energy_bar v2.0
+2026-06-12 01:34:09.597 | DEBUG    | fuse                 | Plugin load order: ['game_memory', 'energy_bar']
+2026-06-12 01:34:09.598 | DEBUG    | game_memory          | Config: 3 default(s) registered (['process_name', 'chains_file', 'reconnect_interval_s'])
+2026-06-12 01:34:09.598 | DEBUG    | game_memory          | Config: 0 default(s) registered (['process_name', 'chains_file', 'reconnect_interval_s'])
+2026-06-12 01:34:09.599 | DEBUG    | game_memory          | Config loaded from C:\Users\maksg\Documents\GitHub\HEAT_SACLOS\data\configs\fuse_game_memory.json (3 disk key(s), 0 extra beyond defaults)
+2026-06-12 01:34:09.600 | DEBUG    | fuse                 | GameMemory: loaded 2 chains from C:\Users\maksg\Documents\GitHub\HEAT_SACLOS\assets\pointer_chains.json
+2026-06-12 01:34:09.600 | DEBUG    | fuse                 | ServiceRegistry: 'game_memory' registered 'game_memory'
+2026-06-12 01:34:09.615 | INFO     | fuse                 | GameMemory: connected to 'engine_launcher.exe' (PID 60212)
+2026-06-12 01:34:09.615 | INFO     | game_memory          | Loaded v1.0
+2026-06-12 01:34:09.616 | DEBUG    | energy_bar           | Config: 4 default(s) registered (['bar_pos_mode', 'bar_custom_pos', 'bg_image', 'fg_image'])
+2026-06-12 01:34:09.617 | DEBUG    | energy_bar           | Config: 2 default(s) registered (['bar_pos_mode', 'bar_custom_pos', 'bg_image', 'fg_image', 'ocr_region', 'ocr_poll_interval_ms'])
+2026-06-12 01:34:09.617 | DEBUG    | energy_bar           | Config loaded from C:\Users\maksg\Documents\GitHub\HEAT_SACLOS\data\configs\fuse_energy_bar.json (6 disk key(s), 0 extra beyond defaults)
+2026-06-12 01:34:09.666 | DEBUG    | fuse                 | Hotkey bound: 't'
+2026-06-12 01:34:09.666 | INFO     | energy_bar           | Loaded v2.0
+2026-06-12 01:34:09.714 | INFO     | fuse                 | energy_bar: CALIBRATE — drag bar, T=OCR region, Ctrl+L=lock
+2026-06-12 01:34:16.030 | INFO     | fuse                 | FUSE host state -> locked
+2026-06-12 01:34:16.031 | DEBUG    | energy_bar           | Config saved: C:\Users\maksg\Documents\GitHub\HEAT_SACLOS\data\configs\fuse_energy_bar.json (6 key(s))
+2026-06-12 01:34:16.053 | INFO     | fuse                 | energy_bar: LOCKED — reading from game_memory, click-through
+2026-06-12 01:36:41.562 | DEBUG    | energy_bar           | Config saved: C:\Users\maksg\Documents\GitHub\HEAT_SACLOS\data\configs\fuse_energy_bar.json (6 key(s))
