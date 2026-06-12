@@ -11,6 +11,12 @@ Owns:
 * a shared :class:`~fuse.events.EventBus` for cross-plugin events,
 * a shared :class:`~fuse.services.ServiceRegistry` for inter-plugin APIs,
 * :class:`PluginState` tracking for every discovered plugin.
+
+Plugin setup is **sequential**: the host sets up one plugin at a time.
+After each plugin's ``setup()`` returns it enters calibrate mode; for
+plugins that declare ``requires_calibration = True`` the user must press
+Ctrl+L to lock that plugin before the next one starts.  Plugins that
+do not need calibration are locked and advanced automatically.
 """
 from __future__ import annotations
 
@@ -94,6 +100,7 @@ class PluginHost:
         self.plugins: List[FusePlugin] = []
         self.contexts: List[FuseContext] = []
         self._plugin_map: Dict[str, FusePlugin] = {}
+        self._context_map: Dict[str, FuseContext] = {}
         self._plugin_states: Dict[str, PluginState] = {}
         self._discovered: Dict[str, DiscoveredPlugin] = {}
 
@@ -105,6 +112,10 @@ class PluginHost:
         self._mods: set[str] = set()
         self._mouse_subscribers: List[MouseCallback] = []
 
+        # Setup queue — plugins are instantiated one at a time.
+        self._setup_pending: List[DiscoveredPlugin] = []
+        self._setup_active: Optional[DiscoveredPlugin] = None  # currently being calibrated
+
         self._register_global_hotkeys()
 
     # ------------------------------------------------------------------
@@ -112,7 +123,11 @@ class PluginHost:
     # ------------------------------------------------------------------
 
     def load_plugins(self, extra_plugin_dirs: list | None = None) -> None:
-        """Discover, filter, sort by dependency, and instantiate all plugins."""
+        """Discover, filter, and sort plugins into the setup queue.
+
+        Plugins are not instantiated here — they are set up one at a time
+        after the mainloop starts via :meth:`_dequeue_next_plugin`.
+        """
         enabled = self.host_state.get("enabled_plugins")
         disabled_set = set(self.host_state.get("disabled_plugins", []))
         extra_dirs = [
@@ -123,7 +138,6 @@ class PluginHost:
 
         raw_specs = discover(extra_dirs=extra_dirs)
 
-        # Record all discovered plugins with an initial PENDING state.
         for spec in raw_specs:
             self._discovered[spec.name] = spec
             self._plugin_states[spec.name] = PluginState.PENDING
@@ -145,19 +159,15 @@ class PluginHost:
 
         ordered = resolve_load_order(eligible)
 
-        # Plugins in eligible but not in ordered were dropped by the resolver.
         ordered_names = {s.name for s in ordered}
         for spec in eligible:
             if spec.name not in ordered_names:
                 self._plugin_states[spec.name] = PluginState.SKIPPED
 
-        for spec in ordered:
-            self._instantiate(spec)
-
-        if not self.plugins:
-            _root_logger.warning("No FUSE plugins loaded — overlay will be inert.")
+        self._setup_pending = list(ordered)
 
     def _instantiate(self, spec: DiscoveredPlugin) -> None:
+        """Create and call setup() for one plugin. Called by the queue."""
         plugin = spec.cls()
         plugin_logger = _root_logger.bind(plugin=spec.name)
         plugin_assets_dir = Path(spec.package_dir) / "assets"
@@ -186,7 +196,6 @@ class PluginHost:
             self._plugin_states[spec.name] = PluginState.ERROR
             return
 
-        # Ensure config is loaded even if the plugin didn't call .load() in setup.
         if not cfg._loaded:
             cfg.load()
 
@@ -194,7 +203,55 @@ class PluginHost:
         self.plugins.append(plugin)
         self.contexts.append(ctx)
         self._plugin_map[spec.name] = plugin
+        self._context_map[spec.name] = ctx
         plugin_logger.info(f"Loaded v{spec.version}")
+
+    def _dequeue_next_plugin(self) -> None:
+        """Instantiate the next queued plugin and enter its calibrate phase.
+
+        Called from the Tk event loop (via ``root.after``).  For plugins that
+        declare ``requires_calibration = False`` the host locks them
+        automatically and immediately advances to the next one.
+        """
+        self._setup_active = None
+
+        if not self._setup_pending:
+            _root_logger.info("All plugins initialized.")
+            self.events.emit("host_ready")
+            return
+
+        spec = self._setup_pending.pop(0)
+        self._setup_active = spec
+
+        # Reset host state to calibrate for this plugin's setup phase.
+        self._state = "calibrate"
+        self._instantiate(spec)
+
+        state = self._plugin_states.get(spec.name)
+        if state != PluginState.ACTIVE:
+            # Error / skip — advance without waiting for user.
+            self._setup_active = None
+            self.root.after(0, self._dequeue_next_plugin)
+            return
+
+        plugin = self._plugin_map[spec.name]
+        ctx = self._context_map[spec.name]
+        ctx.state = "calibrate"
+
+        try:
+            plugin.enter_calibrate()
+        except Exception as e:
+            _root_logger.exception(f"{spec.name}: enter_calibrate failed: {e}")
+
+        if not plugin.requires_calibration:
+            # No UI to calibrate — lock immediately and advance.
+            try:
+                plugin.enter_locked()
+                ctx.state = "locked"
+            except Exception as e:
+                _root_logger.exception(f"{spec.name}: enter_locked failed: {e}")
+            self._setup_active = None
+            self.root.after(0, self._dequeue_next_plugin)
 
     # ------------------------------------------------------------------
     # Public plugin API
@@ -243,10 +300,7 @@ class PluginHost:
         return result
 
     def disable_plugin(self, name: str) -> None:
-        """Persist *name* to the disabled list in ``fuse_host.json``.
-
-        Takes effect on the next FUSE restart.
-        """
+        """Persist *name* to the disabled list in ``fuse_host.json``."""
         disabled = list(self.host_state.get("disabled_plugins", []))
         if name not in disabled:
             disabled.append(name)
@@ -263,6 +317,34 @@ class PluginHost:
         if now - self._last_lock_toggle < 0.25:
             return
         self._last_lock_toggle = now
+
+        if self._setup_active is not None:
+            # Queue mode: only toggle the plugin currently being set up.
+            spec = self._setup_active
+            plugin = self._plugin_map.get(spec.name)
+            ctx = self._context_map.get(spec.name)
+            if plugin is None or self._plugin_states.get(spec.name) != PluginState.ACTIVE:
+                return
+
+            new_state = "locked" if self._state == "calibrate" else "calibrate"
+            self._state = new_state
+            _root_logger.info(f"FUSE host state -> {self._state}")
+            if ctx:
+                ctx.state = self._state
+            try:
+                if self._state == "locked":
+                    plugin.enter_locked()
+                    # First lock after setup — advance to next plugin.
+                    self._setup_active = None
+                    self.root.after(0, self._dequeue_next_plugin)
+                else:
+                    plugin.enter_calibrate()
+            except Exception as e:
+                _root_logger.exception(f"{spec.name}: state change error: {e}")
+            self.events.emit("host_state_changed", state=self._state)
+            return
+
+        # Normal mode: toggle all active plugins.
         self._state = "locked" if self._state == "calibrate" else "calibrate"
         _root_logger.info(f"FUSE host state -> {self._state}")
         for ctx in self.contexts:
@@ -382,15 +464,12 @@ class PluginHost:
     # ------------------------------------------------------------------
 
     def run(self) -> None:
-        if not self.plugins:
-            self.load_plugins()
+        if not self._setup_pending:
+            _root_logger.error("No FUSE plugins queued — aborting.")
+            return
         self._start_listeners()
-        for plugin in self.plugins:
-            try:
-                plugin.enter_calibrate()
-            except Exception as e:
-                _root_logger.exception(f"{plugin.name}: initial calibrate failed: {e}")
         self.root.after(50, self._tick)
+        self.root.after(0, self._dequeue_next_plugin)
         try:
             self.root.mainloop()
         finally:

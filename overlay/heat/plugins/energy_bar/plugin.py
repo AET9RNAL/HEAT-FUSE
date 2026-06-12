@@ -40,6 +40,8 @@ except ImportError:  # pragma: no cover
 class EnergyBarPlugin(FusePlugin):
     """Composited energy-scale HUD with OCR-driven fill percentage."""
 
+    requires_calibration = True
+
     BG_IMAGE_DEFAULT = "bg_progress.png"
     FG_IMAGE_DEFAULT = "progress.png"
     OCR_SETUP_W = 120

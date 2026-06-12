@@ -18,10 +18,7 @@ def run(
     root = tk.Tk()
     host = PluginHost(root)
     host.load_plugins(extra_plugin_dirs=extra_plugin_dirs)
-    if not host.plugins:
-        logger.error("No plugins discovered — aborting.")
-        return
-    host.run()
+    host.run()  # aborts internally if queue is empty
 
 
 def main() -> None:  # pragma: no cover
