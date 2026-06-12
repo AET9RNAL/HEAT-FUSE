@@ -26,6 +26,7 @@ from fuse.api import FuseContext, FusePlugin
 from fuse.utils.layered_window import LayeredWindow
 from fuse.utils.panel import FusePanel
 from fuse.utils.game_memory import GameMemory
+from fuse.ui.config_schema import ConfigCategory, ConfigEntry
 from overlay.heat.plugins.energy_bar.ocr_bar import scan_bar_fill_pct, reset_bar_filter
 
 # Flip to False to revert to OCR-based energy reading.
@@ -105,6 +106,25 @@ class EnergyBarPlugin(FusePlugin):
             bg_image=self.BG_IMAGE_DEFAULT,
             fg_image=self.FG_IMAGE_DEFAULT,
         ).load()
+
+        ctx.config.schema([
+            ConfigCategory("Display", [
+                ConfigEntry("bar_pos_mode", "Position Mode", type="choice",
+                            choices=["custom", "center"],
+                            description="custom = draggable, center = screen center"),
+            ]),
+            ConfigCategory("OCR Source", [
+                ConfigEntry("ocr_poll_interval_ms", "Poll Interval (ms)", type="int",
+                            min=50, max=2000),
+            ]),
+            ConfigCategory("Assets", [
+                ConfigEntry("bg_image", "Background Image", type="str"),
+                ConfigEntry("fg_image", "Foreground Image", type="str"),
+            ]),
+            ConfigCategory("Position", [
+                ConfigEntry("bar_custom_pos", "Bar Position", type="position"),
+            ]),
+        ])
         self.ocr_region = ctx.config.get("ocr_region")
         self.ocr_poll_interval_ms = ctx.config.get("ocr_poll_interval_ms")
         self.bar_pos_mode = ctx.config.get("bar_pos_mode")
@@ -124,7 +144,7 @@ class EnergyBarPlugin(FusePlugin):
 
         self._create_bar_window()
 
-        ctx.hotkeys.register("t", self._toggle_ocr_setup)
+        ctx.hotkeys.register("t", self._toggle_ocr_setup, label="energy_bar: Toggle OCR Region")
         ctx.host.subscribe_mouse(self._on_global_click)
 
     def enter_calibrate(self) -> None:

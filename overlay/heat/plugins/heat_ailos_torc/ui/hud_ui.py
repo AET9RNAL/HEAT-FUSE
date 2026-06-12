@@ -332,9 +332,11 @@ class HudUiMixin:
     def _create_hud_windows(self):
         """Create all HUD window instances and wire up animation loops."""
         self._hud_group = FusePanelGroup()
+        # Use fuse_config for position persistence when available (FUSE-mode).
+        _cfg = getattr(self, "_fuse_config", None)
 
         # Name panel (logo + predictor.png)
-        _name_p = FusePanel("SACLOS HUD Name",
+        _name_p = FusePanel("SACLOS HUD Name", "hud_name_pos", _cfg,
                             default_x=self.hud_name_pos[0], default_y=self.hud_name_pos[1])
         _name_p.create(self._compose_name_image(0))
         self.hud_name_win = _name_p.win
@@ -342,21 +344,21 @@ class HudUiMixin:
 
         # Descriptor panel
         desc_img = self.hud_img_descriptor or self._make_text_image("INTERCEPT", (119, 255, 170, 255), 16)
-        _desc_p = FusePanel("SACLOS HUD Descriptor",
+        _desc_p = FusePanel("SACLOS HUD Descriptor", "hud_descriptor_pos", _cfg,
                             default_x=self.hud_descriptor_pos[0], default_y=self.hud_descriptor_pos[1])
         _desc_p.create(desc_img)
         self.hud_descriptor_win = _desc_p.win
         self._hud_group.add(_desc_p)
 
         # Range panel (image + text)
-        _range_p = FusePanel("SACLOS HUD Range",
+        _range_p = FusePanel("SACLOS HUD Range", "hud_range_pos", _cfg,
                              default_x=self.hud_range_pos[0], default_y=self.hud_range_pos[1])
         _range_p.create(self._compose_range_image())
         self.hud_range_win = _range_p.win
         self._hud_group.add(_range_p)
 
         # Status panel (image + status image)
-        _status_p = FusePanel("SACLOS HUD Status",
+        _status_p = FusePanel("SACLOS HUD Status", "hud_status_pos", _cfg,
                               default_x=self.hud_status_pos[0], default_y=self.hud_status_pos[1])
         _status_p.create(self._compose_status_image())
         self.hud_status_win = _status_p.win

@@ -31,6 +31,7 @@ class PluginConfig:
         self._watchers: Dict[str, List[Callable]] = {}
         self._loaded = False
         self._log = logger.bind(plugin=name)
+        self._schema = None  # list[ConfigCategory] registered via schema()
 
     # ------------------------------------------------------------------
     # Defaults
@@ -43,6 +44,14 @@ class PluginConfig:
         self._defaults.update(kwargs)
         added = len(self._defaults) - before
         self._log.debug(f"Config: {added} default(s) registered ({list(self._defaults)})")
+        return self
+
+    # ------------------------------------------------------------------
+    # Schema (for Plugin Manager UI)
+
+    def schema(self, categories: list) -> "PluginConfig":
+        """Register a declarative UI schema (list of ConfigCategory). Fluent."""
+        self._schema = categories
         return self
 
     # ------------------------------------------------------------------
