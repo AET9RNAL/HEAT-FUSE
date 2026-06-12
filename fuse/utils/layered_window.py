@@ -228,7 +228,7 @@ class LayeredWindow:
             self.global_alpha = global_alpha
         self._free_gdi()
         self._create_dib(image)
-        self._push_layered()
+        self._push_layered(set_position=False)
 
     def set_alpha(self, alpha: int):
         """Update global alpha without changing image."""
@@ -236,7 +236,7 @@ class LayeredWindow:
             return
         self.global_alpha = max(0, min(255, alpha))
         if self._hdc_mem:
-            self._push_layered()
+            self._push_layered(set_position=False)
 
     def move(self, x: int, y: int):
         """Reposition the window."""
@@ -339,13 +339,18 @@ class LayeredWindow:
         ctypes.memmove(ppvBits, raw, len(raw))
         gdi32.SelectObject(self._hdc_mem, self._hbm)
 
-    def _push_layered(self):
-        """Push current DIB to the layered window."""
+    def _push_layered(self, *, set_position: bool = True):
+        """Push current DIB to the layered window.
+
+        Pass set_position=False for image/alpha-only updates: pptDst becomes
+        NULL so UpdateLayeredWindow renders at the current OS window position
+        instead of snapping back to the cached self.x/self.y.  This prevents
+        the 33 ms animation loop from interrupting an in-progress drag.
+        """
         if not self.hwnd or not self._hdc_mem:
             return
 
         pt_src = wt.POINT(0, 0)
-        pt_dst = wt.POINT(self.x, self.y)
         size = wt.SIZE(self.width, self.height)
 
         blend = BLENDFUNCTION()
@@ -354,10 +359,16 @@ class LayeredWindow:
         blend.SourceConstantAlpha = self.global_alpha
         blend.AlphaFormat = AC_SRC_ALPHA
 
+        if set_position:
+            pt_dst = wt.POINT(self.x, self.y)
+            pdst_ptr = ctypes.byref(pt_dst)
+        else:
+            pdst_ptr = None
+
         screen_dc = user32.GetDC(None)
         user32.UpdateLayeredWindow(
             self.hwnd, screen_dc,
-            ctypes.byref(pt_dst), ctypes.byref(size),
+            pdst_ptr, ctypes.byref(size),
             self._hdc_mem, ctypes.byref(pt_src),
             0, ctypes.byref(blend), ULW_ALPHA,
         )
