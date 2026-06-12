@@ -215,8 +215,12 @@ class LayeredWindow:
             self._create_dib(image)
             self._push_layered()
 
-    def update_image(self, image: Image.Image, global_alpha: int = None):
-        """Update displayed image. Call from GUI thread."""
+    def update_image(self, image: Image.Image, global_alpha: int = None,
+                     x: int = None, y: int = None):
+        """Update displayed image. Call from GUI thread.
+
+        Pass x/y to atomically update position together with the image.
+        """
         if not self.hwnd:
             return
         image = image.convert("RGBA")
@@ -226,9 +230,13 @@ class LayeredWindow:
             self.height = new_h
         if global_alpha is not None:
             self.global_alpha = global_alpha
+        if x is not None:
+            self.x = x
+        if y is not None:
+            self.y = y
         self._free_gdi()
         self._create_dib(image)
-        self._push_layered(set_position=False)
+        self._push_layered(set_position=(x is not None or y is not None))
 
     def set_alpha(self, alpha: int):
         """Update global alpha without changing image."""

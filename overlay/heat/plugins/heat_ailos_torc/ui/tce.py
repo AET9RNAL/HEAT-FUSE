@@ -281,13 +281,9 @@ class TCE:
         if ss != 1:
             img = img.resize((win_w, win_h), Image.LANCZOS)
 
-        # NEVER call self.win.move() here. move() does SetWindowPos +
-        # _push_layered with the OLD DIB at the NEW position; the second
-        # update_image push corrects it, but the screen flickers between.
-        # Reads as ghost arcs and radial jitter. Atomic single push:
-        self.win.x = win_x
-        self.win.y = win_y
-        self.win.update_image(img)
+        # Atomic position+image push via update_image(x=, y=) avoids
+        # the SetWindowPos + _push_layered flicker of move().
+        self.win.update_image(img, x=win_x, y=win_y)
         if not self.win.visible:
             self.win.show()
 
@@ -376,9 +372,7 @@ class TCE:
             img = img.resize((size_px, size_px), Image.LANCZOS)
 
         # Atomic push (see _render_arc for rationale).
-        self.win.x = win_x
-        self.win.y = win_y
-        self.win.update_image(img)
+        self.win.update_image(img, x=win_x, y=win_y)
         self._ring_expected_pos = [win_x, win_y]
         if not self.win.visible:
             self.win.show()
