@@ -1,23 +1,31 @@
 """Plugin discovery for the FUSE mod loader.
 
-Each plugin lives under ``fuse/plugins/<name>/`` (core built-in) or any
-extra directory configured in ``fuse_host.json → extra_plugin_dirs``
-(external / 3rd-party).  Every plugin directory must contain:
+Each plugin lives under one of three scanned roots:
+
+* ``fuse/plugins/<name>/``        — core built-in plugins shipped with FUSE
+* ``<repo>/plugins/<name>/``      — standard user drop-in directory (zero config)
+* ``FUSE_PLUGIN_DIRS`` env var    — colon/semicolon-separated extra paths
+* ``extra_plugin_dirs`` arg       — caller-supplied (from fuse_host.json / launcher)
+
+Every plugin directory must contain:
 
 * ``manifest.json`` — required, shape:
 
   .. code-block:: json
 
       {
-        "name":             "my_plugin",
-        "version":          "1.0",
-        "author":           "optional",
-        "description":      "What it does.",
-        "entry":            "plugin:MyPlugin",
-        "min_host_version": "1.0",
-        "dependencies":     [],
-        "hotkeys":          {"toggle": "t"},
-        "default_config":   {}
+        "name":                 "my_plugin",
+        "version":              "1.0",
+        "author":               "optional",
+        "homepage":             "optional",
+        "tags":                 [],
+        "description":          "What it does.",
+        "entry":                "plugin:MyPlugin",
+        "min_host_version":     "1.0",
+        "dependencies":         ["other_plugin"],
+        "optional_dependencies":[],
+        "hotkeys":              {"toggle": "t"},
+        "default_config":       {}
       }
 
 * a Python module (``plugin.py`` by default) exposing the entry class.
@@ -31,16 +39,19 @@ from __future__ import annotations
 
 import importlib
 import json
+import os
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional, Type
 
 from loguru import logger
 
 from fuse.api import FusePlugin
+from fuse.utils.paths import REPO_ROOT
 
-BUILTIN_PLUGINS_DIR = Path(__file__).resolve().parent / "plugins"
+BUILTIN_PLUGINS_DIR: Path = Path(__file__).resolve().parent / "plugins"
+USER_PLUGINS_DIR: Path = REPO_ROOT / "plugins"
 
 
 @dataclass(frozen=True)
@@ -52,7 +63,10 @@ class DiscoveredPlugin:
     package_dir: Path  # filesystem path to the plugin package directory
     cls: Type[FusePlugin]
     manifest: dict
-    is_external: bool = False  # True when loaded from extra_plugin_dirs
+    is_external: bool = False  # True when loaded from outside fuse/plugins/
+    author: str = ""
+    homepage: str = ""
+    tags: list = field(default_factory=list)
 
 
 def _load_manifest(plugin_dir: Path) -> Optional[dict]:
@@ -84,7 +98,7 @@ def _resolve_external_entry(plugin_dir: Path, entry: str) -> Type[FusePlugin]:
     if not class_name:
         raise ValueError(f"manifest 'entry' must be 'module:Class', got {entry!r}")
 
-    parent = str(plugin_dir.parent)
+    parent = str(plugin_dir.resolve().parent)
     pkg_name = plugin_dir.name
     full_module = f"{pkg_name}.{module_name}"
 
@@ -142,6 +156,9 @@ def _scan_directory(
                 cls=cls,
                 manifest=manifest,
                 is_external=is_external,
+                author=manifest.get("author", ""),
+                homepage=manifest.get("homepage", ""),
+                tags=manifest.get("tags", []),
             )
         )
         source = "external" if is_external else "built-in"
@@ -151,15 +168,18 @@ def _scan_directory(
 
 
 def discover(extra_dirs: Optional[List[Path]] = None) -> List[DiscoveredPlugin]:
-    """Scan built-in and optional extra directories; return all valid plugins.
+    """Scan all plugin sources and return every valid plugin found.
 
-    *extra_dirs* — list of absolute :class:`~pathlib.Path` objects to external
-    plugin root directories (each sub-directory is a plugin package).
-    Populated from ``fuse_host.json → extra_plugin_dirs``.
+    Scan order (earlier sources take precedence on name collision):
+
+    1. ``fuse/plugins/``           — built-in core plugins
+    2. ``<repo>/plugins/``         — user drop-in directory (zero config)
+    3. ``FUSE_PLUGIN_DIRS`` env    — colon/semicolon-separated paths
+    4. *extra_dirs*                 — caller-supplied (fuse_host.json / launcher)
     """
     found: List[DiscoveredPlugin] = []
 
-    # Core / built-in plugins shipped with FUSE.
+    # 1. Core built-in plugins shipped with FUSE.
     found.extend(
         _scan_directory(
             BUILTIN_PLUGINS_DIR,
@@ -168,12 +188,20 @@ def discover(extra_dirs: Optional[List[Path]] = None) -> List[DiscoveredPlugin]:
         )
     )
 
-    # External / 3rd-party plugins.
+    # 2. Standard user drop-in directory — no config needed.
+    if USER_PLUGINS_DIR.exists():
+        found.extend(_scan_directory(USER_PLUGINS_DIR, is_external=True))
+
+    # 3. FUSE_PLUGIN_DIRS environment variable.
+    env_dirs = os.environ.get("FUSE_PLUGIN_DIRS", "")
+    for raw in (p.strip() for p in env_dirs.replace(";", ":").split(":") if p.strip()):
+        found.extend(_scan_directory(Path(raw), is_external=True))
+
+    # 4. Caller-supplied extra directories (fuse_host.json / launcher script).
     for ext_dir in (extra_dirs or []):
-        ext_path = Path(ext_dir)
-        found.extend(_scan_directory(ext_path, is_external=True))
+        found.extend(_scan_directory(Path(ext_dir), is_external=True))
 
     return found
 
 
-__all__ = ["DiscoveredPlugin", "discover", "BUILTIN_PLUGINS_DIR"]
+__all__ = ["DiscoveredPlugin", "discover", "BUILTIN_PLUGINS_DIR", "USER_PLUGINS_DIR"]

@@ -93,22 +93,22 @@ class EnergyBarPlugin(FusePlugin):
                 logger.warning("energy_bar: USE_MEMORY_API=True but 'game_memory' service "
                                "not available — falling back to OCR")
 
-        cfg = ctx.config.load({
-            "ocr_region": None,
-            "ocr_poll_interval_ms": 100,
-            "bar_pos_mode": "custom",
-            "bar_custom_pos": None,
-            "bg_image": self.BG_IMAGE_DEFAULT,
-            "fg_image": self.FG_IMAGE_DEFAULT,
-        })
-        self.ocr_region = cfg.get("ocr_region")
-        self.ocr_poll_interval_ms = cfg.get("ocr_poll_interval_ms", 100)
-        self.bar_pos_mode = cfg.get("bar_pos_mode", "custom")
-        self.bar_custom_pos = cfg.get("bar_custom_pos")
+        ctx.config.defaults(
+            ocr_region=None,
+            ocr_poll_interval_ms=100,
+            bar_pos_mode="custom",
+            bar_custom_pos=None,
+            bg_image=self.BG_IMAGE_DEFAULT,
+            fg_image=self.FG_IMAGE_DEFAULT,
+        ).load()
+        self.ocr_region = ctx.config.get("ocr_region")
+        self.ocr_poll_interval_ms = ctx.config.get("ocr_poll_interval_ms")
+        self.bar_pos_mode = ctx.config.get("bar_pos_mode")
+        self.bar_custom_pos = ctx.config.get("bar_custom_pos")
 
         self._load_assets(ctx.assets_dir,
-                          cfg.get("bg_image", self.BG_IMAGE_DEFAULT),
-                          cfg.get("fg_image", self.FG_IMAGE_DEFAULT))
+                          ctx.config.get("bg_image"),
+                          ctx.config.get("fg_image"))
         self._create_ocr_setup_window()
         self._create_setup_dialog()
 
@@ -503,7 +503,7 @@ class EnergyBarPlugin(FusePlugin):
     def _save_config(self) -> None:
         if self.ctx is None:
             return
-        self.ctx.config.save({
+        self.ctx.config.update({
             "ocr_region": self.ocr_region,
             "ocr_poll_interval_ms": self.ocr_poll_interval_ms,
             "bar_pos_mode": self.bar_pos_mode,

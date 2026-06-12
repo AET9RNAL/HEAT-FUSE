@@ -26,15 +26,15 @@ class GameMemoryPlugin(FusePlugin):
     """Core FUSE plugin that opens the game process and registers GameMemory."""
 
     def setup(self, ctx: FuseContext) -> None:
-        cfg = ctx.config.load({
-            "process_name": "engine_launcher.exe",
-            "chains_file": "assets/pointer_chains.json",
-            "reconnect_interval_s": 5.0,
-        })
+        ctx.config.defaults(
+            process_name="engine_launcher.exe",
+            chains_file="assets/pointer_chains.json",
+            reconnect_interval_s=5.0,
+        ).load()
 
-        chains_path = resolve_data(cfg["chains_file"])
-        self._memory = GameMemory(cfg["process_name"], chains_path)
-        self._reconnect_interval = float(cfg["reconnect_interval_s"])
+        chains_path = resolve_data(ctx.config.get("chains_file"))
+        self._memory = GameMemory(ctx.config.get("process_name"), chains_path)
+        self._reconnect_interval = float(ctx.config.get("reconnect_interval_s"))
         self._reconnect_timer = 0.0
         self._ctx = ctx
 
