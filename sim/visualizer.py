@@ -82,7 +82,7 @@ class SimObservatory:
 
     def __init__(self, data_file=None, sim=None):
         if data_file is None:
-            from overlay.ml.heat_ailos_torc.profiles import (
+            from overlay.heat.plugins.heat_ailos_torc.profiles import (
                 default_profile_name, load_profile)
             data_file = load_profile(default_profile_name()).dataset
         self.data_file  = data_file
@@ -528,7 +528,7 @@ class SimObservatory:
             root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
             if root not in sys.path:
                 sys.path.insert(0, root)
-            from overlay.ml.heat_ailos_torc.trainer.correction_learner import CorrectionLearner
+            from overlay.heat.plugins.heat_ailos_torc.trainer.correction_learner import CorrectionLearner
             learner = CorrectionLearner(data_file=self.data_file)
             traj, conf = learner.predict(
                 self._disp_px,
@@ -555,7 +555,7 @@ class SimObservatory:
             root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
             if root not in sys.path:
                 sys.path.insert(0, root)
-            from overlay.ml.heat_ailos_torc.trainer.correction_learner import CorrectionLearner
+            from overlay.heat.plugins.heat_ailos_torc.trainer.correction_learner import CorrectionLearner
             learner = CorrectionLearner(data_file=self.data_file)
             traj = self._current_trajectory()
             n = learner.add_sample(

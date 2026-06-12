@@ -1,2 +1,2 @@
-from overlay.ml.heat_ailos_torc.trainer.correction_learner import CorrectionLearner
-from overlay.ml.heat_ailos_torc.trainer.training_overlay import TrainingOverlay
+# Deprecated shim — moved to overlay.heat.plugins.heat_ailos_torc.trainer
+from overlay.heat.plugins.heat_ailos_torc.trainer import *  # noqa: F401, F403

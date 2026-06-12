@@ -101,6 +101,12 @@ class FusePlugin(ABC):
     version: str = ""
     description: str = ""
 
+    #: Set True for plugins that show calibration UI. The host will wait for
+    #: the user to press Ctrl+L (entering locked state) before starting the
+    #: next plugin's setup. Plugins that require no user interaction leave
+    #: this False and are advanced automatically after setup().
+    requires_calibration: bool = False
+
     @abstractmethod
     def setup(self, ctx: FuseContext) -> None:
         """Construct widgets, load config, register hotkeys."""
