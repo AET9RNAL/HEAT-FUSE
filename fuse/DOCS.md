@@ -1,6 +1,6 @@
 # FUSE Framework
 
-**FUSE** is a lightweight Python plugin framework for building game overlays and real-time tools on Windows. It provides discovery, dependency resolution, a shared event bus, named services, per-plugin configuration, global hotkeys, and a calibrate/locked lifecycle — all running on a single Tk event loop.
+**FUSE** is a lightweight Python plugin framework for building overlays for WoT:HEAT and real-time tools on Windows. It provides discovery, dependency resolution, a shared event bus, named services, per-plugin configuration, global hotkeys, and a calibrate/locked lifecycle — all running on a single Tk event loop.
 
 ---
 

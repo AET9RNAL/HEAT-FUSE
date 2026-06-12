@@ -26,6 +26,8 @@ except ImportError:
 
 try:
     from fuse.utils.layered_window import LayeredWindow
+    from fuse.utils.panel import FusePanel, FusePanelGroup
+    from fuse.utils.animation import AnimationLoop
     LAYERED_OK = True
 except ImportError:
     LAYERED_OK = False
@@ -105,7 +107,7 @@ class HudUiMixin:
         self.hud_logo_frame_index = 0
         self.hud_logo_anim_id = None
 
-        # LayeredWindow handles
+        # LayeredWindow handles (set by _create_hud_windows)
         self.hud_name_win = None
         self.hud_descriptor_win = None
         self.hud_range_win = None
@@ -113,18 +115,20 @@ class HudUiMixin:
         self.hud_designator_predict_win = None
         self.hud_designator_intercept_win = None
 
+        # Panel group for the 4 draggable HUD windows
+        self._hud_group: "FusePanelGroup | None" = None
+
         # State
         self.hud_status = "idle"  # idle, predict, intercept
         self.hud_visible = False
         self.hud_locked = False
 
-        # Designator animation
-        self.hud_designator_anim_id = None
-        self.hud_designator_anim_start = 0
-        self.hud_designator_alpha = 1.0
+        # Animation loops (created in _create_hud_windows)
+        self._logo_anim: "AnimationLoop | None" = None
+        self._designator_anim: "AnimationLoop | None" = None
+        self._blink_anim: "AnimationLoop | None" = None
 
-        # Predict status blink animation
-        self.hud_predict_blink_id = None
+        self.hud_designator_anim_start = 0
         self.hud_predict_blink_visible = True
 
         # Default positions (screen coordinates)
@@ -326,44 +330,51 @@ class HudUiMixin:
     # ── Window creation ──────────────────────────────────────────────
 
     def _create_hud_windows(self):
-        """Create all HUD LayeredWindow instances."""
-        # Name window (logo + predictor.png)
-        name_img = self._compose_name_image(0)
-        self.hud_name_win = LayeredWindow("SACLOS HUD Name",
-                                          x=self.hud_name_pos[0], y=self.hud_name_pos[1],
-                                          draggable=True)
-        self.hud_name_win.create(name_img)
+        """Create all HUD window instances and wire up animation loops."""
+        self._hud_group = FusePanelGroup()
 
-        # Descriptor window
+        # Name panel (logo + predictor.png)
+        _name_p = FusePanel("SACLOS HUD Name",
+                            default_x=self.hud_name_pos[0], default_y=self.hud_name_pos[1])
+        _name_p.create(self._compose_name_image(0))
+        self.hud_name_win = _name_p.win
+        self._hud_group.add(_name_p)
+
+        # Descriptor panel
         desc_img = self.hud_img_descriptor or self._make_text_image("INTERCEPT", (119, 255, 170, 255), 16)
-        self.hud_descriptor_win = LayeredWindow("SACLOS HUD Descriptor",
-                                                x=self.hud_descriptor_pos[0], y=self.hud_descriptor_pos[1],
-                                                draggable=True)
-        self.hud_descriptor_win.create(desc_img)
+        _desc_p = FusePanel("SACLOS HUD Descriptor",
+                            default_x=self.hud_descriptor_pos[0], default_y=self.hud_descriptor_pos[1])
+        _desc_p.create(desc_img)
+        self.hud_descriptor_win = _desc_p.win
+        self._hud_group.add(_desc_p)
 
-        # Range window (image + text)
-        range_img = self._compose_range_image()
-        self.hud_range_win = LayeredWindow("SACLOS HUD Range",
-                                           x=self.hud_range_pos[0], y=self.hud_range_pos[1],
-                                           draggable=True)
-        self.hud_range_win.create(range_img)
+        # Range panel (image + text)
+        _range_p = FusePanel("SACLOS HUD Range",
+                             default_x=self.hud_range_pos[0], default_y=self.hud_range_pos[1])
+        _range_p.create(self._compose_range_image())
+        self.hud_range_win = _range_p.win
+        self._hud_group.add(_range_p)
 
-        # Status window (image + status image)
-        status_img = self._compose_status_image()
-        self.hud_status_win = LayeredWindow("SACLOS HUD Status",
-                                            x=self.hud_status_pos[0], y=self.hud_status_pos[1],
-                                            draggable=True)
-        self.hud_status_win.create(status_img)
+        # Status panel (image + status image)
+        _status_p = FusePanel("SACLOS HUD Status",
+                              default_x=self.hud_status_pos[0], default_y=self.hud_status_pos[1])
+        _status_p.create(self._compose_status_image())
+        self.hud_status_win = _status_p.win
+        self._hud_group.add(_status_p)
 
-        # Designator predict (animated crosshair)
+        # Designator windows (not draggable — stay as raw LayeredWindow)
         pred_img = self.hud_img_designator_predict or self._make_text_image("+", (119, 255, 170, 255), 24)
         self.hud_designator_predict_win = LayeredWindow("SACLOS Designator Predict", draggable=False)
         self.hud_designator_predict_win.create(pred_img)
 
-        # Designator intercept (triangle)
         int_img = self.hud_img_designator_intercept or self._make_text_image("▲", (0, 255, 0, 255), 24)
         self.hud_designator_intercept_win = LayeredWindow("SACLOS Designator Intercept", draggable=False)
         self.hud_designator_intercept_win.create(int_img)
+
+        # Animation loops
+        self._logo_anim = AnimationLoop(self.root, self._animate_logo, fps=30)
+        self._designator_anim = AnimationLoop(self.root, self._animate_designator, fps=20)
+        self._blink_anim = AnimationLoop(self.root, self._animate_predict_blink, fps=2)
 
     # ── _make_draggable kept for QL HUD tkinter windows ──────────────
 
@@ -403,29 +414,20 @@ class HudUiMixin:
     # ── Logo animation ───────────────────────────────────────────────
 
     def _start_logo_animation(self):
-        """Start the continuous spinning logo animation."""
-        if not self.hud_logo_frames:
-            return
-        self._stop_logo_animation()
-        self._animate_logo()
+        if self.hud_logo_frames and self._logo_anim:
+            self._logo_anim.start()
 
     def _stop_logo_animation(self):
-        """Stop the logo animation."""
-        if self.hud_logo_anim_id:
-            self.root.after_cancel(self.hud_logo_anim_id)
-            self.hud_logo_anim_id = None
+        if self._logo_anim:
+            self._logo_anim.stop()
 
     def _animate_logo(self):
-        """Animation step for rotating logo — recomposites name window."""
+        """Single logo frame — called by AnimationLoop at 30 fps."""
         if not self.hud_logo_frames or not self.hud_name_win:
             return
         self.hud_logo_frame_index = (self.hud_logo_frame_index + 1) % len(self.hud_logo_frames)
-        try:
-            name_img = self._compose_name_image(self.hud_logo_frame_index)
-            self.hud_name_win.update_image(name_img)
-        except Exception:
-            return
-        self.hud_logo_anim_id = self.root.after(33, self._animate_logo)
+        name_img = self._compose_name_image(self.hud_logo_frame_index)
+        self.hud_name_win.update_image(name_img)
 
     # ── Status image update ──────────────────────────────────────────
 
@@ -441,19 +443,10 @@ class HudUiMixin:
     def _show_hud_setup(self):
         """Show HUD windows in draggable setup mode."""
         self.hud_locked = False
-
         self._position_hud_windows()
-
-        for win in [self.hud_name_win, self.hud_descriptor_win,
-                    self.hud_range_win, self.hud_status_win]:
-            if win:
-                win.set_draggable(True)
-                win.set_click_through(False)
-                win.show()
-
+        if self._hud_group:
+            self._hud_group.enter_calibrate()
         self.hud_visible = True
-
-        # Refresh content
         self._update_hud_range_text()
         self._update_status_image()
         self._start_logo_animation()
@@ -461,37 +454,24 @@ class HudUiMixin:
     def _show_hud_locked(self):
         """Show HUD windows in locked (click-through) mode."""
         self.hud_locked = True
-
         self._position_hud_windows()
-
-        for win in [self.hud_name_win, self.hud_descriptor_win,
-                    self.hud_range_win, self.hud_status_win]:
-            if win:
-                win.set_draggable(False)
-                win.show()
-                win.set_click_through(True)
-
+        if self._hud_group:
+            self._hud_group.enter_locked()
         self.hud_visible = True
-
-        # Refresh content
         self._update_hud_range_text()
         self._update_status_image()
         self._start_logo_animation()
 
     def _hide_hud(self):
-        """Hide all HUD windows."""
+        """Hide all HUD windows and stop all animations."""
         self.hud_visible = False
         self.hud_locked = False
-
-        # Stop animations
         self._stop_designator_animation()
         self._stop_predict_blink()
         self._stop_logo_animation()
-
-        # Hide all windows
-        for win in [self.hud_name_win, self.hud_descriptor_win,
-                    self.hud_range_win, self.hud_status_win,
-                    self.hud_designator_predict_win, self.hud_designator_intercept_win]:
+        if self._hud_group:
+            self._hud_group.hide_all()
+        for win in [self.hud_designator_predict_win, self.hud_designator_intercept_win]:
             if win:
                 win.hide()
 
@@ -612,84 +592,75 @@ class HudUiMixin:
     # ── Designator animation ─────────────────────────────────────────
 
     def _start_designator_animation(self):
-        """Start the fade-in-out animation for predict designator."""
-        self._stop_designator_animation()
+        if self._designator_anim:
+            self._designator_anim.stop()
         self.hud_designator_anim_start = 0
-        self._animate_designator()
+        if self._designator_anim:
+            self._designator_anim.start()
 
     def _animate_designator(self):
-        """Animation loop for designator fade — uses per-pixel alpha scaling."""
+        """Single designator fade frame — called by AnimationLoop at 20 fps."""
         if self.hud_designator_anim_start == 0:
             self.hud_designator_anim_start = time.perf_counter()
-
         elapsed = time.perf_counter() - self.hud_designator_anim_start
-        # Sine wave: period ~2.5 seconds, alpha 0.2 to 1.0
         alpha = 0.6 * (0.5 + 0.5 * math.sin(elapsed * 2.5)) + 0.2
         alpha = max(0.15, min(1.0, alpha))
-
         if self.hud_designator_predict_win:
             self.hud_designator_predict_win.set_alpha(int(alpha * 255))
-
-        # Continue animation
-        if self.hud_status == "predict":
-            self.hud_designator_anim_id = self.root.after(50, self._animate_designator)
+        if self.hud_status != "predict" and self._designator_anim:
+            self._designator_anim.stop()
 
     def _stop_designator_animation(self):
-        """Stop the designator animation."""
-        if self.hud_designator_anim_id:
-            self.root.after_cancel(self.hud_designator_anim_id)
-            self.hud_designator_anim_id = None
+        if self._designator_anim:
+            self._designator_anim.stop()
         if self.hud_designator_predict_win:
             self.hud_designator_predict_win.set_alpha(255)
 
     # ── Predict blink ────────────────────────────────────────────────
 
     def _start_predict_blink(self):
-        """Start square-wave blink on the predict status image."""
-        self._stop_predict_blink()
+        if self._blink_anim:
+            self._blink_anim.stop()
         self.hud_predict_blink_visible = True
-        self._animate_predict_blink()
+        if self._blink_anim:
+            self._blink_anim.start()
 
     def _stop_predict_blink(self):
-        """Stop predict blink and restore status image."""
-        if self.hud_predict_blink_id:
-            self.root.after_cancel(self.hud_predict_blink_id)
-            self.hud_predict_blink_id = None
-        # Restore full status image
+        if self._blink_anim:
+            self._blink_anim.stop()
         self._update_status_image()
 
     def _animate_predict_blink(self):
-        """Toggle status window visibility for blink effect."""
+        """Single predict-blink frame — called by AnimationLoop at 2 fps."""
+        if self.hud_status != "predict":
+            if self._blink_anim:
+                self._blink_anim.stop()
+            self._update_status_image()
+            return
         if not self.hud_status_win or not self.hud_status_win.is_created:
             return
-        try:
-            if self.hud_predict_blink_visible:
-                self._update_status_image()
+        if self.hud_predict_blink_visible:
+            self._update_status_image()
+        else:
+            if self.hud_img_status:
+                blank_w = max(
+                    (img.width for img in [self.hud_img_status_idle, self.hud_img_status_predict,
+                                           self.hud_img_status_intercept] if img),
+                    default=60)
+                blank_h = max(
+                    (img.height for img in [self.hud_img_status_idle, self.hud_img_status_predict,
+                                            self.hud_img_status_intercept] if img),
+                    default=20)
+                spacer_w = 8
+                total_w = self.hud_img_status.width + spacer_w + blank_w
+                max_h = max(self.hud_img_status.height, blank_h)
+                img = Image.new("RGBA", (total_w, max_h), (0, 0, 0, 0))
+                img = self._paste_alpha(img, self.hud_img_status,
+                          (0, (max_h - self.hud_img_status.height) // 2))
+                self.hud_status_win.update_image(img)
             else:
-                # Compose with blank status indicator
-                if self.hud_img_status:
-                    blank_w = max(
-                        (img.width for img in [self.hud_img_status_idle, self.hud_img_status_predict,
-                                               self.hud_img_status_intercept] if img),
-                        default=60)
-                    blank_h = max(
-                        (img.height for img in [self.hud_img_status_idle, self.hud_img_status_predict,
-                                                self.hud_img_status_intercept] if img),
-                        default=20)
-                    spacer_w = 8
-                    total_w = self.hud_img_status.width + spacer_w + blank_w
-                    max_h = max(self.hud_img_status.height, blank_h)
-                    img = Image.new("RGBA", (total_w, max_h), (0, 0, 0, 0))
-                    img = self._paste_alpha(img, self.hud_img_status,
-                              (0, (max_h - self.hud_img_status.height) // 2))
-                    self.hud_status_win.update_image(img)
-                else:
-                    self.hud_status_win.set_alpha(30 if not self.hud_predict_blink_visible else 255)
-        except Exception:
-            return
+                self.hud_status_win.set_alpha(30)
         self.hud_predict_blink_visible = not self.hud_predict_blink_visible
-        if self.hud_status == "predict":
-            self.hud_predict_blink_id = self.root.after(500, self._animate_predict_blink)
 
     # ── Click-through (kept for QL HUD tkinter windows) ──────────────
 
@@ -768,13 +739,13 @@ class HudUiMixin:
             self.hud_status_pos = list(status_pos)
 
     def _cleanup_hud(self):
-        """Clean up HUD windows."""
+        """Stop animations and destroy all HUD windows."""
         self._stop_designator_animation()
         self._stop_predict_blink()
         self._stop_logo_animation()
-        for win in [self.hud_name_win, self.hud_descriptor_win,
-                    self.hud_range_win, self.hud_status_win,
-                    self.hud_designator_predict_win, self.hud_designator_intercept_win]:
+        if self._hud_group:
+            self._hud_group.destroy_all()
+        for win in [self.hud_designator_predict_win, self.hud_designator_intercept_win]:
             if win:
                 try:
                     win.destroy()

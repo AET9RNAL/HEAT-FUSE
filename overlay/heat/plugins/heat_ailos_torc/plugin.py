@@ -64,6 +64,19 @@ class HeatAilosTorcPlugin(FusePlugin):
         else:
             ctx.logger.error(f"heat_ailos_torc: unknown mode {mode!r} — aborting setup.")
 
+        # Wire optional 'game_memory' service into the overlay so the range
+        # source can be flipped to memory via USE_MEMORY_API in base_overlay.py.
+        if self._overlay is not None:
+            mem = ctx.services.get("game_memory")
+            if mem is not None:
+                self._overlay._game_memory = mem
+                ctx.logger.info("heat_ailos_torc: connected to 'game_memory' service")
+            else:
+                ctx.logger.debug(
+                    "heat_ailos_torc: 'game_memory' service not available — "
+                    "OCR fallback will be used regardless of USE_MEMORY_API."
+                )
+
     def enter_calibrate(self) -> None:
         if self._overlay and hasattr(self._overlay, "_on_calibrate"):
             self._overlay._on_calibrate()

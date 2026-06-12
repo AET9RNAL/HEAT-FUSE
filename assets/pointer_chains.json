@@ -14,5 +14,13 @@
     "offsets": [0, 0, 0, 0, 0, 0, 0],
     "dtype": "float",
     "readonly": false
+  },
+
+  "rangefinder": {
+    "_note": "Rangefinder distance to currently aimed-at enemy (meters, integer). Static cohtml.WindowsDesktop.dll chain.",
+    "module": "cohtml.WindowsDesktop.dll",
+    "offsets": ["0x64D218", "0x10", "0x48", "0x80", "0x08", "0xC8", "0x188", "0x110"],
+    "dtype": "uint32",
+    "readonly": true
   }
 }

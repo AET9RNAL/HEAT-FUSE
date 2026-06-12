@@ -5,6 +5,7 @@
   "description": "ML-assisted SACLOS missile guidance overlay (predictor / trainer / refiner).",
   "entry": "plugin:HeatAilosTorcPlugin",
   "tags": ["ml", "saclos", "overlay"],
+  "optional_dependencies": ["game_memory"],
   "default_config": {
     "mode": "predictor",
     "profile_name": null,

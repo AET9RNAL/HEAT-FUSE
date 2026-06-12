@@ -236,7 +236,7 @@ class LayeredWindow:
             self.y = y
         self._free_gdi()
         self._create_dib(image)
-        self._push_layered(set_position=(x is not None or y is not None))
+        self._push_layered(set_position=(x is not None and y is not None))
 
     def set_alpha(self, alpha: int):
         """Update global alpha without changing image."""

@@ -1,1 +1,0 @@
-from fuse.utils.hardware_inject import *  # noqa: F401, F403

@@ -11,7 +11,32 @@ from typing import List, Optional, Sequence
 
 from loguru import logger
 
-_kernel32 = ctypes.windll.kernel32
+_kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+
+# ---------------------------------------------------------------------------
+# Critical: declare argtypes/restype so 64-bit pointers don't get truncated
+# ---------------------------------------------------------------------------
+_kernel32.OpenProcess.argtypes = [wt.DWORD, wt.BOOL, wt.DWORD]
+_kernel32.OpenProcess.restype = wt.HANDLE
+
+_kernel32.CloseHandle.argtypes = [wt.HANDLE]
+_kernel32.CloseHandle.restype = wt.BOOL
+
+_kernel32.ReadProcessMemory.argtypes = [
+    wt.HANDLE, ctypes.c_void_p, ctypes.c_void_p,
+    ctypes.c_size_t, ctypes.POINTER(ctypes.c_size_t),
+]
+_kernel32.ReadProcessMemory.restype = wt.BOOL
+
+_kernel32.WriteProcessMemory.argtypes = [
+    wt.HANDLE, ctypes.c_void_p, ctypes.c_void_p,
+    ctypes.c_size_t, ctypes.POINTER(ctypes.c_size_t),
+]
+_kernel32.WriteProcessMemory.restype = wt.BOOL
+
+_kernel32.CreateToolhelp32Snapshot.argtypes = [wt.DWORD, wt.DWORD]
+_kernel32.CreateToolhelp32Snapshot.restype = wt.HANDLE
+
 
 _PROCESS_QUERY_INFORMATION = 0x0400
 _PROCESS_VM_READ = 0x0010
