@@ -22,9 +22,13 @@ import numpy as np
 from loguru import logger
 from PIL import Image, ImageDraw
 
-from overlay.heat.plugin_api import HeatContext, HeatPlugin
-from utils.layered_window import LayeredWindow
+from fuse.api import FuseContext, FusePlugin
+from fuse.utils.layered_window import LayeredWindow
+from fuse.utils.game_memory import GameMemory
 from overlay.heat.plugins.energy_bar.ocr_bar import scan_bar_fill_pct, reset_bar_filter
+
+# Flip to False to revert to OCR-based energy reading.
+USE_MEMORY_API: bool = True
 
 try:
     from pynput import mouse as pynmouse
@@ -33,7 +37,7 @@ except ImportError:  # pragma: no cover
     PYNPUT_OK = False
 
 
-class EnergyBarPlugin(HeatPlugin):
+class EnergyBarPlugin(FusePlugin):
     """Composited energy-scale HUD with OCR-driven fill percentage."""
 
     BG_IMAGE_DEFAULT = "bg_progress.png"
@@ -42,7 +46,8 @@ class EnergyBarPlugin(HeatPlugin):
     OCR_SETUP_H = 40
 
     def __init__(self) -> None:
-        self.ctx: Optional[HeatContext] = None
+        self.ctx: Optional[FuseContext] = None
+        self._mem: Optional[GameMemory] = None  # set in setup() when USE_MEMORY_API
 
         # Images
         self.bg_img_pil: Optional[Image.Image] = None
@@ -79,8 +84,14 @@ class EnergyBarPlugin(HeatPlugin):
     # HeatPlugin lifecycle
     # ------------------------------------------------------------------
 
-    def setup(self, ctx: HeatContext) -> None:
+    def setup(self, ctx: FuseContext) -> None:
         self.ctx = ctx
+
+        if USE_MEMORY_API:
+            self._mem = ctx.services.get("game_memory")  # type: ignore[assignment]
+            if self._mem is None:
+                logger.warning("energy_bar: USE_MEMORY_API=True but 'game_memory' service "
+                               "not available — falling back to OCR")
 
         cfg = ctx.config.load({
             "ocr_region": None,
@@ -141,15 +152,21 @@ class EnergyBarPlugin(HeatPlugin):
         self._apply_bar_position()
         self._last_drawn_pct = -1
         self._refresh_bar_if_changed()
-        if self.ocr_region:
+        if not (USE_MEMORY_API and self._mem is not None) and self.ocr_region:
             self._start_ocr_thread()
         if self.setup_state_lbl is not None:
             self.setup_state_lbl.config(text="LOCKED", fg="#77ffaa")
         self._hide_setup_dialog()
-        logger.info("energy_bar: LOCKED — OCR polling, click-through")
+        src = "game_memory" if (USE_MEMORY_API and self._mem is not None) else "OCR"
+        logger.info(f"energy_bar: LOCKED — reading from {src}, click-through")
 
     def tick(self, dt: float) -> None:  # noqa: D401 — short verb
         if self.ctx and self.ctx.state == "locked":
+            if USE_MEMORY_API and self._mem is not None:
+                val = self._mem.read("energy")
+                if val is not None:
+                    with self._ocr_lock:
+                        self.energy_pct = max(0, min(100, int(val)))
             self._refresh_bar_if_changed()
 
     def teardown(self) -> None:

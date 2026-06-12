@@ -1,0 +1,5 @@
+{
+  "process_name": "engine_launcher.exe",
+  "chains_file": "assets/pointer_chains.json",
+  "reconnect_interval_s": 5.0
+}
