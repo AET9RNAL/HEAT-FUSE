@@ -321,7 +321,7 @@ class BaseSACLOSOverlay(OCRUiMixin, RangefinderUiMixin, HudUiMixin):
             self.img_tracking = self.img_normal
 
         bar_h = 28
-        self.root.geometry(f"{self.img_w}x{self.img_h + bar_h}")
+        self.root.geometry(f"{self.img_w}x{self.img_h + bar_h}+{int(self.win_x)}+{int(self.win_y)}")
         self.canvas.config(width=self.img_w, height=self.img_h)
         if self.img_id: self.canvas.delete(self.img_id)
         self.img_id = self.canvas.create_image(0, 0, anchor=tk.NW, image=self.img_normal)
@@ -329,7 +329,7 @@ class BaseSACLOSOverlay(OCRUiMixin, RangefinderUiMixin, HudUiMixin):
 
     def _draw_placeholder(self):
         self.img_w, self.img_h = 400, 400
-        self.root.geometry("400x428")
+        self.root.geometry(f"400x428+{int(self.win_x)}+{int(self.win_y)}")
         self.canvas.config(width=400, height=400)
         cx, cy = 200, 200
         r = 80
@@ -388,6 +388,11 @@ class BaseSACLOSOverlay(OCRUiMixin, RangefinderUiMixin, HudUiMixin):
 
     def _drag_start(self, event):
         if self.state == "calibrate":
+            # Sync win_x/win_y from the actual window position before computing
+            # the drag offset — guards against any geometry call that set size
+            # without position, which would leave win_x/win_y stale.
+            self.win_x = self.root.winfo_x()
+            self.win_y = self.root.winfo_y()
             self._ox = event.x_root - self.win_x
             self._oy = event.y_root - self.win_y
         elif self.state == "adjust_bounds":
@@ -501,7 +506,7 @@ class BaseSACLOSOverlay(OCRUiMixin, RangefinderUiMixin, HudUiMixin):
         self.state = "adjust_bounds"
         self.origin_x = self.win_x + self.img_w / 2
         self.origin_y = self.win_y + self.img_h / 2
-        self.root.geometry(f"{self.img_w}x{self.img_h + 28}")
+        self.root.geometry(f"{self.img_w}x{self.img_h + 28}+{int(self.win_x)}+{int(self.win_y)}")
         self.status_lbl.config(text="ADJUST BOUNDS  |  Drag corners=resize  |  T=OCR region  |  Ctrl+L=confirm", fg="#ff9900")
         if not self.bar.winfo_ismapped(): self.bar.pack(side=tk.BOTTOM, fill=tk.X)
         self._draw_boundary_box()
@@ -531,7 +536,7 @@ class BaseSACLOSOverlay(OCRUiMixin, RangefinderUiMixin, HudUiMixin):
             self._create_locked_overlay()
             self.root.withdraw()  # Hide tkinter window
         else:
-            self.root.geometry(f"{self.img_w}x{self.img_h}")
+            self.root.geometry(f"{self.img_w}x{self.img_h}+{int(self.win_x)}+{int(self.win_y)}")
             self._set_clickthrough(True)
 
         if getattr(self, "ocr_setup_visible", False): self._hide_ocr_setup()
@@ -567,7 +572,7 @@ class BaseSACLOSOverlay(OCRUiMixin, RangefinderUiMixin, HudUiMixin):
                 if self.hwnd is None: self.hwnd = ctypes.windll.user32.FindWindowW(None, "SACLOS Overlay")
                 if self.hwnd: ctypes.windll.user32.SetWindowPos(self.hwnd, 0, 0, 0, self.img_w, self.img_h, 0x0002 | 0x0004 | 0x0010)
             except Exception:
-                self.root.geometry(f"{self.img_w}x{self.img_h}")
+                self.root.geometry(f"{self.img_w}x{self.img_h}+{int(self.win_x)}+{int(self.win_y)}")
 
         self.mouse_listener = pynmouse.Listener(on_move=self._on_mouse_move)
         self.mouse_listener.start()
@@ -680,7 +685,7 @@ class BaseSACLOSOverlay(OCRUiMixin, RangefinderUiMixin, HudUiMixin):
         self.root.attributes("-topmost", True)
 
         self._set_clickthrough(False)
-        self.root.geometry(f"{self.img_w}x{self.img_h + 28}")
+        self.root.geometry(f"{self.img_w}x{self.img_h + 28}+{int(self.win_x)}+{int(self.win_y)}")
         self.bar.pack(side=tk.BOTTOM, fill=tk.X)
         self.status_lbl.config(text="CALIBRATE  |  Drag to position all widgets  |  T=OCR  |  Ctrl+L=lock", fg="#555")
         self._draw_boundary_box()
