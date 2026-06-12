@@ -3,20 +3,21 @@
 Every plugin subclasses :class:`FusePlugin` and is handed a
 :class:`FuseContext` instance during :meth:`FusePlugin.setup`. The context
 owns shared infrastructure (the Tk root, hotkey registry, per-plugin
-:class:`~utils.config.ConfigManager`, assets directory, event bus, service
-registry) so plugins never create global state on their own.
+:class:`~fuse.utils.config.PluginConfig`, assets directory, event bus,
+service registry, and a per-plugin logger) so plugins never create global
+state on their own.
 """
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, Dict, Optional
+from typing import Any, Callable, Dict, Optional
 
 import tkinter as tk
 from loguru import logger
 
-from fuse.utils.config import ConfigManager
+from fuse.utils.config import PluginConfig
 
 
 class HotkeyRegistry:
@@ -61,7 +62,7 @@ class FuseContext:
     """Runtime context handed to every plugin during setup."""
 
     tk_root: tk.Tk
-    config: ConfigManager
+    config: PluginConfig
     hotkeys: HotkeyRegistry
     assets_dir: Path
     host: "PluginHost"  # noqa: F821
@@ -78,6 +79,9 @@ class FuseContext:
 
     # Plugin-private storage (the host never touches this).
     extras: Dict[str, object] = field(default_factory=dict)
+
+    # Per-plugin logger bound with plugin=name. Use ctx.logger.info(...).
+    logger: Any = None
 
     def hotkey_for(self, name: str, fallback: str = "") -> str:
         """Return the configured combo for logical hotkey *name*.

@@ -6,19 +6,21 @@ Owns:
   layered windows),
 * one ``pynput`` keyboard listener (fanned out via :class:`HotkeyRegistry`),
 * one ``pynput`` mouse listener (broadcast to plugins that opt-in),
-* per-plugin :class:`~utils.config.ConfigManager` instances,
+* per-plugin :class:`~fuse.utils.config.PluginConfig` instances,
 * the calibrate/locked global state machine (``Ctrl+L`` toggle, ``Ctrl+P`` quit),
 * a shared :class:`~fuse.events.EventBus` for cross-plugin events,
-* a shared :class:`~fuse.services.ServiceRegistry` for inter-plugin APIs.
+* a shared :class:`~fuse.services.ServiceRegistry` for inter-plugin APIs,
+* :class:`PluginState` tracking for every discovered plugin.
 """
 from __future__ import annotations
 
 import time
+from enum import Enum
 from pathlib import Path
 from typing import Callable, Dict, List, Optional
 
 import tkinter as tk
-from loguru import logger
+from loguru import logger as _root_logger
 
 try:
     from pynput import keyboard as pynkeyboard, mouse as pynmouse
@@ -26,10 +28,10 @@ try:
 except ImportError:  # pragma: no cover
     PYNPUT_OK = False
 
-from fuse.utils.config import ConfigManager
+from fuse.utils.config import ConfigManager, PluginConfig
 
 from fuse.api import FuseContext, FusePlugin, HotkeyRegistry
-from fuse.discovery import discover, DiscoveredPlugin
+from fuse.discovery import DiscoveredPlugin, discover
 from fuse.resolver import resolve_load_order
 from fuse.events import EventBus
 from fuse.services import ServiceRegistry
@@ -38,6 +40,16 @@ from fuse.services import ServiceRegistry
 HOST_VERSION = "1.0"
 
 MouseCallback = Callable[[int, int, "pynmouse.Button", bool], None]
+
+
+class PluginState(str, Enum):
+    """Lifecycle state of a discovered plugin."""
+    PENDING  = "pending"    # discovered, not yet processed
+    LOADING  = "loading"    # setup() in progress
+    ACTIVE   = "active"     # running normally
+    DISABLED = "disabled"   # excluded by enabled_plugins / disabled_plugins config
+    SKIPPED  = "skipped"    # missing or incompatible dependency / compat check failed
+    ERROR    = "error"      # setup() raised an exception
 
 
 def _version_tuple(v: str) -> tuple:
@@ -52,19 +64,12 @@ def _check_compat(manifest: dict, name: str) -> bool:
     if not min_ver:
         return True
     if _version_tuple(str(min_ver)) > _version_tuple(HOST_VERSION):
-        logger.error(
+        _root_logger.error(
             f"Plugin {name!r} requires host v{min_ver} "
             f"but FUSE is v{HOST_VERSION} — skipping."
         )
         return False
     return True
-
-
-def _deep_merge_defaults(defaults: dict, existing: dict) -> dict:
-    """Fill missing keys in *existing* from *defaults* (one level deep)."""
-    merged = dict(defaults)
-    merged.update(existing)
-    return merged
 
 
 class PluginHost:
@@ -79,7 +84,7 @@ class PluginHost:
 
         self.host_config = ConfigManager(filename=self.HOST_CONFIG_FILENAME)
         self.host_state = self.host_config.load(
-            {"enabled_plugins": None, "extra_plugin_dirs": []}
+            {"enabled_plugins": None, "disabled_plugins": [], "extra_plugin_dirs": []}
         )
 
         self.hotkeys = HotkeyRegistry()
@@ -89,6 +94,8 @@ class PluginHost:
         self.plugins: List[FusePlugin] = []
         self.contexts: List[FuseContext] = []
         self._plugin_map: Dict[str, FusePlugin] = {}
+        self._plugin_states: Dict[str, PluginState] = {}
+        self._discovered: Dict[str, DiscoveredPlugin] = {}
 
         self._state = "calibrate"
         self._last_lock_toggle = 0.0
@@ -107,6 +114,7 @@ class PluginHost:
     def load_plugins(self, extra_plugin_dirs: list | None = None) -> None:
         """Discover, filter, sort by dependency, and instantiate all plugins."""
         enabled = self.host_state.get("enabled_plugins")
+        disabled_set = set(self.host_state.get("disabled_plugins", []))
         extra_dirs = [
             Path(p) for p in self.host_state.get("extra_plugin_dirs", [])
         ]
@@ -115,29 +123,51 @@ class PluginHost:
 
         raw_specs = discover(extra_dirs=extra_dirs)
 
+        # Record all discovered plugins with an initial PENDING state.
+        for spec in raw_specs:
+            self._discovered[spec.name] = spec
+            self._plugin_states[spec.name] = PluginState.PENDING
+
         eligible = []
         for spec in raw_specs:
             if enabled is not None and spec.name not in enabled:
-                logger.info(f"Plugin disabled by host config: {spec.name}")
+                _root_logger.info(f"Plugin excluded by enabled_plugins list: {spec.name}")
+                self._plugin_states[spec.name] = PluginState.DISABLED
+                continue
+            if spec.name in disabled_set:
+                _root_logger.info(f"Plugin disabled: {spec.name}")
+                self._plugin_states[spec.name] = PluginState.DISABLED
                 continue
             if not _check_compat(spec.manifest, spec.name):
+                self._plugin_states[spec.name] = PluginState.SKIPPED
                 continue
             eligible.append(spec)
 
         ordered = resolve_load_order(eligible)
 
+        # Plugins in eligible but not in ordered were dropped by the resolver.
+        ordered_names = {s.name for s in ordered}
+        for spec in eligible:
+            if spec.name not in ordered_names:
+                self._plugin_states[spec.name] = PluginState.SKIPPED
+
         for spec in ordered:
             self._instantiate(spec)
 
         if not self.plugins:
-            logger.warning("No FUSE plugins loaded — overlay will be inert.")
+            _root_logger.warning("No FUSE plugins loaded — overlay will be inert.")
 
     def _instantiate(self, spec: DiscoveredPlugin) -> None:
         plugin = spec.cls()
+        plugin_logger = _root_logger.bind(plugin=spec.name)
         plugin_assets_dir = Path(spec.package_dir) / "assets"
+
+        cfg = PluginConfig(spec.name)
+        cfg.defaults(spec.manifest.get("default_config", {}))
+
         ctx = FuseContext(
             tk_root=self.root,
-            config=ConfigManager(filename=f"fuse_{spec.name}.json"),
+            config=cfg,
             hotkeys=self.hotkeys,
             assets_dir=plugin_assets_dir,
             host=self,
@@ -145,27 +175,29 @@ class PluginHost:
             events=self.events,
             services=self.services,
             manifest_hotkeys=dict(spec.manifest.get("hotkeys", {})),
+            logger=plugin_logger,
         )
+
+        self._plugin_states[spec.name] = PluginState.LOADING
         try:
             plugin.setup(ctx)
         except Exception as e:
-            logger.exception(f"Plugin {spec.name!r} setup failed: {e}")
+            plugin_logger.exception(f"setup failed: {e}")
+            self._plugin_states[spec.name] = PluginState.ERROR
             return
 
-        defaults = spec.manifest.get("default_config")
-        if defaults:
-            existing = ctx.config.load()
-            merged = _deep_merge_defaults(defaults, existing)
-            if merged != existing:
-                ctx.config.save(merged)
+        # Ensure config is loaded even if the plugin didn't call .load() in setup.
+        if not cfg._loaded:
+            cfg.load()
 
+        self._plugin_states[spec.name] = PluginState.ACTIVE
         self.plugins.append(plugin)
         self.contexts.append(ctx)
         self._plugin_map[spec.name] = plugin
-        logger.info(f"Plugin loaded: {spec.name} v{spec.version}")
+        plugin_logger.info(f"Loaded v{spec.version}")
 
     # ------------------------------------------------------------------
-    # Public API
+    # Public plugin API
     # ------------------------------------------------------------------
 
     def get_plugin(self, name: str) -> Optional[FusePlugin]:
@@ -175,6 +207,52 @@ class PluginHost:
     def get_service(self, name: str) -> Optional[object]:
         """Return the service registered under *name*, or ``None``."""
         return self.services.get(name)
+
+    def get_plugin_state(self, name: str) -> Optional[PluginState]:
+        """Return the current :class:`PluginState` for *name*, or ``None`` if unknown."""
+        return self._plugin_states.get(name)
+
+    def list_plugins(self) -> List[dict]:
+        """Return metadata for every discovered plugin.
+
+        Each entry::
+
+            {
+                "name":        str,
+                "version":     str,
+                "description": str,
+                "author":      str,
+                "homepage":    str,
+                "tags":        list[str],
+                "state":       str,          # PluginState value
+                "is_external": bool,
+            }
+        """
+        result = []
+        for name, spec in self._discovered.items():
+            result.append({
+                "name":        name,
+                "version":     spec.version,
+                "description": spec.description,
+                "author":      spec.author,
+                "homepage":    spec.homepage,
+                "tags":        list(spec.tags),
+                "state":       self._plugin_states.get(name, PluginState.PENDING).value,
+                "is_external": spec.is_external,
+            })
+        return result
+
+    def disable_plugin(self, name: str) -> None:
+        """Persist *name* to the disabled list in ``fuse_host.json``.
+
+        Takes effect on the next FUSE restart.
+        """
+        disabled = list(self.host_state.get("disabled_plugins", []))
+        if name not in disabled:
+            disabled.append(name)
+            self.host_state["disabled_plugins"] = disabled
+            self.host_config.save(self.host_state)
+        self._plugin_states[name] = PluginState.DISABLED
 
     # ------------------------------------------------------------------
     # State machine
@@ -186,7 +264,7 @@ class PluginHost:
             return
         self._last_lock_toggle = now
         self._state = "locked" if self._state == "calibrate" else "calibrate"
-        logger.info(f"FUSE host state -> {self._state}")
+        _root_logger.info(f"FUSE host state -> {self._state}")
         for ctx in self.contexts:
             ctx.state = self._state
         for plugin in self.plugins:
@@ -196,7 +274,7 @@ class PluginHost:
                 else:
                     plugin.enter_calibrate()
             except Exception as e:
-                logger.exception(f"{plugin.name}: state change error: {e}")
+                _root_logger.exception(f"{plugin.name}: state change error: {e}")
         self.events.emit("host_state_changed", state=self._state)
 
     @property
@@ -216,7 +294,7 @@ class PluginHost:
 
     def _start_listeners(self) -> None:
         if not PYNPUT_OK:
-            logger.warning("pynput unavailable — hotkeys disabled")
+            _root_logger.warning("pynput unavailable — hotkeys disabled")
             return
 
         CTRL = {pynkeyboard.Key.ctrl, pynkeyboard.Key.ctrl_l, pynkeyboard.Key.ctrl_r}
@@ -272,7 +350,7 @@ class PluginHost:
                 try:
                     cb(x, y, button, pressed)
                 except Exception as e:
-                    logger.exception(f"mouse subscriber error: {e}")
+                    _root_logger.exception(f"mouse subscriber error: {e}")
 
         self._mouse_listener = pynmouse.Listener(on_click=on_click)
         self._mouse_listener.start()
@@ -296,7 +374,7 @@ class PluginHost:
             try:
                 plugin.tick(dt)
             except Exception as e:
-                logger.exception(f"{plugin.name}: tick error: {e}")
+                _root_logger.exception(f"{plugin.name}: tick error: {e}")
         self.root.after(50, self._tick)
 
     # ------------------------------------------------------------------
@@ -311,7 +389,7 @@ class PluginHost:
             try:
                 plugin.enter_calibrate()
             except Exception as e:
-                logger.exception(f"{plugin.name}: initial calibrate failed: {e}")
+                _root_logger.exception(f"{plugin.name}: initial calibrate failed: {e}")
         self.root.after(50, self._tick)
         try:
             self.root.mainloop()
@@ -331,7 +409,7 @@ class PluginHost:
             try:
                 plugin.teardown()
             except Exception as e:
-                logger.exception(f"{plugin.name}: teardown error: {e}")
+                _root_logger.exception(f"{plugin.name}: teardown error: {e}")
 
 
-__all__ = ["PluginHost", "HOST_VERSION"]
+__all__ = ["PluginHost", "PluginState", "HOST_VERSION"]
