@@ -15,6 +15,19 @@ from overlay.heat.plugins.heat_ailos_torc.ocr.ocr_ui import OCRUiMixin
 from overlay.heat.plugins.heat_ailos_torc.ocr.rangefinder_ui import RangefinderUiMixin
 from overlay.heat.plugins.heat_ailos_torc.ui.hud_ui import HudUiMixin
 
+# ---------------------------------------------------------------------------
+# Range-source switch
+#
+# Set to True to read the rangefinder value directly from game memory via the
+# FUSE 'game_memory' service (chain 'rangefinder' in pointer_chains.json).
+# Set to False to fall back to the legacy on-screen OCR pipeline.
+#
+# When True but the game_memory service is unavailable (plugin not loaded,
+# process not attached, chain unresolved), the loop transparently falls
+# back to OCR for that tick.
+# ---------------------------------------------------------------------------
+USE_MEMORY_API: bool = True
+
 
 def _resolve_overlay_image(path):
     """Resolve a calibration overlay image path.
@@ -96,6 +109,10 @@ class BaseSACLOSOverlay(OCRUiMixin, RangefinderUiMixin, HudUiMixin):
 
         self.target_range_m = 70.0
         self.input_backend = "arduino"
+
+        # Set by the FUSE plugin wrapper after construction when the
+        # 'game_memory' service is available. Stays None in standalone runs.
+        self._game_memory = None
 
         # Run mixin initializations
         self._init_rangefinder()
@@ -540,7 +557,9 @@ class BaseSACLOSOverlay(OCRUiMixin, RangefinderUiMixin, HudUiMixin):
             self._set_clickthrough(True)
 
         if getattr(self, "ocr_setup_visible", False): self._hide_ocr_setup()
-        if self.ocr_enabled and getattr(self, "ocr_region", None) and TESSERACT_OK:
+        ocr_ready = self.ocr_enabled and getattr(self, "ocr_region", None) and TESSERACT_OK
+        memory_ready = USE_MEMORY_API and self._game_memory is not None
+        if ocr_ready or memory_ready:
             self._start_ocr_thread()
             self._start_ocr_update_timer()
 
@@ -821,12 +840,26 @@ class BaseSACLOSOverlay(OCRUiMixin, RangefinderUiMixin, HudUiMixin):
         interval_s = self.ocr_poll_interval_ms / 1000.0
         while not self.ocr_stop_event.is_set():
             if not self.ocr_paused:
-                val = ocr_capture_range(self.ocr_region)
+                val = self._read_range_value()
                 if val is not None:
                     with self.position_lock:
                         self.ocr_pending_range = val
                         self.ocr_last_range = val
             self.ocr_stop_event.wait(timeout=interval_s)
+
+    def _read_range_value(self):
+        """Read range from game memory or OCR per the USE_MEMORY_API flag.
+
+        Falls back to OCR if memory mode is requested but the 'game_memory'
+        service is unavailable or returns None.
+        """
+        if USE_MEMORY_API:
+            mem = self._game_memory
+            if mem is not None and getattr(mem, "connected", False):
+                v = mem.read("rangefinder")
+                if v is not None:
+                    return float(v)
+        return ocr_capture_range(self.ocr_region)
 
     def _start_ocr_update_timer(self):
         self._process_ocr_updates()

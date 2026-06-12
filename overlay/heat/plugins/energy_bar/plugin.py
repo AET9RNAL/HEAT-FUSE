@@ -24,6 +24,7 @@ from PIL import Image, ImageDraw
 
 from fuse.api import FuseContext, FusePlugin
 from fuse.utils.layered_window import LayeredWindow
+from fuse.utils.panel import FusePanel
 from fuse.utils.game_memory import GameMemory
 from overlay.heat.plugins.energy_bar.ocr_bar import scan_bar_fill_pct, reset_bar_filter
 
@@ -57,7 +58,8 @@ class EnergyBarPlugin(FusePlugin):
         self.fg_content_top = 0
         self.fg_content_bottom = 0
 
-        # Layered output window
+        # Overlay panel (wraps LayeredWindow; bar_win is the raw window for compat)
+        self._bar_panel: Optional[FusePanel] = None
         self.bar_win: Optional[LayeredWindow] = None
         self._last_drawn_pct = -1
 
@@ -126,9 +128,8 @@ class EnergyBarPlugin(FusePlugin):
         ctx.host.subscribe_mouse(self._on_global_click)
 
     def enter_calibrate(self) -> None:
-        if self.bar_win:
-            self.bar_win.set_draggable(True)
-            self.bar_win.set_click_through(False)
+        if self._bar_panel:
+            self._bar_panel.enter_calibrate()
         with self._ocr_lock:
             self.energy_pct = 50
         self._last_drawn_pct = -1
@@ -142,13 +143,11 @@ class EnergyBarPlugin(FusePlugin):
         logger.info("energy_bar: CALIBRATE — drag bar, T=OCR region, Ctrl+L=lock")
 
     def enter_locked(self) -> None:
-        if self.bar_pos_mode == "custom" and self.bar_win:
-            self.bar_custom_pos = list(self.bar_win.get_position())
-            self._save_config()
-
-        if self.bar_win:
-            self.bar_win.set_draggable(False)
-            self.bar_win.set_click_through(True)
+        if self._bar_panel:
+            if self.bar_pos_mode == "custom":
+                self.bar_custom_pos = list(self._bar_panel.get_position())
+                self._save_config()
+            self._bar_panel.enter_locked()
         if self.ocr_setup_visible:
             self._hide_ocr_setup()
         self._apply_bar_position()
@@ -174,14 +173,14 @@ class EnergyBarPlugin(FusePlugin):
     def teardown(self) -> None:
         try:
             self._stop_ocr_thread()
-            if self.bar_pos_mode == "custom" and self.bar_win and self.bar_win.is_created:
-                self.bar_custom_pos = list(self.bar_win.get_position())
+            if self.bar_pos_mode == "custom" and self._bar_panel and self._bar_panel.is_created:
+                self.bar_custom_pos = list(self._bar_panel.get_position())
             self._save_config()
         except Exception:
             pass
         try:
-            if self.bar_win:
-                self.bar_win.destroy()
+            if self._bar_panel:
+                self._bar_panel.destroy()
         except Exception:
             pass
 
@@ -249,13 +248,15 @@ class EnergyBarPlugin(FusePlugin):
         return canvas
 
     def _create_bar_window(self) -> None:
-        if self.bar_win is not None or self.bg_img_pil is None:
+        if self._bar_panel is not None or self.bg_img_pil is None:
             return
         x, y = self._current_pos()
-        self.bar_win = LayeredWindow("HEAT Energy Bar", x=x, y=y, draggable=True)
+        self._bar_panel = FusePanel("HEAT Energy Bar", "bar_custom_pos", self.ctx.config,
+                                    default_x=x, default_y=y)
         img = self._compose_bar_image(self.energy_pct)
-        self.bar_win.create(img, global_alpha=255)
-        self.bar_win.show()
+        self._bar_panel.create(img, global_alpha=255)
+        self._bar_panel.show()
+        self.bar_win = self._bar_panel.win  # raw LayeredWindow for direct use
         self._last_drawn_pct = self.energy_pct
 
     def _refresh_bar_if_changed(self) -> None:

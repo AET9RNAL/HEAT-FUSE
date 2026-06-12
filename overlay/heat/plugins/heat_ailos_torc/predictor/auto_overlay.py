@@ -344,9 +344,16 @@ class AutoOverlay(QuickLabelHudMixin, BaseSACLOSOverlay):
             self.tce = None
 
     def _tce_get_origin(self):
-        if self.state not in ("locked", "adjust_bounds"):
+        if self.state not in ("locked", "adjust_bounds", "calibrate"):
             return None
         if self.origin_x is None or self.origin_y is None:
+            if self.state == "calibrate":
+                # No calibrated origin yet — show ring at screen centre so the
+                # user can see it.  Offset won't persist until the main tracker
+                # is calibrated (which sets origin_x/y) and the user locks again.
+                sw = self.root.winfo_screenwidth()
+                sh = self.root.winfo_screenheight()
+                return sw / 2.0, sh / 2.0
             return None
         return (self.origin_x + self.envelope_offset_x,
                 self.origin_y + self.envelope_offset_y)

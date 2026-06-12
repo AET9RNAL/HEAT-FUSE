@@ -6,7 +6,7 @@ Run while the game is running.
 from __future__ import annotations
 
 import struct
-from utils.memory_reader import find_pid_by_name, get_module_base, ProcessHandle, resolve_pointer_chain
+from fuse.utils.memory_reader import find_pid_by_name, get_module_base, ProcessHandle, resolve_pointer_chain
 
 PROCESS_NAME = "engine_launcher.exe"
 ENERGY_CHAIN = {
@@ -37,7 +37,7 @@ def main():
         if base is None:
             print(f"[!] Module '{ENERGY_CHAIN['module']}' not loaded.")
             print("[*] Loaded modules (relevant):")
-            from utils.memory_reader import list_modules
+            from fuse.utils.memory_reader import list_modules
             for m in list_modules(pid):
                 if "cohtml" in m.name.lower() or "engine" in m.name.lower():
                     print(f"    {m.name}")

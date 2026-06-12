@@ -48,6 +48,17 @@ _DTYPE_SIZE: Dict[str, int] = {
 }
 
 
+def _parse_offset(value: object) -> int:
+    """Accept ints or strings like ``"0x208"`` / ``"520"``."""
+    if isinstance(value, bool):  # bool is subclass of int — reject explicitly
+        raise ValueError(f"bool is not a valid offset: {value!r}")
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        return int(value, 0)
+    raise ValueError(f"bad offset type {type(value).__name__}: {value!r}")
+
+
 def _decode(dtype: str, raw: bytes) -> Union[int, float]:
     if dtype == "float":
         return struct.unpack("<f", raw)[0]
@@ -116,7 +127,7 @@ class GameMemory:
                 chains[key] = ChainDef(
                     name=key,
                     module=val["module"],
-                    offsets=[int(o) for o in val["offsets"]],
+                    offsets=[_parse_offset(o) for o in val["offsets"]],
                     dtype=dtype,
                 )
             except (KeyError, ValueError) as e:
