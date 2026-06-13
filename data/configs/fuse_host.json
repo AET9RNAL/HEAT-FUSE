@@ -1,5 +1,7 @@
 {
   "enabled_plugins": null,
-  "disabled_plugins": [],
+  "disabled_plugins": [
+    "heat_ailos_torc"
+  ],
   "extra_plugin_dirs": []
 }

@@ -532,8 +532,7 @@ class PluginHost:
 
     def run(self) -> None:
         if not self._setup_pending:
-            _root_logger.error("No FUSE plugins queued — aborting.")
-            return
+            _root_logger.warning("No plugins queued — starting with empty host. Use Ctrl+M to enable plugins.")
         self._start_listeners()
         self.root.after(50, self._tick)
         self.root.after(0, self._dequeue_next_plugin)

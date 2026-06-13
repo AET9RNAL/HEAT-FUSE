@@ -16,9 +16,9 @@
     "readonly": false
   },
 
-  "health": {
-    "module": "plugin_hud_battle.dll",
-    "offsets": [0, 0, 0, 0, 0, 0, 0],
+  "health_multiplayer": {
+    "module": "cohtml.WindowsDesktop.dll",
+    "offsets": [6607384, 16, 72, 128, 32, 200, 464, 72],
     "dtype": "float",
     "readonly": false
   },

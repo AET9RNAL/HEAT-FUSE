@@ -37,6 +37,19 @@ _kernel32.WriteProcessMemory.restype = wt.BOOL
 _kernel32.CreateToolhelp32Snapshot.argtypes = [wt.DWORD, wt.DWORD]
 _kernel32.CreateToolhelp32Snapshot.restype = wt.HANDLE
 
+_kernel32.Module32First.argtypes = [wt.HANDLE, ctypes.c_void_p]
+_kernel32.Module32First.restype = wt.BOOL
+_kernel32.Module32Next.argtypes = [wt.HANDLE, ctypes.c_void_p]
+_kernel32.Module32Next.restype = wt.BOOL
+
+_kernel32.Process32First.argtypes = [wt.HANDLE, ctypes.c_void_p]
+_kernel32.Process32First.restype = wt.BOOL
+_kernel32.Process32Next.argtypes = [wt.HANDLE, ctypes.c_void_p]
+_kernel32.Process32Next.restype = wt.BOOL
+
+# INVALID_HANDLE_VALUE is (HANDLE)-1 = 0xFFFFFFFFFFFFFFFF on 64-bit.
+# wt.HANDLE (c_void_p) returns it as a large unsigned int, not -1.
+_INVALID_HANDLE_VALUE = ctypes.c_size_t(-1).value
 
 _PROCESS_QUERY_INFORMATION = 0x0400
 _PROCESS_VM_READ = 0x0010
@@ -92,7 +105,7 @@ def _err_check(result, _func, _args) -> int:
 def list_processes() -> List[tuple]:
     """Return [(pid, exe_name), ...] for all running processes."""
     h = _kernel32.CreateToolhelp32Snapshot(_TH32CS_SNAPPROCESS, 0)
-    if h == -1:
+    if h is None or h == _INVALID_HANDLE_VALUE:
         raise ctypes.WinError(ctypes.get_last_error())
     try:
         pe = _PROCESSENTRY32()
@@ -133,7 +146,7 @@ class ModuleInfo:
 def list_modules(pid: int) -> List[ModuleInfo]:
     """Enumerate loaded modules in *pid*."""
     h = _kernel32.CreateToolhelp32Snapshot(_TH32CS_SNAPMODULE, pid)
-    if h == -1:
+    if h is None or h == _INVALID_HANDLE_VALUE:
         raise ctypes.WinError(ctypes.get_last_error())
     try:
         me = _MODULEENTRY32()

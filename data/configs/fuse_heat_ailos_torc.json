@@ -10,7 +10,7 @@
   "image_path": "Ballistic Drop Compensator-01.png",
   "tracking_image_path": "Ballistic Drop Compensator-02.png",
   "tracking_key_name": "q",
-  "rf_key_name": "r",
+  "rf_key_name": "none",
   "ocr_region": [
     1022,
     484,
