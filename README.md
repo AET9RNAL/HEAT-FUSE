@@ -26,11 +26,7 @@ Any modifications to FUSE that would allow reading, exposing, or exploiting clie
 4. [Overlay Plugins](#overlay-plugins)
    - [game_memory](#game_memory)
    - [energy_bar](#energy_bar)
-   - [heat_ailos_torc](#heat_ailos_torc)
-5. [ML System](#ml-system)
-6. [Simulation](#simulation)
-7. [Hardware Injection](#hardware-injection)
-8. [Project Layout](#project-layout)
+5. [Project Layout](#project-layout)
 
 ---
 
