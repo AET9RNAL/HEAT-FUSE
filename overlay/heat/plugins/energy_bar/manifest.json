@@ -1,6 +1,7 @@
 {
   "name": "energy_bar",
   "version": "2.0",
+  "author": "AETERNAL",
   "description": "Memory-driven energy / progress scale HUD (composited bg + clipped foreground).",
   "entry": "plugin:EnergyBarPlugin",
   "dependencies": ["game_memory"],
