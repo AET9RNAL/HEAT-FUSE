@@ -35,6 +35,8 @@ from fuse.utils.memory_reader import (
 from fuse.utils.paths import resolve_data
 
 
+_MISSING = object()  # sentinel for absent cache entries
+
 # ---------------------------------------------------------------------------
 # dtype tables
 # ---------------------------------------------------------------------------
@@ -196,12 +198,17 @@ class GameMemory:
     # ------------------------------------------------------------------ read
 
     def _get_module_base(self, module: str) -> Optional[int]:
-        if module not in self._module_bases:
-            base = get_module_base(self._pid, module)
+        # Only serve from cache when we have a valid (non-None) entry.
+        cached = self._module_bases.get(module, _MISSING)
+        if cached is not _MISSING and cached is not None:
+            return cached
+        base = get_module_base(self._pid, module)
+        if base is not None:
             self._module_bases[module] = base
-            if base is None:
-                logger.warning(f"GameMemory: module '{module}' not found in process")
-        return self._module_bases[module]
+        else:
+            # Don't cache None — module may reappear on next read (e.g. reloading between matches).
+            logger.debug(f"GameMemory: module '{module}' not found in process (will retry)")
+        return base
 
     def read(self, name: str) -> Optional[Union[int, float]]:
         """Read the value for chain *name*.  Returns ``None`` on any failure."""
@@ -227,7 +234,11 @@ class GameMemory:
                     logger.warning("GameMemory: process gone, marking disconnected")
                     self._connected = False
                 else:
-                    logger.debug(f"GameMemory: read({name!r}) chain error: {e}")
+                    # Chain error with live process = stale module base (DLL reloaded
+                    # between matches at a new address). Clear cache so next read
+                    # re-resolves the module base from scratch.
+                    logger.debug(f"GameMemory: read({name!r}) chain error: {e} — clearing module base cache")
+                    self._module_bases.clear()
                 return None
 
     def resolve_address(self, name: str) -> Optional[int]:
