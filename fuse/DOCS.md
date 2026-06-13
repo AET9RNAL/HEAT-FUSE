@@ -1,51 +1,86 @@
-# FUSE Framework
+# H.E.A.T / FUSE — Project Documentation
 
-**FUSE** is a lightweight Python plugin framework for building overlays for WoT:HEAT and real-time tools on Windows. It provides discovery, dependency resolution, a shared event bus, named services, per-plugin configuration, global hotkeys, and a calibrate/locked lifecycle — all running on a single Tk event loop.
+**H.E.A.T** (High-Energy Anti-Tank) is an external modding toolkit for *World of Tanks: HEAT* built around **FUSE**, a lightweight Python plugin framework for real-time Windows overlays.
 
 ---
 
 ## Table of Contents
 
-1. [Architecture](#architecture)
-2. [Plugin Contract](#plugin-contract)
-3. [Manifest](#manifest)
-4. [Discovery & Load Order](#discovery--load-order)
-5. [Core APIs](#core-apis)
-   - [FuseContext](#fusecontext)
-   - [EventBus](#eventbus)
-   - [ServiceRegistry](#serviceregistry)
-   - [HotkeyRegistry](#hotkeyregistry)
-   - [PluginConfig](#pluginconfig)
-6. [Built-in Utilities](#built-in-utilities)
-7. [Host Lifecycle](#host-lifecycle)
-8. [Writing a Plugin](#writing-a-plugin)
-9. [Calibration vs Locked](#calibration-vs-locked)
-10. [Project Layout](#project-layout)
+1. [Project Overview](#project-overview)
+2. [Getting Started](#getting-started)
+3. [FUSE Framework](#fuse-framework)
+   - [Architecture](#architecture)
+   - [Plugin Contract](#plugin-contract)
+   - [Manifest](#manifest)
+   - [Discovery & Load Order](#discovery--load-order)
+   - [Core APIs](#core-apis)
+   - [Built-in Utilities](#built-in-utilities)
+   - [Host Lifecycle](#host-lifecycle)
+   - [Plugin Manager](#plugin-manager)
+4. [Overlay Plugins](#overlay-plugins)
+   - [game_memory](#game_memory)
+   - [energy_bar](#energy_bar)
+   - [heat_ailos_torc](#heat_ailos_torc)
+5. [ML System](#ml-system)
+6. [Simulation](#simulation)
+7. [Hardware Injection](#hardware-injection)
+8. [Project Layout](#project-layout)
 
 ---
 
-## Architecture
+## Project Overview
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│  PluginHost (Tk root, pynput listeners, idle loop)          │
-├─────────────────────────────────────────────────────────────┤
-│  EventBus   │  ServiceRegistry  │  HotkeyRegistry          │
-├─────────────────────────────────────────────────────────────┤
-│  Plugin A   │  Plugin B         │  Plugin C   │ ...        │
-│  ─────────  │  ─────────        │  ─────────               │
-│  setup()    │  setup()          │  setup()                 │
-│  tick()     │  tick()           │  tick()                  │
-│  enter_*()  │  enter_*()        │  enter_*()               │
-│  teardown() │  teardown()       │  teardown()              │
-└─────────────────────────────────────────────────────────────┘
-```
+H.E.A.T provides:
 
-FUSE owns all shared infrastructure. Plugins never create global state. They receive a `FuseContext` at setup time and communicate through the event bus and service registry.
+- **Per-pixel-alpha HUD overlays** via Win32 `LayeredWindow` — no chroma-key, no grey borders.
+- **In-game memory reading** via pointer chains (`ctypes` + `kernel32`, no external dependencies).
+- **ML-assisted SACLOS missile guidance** — predictor, trainer, and refiner modes.
+- **Interactive physics simulator** with real-time matplotlib observatory.
+- **OCR rangefinder** fallback when memory API is unavailable.
+- **Hardware mouse injection** via Arduino HID or Windows `SendInput`.
+- **Plugin-based architecture** — FUSE loads, calibrates, and manages overlays sequentially.
+
+### Entry Points
+
+| Script | Purpose |
+|--------|---------|
+| `run.bat` | Conda env setup + interactive launcher menu |
+| `run_heat_overlay.py` | Boots FUSE with `overlay/heat/plugins/` |
+| `run_heat_ailos_torc.py` | Standalone ML launcher (predictor / trainer / refiner picker) |
+| `run_sim_viz.py` | MK8 missile physics simulator observatory |
 
 ---
 
-## Plugin Contract
+## Getting Started
+
+1. Install [Miniconda](https://docs.anaconda.com/miniconda/) and run `run.bat` — it creates the `heat_saclos` env, installs deps, and shows a menu.
+2. Install [Tesseract OCR](https://github.com/tesseract-ocr/tesseract) if using OCR features.
+3. For hardware injection, flash `arduino/mouse_hid/` to a Leonardo / Pro Micro.
+
+---
+
+## FUSE Framework
+
+**FUSE** is the plugin runtime. It owns all shared infrastructure; plugins never create global state.
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  PluginHost (Tk root, pynput listeners, idle loop, manager)     │
+├─────────────────────────────────────────────────────────────────┤
+│  EventBus  │  ServiceRegistry  │  HotkeyRegistry  │  Config    │
+├─────────────────────────────────────────────────────────────────┤
+│  Plugin A  │  Plugin B         │  Plugin C        │ ...        │
+│  ────────  │  ────────         │  ────────                     │
+│  setup()   │  setup()          │  setup()                      │
+│  tick()    │  tick()           │  tick()                       │
+│  enter_*() │  enter_*()        │  enter_*()                    │
+│  teardown()│  teardown()       │  teardown()                   │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Plugin Contract
 
 Every plugin subclasses `FusePlugin` and lives in its own directory with a `manifest.json`.
 
@@ -71,23 +106,23 @@ class MyPlugin(FusePlugin):
         ...
 ```
 
-### Lifecycle Hooks
+#### Lifecycle Hooks
 
 | Hook | Called When |
 |------|-------------|
-| `setup(ctx)` | Once after the plugin is instantiated. Build widgets, register hotkeys, consume services. |
+| `setup(ctx)` | Once after instantiation. Build widgets, register hotkeys, consume services. |
 | `tick(dt)` | Every ~50 ms from the host idle loop. `dt` is seconds since last tick. |
 | `enter_calibrate()` | When the host enters calibrate mode for this plugin. |
 | `enter_locked()` | When the host enters locked mode (click-through, scanning). |
 | `teardown()` | On shutdown. Persist state, release handles. |
 
-### Class Attributes
+#### Class Attributes
 
-- `requires_calibration` — `True` if the plugin has interactive calibration UI. The host waits for the user to press `Ctrl+L` before starting the next plugin.
+- `requires_calibration` — `True` if the plugin has interactive calibration UI. The host waits for `Ctrl+L` before starting the next plugin.
 
 ---
 
-## Manifest
+### Manifest
 
 Each plugin directory must contain a `manifest.json`:
 
@@ -107,21 +142,21 @@ Each plugin directory must contain a `manifest.json`:
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| `name` | yes | Plugin identifier. Must be unique. |
+| `name` | yes | Unique plugin identifier. |
 | `version` | yes | Semver string. |
 | `description` | no | Short human-readable summary. |
-| `entry` | yes | `"module:ClassName"`. The module is resolved relative to the plugin package. |
-| `min_host_version` | no | Minimum FUSE host version. Plugin skipped if host is older. |
-| `dependencies` | no | List of required plugin names. Used for load-order resolution. |
+| `entry` | yes | `"module:ClassName"`. Module resolved relative to the plugin package. |
+| `min_host_version` | no | Minimum FUSE host version. |
+| `dependencies` | no | Required plugin names (supports versioned dict: `{"name": ">=1.0"}`). |
 | `optional_dependencies` | no | Soft load-order hints; missing plugins do not block loading. |
 | `hotkeys` | no | `{"logical_name": "combo"}` combos exposed via `ctx.hotkey_for()`. |
 | `default_config` | no | Default values for `ctx.config`. |
 
 ---
 
-## Discovery & Load Order
+### Discovery & Load Order
 
-FUSE scans plugins from four sources, in order of precedence (earlier wins on name collision):
+FUSE scans plugins from four sources (earlier wins on name collision):
 
 1. `fuse/plugins/` — built-in core plugins
 2. `<repo>/plugins/` — user drop-in directory
@@ -137,11 +172,9 @@ After discovery, the resolver:
 
 ---
 
-## Core APIs
+### Core APIs
 
-### FuseContext
-
-`FuseContext` is a dataclass handed to every plugin during `setup()`:
+#### FuseContext
 
 ```python
 @dataclass
@@ -159,9 +192,7 @@ class FuseContext:
     logger: Any               # loguru logger bound with plugin=name
 ```
 
-**`ctx.hotkey_for(name, fallback="")`**
-
-Look up a hotkey combo declared in `manifest.json`:
+**`ctx.hotkey_for(name, fallback="")`** — Look up a hotkey combo declared in `manifest.json`:
 
 ```python
 combo = ctx.hotkey_for("toggle", fallback="ctrl+t")
@@ -170,9 +201,9 @@ ctx.hotkeys.register(combo, self._on_toggle)
 
 ---
 
-### EventBus
+#### EventBus
 
-Lightweight pub/sub for cross-plugin communication. Handlers run on the Tk thread via `root.after(0, ...)`.
+Lightweight pub/sub for cross-plugin communication. Handlers run on the Tk thread.
 
 ```python
 def _on_connected(**kwargs):
@@ -185,7 +216,7 @@ ctx.events.unsubscribe("game_memory.connected", _on_connected)
 
 ---
 
-### ServiceRegistry
+#### ServiceRegistry
 
 Named object registry for inter-plugin APIs.
 
@@ -198,11 +229,11 @@ api = ctx.services.require("my_api")   # raises RuntimeError if missing
 api = ctx.services.get("my_api")       # returns None if missing
 ```
 
-A plugin that consumes a service should list the provider in `dependencies` so load order is correct.
+A plugin that consumes a service should list the provider in `dependencies`.
 
 ---
 
-### HotkeyRegistry
+#### HotkeyRegistry
 
 Global keyboard listener (pynput) fanned out to registered callbacks.
 
@@ -215,7 +246,7 @@ Combos are parsed as `modifier+modifier+key`. Case-insensitive. Re-registrations
 
 ---
 
-### PluginConfig
+#### PluginConfig
 
 Per-plugin JSON config with auto-save and watchers.
 
@@ -230,13 +261,29 @@ ctx.config.update({"x": 100, "y": 200})
 
 Config files live in `data/configs/fuse_<plugin_name>.json`.
 
+**Declarative schema** for the Plugin Manager UI:
+
+```python
+from fuse.ui.config_schema import ConfigCategory, ConfigEntry
+
+ctx.config.schema([
+    ConfigCategory("Display", [
+        ConfigEntry("opacity", "Opacity", type="int", min=0, max=255),
+        ConfigEntry("show_logo", "Show Logo", type="bool"),
+        ConfigEntry("theme", "Theme", type="choice", choices=["dark", "light"]),
+    ]),
+])
+```
+
+Entry types: `bool`, `int`, `float`, `str`, `choice`, `position`.
+
 ---
 
-## Built-in Utilities
+### Built-in Utilities
 
-### GameMemory
+#### GameMemory
 
-Typed memory reader for Windows processes via pointer chains. No external dependencies — uses `ctypes` + `kernel32`.
+Typed memory reader for Windows processes via pointer chains. Uses `ctypes` + `kernel32` — no external dependencies.
 
 ```python
 from fuse.utils.game_memory import GameMemory
@@ -262,8 +309,6 @@ Pointer chains JSON:
 
 Supported dtypes: `uint8`, `int8`, `uint16`, `int16`, `uint32`, `int32`, `uint64`, `int64`, `float`, `double`.
 
-### ProcessHandle & MemoryReader
-
 Lower-level primitives in `fuse.utils.memory_reader`:
 
 - `find_pid_by_name(name)` — first matching PID.
@@ -273,21 +318,87 @@ Lower-level primitives in `fuse.utils.memory_reader`:
 
 ---
 
-## Host Lifecycle
+#### LayeredWindow
+
+Win32 per-pixel-alpha overlay window via `CreateWindowExW` + `UpdateLayeredWindow`. No grey borders, no drop shadows, no chroma-key. Works alongside the tkinter mainloop.
+
+```python
+from fuse.utils.layered_window import LayeredWindow
+
+win = LayeredWindow("My Overlay", x=100, y=200, draggable=False)
+win.create(pil_rgba_image, global_alpha=220)
+win.show()
+win.move(300, 400)
+win.update_image(new_pil_rgba_image)
+win.set_click_through(True)   # click-through mode
+win.set_alpha(180)
+win.destroy()
+```
+
+---
+
+#### FusePanel
+
+`LayeredWindow` wrapper with config-backed position and calibrate/locked lifecycle management.
+
+```python
+from fuse.utils.panel import FusePanel
+
+panel = FusePanel("hud_name", "hud_name_pos", ctx,
+                  title="SACLOS HUD Name", default_x=100, default_y=50)
+panel.create(pil_rgba_image)
+panel.enter_calibrate()   # draggable, click-enabled, visible
+panel.enter_locked()      # saves position, click-through, visible
+panel.update(new_image)   # animation frame (no position snap)
+```
+
+`FusePanelGroup` fans out `enter_calibrate` / `enter_locked` / `show_all` / `hide_all` to a collection.
+
+---
+
+#### Screen Capture
+
+```python
+from fuse.utils.screen_capture import grab_region_np
+
+arr = grab_region_np((x1, y1, x2, y2))  # np.ndarray (H, W, 3) RGB uint8
+```
+
+Prefers `mss` (~3–8 ms) and falls back to PIL `ImageGrab` (~20 ms). Thread-safe via thread-local `mss` instances.
+
+---
+
+#### Hardware Injection Router
+
+Abstracts mouse input backends. Configured via `input_backend` config key (`arduino`, `sendinput`, `none`).
+
+```python
+from fuse.utils.hardware_inject_router import (
+    is_admin, connect, disconnect,
+    inject_mouse_movement, inject_mouse_click, set_cursor_pos,
+)
+```
+
+Requires Administrator privileges for `SendInput` against elevated game windows (UIPI).
+
+---
+
+### Host Lifecycle
 
 1. **Boot**
-   - `runner.run()` creates a Tk root, instantiates `PluginHost`, and calls `host.load_plugins()`.
+   - `runner.run()` creates a Tk root, instantiates `PluginHost`, calls `host.load_plugins()`.
    - `host.run()` starts the mainloop.
 
 2. **Setup Queue**
-   - Plugins are instantiated one at a time.
+   - Plugins are instantiated **one at a time**.
    - After `setup()` returns, the plugin enters calibrate mode.
    - If `requires_calibration == False`, the host auto-locks and advances.
    - If `requires_calibration == True`, the host waits for `Ctrl+L`.
 
 3. **Global Hotkeys**
-   - `Ctrl+L` — toggle calibrate/locked for the active plugin.
+   - `Ctrl+L` — toggle calibrate/locked.
    - `Ctrl+P` — quit.
+   - `Ctrl+M` — open Plugin Manager.
 
 4. **Idle Loop**
    - `tick(dt)` is called on every active plugin every ~50 ms.
@@ -297,89 +408,247 @@ Lower-level primitives in `fuse.utils.memory_reader`:
 
 ---
 
-## Writing a Plugin
+### Plugin Manager
 
-Directory layout:
+Press `Ctrl+M` to open a dark management window with three tabs:
 
+- **Plugins** — list of discovered plugins with state badges and Enable/Disable toggles. Takes effect at runtime without restart.
+- **Settings** — per-plugin editable config for any plugin that called `ctx.config.schema([...])`.
+- **Keybindings** — all registered hotkeys with live rebind support (click Rebind, press new combo).
+
+---
+
+## Overlay Plugins
+
+### game_memory
+
+Core built-in plugin that opens the game process and registers `GameMemory` as a service.
+
+```json
+{
+  "name": "game_memory",
+  "version": "1.0",
+  "description": "Reads in-game values via pointer chains.",
+  "entry": "plugin:GameMemoryPlugin"
+}
 ```
-plugins/
-  my_plugin/
-    manifest.json
-    plugin.py
-    assets/
-      icon.png
-```
 
-`plugin.py`:
+Other plugins declare `"dependencies": ["game_memory"]` and consume:
 
 ```python
-from fuse.api import FusePlugin, FuseContext
+mem = ctx.services.require("game_memory")
+energy = mem.read("energy")
+```
 
-class MyPlugin(FusePlugin):
-    requires_calibration = True
+Config keys: `process_name`, `chains_file`, `reconnect_interval_s`. Auto-reconnects when the game process is not found.
 
-    def setup(self, ctx: FuseContext) -> None:
-        ctx.config.defaults(opacity=200).load()
-        self._opacity = ctx.config.get("opacity")
+---
 
-        combo = ctx.hotkey_for("toggle", fallback="ctrl+t")
-        ctx.hotkeys.register(combo, self._toggle)
+### energy_bar
 
-        self._ctx = ctx
+Memory-driven (or OCR-driven) energy / progress scale HUD. Composites a background PNG with a vertically-clipped foreground PNG driven by fill percentage.
 
-    def enter_calibrate(self) -> None:
-        ...
+- **Mode A**: Reads `energy` from `game_memory` service (`USE_MEMORY_API = True`).
+- **Mode B**: OCR-scans a user-defined screen region (`T` hotkey to set region in calibrate mode).
 
-    def enter_locked(self) -> None:
-        ...
+Assets: `bg_progress.png`, `progress.png` (auto-scaled to 40 % screen width).
 
-    def tick(self, dt: float) -> None:
-        ...
+Hotkeys: `T` — toggle OCR region setup (calibrate only). `RMB` on bar — toggle center/custom position.
 
-    def teardown(self) -> None:
-        ...
+Requires calibration for positioning.
 
-    def _toggle(self) -> None:
-        ...
+---
+
+### heat_ailos_torc
+
+ML-assisted SACLOS missile guidance overlay. Exposes three modes via a profile picker on first run:
+
+| Mode | Purpose |
+|------|---------|
+| **predictor** | Live HUD with ML-driven correction suggestions, rangefinder, attention heatmap, quick-label graphs. |
+| **trainer** | Record correction trajectories, label hits/misses, export to dataset. |
+| **refiner** | Review and edit recorded trajectories, adjust timing, re-export. |
+
+Features:
+
+- **LayeredWindow HUD** — 6 windows (name, descriptor, range, status, predict designator, intercept designator) rendered via PIL `ImageDraw` to RGBA.
+- **Rangefinder** — OCR or memory-driven distance readout.
+- **Correction engine** — Translates predicted trajectory into mouse deltas; accounts for turret traverse limits.
+- **Attention system** — Online bucketed attention weights that learn which trajectory segments matter most.
+- **Quick Label (QL) HUD** — Live training feedback graphs (factors, learning rate, sim result, checkpoints, features).
+- **Envelope system** — Dynamic displacement caps based on range-dependent SACLOS authority.
+
+Config categories: ML, Correction, Turret, Input, HUD Positions.
+
+Optional dependency: `game_memory` (enables memory-driven rangefinder when available).
+
+---
+
+## ML System
+
+Located under `overlay/ml/heat_ailos_torc/`:
+
+| Module | Purpose |
+|--------|---------|
+| `profiles.py` | ML profile registry (`data/ml/ml_profiles.json`). Each profile maps to a vehicle, dataset, and learned weights. |
+| `predictor/` | Live inference overlay (`auto_overlay.py`, `ql_hud.py`). |
+| `trainer/` | Dataset collection and online learning (`correction_learner.py`, `trajectory_attentioner.py`, `training_overlay.py`). |
+| `refiner/` | Post-hoc trajectory editing (`trajectory_editor.py`). |
+| `ocr/` | Rangefinder OCR pipeline (`range_ocr.py`, `rangefinder_ui.py`). |
+
+### CorrectionLearner
+
+KNN-based trajectory predictor trained on human hit/miss data. Key features:
+
+- Displacement (px), angle (rad), range (m), quiet phase duration.
+- Predicts a full correction trajectory (Gaussian-structured sweep).
+- TORC quality scoring — `|sin θ|` at impact (90° = ideal).
+
+### TrajectoryAttentioner
+
+Bucketed attention over trajectory time. Learns online which correction phases correlate with hits, updating per-bucket weights via gradient descent.
+
+### Dataset Format
+
+`data/ml/profiles/<profile>/dataset.json` — JSONL of samples:
+
+```json
+{"displacement_px": 120, "angle_rad": 0.785, "range_m": 200,
+ "trajectory": [{"t": 0.0, "dx": 0, "dy": 0}, ...],
+ "hit": true, "torc_quality": 0.85}
 ```
 
 ---
 
-## Calibration vs Locked
+## Simulation
 
-| Mode | Purpose |
-|------|---------|
-| **Calibrate** | Interactive. Windows are draggable, clickable, editable. User positions overlays and sets parameters. |
-| **Locked** | Passive. Windows are click-through, scanning / drawing only. No user interaction. |
+Located under `sim/`:
 
-Plugins with `requires_calibration = True` stay in calibrate mode until the user presses `Ctrl+L`. The host then locks the plugin and advances to the next one.
+### MK8Sim
 
-Plugins with `requires_calibration = False` are locked immediately after `setup()` and the host advances without waiting.
+Forward-integrates the MK8 ATGM flight in screen-world space using confirmed game-extracted physics:
+
+| Parameter | Value |
+|-----------|-------|
+| Launch velocity | 30.0 m/s |
+| Acceleration | 289.86 m/s² |
+| Max speed | 666.67 m/s |
+| Turn rate | 72.0 deg/s |
+| Guidance sensitivity | 0.72 |
+
+SACLOS law: `F = k · φ_err · z_from_muzzle` (angular acceleration command, capped at turn_rate × sensitivity).
+
+### SimObservatory
+
+Interactive matplotlib dashboard (`run_sim_viz.py`):
+
+- **Engagement View** — missile path colored by TORC quality.
+- **TORC Angle plot** — θ(t) over time.
+- **Speed & Authority** — missile speed and effective turn rate.
+- **Sliders** — adjust disp, angle, range, quiet phase, sweep magnitude, px/m.
+- **Buttons** — Simulate, Animate, Load KNN, Export Hit.
+
+---
+
+## Hardware Injection
+
+### Arduino HID
+
+Flash `arduino/mouse_hid/` to an Arduino Leonardo / Pro Micro. Communicates over serial at 115200 baud.
+
+### Windows SendInput
+
+Fallback when Arduino is unavailable. Requires Administrator privileges for elevated game windows.
+
+### Router
+
+`fuse.utils.hardware_inject_router` auto-selects backend based on config:
+
+```python
+from fuse.utils.hardware_inject_router import connect, inject_mouse_movement
+connect()  # opens serial or initializes SendInput
+```
 
 ---
 
 ## Project Layout
 
 ```
-fuse/
-  __init__.py
-  api.py              # FusePlugin, FuseContext, HotkeyRegistry
-  discovery.py         # Plugin scanning & manifest parsing
-  resolver.py          # Dependency resolution & topological sort
-  host.py              # PluginHost — lifecycle, listeners, idle loop
-  events.py            # EventBus
-  services.py          # ServiceRegistry
-  runner.py            # CLI entry point: run()
-  log.py               # Logging setup
-  plugins/             # Built-in core plugins
-    game_memory/
-      manifest.json
-      plugin.py
-  utils/
-    config.py          # PluginConfig
-    game_memory.py     # GameMemory, ChainDef
-    memory_reader.py   # ctypes kernel32 wrappers
-    paths.py           # Path resolution helpers
+HEAT_SACLOS/
+├── fuse/                          # FUSE plugin framework
+│   ├── api.py                     # FusePlugin, FuseContext, HotkeyRegistry
+│   ├── discovery.py               # Plugin scanning & manifest parsing
+│   ├── resolver.py                # Dependency resolution & topological sort
+│   ├── host.py                    # PluginHost — lifecycle, listeners, idle loop
+│   ├── events.py                  # EventBus
+│   ├── services.py                # ServiceRegistry
+│   ├── runner.py                  # CLI entry point
+│   ├── log.py                     # loguru session logging
+│   ├── plugins/                   # Built-in core plugins
+│   │   └── game_memory/
+│   │       ├── manifest.json
+│   │       └── plugin.py
+│   ├── ui/                        # Framework UI
+│   │   ├── manager.py             # Plugin Manager (Ctrl+M)
+│   │   └── config_schema.py       # Declarative config schema
+│   └── utils/                     # Framework utilities
+│       ├── config.py              # PluginConfig, ConfigManager
+│       ├── game_memory.py         # GameMemory, ChainDef
+│       ├── memory_reader.py       # ctypes kernel32 wrappers
+│       ├── layered_window.py      # Win32 LayeredWindow
+│       ├── panel.py               # FusePanel / FusePanelGroup
+│       ├── screen_capture.py      # mss / PIL grab_region_np
+│       ├── hardware_inject*.py    # Input injection backends
+│       ├── ocr.py                 # OCR helpers
+│       ├── paths.py               # Path resolution
+│       └── ...
+│
+├── overlay/                       # HEAT overlay plugins
+│   ├── heat/
+│   │   └── plugins/
+│   │       ├── energy_bar/        # Energy/progress HUD
+│   │       │   ├── manifest.json
+│   │       │   ├── plugin.py
+│   │       │   └── ocr_bar.py
+│   │       └── heat_ailos_torc/   # SACLOS ML overlay
+│   │           ├── manifest.json
+│   │           ├── plugin.py
+│   │           ├── profiles.py
+│   │           ├── runner.py
+│   │           ├── predictor/
+│   │           ├── trainer/
+│   │           ├── refiner/
+│   │           └── ui/
+│   └── ml/heat_ailos_torc/        # Shared ML modules
+│       ├── profiles.py
+│       ├── ocr/
+│       ├── predictor/
+│       ├── trainer/
+│       └── refiner/
+│
+├── sim/                           # Missile physics simulator
+│   ├── missile_sim.py             # MK8Sim
+│   └── visualizer.py              # SimObservatory
+│
+├── data/                          # Persistent data
+│   ├── configs/                   # JSON configs (fuse_*.json)
+│   └── ml/                        # ML profiles, datasets, weights
+│
+├── assets/                        # Game memory pointer chains
+│   └── pointer_chains.json
+│
+├── tools/                         # Calibration utilities
+│   └── calibrate_envelope.py
+│
+├── arduino/                       # Hardware injection firmware
+│   ├── mouse_hid/
+│   └── flash_leonardo.py
+│
+├── run.bat                        # Windows launcher menu
+├── run_heat_overlay.py            # FUSE overlay entry
+├── run_heat_ailos_torc.py         # Standalone ML entry
+├── run_sim_viz.py                 # Simulator entry
+└── requirements.txt               # pynput, Pillow, pytesseract, numpy, mss, loguru, matplotlib, pyserial
 ```
 
 ---
