@@ -221,9 +221,10 @@ class FuseManager:
             self._plugin_row(inner, info)
 
     def _plugin_row(self, parent: tk.Frame, info: dict) -> None:
-        state = info["state"]
-        color = STATE_COLOR.get(state, FG_DIM)
-        name  = info["name"]
+        state     = info["state"]
+        color     = STATE_COLOR.get(state, FG_DIM)
+        name      = info["name"]
+        plugin_id = info["plugin_id"]
 
         row = tk.Frame(parent, bg=BG2, pady=5, padx=10)
         row.pack(fill="x", padx=6, pady=2)
@@ -250,9 +251,9 @@ class FuseManager:
 
         # Toggle button
         if state == "active":
-            btn_text, btn_cmd, btn_fg = "Disable", lambda n=name: self._disable(n), RED
+            btn_text, btn_cmd, btn_fg = "Disable", lambda n=plugin_id: self._disable(n), RED
         elif state == "disabled":
-            btn_text, btn_cmd, btn_fg = "Enable",  lambda n=name: self._enable(n),  GREEN
+            btn_text, btn_cmd, btn_fg = "Enable",  lambda n=plugin_id: self._enable(n),  GREEN
         else:
             btn_text, btn_cmd, btn_fg = state.capitalize(), None, FG_DIM
 
@@ -290,7 +291,7 @@ class FuseManager:
         self._dirty_bar = None
 
         plugins_with_schema = [
-            name for name, ctx in self._host._context_map.items()
+            plugin_id for plugin_id, ctx in self._host._context_map.items()
             if getattr(ctx.config, "_schema", None)
         ]
 
@@ -341,8 +342,9 @@ class FuseManager:
             activestyle="none",
         )
         lb.pack(fill="both", expand=True, padx=4, pady=4)
-        for n in plugins_with_schema:
-            lb.insert("end", n)
+        for pid in plugins_with_schema:
+            spec = self._host._discovered.get(pid)
+            lb.insert("end", spec.name if spec else pid)
 
         def _on_select(event):
             sel = lb.curselection()

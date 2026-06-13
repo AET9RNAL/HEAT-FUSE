@@ -143,40 +143,40 @@ class PluginHost:
         raw_specs = discover(extra_dirs=extra_dirs)
 
         for spec in raw_specs:
-            self._discovered[spec.name] = spec
-            self._plugin_states[spec.name] = PluginState.PENDING
+            self._discovered[spec.plugin_id] = spec
+            self._plugin_states[spec.plugin_id] = PluginState.PENDING
 
         eligible = []
         for spec in raw_specs:
-            if enabled is not None and spec.name not in enabled:
+            if enabled is not None and spec.plugin_id not in enabled:
                 _root_logger.info(f"Plugin excluded by enabled_plugins list: {spec.name}")
-                self._plugin_states[spec.name] = PluginState.DISABLED
+                self._plugin_states[spec.plugin_id] = PluginState.DISABLED
                 continue
-            if spec.name in disabled_set:
+            if spec.plugin_id in disabled_set:
                 _root_logger.info(f"Plugin disabled: {spec.name}")
-                self._plugin_states[spec.name] = PluginState.DISABLED
+                self._plugin_states[spec.plugin_id] = PluginState.DISABLED
                 continue
             if not _check_compat(spec.manifest, spec.name):
-                self._plugin_states[spec.name] = PluginState.SKIPPED
+                self._plugin_states[spec.plugin_id] = PluginState.SKIPPED
                 continue
             eligible.append(spec)
 
         ordered = resolve_load_order(eligible)
 
-        ordered_names = {s.name for s in ordered}
+        ordered_ids = {s.plugin_id for s in ordered}
         for spec in eligible:
-            if spec.name not in ordered_names:
-                self._plugin_states[spec.name] = PluginState.SKIPPED
+            if spec.plugin_id not in ordered_ids:
+                self._plugin_states[spec.plugin_id] = PluginState.SKIPPED
 
         self._setup_pending = list(ordered)
 
     def _instantiate(self, spec: DiscoveredPlugin) -> None:
         """Create and call setup() for one plugin. Called by the queue."""
         plugin = spec.cls()
-        plugin_logger = _root_logger.bind(plugin=spec.name)
+        plugin_logger = _root_logger.bind(plugin=spec.plugin_id)
         plugin_assets_dir = Path(spec.package_dir) / "assets"
 
-        cfg = PluginConfig(spec.name)
+        cfg = PluginConfig(spec.plugin_id)
         cfg.defaults(spec.manifest.get("default_config", {}))
 
         ctx = FuseContext(
@@ -192,22 +192,22 @@ class PluginHost:
             logger=plugin_logger,
         )
 
-        self._plugin_states[spec.name] = PluginState.LOADING
+        self._plugin_states[spec.plugin_id] = PluginState.LOADING
         try:
             plugin.setup(ctx)
         except Exception as e:
             plugin_logger.exception(f"setup failed: {e}")
-            self._plugin_states[spec.name] = PluginState.ERROR
+            self._plugin_states[spec.plugin_id] = PluginState.ERROR
             return
 
         if not cfg._loaded:
             cfg.load()
 
-        self._plugin_states[spec.name] = PluginState.ACTIVE
+        self._plugin_states[spec.plugin_id] = PluginState.ACTIVE
         self.plugins.append(plugin)
         self.contexts.append(ctx)
-        self._plugin_map[spec.name] = plugin
-        self._context_map[spec.name] = ctx
+        self._plugin_map[spec.plugin_id] = plugin
+        self._context_map[spec.plugin_id] = ctx
         plugin_logger.info(f"Loaded v{spec.version}")
 
     def _dequeue_next_plugin(self) -> None:
@@ -231,15 +231,15 @@ class PluginHost:
         self._state = "calibrate"
         self._instantiate(spec)
 
-        state = self._plugin_states.get(spec.name)
+        state = self._plugin_states.get(spec.plugin_id)
         if state != PluginState.ACTIVE:
             # Error / skip — advance without waiting for user.
             self._setup_active = None
             self.root.after(0, self._dequeue_next_plugin)
             return
 
-        plugin = self._plugin_map[spec.name]
-        ctx = self._context_map[spec.name]
+        plugin = self._plugin_map[spec.plugin_id]
+        ctx = self._context_map[spec.plugin_id]
         ctx.state = "calibrate"
 
         try:
@@ -261,17 +261,17 @@ class PluginHost:
     # Public plugin API
     # ------------------------------------------------------------------
 
-    def get_plugin(self, name: str) -> Optional[FusePlugin]:
-        """Return the loaded plugin with *name*, or ``None``."""
-        return self._plugin_map.get(name)
+    def get_plugin(self, plugin_id: str) -> Optional[FusePlugin]:
+        """Return the loaded plugin with *plugin_id*, or ``None``."""
+        return self._plugin_map.get(plugin_id)
 
     def get_service(self, name: str) -> Optional[object]:
         """Return the service registered under *name*, or ``None``."""
         return self.services.get(name)
 
-    def get_plugin_state(self, name: str) -> Optional[PluginState]:
-        """Return the current :class:`PluginState` for *name*, or ``None`` if unknown."""
-        return self._plugin_states.get(name)
+    def get_plugin_state(self, plugin_id: str) -> Optional[PluginState]:
+        """Return the current :class:`PluginState` for *plugin_id*, or ``None`` if unknown."""
+        return self._plugin_states.get(plugin_id)
 
     def list_plugins(self) -> List[dict]:
         """Return metadata for every discovered plugin.
@@ -290,32 +290,33 @@ class PluginHost:
             }
         """
         result = []
-        for name, spec in self._discovered.items():
+        for plugin_id, spec in self._discovered.items():
             result.append({
-                "name":        name,
+                "plugin_id":   plugin_id,
+                "name":        spec.name,
                 "version":     spec.version,
                 "description": spec.description,
                 "author":      spec.author,
                 "homepage":    spec.homepage,
                 "tags":        list(spec.tags),
-                "state":       self._plugin_states.get(name, PluginState.PENDING).value,
+                "state":       self._plugin_states.get(plugin_id, PluginState.PENDING).value,
                 "is_external": spec.is_external,
             })
         return result
 
-    def disable_plugin(self, name: str) -> None:
+    def disable_plugin(self, plugin_id: str) -> None:
         """Tear down an active plugin and persist it to the disabled list."""
         disabled = list(self.host_state.get("disabled_plugins", []))
-        if name not in disabled:
-            disabled.append(name)
+        if plugin_id not in disabled:
+            disabled.append(plugin_id)
             self.host_state["disabled_plugins"] = disabled
             self.host_config.save(self.host_state)
-        self._plugin_states[name] = PluginState.DISABLED
+        self._plugin_states[plugin_id] = PluginState.DISABLED
 
         # Tear down if currently active.
-        plugin = self._plugin_map.pop(name, None)
+        plugin = self._plugin_map.pop(plugin_id, None)
         if plugin is not None:
-            ctx = self._context_map.pop(name, None)
+            ctx = self._context_map.pop(plugin_id, None)
             if plugin in self.plugins:
                 self.plugins.remove(plugin)
             if ctx in self.contexts:
@@ -323,10 +324,10 @@ class PluginHost:
             try:
                 plugin.teardown()
             except Exception as e:
-                _root_logger.exception(f"{name}: teardown during disable failed: {e}")
-            _root_logger.info(f"Plugin {name!r} disabled and torn down.")
+                _root_logger.exception(f"{plugin_id}: teardown during disable failed: {e}")
+            _root_logger.info(f"Plugin {plugin_id!r} disabled and torn down.")
 
-    def enable_plugin(self, name: str) -> None:
+    def enable_plugin(self, plugin_id: str) -> None:
         """Re-enable a disabled plugin at runtime without restarting the setup queue.
 
         The plugin enters whatever state the host is currently in (locked or
@@ -335,26 +336,26 @@ class PluginHost:
         """
         # Remove from disabled list.
         disabled = list(self.host_state.get("disabled_plugins", []))
-        if name in disabled:
-            disabled.remove(name)
+        if plugin_id in disabled:
+            disabled.remove(plugin_id)
             self.host_state["disabled_plugins"] = disabled
             self.host_config.save(self.host_state)
 
-        if self._plugin_states.get(name) == PluginState.ACTIVE:
+        if self._plugin_states.get(plugin_id) == PluginState.ACTIVE:
             return  # already running
 
-        spec = self._discovered.get(name)
+        spec = self._discovered.get(plugin_id)
         if spec is None:
-            _root_logger.warning(f"enable_plugin: {name!r} not in discovered set.")
+            _root_logger.warning(f"enable_plugin: {plugin_id!r} not in discovered set.")
             return
 
         self._instantiate(spec)
 
-        if self._plugin_states.get(name) != PluginState.ACTIVE:
+        if self._plugin_states.get(plugin_id) != PluginState.ACTIVE:
             return  # instantiation failed
 
-        plugin = self._plugin_map[name]
-        ctx = self._context_map[name]
+        plugin = self._plugin_map[plugin_id]
+        ctx = self._context_map[plugin_id]
         ctx.state = self._state
         try:
             if self._state == "locked":
@@ -362,8 +363,8 @@ class PluginHost:
             else:
                 plugin.enter_calibrate()
         except Exception as e:
-            _root_logger.exception(f"{name}: state entry on enable failed: {e}")
-        _root_logger.info(f"Plugin {name!r} enabled at runtime (state={self._state}).")
+            _root_logger.exception(f"{plugin_id}: state entry on enable failed: {e}")
+        _root_logger.info(f"Plugin {plugin_id!r} enabled at runtime (state={self._state}).")
 
     # ------------------------------------------------------------------
     # State machine
@@ -378,9 +379,9 @@ class PluginHost:
         if self._setup_active is not None:
             # Queue mode: only toggle the plugin currently being set up.
             spec = self._setup_active
-            plugin = self._plugin_map.get(spec.name)
-            ctx = self._context_map.get(spec.name)
-            if plugin is None or self._plugin_states.get(spec.name) != PluginState.ACTIVE:
+            plugin = self._plugin_map.get(spec.plugin_id)
+            ctx = self._context_map.get(spec.plugin_id)
+            if plugin is None or self._plugin_states.get(spec.plugin_id) != PluginState.ACTIVE:
                 return
 
             new_state = "locked" if self._state == "calibrate" else "calibrate"

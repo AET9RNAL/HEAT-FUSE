@@ -76,75 +76,75 @@ def resolve_load_order(specs: List[DiscoveredPlugin]) -> List[DiscoveredPlugin]:
 
     Plugins forming dependency cycles are dropped from the result.
     """
-    by_name: Dict[str, DiscoveredPlugin] = {s.name: s for s in specs}
+    by_id: Dict[str, DiscoveredPlugin] = {s.plugin_id: s for s in specs}
 
     # Phase 1 — filter plugins with unsatisfied required deps.
     valid: Dict[str, DiscoveredPlugin] = {}
     for spec in specs:
         required, _ = _parse_deps(spec.manifest)
         ok = True
-        for dep_name, ver_spec in required.items():
-            if dep_name not in by_name:
+        for dep_id, ver_spec in required.items():
+            if dep_id not in by_id:
                 logger.error(
                     f"Plugin {spec.name!r} skipped — "
-                    f"missing required dependency: {dep_name!r}"
+                    f"missing required dependency: {dep_id!r}"
                 )
                 ok = False
                 break
-            actual_ver = by_name[dep_name].version
+            actual_ver = by_id[dep_id].version
             if not _version_satisfies(actual_ver, ver_spec):
                 logger.error(
-                    f"Plugin {spec.name!r} skipped — {dep_name!r} "
+                    f"Plugin {spec.name!r} skipped — {dep_id!r} "
                     f"v{actual_ver} does not satisfy {ver_spec!r}"
                 )
                 ok = False
                 break
         if ok:
-            valid[spec.name] = spec
+            valid[spec.plugin_id] = spec
 
     # Phase 2 — iterative DFS topological sort.
     ordered: List[DiscoveredPlugin] = []
     visiting: Set[str] = set()
     visited: Set[str] = set()
 
-    def visit(name: str) -> bool:
-        if name in visited:
+    def visit(plugin_id: str) -> bool:
+        if plugin_id in visited:
             return True
-        if name in visiting:
-            logger.error(f"Dependency cycle detected involving plugin {name!r}")
+        if plugin_id in visiting:
+            logger.error(f"Dependency cycle detected involving plugin {plugin_id!r}")
             return False
-        visiting.add(name)
-        spec = valid[name]
+        visiting.add(plugin_id)
+        spec = valid[plugin_id]
         required, optional = _parse_deps(spec.manifest)
 
         # Hard edges: required dependencies must load first.
-        for dep_name in required:
-            if dep_name not in valid:
+        for dep_id in required:
+            if dep_id not in valid:
                 continue
-            if not visit(dep_name):
+            if not visit(dep_id):
                 return False
 
         # Soft edges: optional deps load first if available; failure is non-fatal.
-        for dep_name in optional:
-            if dep_name in valid and dep_name not in visited:
-                visit(dep_name)
+        for dep_id in optional:
+            if dep_id in valid and dep_id not in visited:
+                visit(dep_id)
 
-        visiting.discard(name)
-        visited.add(name)
+        visiting.discard(plugin_id)
+        visited.add(plugin_id)
         ordered.append(spec)
         return True
 
     cycle_members: Set[str] = set()
-    for name in list(valid):
-        if name not in visited:
-            if not visit(name):
-                cycle_members.add(name)
+    for plugin_id in list(valid):
+        if plugin_id not in visited:
+            if not visit(plugin_id):
+                cycle_members.add(plugin_id)
 
     if cycle_members:
         logger.error(f"Dropping plugins involved in dependency cycles: {cycle_members}")
-        ordered = [s for s in ordered if s.name not in cycle_members]
+        ordered = [s for s in ordered if s.plugin_id not in cycle_members]
 
-    logger.debug(f"Plugin load order: {[s.name for s in ordered]}")
+    logger.debug(f"Plugin load order: {[s.plugin_id for s in ordered]}")
     return ordered
 
 

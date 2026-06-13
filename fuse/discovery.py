@@ -56,11 +56,12 @@ USER_PLUGINS_DIR: Path = REPO_ROOT / "plugins"
 
 @dataclass(frozen=True)
 class DiscoveredPlugin:
-    name: str
+    plugin_id: str      # programmatic identifier — used for config files, deps, enable/disable
+    name: str           # display name shown in UI and logs
     version: str
     description: str
-    package: str       # dotted import path, e.g. "fuse.plugins.game_memory"
-    package_dir: Path  # filesystem path to the plugin package directory
+    package: str        # dotted import path, e.g. "fuse.plugins.game_memory"
+    package_dir: Path   # filesystem path to the plugin package directory
     cls: Type[FusePlugin]
     manifest: dict
     is_external: bool = False  # True when loaded from outside fuse/plugins/
@@ -130,7 +131,8 @@ def _scan_directory(
         manifest = _load_manifest(entry)
         if manifest is None:
             continue
-        name = manifest.get("name", entry.name)
+        plugin_id = manifest.get("plugin_id", entry.name)
+        name = manifest.get("name", plugin_id)
         try:
             if is_external:
                 cls = _resolve_external_entry(entry, manifest["entry"])
@@ -139,7 +141,7 @@ def _scan_directory(
                 package = f"{package_prefix}.{entry.name}" if package_prefix else entry.name
                 cls = _resolve_builtin_entry(package, manifest["entry"])
         except Exception as e:
-            logger.error(f"Skipping plugin {name!r}: {e}")
+            logger.error(f"Skipping plugin {plugin_id!r}: {e}")
             continue
 
         cls.name = name
@@ -148,6 +150,7 @@ def _scan_directory(
 
         found.append(
             DiscoveredPlugin(
+                plugin_id=plugin_id,
                 name=name,
                 version=cls.version,
                 description=cls.description,
@@ -162,7 +165,7 @@ def _scan_directory(
             )
         )
         source = "external" if is_external else "built-in"
-        logger.info(f"Discovered plugin ({source}): {name} v{cls.version}")
+        logger.info(f"Discovered plugin ({source}): {name} [{plugin_id}] v{cls.version}")
 
     return found
 

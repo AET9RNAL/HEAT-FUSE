@@ -1,0 +1,16 @@
+{
+  "plugin_id": "energy_bar",
+  "name": "Energy Bar",
+  "version": "2.0",
+  "author": "AETERNAL",
+  "description": "Reskin of the game's energy bar",
+  "entry": "plugin:EnergyBarPlugin",
+  "dependencies": ["game_memory"],
+  "default_config": {
+    "bar_pos_mode": "custom",
+    "bar_custom_pos": null,
+    "bg_image": "bg_progress.png",
+    "fg_image": "progress.png",
+    "memory_chain": "energy_multiplayer"
+  }
+}

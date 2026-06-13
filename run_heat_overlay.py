@@ -3,4 +3,4 @@
 from fuse.runner import run
 
 if __name__ == "__main__":
-    run(extra_plugin_dirs=["overlay/heat/plugins"])
+    run()  # plugins/ at repo root is auto-scanned by discovery

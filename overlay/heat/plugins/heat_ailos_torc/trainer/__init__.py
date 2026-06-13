@@ -1,2 +1,0 @@
-from overlay.heat.plugins.heat_ailos_torc.trainer.correction_learner import CorrectionLearner
-from overlay.heat.plugins.heat_ailos_torc.trainer.training_overlay import TrainingOverlay
