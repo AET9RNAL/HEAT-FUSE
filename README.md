@@ -36,14 +36,10 @@ Any modifications to FUSE that would allow reading, exposing, or exploiting clie
 
 ## Project Overview
 
-H.E.A.T provides:
+FUSE provides:
 
 - **Per-pixel-alpha HUD overlays** via Win32 `LayeredWindow` — no chroma-key, no grey borders.
 - **In-game memory reading** via pointer chains (`ctypes` + `kernel32`, no external dependencies).
-- **ML-assisted SACLOS missile guidance** — predictor, trainer, and refiner modes.
-- **Interactive physics simulator** with real-time matplotlib observatory.
-- **OCR rangefinder** fallback when memory API is unavailable.
-- **Hardware mouse injection** via Arduino HID or Windows `SendInput`.
 - **Plugin-based architecture** — FUSE loads, calibrates, and manages overlays sequentially.
 
 ### Entry Points
@@ -52,8 +48,6 @@ H.E.A.T provides:
 |--------|---------|
 | `run.bat` | Conda env setup + interactive launcher menu |
 | `run_heat_overlay.py` | Boots FUSE with `overlay/heat/plugins/` |
-| `run_heat_ailos_torc.py` | Standalone ML launcher (predictor / trainer / refiner picker) |
-| `run_sim_viz.py` | MK8 missile physics simulator observatory |
 
 ---
 
@@ -61,7 +55,6 @@ H.E.A.T provides:
 
 1. Install [Miniconda](https://docs.anaconda.com/miniconda/) and run `run.bat` — it creates the `heat_saclos` env, installs deps, and shows a menu.
 2. Install [Tesseract OCR](https://github.com/tesseract-ocr/tesseract) if using OCR features.
-3. For hardware injection, flash `arduino/mouse_hid/` to a Leonardo / Pro Micro.
 
 ---
 
