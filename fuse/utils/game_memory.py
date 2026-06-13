@@ -20,6 +20,7 @@ from __future__ import annotations
 import json
 import struct
 import threading
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional, Union
@@ -36,6 +37,7 @@ from fuse.utils.paths import resolve_data
 
 
 _MISSING = object()  # sentinel for absent cache entries
+_CHAIN_RETRY_S = 3.0  # seconds to suppress retries after a chain error
 
 # ---------------------------------------------------------------------------
 # dtype tables
@@ -101,6 +103,9 @@ class GameMemory:
         self._module_bases: Dict[str, Optional[int]] = {}
         self._chains: Dict[str, ChainDef] = {}
         self._connected = False
+        # Per-chain cooldown: after an OSError the chain is skipped until this
+        # time passes, avoiding log spam and repeated EnumProcessModules calls.
+        self._chain_retry_after: Dict[str, float] = {}
 
         if isinstance(chains, dict):
             self._load_chains_dict(chains)
@@ -154,6 +159,7 @@ class GameMemory:
             self._pid = pid
             self._proc = proc
             self._module_bases = {}
+            self._chain_retry_after = {}
             self._connected = True
             logger.info(
                 f"GameMemory: connected to '{self._process_name}' (PID {pid})"
@@ -219,6 +225,13 @@ class GameMemory:
             if chain is None:
                 logger.warning(f"GameMemory: unknown chain {name!r}")
                 return None
+
+            # Cooldown: skip expensive retries while chain is known-broken.
+            now = time.monotonic()
+            retry_at = self._chain_retry_after.get(name, 0.0)
+            if now < retry_at:
+                return None
+
             try:
                 base = self._get_module_base(chain.module)
                 if base is None:
@@ -228,17 +241,28 @@ class GameMemory:
                     return None
                 size = _DTYPE_SIZE[chain.dtype]
                 raw = self._proc.read(addr, size)
-                return _decode(chain.dtype, raw)
+                value = _decode(chain.dtype, raw)
+                # Successful read — clear any previous cooldown entry.
+                if name in self._chain_retry_after:
+                    del self._chain_retry_after[name]
+                    logger.debug(f"GameMemory: read({name!r}) recovered")
+                return value
             except OSError as e:
                 if find_pid_by_name(self._process_name) is None:
                     logger.warning("GameMemory: process gone, marking disconnected")
                     self._connected = False
                 else:
-                    # Chain error with live process = stale module base (DLL reloaded
-                    # between matches at a new address). Clear cache so next read
-                    # re-resolves the module base from scratch.
-                    logger.debug(f"GameMemory: read({name!r}) chain error: {e} — clearing module base cache")
+                    # Stale module base (DLL reloaded between matches). Clear
+                    # the base cache and suppress retries for a few seconds to
+                    # avoid log spam while the game reloads its UI.
+                    first_error = name not in self._chain_retry_after
                     self._module_bases.clear()
+                    self._chain_retry_after[name] = now + _CHAIN_RETRY_S
+                    if first_error:
+                        logger.debug(
+                            f"GameMemory: read({name!r}) chain error: {e} "
+                            f"— retrying in {_CHAIN_RETRY_S:.0f}s"
+                        )
                 return None
 
     def resolve_address(self, name: str) -> Optional[int]:
