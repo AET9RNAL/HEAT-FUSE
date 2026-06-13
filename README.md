@@ -367,20 +367,6 @@ Prefers `mss` (~3–8 ms) and falls back to PIL `ImageGrab` (~20 ms). Thread-saf
 
 ---
 
-#### Hardware Injection Router
-
-Abstracts mouse input backends. Configured via `input_backend` config key (`arduino`, `sendinput`, `none`).
-
-```python
-from fuse.utils.hardware_inject_router import (
-    is_admin, connect, disconnect,
-    inject_mouse_movement, inject_mouse_click, set_cursor_pos,
-)
-```
-
-Requires Administrator privileges for `SendInput` against elevated game windows (UIPI).
-
----
 
 ### Host Lifecycle
 
