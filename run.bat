@@ -16,7 +16,7 @@ cd /d "%~dp0"
 
 setlocal
 
-set ENV_NAME=heat_saclos
+set ENV_NAME=heat_fuse
 set PYTHON_VER=3.14
 
 :: -------------------------------------------------------
@@ -74,39 +74,29 @@ if errorlevel 1 (
 :menu
 echo.
 echo ======================================================
-echo   HEAT - Environment "%ENV_NAME%" is ready
+echo   HEAT-FUSE - Environment "%ENV_NAME%" is ready
 echo ======================================================
 echo.
-echo   [1] HEAT AILOS-TORC   (ML predictor / trainer / refiner)
-echo   [2] HEAT Overlay      (universal, plugin-based HUD)
-echo   [3] Open shell in environment
-echo   [4] Exit
+echo   [1] HEAT-FUSE      (universal, plugin-based HUD)
+echo   [2] Open shell in environment
+echo   [3] Exit
 echo.
 echo   NOTE: For OCR features, install Tesseract separately:
 echo         https://github.com/tesseract-ocr/tesseract
 echo ======================================================
 echo.
-choice /c 1234 /n /m "Select option [1-4]: "
-if errorlevel 4 goto quit
-if errorlevel 3 goto open_shell
-if errorlevel 2 goto run_heat_overlay
-if errorlevel 1 goto run_heat_ailos_torc
-goto menu
-
-:run_heat_ailos_torc
-echo.
-echo Starting HEAT AILOS-TORC launcher ...
-python "%~dp0run_heat_ailos_torc.py"
-echo.
-echo HEAT AILOS-TORC exited.
+choice /c 123 /n /m "Select option [1-3]: "
+if errorlevel 3 goto quit
+if errorlevel 2 goto open_shell
+if errorlevel 1 goto run_heat_overlay
 goto menu
 
 :run_heat_overlay
 echo.
-echo Starting HEAT Overlay ...
+echo Starting HEAT-FUSE ...
 python "%~dp0run_heat_overlay.py"
 echo.
-echo HEAT Overlay exited.
+echo HEAT-FUSE exited.
 goto menu
 
 :open_shell

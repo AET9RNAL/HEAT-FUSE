@@ -430,7 +430,9 @@ class PluginHost:
         self.hotkeys.register("ctrl+m", self._open_manager,  label="Open Plugin Manager")
 
     def _open_manager(self) -> None:
+        _root_logger.debug("host: _open_manager called")
         if self._manager is None:
+            _root_logger.debug("host: creating FuseManager instance")
             self._manager = FuseManager(self.root, self)
         self._manager.toggle()
 

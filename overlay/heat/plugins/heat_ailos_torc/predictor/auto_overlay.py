@@ -155,39 +155,43 @@ class AutoOverlay(QuickLabelHudMixin, BaseSACLOSOverlay):
     # ----------------------------------------------------------------
 
     def _add_extra_config(self, config_dict):
-        config_dict.update({
-            "correction_enabled": self.correction_enabled,
-            "correction_min_threshold_px": self.correction_min_threshold_px,
-            "correction_speed_multiplier": self.correction_speed_multiplier,
-            "turret_traverse_speed_deg_s": self.turret_traverse_speed_deg_s,
-            "turret_instant_follow_deg": self.turret_instant_follow_deg,
-            "pixels_per_degree": self.pixels_per_degree,
-            "mouse_sensitivity_scale": self.mouse_sensitivity_scale,
-            "lead_alpha": self.lead_alpha,
-            "lead_beta": self.lead_beta,
-            "lead_gamma": self.lead_gamma,
-            "urgency_k": self.urgency_k,
-            "base_engagement_delay_s": self.base_engagement_delay_s,
-            "base_duration_ms": self.base_duration_ms,
-            "ml_enabled": self.ml_enabled,
-            "ml_confidence_threshold": self.ml_confidence_threshold,
-            "ml_online_learning": self.ml_online_learning,
-            "attn_enabled": self.attn_enabled,
-            "attn_lr": self.attn_lr,
-            "attn_n_buckets": self.attn_n_buckets,
-            "torc_quality_weight": self.torc_quality_weight,
-            "quick_label_enabled": self.quick_label_enabled,
-            "envelope_enabled": self.envelope_enabled,
-            "envelope_d_max_px": self.envelope_d_max_px,
-            "envelope_n_max_deg": self.envelope_n_max_deg,
-            "envelope_d_base_px": self.envelope_d_base_px,
-            "envelope_d_per_meter_px": self.envelope_d_per_meter_px,
-            "envelope_d_min_px": self.envelope_d_min_px,
-            "envelope_d_max_cap_px": self.envelope_d_max_cap_px,
-            "envelope_offset_x": self.envelope_offset_x,
-            "envelope_offset_y": self.envelope_offset_y,
-            "envelope_arc_length_px": self.envelope_arc_length_px,
-        })
+        if self._fuse_config is None:
+            # Standalone mode: save all settings from instance attrs.
+            # In FUSE mode these keys are owned by ctx.config.set() which already
+            # persisted them to disk; writing stale instance attrs would revert changes.
+            config_dict.update({
+                "correction_enabled": self.correction_enabled,
+                "correction_min_threshold_px": self.correction_min_threshold_px,
+                "correction_speed_multiplier": self.correction_speed_multiplier,
+                "turret_traverse_speed_deg_s": self.turret_traverse_speed_deg_s,
+                "turret_instant_follow_deg": self.turret_instant_follow_deg,
+                "pixels_per_degree": self.pixels_per_degree,
+                "mouse_sensitivity_scale": self.mouse_sensitivity_scale,
+                "lead_alpha": self.lead_alpha,
+                "lead_beta": self.lead_beta,
+                "lead_gamma": self.lead_gamma,
+                "urgency_k": self.urgency_k,
+                "base_engagement_delay_s": self.base_engagement_delay_s,
+                "base_duration_ms": self.base_duration_ms,
+                "ml_enabled": self.ml_enabled,
+                "ml_confidence_threshold": self.ml_confidence_threshold,
+                "ml_online_learning": self.ml_online_learning,
+                "attn_enabled": self.attn_enabled,
+                "attn_lr": self.attn_lr,
+                "attn_n_buckets": self.attn_n_buckets,
+                "torc_quality_weight": self.torc_quality_weight,
+                "quick_label_enabled": self.quick_label_enabled,
+                "envelope_enabled": self.envelope_enabled,
+                "envelope_d_max_px": self.envelope_d_max_px,
+                "envelope_n_max_deg": self.envelope_n_max_deg,
+                "envelope_d_base_px": self.envelope_d_base_px,
+                "envelope_d_per_meter_px": self.envelope_d_per_meter_px,
+                "envelope_d_min_px": self.envelope_d_min_px,
+                "envelope_d_max_cap_px": self.envelope_d_max_cap_px,
+                "envelope_offset_x": self.envelope_offset_x,
+                "envelope_offset_y": self.envelope_offset_y,
+                "envelope_arc_length_px": self.envelope_arc_length_px,
+            })
         self._ql_capture_positions()
         self._ql_save_config(config_dict)
 

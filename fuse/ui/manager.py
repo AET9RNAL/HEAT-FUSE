@@ -25,6 +25,8 @@ import tkinter as tk
 from tkinter import ttk
 from typing import TYPE_CHECKING
 
+from loguru import logger
+
 if TYPE_CHECKING:
     from fuse.host import PluginHost
 
@@ -43,10 +45,10 @@ RED    = "#e05c5c"
 YELLOW = "#e0c05c"
 GRAY   = "#555555"
 
-FONT_MONO   = ("Consolas", 10)
-FONT_BOLD   = ("Consolas", 10, "bold")
-FONT_SMALL  = ("Consolas", 9)
-FONT_HEADER = ("Consolas", 11, "bold")
+FONT_MONO   = ("Noto Sans", 10)
+FONT_BOLD   = ("Noto Sans", 10, "bold")
+FONT_SMALL  = ("Noto Sans", 9)
+FONT_HEADER = ("Noto Sans", 11, "bold")
 
 STATE_COLOR = {
     "active":   GREEN,
@@ -73,61 +75,98 @@ class FuseManager:
         self._rebind_target: tuple | None = None   # (mods, key, StringVar)
         self._settings_right: tk.Frame | None = None
 
+        # Pending-change tracking for the Settings tab.
+        # {plugin_name: {config_key: new_value}} — written by _on_field_change,
+        # committed on Save, cleared on Discard.
+        self._pending: dict = {}
+        self._current_settings_plugin: str | None = None
+        self._dirty_label: tk.Label | None = None
+        self._dirty_bar: tk.Frame | None = None
+
     # ------------------------------------------------------------------
     # Public
 
     def toggle(self) -> None:
         """Show the window if hidden, hide it if visible.  Creates on first call."""
-        if self._win is None or not self._win.winfo_exists():
-            self._build()
-        elif self._win.winfo_viewable():
-            self._win.withdraw()
-        else:
-            self._refresh_current_tab()
-            self._win.deiconify()
-            self._win.lift()
+        logger.debug("FuseManager: toggle()")
+        try:
+            if self._win is None or not self._win.winfo_exists():
+                self._build()
+            elif self._win.winfo_viewable():
+                if self._pending:
+                    # Unsaved changes — refuse to close; surface the Settings tab.
+                    self._nb.select(1)
+                    self._flash_dirty_bar()
+                else:
+                    self._win.withdraw()
+            else:
+                self._refresh_current_tab()
+                self._win.deiconify()
+                self._win.lift()
+        except Exception:
+            logger.exception("FuseManager: toggle raised an exception")
 
     # ------------------------------------------------------------------
     # Build
 
     def _build(self) -> None:
-        win = tk.Toplevel(self._root)
-        self._win = win
-        win.title("FUSE Plugin Manager")
-        win.configure(bg=BG)
-        win.geometry("720x540")
-        win.resizable(True, True)
-        win.protocol("WM_DELETE_WINDOW", win.withdraw)
-        win.attributes("-topmost", True)
-        win.deiconify()   # root is withdrawn; Toplevel must be explicitly shown
-        win.lift()
-
-        self._apply_style(win)
-
-        nb = ttk.Notebook(win)
-        self._nb = nb
-        nb.pack(fill="both", expand=True, padx=8, pady=8)
-        nb.bind("<<NotebookTabChanged>>", self._on_tab_change)
-
-        self._plugins_frame  = tk.Frame(nb, bg=BG)
-        self._settings_frame = tk.Frame(nb, bg=BG)
-        self._hotkeys_frame  = tk.Frame(nb, bg=BG)
-
-        nb.add(self._plugins_frame,  text="  Plugins  ")
-        nb.add(self._settings_frame, text="  Settings  ")
-        nb.add(self._hotkeys_frame,  text="  Keybindings  ")
-
-        self._build_plugins_tab()
-        self._build_settings_tab()
-        self._build_hotkeys_tab()
-
-    @staticmethod
-    def _apply_style(win: tk.Toplevel) -> None:
-        style = ttk.Style(win)
+        logger.debug("FuseManager: _build start")
         try:
-            style.theme_use("clam")
-        except tk.TclError:
-            pass
+            win = tk.Toplevel(self._root)
+            self._win = win
+            logger.debug("FuseManager: Toplevel created")
+            win.title("FUSE Plugin Manager")
+            win.configure(bg=BG)
+            win.geometry("720x540")
+            win.resizable(True, True)
+            win.protocol("WM_DELETE_WINDOW", win.withdraw)
+            # Keep window hidden until all widgets are built to avoid
+            # partial renders triggering paint events during construction.
+            win.withdraw()
+            logger.debug("FuseManager: applying style")
+            self._apply_style(win)
+            logger.debug("FuseManager: style applied")
+
+            nb = ttk.Notebook(win)
+            self._nb = nb
+            nb.pack(fill="both", expand=True, padx=8, pady=8)
+
+            self._plugins_frame  = tk.Frame(nb, bg=BG)
+            self._settings_frame = tk.Frame(nb, bg=BG)
+            self._hotkeys_frame  = tk.Frame(nb, bg=BG)
+
+            nb.add(self._plugins_frame,  text="  Plugins  ")
+            nb.add(self._settings_frame, text="  Settings  ")
+            nb.add(self._hotkeys_frame,  text="  Keybindings  ")
+
+            # Bind AFTER adding tabs so <<NotebookTabChanged>> doesn't fire during build.
+            nb.bind("<<NotebookTabChanged>>", self._on_tab_change)
+
+            # Only build the visible Plugins tab eagerly; defer the others until selected.
+            self._settings_built = False
+            self._hotkeys_built  = False
+            logger.debug("FuseManager: building plugins tab")
+            self._build_plugins_tab()
+            logger.debug("FuseManager: plugins tab built")
+
+            win.attributes("-topmost", True)
+            win.deiconify()   # root is withdrawn; Toplevel must be explicitly shown
+            win.lift()
+            logger.debug("FuseManager: _build complete")
+        except Exception:
+            logger.exception("FuseManager: _build raised an exception")
+
+    _style_applied: bool = False  # class-level flag; style is per-interpreter (global)
+
+    @classmethod
+    def _apply_style(cls, win: tk.Toplevel) -> None:
+        style = ttk.Style(win)
+        if not cls._style_applied:
+            try:
+                style.theme_use("clam")
+                cls._style_applied = True
+            except tk.TclError:
+                pass
         style.configure(".",
                          background=BG, foreground=FG,
                          fieldbackground=BG2, troughcolor=BG2,
@@ -190,7 +229,7 @@ class FuseManager:
         row.pack(fill="x", padx=6, pady=2)
 
         # State dot
-        tk.Label(row, text="●", fg=color, bg=BG2, font=("Consolas", 11)).pack(side="left", padx=(0, 8))
+        tk.Label(row, text="●", fg=color, bg=BG2, font=("Noto Sans", 11)).pack(side="left", padx=(0, 8))
 
         # Name + description
         meta = tk.Frame(row, bg=BG2)
@@ -225,11 +264,19 @@ class FuseManager:
         ).pack(side="right", padx=(4, 0))
 
     def _disable(self, name: str) -> None:
-        self._host.disable_plugin(name)
+        logger.debug(f"FuseManager: disable {name!r}")
+        try:
+            self._host.disable_plugin(name)
+        except Exception:
+            logger.exception(f"FuseManager: disable_plugin({name!r}) raised")
         self._build_plugins_tab()
 
     def _enable(self, name: str) -> None:
-        self._host.enable_plugin(name)
+        logger.debug(f"FuseManager: enable {name!r}")
+        try:
+            self._host.enable_plugin(name)
+        except Exception:
+            logger.exception(f"FuseManager: enable_plugin({name!r}) raised")
         self._build_plugins_tab()
 
     # ------------------------------------------------------------------
@@ -239,6 +286,8 @@ class FuseManager:
         for w in self._settings_frame.winfo_children():
             w.destroy()
         self._settings_right = None
+        self._dirty_label = None
+        self._dirty_bar = None
 
         plugins_with_schema = [
             name for name, ctx in self._host._context_map.items()
@@ -254,6 +303,28 @@ class FuseManager:
             ).pack(expand=True)
             return
 
+        # --- Dirty footer (packed first so it anchors to the bottom) ---
+        dirty_bar = tk.Frame(self._settings_frame, bg=BG2, pady=6)
+        dirty_bar.pack(side="bottom", fill="x")
+        self._dirty_bar = dirty_bar
+
+        dirty_lbl = tk.Label(dirty_bar, text="You have unsaved changes",
+                             fg=RED, bg=BG2, font=FONT_SMALL)
+        dirty_lbl.pack(side="left", padx=12)
+        self._dirty_label = dirty_lbl
+
+        btn_frame = tk.Frame(dirty_bar, bg=BG2)
+        btn_frame.pack(side="right", padx=8)
+        tk.Button(btn_frame, text="Save Changes",    fg=GREEN, bg=BG, activebackground=BG3,
+                  activeforeground=GREEN, font=FONT_SMALL, bd=1, relief="solid",
+                  command=self._save_pending).pack(side="left", padx=(0, 4))
+        tk.Button(btn_frame, text="Discard Changes", fg=RED,   bg=BG, activebackground=BG3,
+                  activeforeground=RED,   font=FONT_SMALL, bd=1, relief="solid",
+                  command=self._discard_pending).pack(side="left")
+
+        self._update_dirty_bar()  # show only if dirty
+
+        # --- Paned content area ---
         paned = tk.PanedWindow(self._settings_frame, orient="horizontal",
                                bg=BG, sashwidth=4, sashrelief="flat")
         paned.pack(fill="both", expand=True)
@@ -284,6 +355,7 @@ class FuseManager:
             self._show_plugin_settings(plugins_with_schema[0])
 
     def _show_plugin_settings(self, plugin_name: str) -> None:
+        self._current_settings_plugin = plugin_name
         right = self._settings_right
         if right is None:
             return
@@ -297,38 +369,45 @@ class FuseManager:
 
         inner = self._scrollable(right)
         config = ctx.config
+        pending_plugin = self._pending.get(plugin_name, {})
 
         for cat in config._schema:
             tk.Label(inner, text=cat.label, fg=ACCENT, bg=BG,
                      font=FONT_BOLD, anchor="w").pack(fill="x", padx=10, pady=(10, 2))
             tk.Frame(inner, bg=ACCENT, height=1).pack(fill="x", padx=10, pady=(0, 4))
             for entry in cat.entries:
-                self._config_row(inner, config, entry)
+                # Show pending value if present, otherwise saved value.
+                display_val = pending_plugin.get(entry.key, config.get(entry.key, None))
+                self._config_row(inner, plugin_name, config, entry, display_val)
 
-    def _config_row(self, parent: tk.Frame, config, entry) -> None:
+    def _config_row(self, parent: tk.Frame, plugin_name: str, config,
+                    entry, display_val) -> None:
         row = tk.Frame(parent, bg=BG)
         row.pack(fill="x", padx=10, pady=2)
 
         tk.Label(row, text=entry.label, fg=FG, bg=BG,
                  font=FONT_MONO, width=22, anchor="w").pack(side="left")
 
-        val = config.get(entry.key, None)
+        val = display_val
 
         if entry.type == "bool":
             var = tk.BooleanVar(value=bool(val))
             tk.Checkbutton(
                 row, variable=var, bg=BG, activebackground=BG,
                 selectcolor=BG3, fg=FG, activeforeground=FG,
-                command=lambda k=entry.key, v=var: config.set(k, v.get()),
+                command=lambda k=entry.key, v=var:
+                    self._on_field_change(plugin_name, config, k, v.get()),
             ).pack(side="left")
 
         elif entry.type == "choice" and entry.choices:
-            var = tk.StringVar(value=str(val) if val is not None else (entry.choices[0] if entry.choices else ""))
+            cur = str(val) if val is not None else (entry.choices[0] if entry.choices else "")
+            var = tk.StringVar(value=cur)
             cb = ttk.Combobox(row, textvariable=var, values=entry.choices,
                               state="readonly", width=18, font=FONT_MONO)
             cb.pack(side="left")
             cb.bind("<<ComboboxSelected>>",
-                    lambda e, k=entry.key, v=var: config.set(k, v.get()))
+                    lambda _e, k=entry.key, v=var:
+                        self._on_field_change(plugin_name, config, k, v.get()))
 
         elif entry.type in ("int", "float"):
             var = tk.StringVar(value="" if val is None else str(val))
@@ -339,23 +418,26 @@ class FuseManager:
             )
             ent.pack(side="left")
 
-            def _apply(event, k=entry.key, v=var, t=entry.type):
+            def _on_numeric(event, k=entry.key, v=var, t=entry.type):
                 try:
                     nv = int(v.get()) if t == "int" else float(v.get())
                     if entry.min is not None:
                         nv = max(type(nv)(entry.min), nv)
                     if entry.max is not None:
                         nv = min(type(nv)(entry.max), nv)
-                    config.set(k, nv)
-                    v.set(str(nv))
+                    self._on_field_change(plugin_name, config, k, nv)
                 except ValueError:
-                    pass
+                    pass  # partial input — leave pending as-is
 
-            ent.bind("<Return>",    _apply)
-            ent.bind("<FocusOut>",  _apply)
+            ent.bind("<KeyRelease>", _on_numeric)
+            ent.bind("<FocusOut>",   _on_numeric)
             if entry.min is not None or entry.max is not None:
-                hint = f"({entry.min}–{entry.max})" if entry.min is not None and entry.max is not None \
-                       else (f"≥{entry.min}" if entry.min is not None else f"≤{entry.max}")
+                if entry.min is not None and entry.max is not None:
+                    hint = f"({entry.min}–{entry.max})"
+                elif entry.min is not None:
+                    hint = f"≥{entry.min}"
+                else:
+                    hint = f"≤{entry.max}"
                 tk.Label(row, text=hint, fg=FG_DIM, bg=BG, font=FONT_SMALL).pack(side="left", padx=4)
 
         elif entry.type == "position":
@@ -370,12 +452,70 @@ class FuseManager:
                 highlightthickness=1, highlightbackground=BG3, highlightcolor=ACCENT,
             )
             ent.pack(side="left")
-            ent.bind("<Return>",    lambda e, k=entry.key, v=var: config.set(k, v.get()))
-            ent.bind("<FocusOut>",  lambda e, k=entry.key, v=var: config.set(k, v.get()))
+            ent.bind("<KeyRelease>",
+                     lambda e, k=entry.key, v=var:
+                         self._on_field_change(plugin_name, config, k, v.get()))
+            ent.bind("<FocusOut>",
+                     lambda e, k=entry.key, v=var:
+                         self._on_field_change(plugin_name, config, k, v.get()))
 
         if entry.description:
             tk.Label(row, text=f"  {entry.description}", fg=FG_DIM, bg=BG,
                      font=FONT_SMALL).pack(side="left", padx=4)
+
+    # ------------------------------------------------------------------
+    # Pending-change tracking
+
+    def _on_field_change(self, plugin_name: str, config, key: str, value) -> None:
+        """Record a field edit in the pending buffer and refresh the dirty bar."""
+        saved = config.get(key, None)
+        plugin_pending = self._pending.setdefault(plugin_name, {})
+        if value != saved:
+            plugin_pending[key] = value
+        else:
+            plugin_pending.pop(key, None)
+            if not plugin_pending:
+                self._pending.pop(plugin_name, None)
+        self._update_dirty_bar()
+
+    def _is_dirty(self) -> bool:
+        return bool(self._pending)
+
+    def _update_dirty_bar(self) -> None:
+        """Show or hide the dirty footer bar based on pending state."""
+        if self._dirty_bar is None:
+            return
+        if self._pending:
+            self._dirty_bar.pack(side="bottom", fill="x")
+        else:
+            self._dirty_bar.pack_forget()
+
+    def _flash_dirty_bar(self) -> None:
+        """Briefly flash the warning label to draw attention."""
+        if self._dirty_label is None:
+            return
+        self._dirty_label.config(fg="#ffffff")
+        if self._win:
+            self._win.after(300, lambda: self._dirty_label.config(fg=RED)
+                            if self._dirty_label else None)
+
+    def _save_pending(self) -> None:
+        """Apply all pending changes to plugin configs and clear the buffer."""
+        for pname, changes in list(self._pending.items()):
+            ctx = self._host._context_map.get(pname)
+            if ctx is None:
+                continue
+            for key, value in changes.items():
+                ctx.config.set(key, value)
+        self._pending.clear()
+        self._update_dirty_bar()
+
+    def _discard_pending(self) -> None:
+        """Discard all pending changes and rebuild the current settings form."""
+        self._pending.clear()
+        self._update_dirty_bar()
+        if self._current_settings_plugin:
+            self._show_plugin_settings(self._current_settings_plugin)
 
     # ------------------------------------------------------------------
     # Keybindings tab
@@ -461,13 +601,24 @@ class FuseManager:
     # Tab change / refresh
 
     def _on_tab_change(self, event: tk.Event) -> None:
-        tab = self._nb.tab("current", "text").strip()
-        if tab == "Plugins":
-            self._build_plugins_tab()
-        elif tab == "Settings":
-            self._build_settings_tab()
-        elif tab == "Keybindings":
-            self._build_hotkeys_tab()
+        try:
+            tab = self._nb.tab("current", "text").strip()
+            logger.debug(f"FuseManager: tab changed -> {tab!r}")
+            if tab != "Settings" and self._pending:
+                # Block leaving Settings while there are unsaved changes.
+                self._nb.select(1)
+                self._flash_dirty_bar()
+                return
+            if tab == "Plugins":
+                self._build_plugins_tab()
+            elif tab == "Settings":
+                self._settings_built = True
+                self._build_settings_tab()
+            elif tab == "Keybindings":
+                self._hotkeys_built = True
+                self._build_hotkeys_tab()
+        except Exception:
+            logger.exception("FuseManager: _on_tab_change raised")
 
     def _refresh_current_tab(self) -> None:
         if self._nb is None:
@@ -476,8 +627,10 @@ class FuseManager:
         if tab == "Plugins":
             self._build_plugins_tab()
         elif tab == "Settings":
+            self._settings_built = True
             self._build_settings_tab()
         elif tab == "Keybindings":
+            self._hotkeys_built = True
             self._build_hotkeys_tab()
 
 
