@@ -6,6 +6,8 @@
 
 **FUSE** does not provide any game modifications or hacks. It is a toolkit for building overlays/UI reskins that uses game information accessible to the user during normal gameplay. It does not read, expose, exploit client information that wouldn't normally be available to the user.
 
+Any modifications to FUSE that would allow reading, exposing, or exploiting client information that wouldn't normally be available to the user are strictly prohibited.
+
 ---
 
 ## Table of Contents
