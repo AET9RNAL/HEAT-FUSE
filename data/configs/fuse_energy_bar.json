@@ -6,6 +6,7 @@
   ],
   "bg_image": "bg_progress.png",
   "fg_image": "progress.png",
+  "memory_chain": "energy_multiplayer",
   "ocr_region": null,
   "ocr_poll_interval_ms": 100
 }

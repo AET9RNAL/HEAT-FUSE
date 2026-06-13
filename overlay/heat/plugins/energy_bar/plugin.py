@@ -105,6 +105,7 @@ class EnergyBarPlugin(FusePlugin):
             bar_custom_pos=None,
             bg_image=self.BG_IMAGE_DEFAULT,
             fg_image=self.FG_IMAGE_DEFAULT,
+            memory_chain="energy_multiplayer",
         ).load()
 
         ctx.config.schema([
@@ -112,6 +113,11 @@ class EnergyBarPlugin(FusePlugin):
                 ConfigEntry("bar_pos_mode", "Position Mode", type="choice",
                             choices=["custom", "center"],
                             description="custom = draggable, center = screen center"),
+            ]),
+            ConfigCategory("Memory Source", [
+                ConfigEntry("memory_chain", "Pointer Chain", type="choice",
+                            choices=["energy_multiplayer", "energy_training_range"],
+                            description="Which pointer chain to read energy from"),
             ]),
             ConfigCategory("OCR Source", [
                 ConfigEntry("ocr_poll_interval_ms", "Poll Interval (ms)", type="int",
@@ -184,7 +190,7 @@ class EnergyBarPlugin(FusePlugin):
     def tick(self, dt: float) -> None:  # noqa: D401 — short verb
         if self.ctx and self.ctx.state == "locked":
             if USE_MEMORY_API and self._mem is not None:
-                val = self._mem.read("energy")
+                val = self._mem.read(self.ctx.config.get("memory_chain", "energy_multiplayer"))
                 if val is not None:
                     with self._ocr_lock:
                         self.energy_pct = max(0, min(100, int(val)))
