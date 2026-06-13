@@ -25,7 +25,7 @@
     "ocr_enabled": false,
     "ocr_poll_interval_ms": 350,
     "ocr_display_pos": null,
-    "input_backend": "arduino",
+    "input_backend": "sendinput",
 
     "hud_assets_dir": "assets",
     "hud_name_image": "predictor.png",
