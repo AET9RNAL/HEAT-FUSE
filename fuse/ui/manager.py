@@ -585,13 +585,14 @@ class FuseManager:
         self._win.unbind("<KeyPress>")
         self._host._capturing_rebind = False
 
-        # Build combo string from event modifiers
+        # Build combo string from event modifiers.
+        # On Windows, Tk reports Alt as 0x20000 — 0x8 is NumLock, not Alt.
         new_mods = []
         if event.state & 0x4:
             new_mods.append("ctrl")
         if event.state & 0x1:
             new_mods.append("shift")
-        if event.state & 0x8 or event.state & 0x80:
+        if event.state & 0x20000:
             new_mods.append("alt")
         new_key = event.keysym.lower()
         new_combo = "+".join(sorted(new_mods) + [new_key])
