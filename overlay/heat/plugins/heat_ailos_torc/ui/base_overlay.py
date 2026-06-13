@@ -1,7 +1,7 @@
 import os
 import math
 import tkinter as tk
-from tkinter import filedialog, messagebox
+from tkinter import messagebox
 from collections import deque
 import threading
 import time
@@ -137,10 +137,6 @@ class BaseSACLOSOverlay(OCRUiMixin, RangefinderUiMixin, HudUiMixin):
         self.bar = tk.Frame(self.root, bg="#111111", pady=3)
         self.bar.pack(side=tk.BOTTOM, fill=tk.X)
 
-        tk.Button(self.bar, text="Open image (Ctrl+O)", command=self._open_image,
-                  bg="#222", fg="#aaa", relief=tk.FLAT,
-                  padx=8, pady=2).pack(side=tk.LEFT, padx=4)
-
         self.status_lbl = tk.Label(
             self.bar,
             text="CALIBRATE  |  T=OCR region  |  Ctrl+L = lock    Ctrl+P = quit",
@@ -178,8 +174,6 @@ class BaseSACLOSOverlay(OCRUiMixin, RangefinderUiMixin, HudUiMixin):
         self.canvas.bind("<Button-1>", lambda e: force_focus(self.canvas), add=True)
 
         for widget in [self.root, self.canvas]:
-            widget.bind("<Control-o>", lambda e: self._open_image() if self.state != "locked" else None)
-            widget.bind("<Control-O>", lambda e: self._open_image() if self.state != "locked" else None)
             widget.bind("<Control-l>", lambda e: self._toggle_lock())
             widget.bind("<Control-L>", lambda e: self._toggle_lock())
             widget.bind("<Control-p>", lambda e: self._quit())
@@ -316,8 +310,9 @@ class BaseSACLOSOverlay(OCRUiMixin, RangefinderUiMixin, HudUiMixin):
 
     def _load_images(self, normal_path, tracking_path=None):
         if not PIL_OK: return
-        self.image_path = normal_path
-        self.tracking_image_path = tracking_path
+        # Store only the filename so config never persists absolute paths.
+        self.image_path = os.path.basename(normal_path) if normal_path else None
+        self.tracking_image_path = os.path.basename(tracking_path) if tracking_path else None
         
         img = Image.open(normal_path).convert("RGBA")
         self.img_w, self.img_h = img.size
@@ -352,18 +347,6 @@ class BaseSACLOSOverlay(OCRUiMixin, RangefinderUiMixin, HudUiMixin):
         r = 80
         self.canvas.create_oval(cx-r, cy-r, cx+r, cy+r, outline="#1d9e75", width=1)
         self.canvas.create_text(cx, cy + r + 24, text="No image — press O to open", fill="#444", font=("Montserrat", 10))
-
-    def _open_image(self):
-        self.root.overrideredirect(False)
-        path = filedialog.askopenfilename(title="Open overlay image", filetypes=[("Images", "*.png *.bmp *.jpg *.tga"), ("All", "*.*")])
-        self.root.overrideredirect(True)
-        self.root.attributes("-topmost", True)
-        if path:
-            self.root.overrideredirect(False)
-            tracking_path = filedialog.askopenfilename(title="Open tracking image (optional, cancel to use same)", filetypes=[("Images", "*.png *.bmp *.jpg *.tga"), ("All", "*.*")])
-            self.root.overrideredirect(True)
-            self.root.attributes("-topmost", True)
-            self._load_images(path, tracking_path if tracking_path else None)
 
     def _apply_geometry(self):
         # Use LayeredWindow in locked mode if available
@@ -759,8 +742,6 @@ class BaseSACLOSOverlay(OCRUiMixin, RangefinderUiMixin, HudUiMixin):
                     if char and char.lower() == 'l':
                         if not self.fuse_mode:
                             self.root.after(0, self._toggle_lock)
-                    elif char and char.lower() == 'o':
-                        self.root.after(0, self._open_image) if self.state != "locked" else None
                     elif char and char.lower() == 'p':
                         if not self.fuse_mode:
                             self.root.after(0, self._quit)

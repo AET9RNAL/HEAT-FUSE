@@ -78,15 +78,15 @@ class PluginConfig:
         self._data = {**self._defaults, **on_disk}
         self._loaded = True
         if from_disk:
-            disk_keys = set(on_disk) - set(self._defaults)
             self._log.debug(
-                f"Config loaded from {self._path} "
-                f"({len(on_disk)} disk key(s), {len(disk_keys)} extra beyond defaults)"
+                f"Config loaded from {self._path} ({len(on_disk)} disk key(s))"
             )
         else:
             self._log.debug(
                 f"Config: no file at {self._path} — using {len(self._defaults)} default(s)"
             )
+        for k, v in self._data.items():
+            self._log.debug(f"  config  {k} = {v!r}")
         return self
 
     def save(self) -> None:

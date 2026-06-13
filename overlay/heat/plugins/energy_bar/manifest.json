@@ -1,8 +1,8 @@
 {
-  "name": "energy_bar",
+  "name": "Energy Bar",
   "version": "2.0",
   "author": "AETERNAL",
-  "description": "Memory-driven energy / progress scale HUD (composited bg + clipped foreground).",
+  "description": "Reskin of the game's energy bar",
   "entry": "plugin:EnergyBarPlugin",
   "dependencies": ["game_memory"],
   "default_config": {

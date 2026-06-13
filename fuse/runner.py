@@ -2,10 +2,19 @@
 from __future__ import annotations
 
 import tkinter as tk
+from pathlib import Path
 from loguru import logger
 
 from fuse.log import setup as _setup_logging
 from fuse.host import PluginHost
+from fuse.utils.fonts import load_font
+
+_ASSETS_DIR = Path(__file__).resolve().parent.parent / "assets"
+
+_FUSE_FONTS = [
+    "NotoSans-VariableFont_wdth,wght.ttf",
+    "NotoSans-Italic-VariableFont_wdth,wght.ttf",
+]
 
 
 def run(
@@ -15,6 +24,8 @@ def run(
     """Boot FUSE with all enabled plugins."""
     del argv  # reserved for future CLI flags
     _setup_logging()
+    for name in _FUSE_FONTS:
+        load_font(_ASSETS_DIR / name)
     root = tk.Tk()
     host = PluginHost(root)
     host.load_plugins(extra_plugin_dirs=extra_plugin_dirs)

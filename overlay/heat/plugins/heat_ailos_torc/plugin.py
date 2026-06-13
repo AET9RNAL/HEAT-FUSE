@@ -9,11 +9,14 @@ fully functional; this plugin is an additional integration path.
 """
 from __future__ import annotations
 
+import threading
 import tkinter as tk
 from typing import TYPE_CHECKING
 
 from fuse.api import FuseContext, FusePlugin
 from fuse.ui.config_schema import ConfigCategory, ConfigEntry
+from fuse.utils.fonts import load_font
+from overlay.heat.plugins.heat_ailos_torc import ASSETS_DIR as _AILOS_ASSETS_DIR
 
 if TYPE_CHECKING:
     from overlay.heat.plugins.heat_ailos_torc.ui.base_overlay import BaseSACLOSOverlay
@@ -25,6 +28,8 @@ class HeatAilosTorcPlugin(FusePlugin):
     requires_calibration = True
 
     def setup(self, ctx: FuseContext) -> None:
+        load_font(_AILOS_ASSETS_DIR / "Montserrat-VariableFont_wght.ttf")
+        load_font(_AILOS_ASSETS_DIR / "Montserrat-Italic-VariableFont_wght.ttf")
         # Host pre-seeds manifest default_config; load merges with on-disk.
         ctx.config.load()
 
@@ -60,14 +65,23 @@ class HeatAilosTorcPlugin(FusePlugin):
             ]),
         ])
 
-        from fuse.utils.hardware_inject_router import is_admin, connect
+        from fuse.utils.hardware_inject_router import is_admin, init_backend
+        init_backend(ctx.config.get("input_backend", "arduino"))
         if not is_admin():
             ctx.logger.warning(
                 "Not running as Administrator — SendInput events may be "
                 "blocked by elevated game windows (UIPI)."
             )
-        connect()
-        self._hw_connected = True
+        # Run connect() on a daemon thread — the Arduino backend sleeps 2s
+        # during initialization, which would freeze the Tk main thread.
+        # Import connect inside the closure so it resolves AFTER init_backend
+        # has pointed the router at the correct backend module.
+        self._hw_connected = False
+        def _connect_hw():
+            from fuse.utils.hardware_inject_router import connect
+            if connect():
+                self._hw_connected = True
+        threading.Thread(target=_connect_hw, daemon=True).start()
         self._ctx = ctx
         self._overlay: BaseSACLOSOverlay | None = None
 
@@ -109,6 +123,7 @@ class HeatAilosTorcPlugin(FusePlugin):
                     "heat_ailos_torc: 'game_memory' service not available — "
                     "OCR fallback will be used regardless of USE_MEMORY_API."
                 )
+            self._setup_config_watchers(ctx)
 
     def enter_calibrate(self) -> None:
         if self._overlay and hasattr(self._overlay, "_on_calibrate"):
@@ -140,6 +155,68 @@ class HeatAilosTorcPlugin(FusePlugin):
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
+
+    def _setup_config_watchers(self, ctx: FuseContext) -> None:
+        """Register config.watch() callbacks so manager edits take effect live."""
+        overlay = self._overlay
+        if overlay is None:
+            return
+
+        # (config_key, overlay_attr, type_coerce)
+        _float_attrs = [
+            ("ml_confidence_threshold",     "ml_confidence_threshold",     float),
+            ("attn_lr",                     "attn_lr",                     float),
+            ("correction_speed_multiplier", "correction_speed_multiplier", float),
+            ("correction_min_threshold_px", "correction_min_threshold_px", float),
+            ("mouse_sensitivity_scale",     "mouse_sensitivity_scale",     float),
+            ("turret_traverse_speed_deg_s", "turret_traverse_speed_deg_s", float),
+            ("pixels_per_degree",           "pixels_per_degree",           float),
+        ]
+        _bool_attrs = [
+            ("ml_enabled",           "ml_enabled"),
+            ("ml_online_learning",   "ml_online_learning"),
+            ("attn_enabled",         "attn_enabled"),
+            ("correction_enabled",   "correction_enabled"),
+            ("quick_label_enabled",  "quick_label_enabled"),
+        ]
+
+        for key, attr, coerce in _float_attrs:
+            def _make_float_setter(a, c):
+                def _set(v):
+                    if hasattr(overlay, a):
+                        try:
+                            setattr(overlay, a, c(v))
+                        except (TypeError, ValueError):
+                            pass
+                return _set
+            ctx.config.watch(key, _make_float_setter(attr, coerce))
+
+        for key, attr in _bool_attrs:
+            def _make_bool_setter(a):
+                def _set(v):
+                    if hasattr(overlay, a):
+                        setattr(overlay, a, bool(v))
+                return _set
+            ctx.config.watch(key, _make_bool_setter(attr))
+
+        # input_backend: update both overlay attr AND the router so the change
+        # takes effect immediately without a restart.
+        def _on_backend_change(v):
+            from fuse.utils.hardware_inject_router import init_backend
+            init_backend(v)
+            if hasattr(overlay, "input_backend"):
+                overlay.input_backend = v
+        ctx.config.watch("input_backend", _on_backend_change)
+
+        # Fallback: any schema key without a specific watcher gets a plain
+        # attr-sync watcher so _save_config() never writes stale overlay attrs.
+        if ctx.config._schema:
+            for _cat in ctx.config._schema:
+                for _entry in _cat.entries:
+                    if _entry.key not in ctx.config._watchers and hasattr(overlay, _entry.key):
+                        def _make_sync(k):
+                            return lambda v: setattr(overlay, k, v)
+                        ctx.config.watch(_entry.key, _make_sync(_entry.key))
 
     def _pick(self, ctx: FuseContext):
         """Return (MLProfile, mode_str).

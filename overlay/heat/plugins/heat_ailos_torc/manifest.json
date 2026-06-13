@@ -1,8 +1,8 @@
 {
-  "name": "heat_ailos_torc",
+  "name": "H.E.A.T. AILOS TORC",
   "version": "1.0",
   "author": "AETERNAL",
-  "description": "ML-assisted SACLOS missile guidance overlay (predictor / trainer / refiner).",
+  "description": "Automatic Indirect Line of Sight is a trajectory correction system for ATGMs",
   "entry": "plugin:HeatAilosTorcPlugin",
   "tags": ["ml", "saclos", "overlay"],
   "optional_dependencies": ["game_memory"],

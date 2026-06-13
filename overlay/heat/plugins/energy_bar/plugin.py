@@ -153,6 +153,9 @@ class EnergyBarPlugin(FusePlugin):
         ctx.hotkeys.register("t", self._toggle_ocr_setup, label="energy_bar: Toggle OCR Region")
         ctx.host.subscribe_mouse(self._on_global_click)
 
+        ctx.config.watch("ocr_poll_interval_ms",
+                         lambda v: setattr(self, "ocr_poll_interval_ms", int(v)))
+
     def enter_calibrate(self) -> None:
         if self._bar_panel:
             self._bar_panel.enter_calibrate()
@@ -349,7 +352,7 @@ class EnergyBarPlugin(FusePlugin):
         self.setup_state_lbl = tk.Label(
             self.setup_dialog, text="CALIBRATE",
             bg="#0a0a0a", fg="#ffaa00",
-            font=("Montserrat", 11, "bold"),
+            font=("Noto Sans", 11, "bold"),
             padx=12, pady=6,
         )
         self.setup_state_lbl.pack()
@@ -359,7 +362,7 @@ class EnergyBarPlugin(FusePlugin):
                   "LMB-drag bar to move   RMB on bar = toggle center\n"
                   "Ctrl+L = lock   Ctrl+P = quit"),
             bg="#0a0a0a", fg="#888",
-            font=("Montserrat", 9), justify=tk.LEFT, padx=12, pady=6,
+            font=("Noto Sans", 9), justify=tk.LEFT, padx=12, pady=6,
         )
         hint.pack()
         self.setup_dialog.protocol("WM_DELETE_WINDOW", self.ctx.host.quit)

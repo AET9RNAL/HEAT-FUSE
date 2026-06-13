@@ -20,27 +20,18 @@ from overlay.heat.plugins.heat_ailos_torc.ocr.range_ocr import reset_ocr_filter
 
 
 def _rf_font(size=14):
-    """Get rangefinder font."""
-    import os
-    _candidates = [
-        "Montserrat-VariableFont_wght.ttf",
-        os.path.join(os.environ.get("LOCALAPPDATA", ""),
-                     "Microsoft", "Windows", "Fonts",
-                     "Montserrat-VariableFont_wght.ttf"),
-        os.path.join(os.environ.get("WINDIR", "C:\\Windows"),
-                     "Fonts", "Montserrat-VariableFont_wght.ttf"),
-    ]
-    for path in _candidates:
+    """Get rangefinder font from the bundled plugin assets."""
+    from overlay.heat.plugins.heat_ailos_torc import ASSETS_DIR as _AILOS_ASSETS_DIR
+    path = _AILOS_ASSETS_DIR / "Montserrat-VariableFont_wght.ttf"
+    try:
+        font = ImageFont.truetype(str(path), size)
         try:
-            font = ImageFont.truetype(path, size)
-            try:
-                font.set_variation_by_axes([600])  # Semi Bold
-            except Exception:
-                pass
-            return font
+            font.set_variation_by_axes([600])  # Semi Bold
         except Exception:
-            continue
-    return ImageFont.load_default()
+            pass
+        return font
+    except Exception:
+        return ImageFont.load_default()
 
 
 class RangefinderUiMixin:

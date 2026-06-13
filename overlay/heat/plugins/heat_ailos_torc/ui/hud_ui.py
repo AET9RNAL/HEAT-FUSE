@@ -37,28 +37,18 @@ _HUD_FONT = None
 _HUD_FONT_SMALL = None
 
 def _get_hud_font(size=16):
-    """Get a PIL TrueType font, falling back to default."""
-    import os
-    # Variable font — request Bold weight via variation axis
-    _candidates = [
-        "Montserrat-VariableFont_wght.ttf",
-        os.path.join(os.environ.get("LOCALAPPDATA", ""),
-                     "Microsoft", "Windows", "Fonts",
-                     "Montserrat-VariableFont_wght.ttf"),
-        os.path.join(os.environ.get("WINDIR", "C:\\Windows"),
-                     "Fonts", "Montserrat-VariableFont_wght.ttf"),
-    ]
-    for path in _candidates:
+    """Get a PIL TrueType font from the bundled plugin assets."""
+    from overlay.heat.plugins.heat_ailos_torc import ASSETS_DIR as _AILOS_ASSETS_DIR
+    path = _AILOS_ASSETS_DIR / "Montserrat-VariableFont_wght.ttf"
+    try:
+        font = ImageFont.truetype(str(path), size)
         try:
-            font = ImageFont.truetype(path, size)
-            try:
-                font.set_variation_by_axes([600])  # 600 = Semi Bold weight
-            except Exception:
-                pass
-            return font
+            font.set_variation_by_axes([600])  # Semi Bold weight
         except Exception:
-            continue
-    return ImageFont.load_default()
+            pass
+        return font
+    except Exception:
+        return ImageFont.load_default()
 
 
 def _get_hud_fonts():
