@@ -1,5 +1,5 @@
 {
-  "default": "m3e1",
+  "default": "amx_10rc",
   "profiles": {
     "amx_10rc": {
       "label": "AMX-10RC (HOT-2 SACLOS)",
@@ -9,11 +9,11 @@
       "biases": "data/ml/profiles/amx_10rc/biases.json"
     },
     "m3e1": {
-      "label": "M3E1 (TOW-2 SACLOS)",
+      "label": "M3E1 (TOW-2A)",
       "vehicle_label": "M3E1",
-      "dataset": "data/ml/profiles/m3e1/dataset.json",
+      "dataset":      "data/ml/profiles/m3e1/dataset.json",
       "attn_weights": "data/ml/profiles/m3e1/attn_weights.json",
-      "biases": "data/ml/profiles/m3e1/biases.json"
+      "biases":       "data/ml/profiles/m3e1/biases.json"
     }
   }
 }
