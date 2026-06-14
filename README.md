@@ -38,7 +38,7 @@ FUSE provides:
 
 - **Per-pixel-alpha HUD overlays** via Win32 `LayeredWindow` (`CreateWindowExW` + `UpdateLayeredWindow`). No chroma-key artifacts, no grey borders, no drop shadows. Each pixel carries its own alpha channel.
 - **In-game memory reading** via pointer chains (`ctypes` + `kernel32`, zero external dependencies for the core runtime).
-- **Plugin-based architecture** -FUSE discovers, resolves dependencies, calibrates, and manages overlays sequentially. Plugins never create global state.
+- **Plugin-based architecture** - FUSE discovers, resolves dependencies, calibrates, and manages overlays sequentially. Plugins never create global state.
 
 ### Entry Points
 
@@ -51,7 +51,7 @@ FUSE provides:
 
 ## Getting Started
 
-1. Install [Miniconda](https://docs.anaconda.com/miniconda/) and run `run.bat` -it creates the `heat_saclos` env, installs deps, and shows a menu.
+1. Install [Miniconda](https://docs.anaconda.com/miniconda/) and run `run.bat` - it creates the `heat_saclos` env, installs deps, and shows a menu.
 2. Install [Tesseract OCR](https://github.com/tesseract-ocr/tesseract) if using OCR features.
 
 ---
@@ -121,7 +121,7 @@ class MyPlugin(FusePlugin):
 
 #### Class Attributes
 
-- `requires_calibration` -`True` if the plugin has interactive calibration UI. The host waits for `Ctrl+L` before starting the next plugin.
+- `requires_calibration` - `True` if the plugin has interactive calibration UI. The host waits for `Ctrl+L` before starting the next plugin.
 
 ---
 
@@ -163,18 +163,18 @@ Each plugin directory must contain a `manifest.json`:
 
 FUSE scans plugins from four sources. Earlier sources win on `plugin_id` collision:
 
-1. `fuse/plugins/` -built-in core plugins shipped with the framework.
-2. `<repo>/plugins/` -user drop-in directory (zero configuration).
+1. `fuse/plugins/` - built-in core plugins shipped with the framework.
+2. `<repo>/plugins/` - user drop-in directory (zero configuration).
 3. `FUSE_PLUGIN_DIRS` environment variable (`:` or `;` separated list of absolute paths).
 4. `extra_plugin_dirs` argument passed to `run()` / `PluginHost.load_plugins()`.
 
 After discovery, the resolver performs the following steps:
 
-1. **Enable/disable filtering** -Plugins in `fuse_host.json`'s `disabled_plugins` list are excluded. If `enabled_plugins` is non-null, only those IDs are kept.
-2. **Compatibility check** -`min_host_version` is compared against `HOST_VERSION` (`"1.0"` in `fuse/host.py`). Incompatible plugins are skipped.
-3. **Dependency filtering** -Required dependencies that are missing or fail version constraints cause the dependent plugin to be dropped.
-4. **Topological sort** -Required dependencies form hard edges; optional dependencies form soft edges. The sort guarantees providers are instantiated before consumers.
-5. **Cycle detection** -Plugins involved in dependency cycles are dropped with an error log.
+1. **Enable/disable filtering** - Plugins in `fuse_host.json`'s `disabled_plugins` list are excluded. If `enabled_plugins` is non-null, only those IDs are kept.
+2. **Compatibility check** - `min_host_version` is compared against `HOST_VERSION` (`"1.0"` in `fuse/host.py`). Incompatible plugins are skipped.
+3. **Dependency filtering** - Required dependencies that are missing or fail version constraints cause the dependent plugin to be dropped.
+4. **Topological sort** - Required dependencies form hard edges; optional dependencies form soft edges. The sort guarantees providers are instantiated before consumers.
+5. **Cycle detection** - Plugins involved in dependency cycles are dropped with an error log.
 
 ---
 
@@ -202,17 +202,17 @@ class FuseContext:
 
 **Fields**
 
-- `tk_root` -The host's hidden Tk root. Use for scheduling `root.after()` calls from worker threads.
-- `config` -`PluginConfig` instance scoped to this plugin. See PluginConfig API below.
-- `hotkeys` -Shared `HotkeyRegistry`. Plugins register combos here; the host's pynput listener fans out presses.
-- `assets_dir` -`Path(plugin_dir / "assets")`. Use for loading plugin-specific images, fonts, etc.
-- `host` -Reference to the running `PluginHost`. Use sparingly; prefer events/services for cross-plugin communication.
-- `state` -Current host state string. Updated when the global calibrate/locked mode changes.
-- `events` -`EventBus` for pub/sub.
-- `services` -`ServiceRegistry` for inter-plugin APIs.
-- `manifest_hotkeys` -Dict loaded from the plugin's `manifest.json` `"hotkeys"` section.
-- `extras` -Empty dict reserved for plugin-private runtime state. The host never reads or writes this.
-- `logger` -A `loguru` logger bound with `plugin=<plugin_id>`. Log lines are tagged per-plugin in session files.
+- `tk_root` - The host's hidden Tk root. Use for scheduling `root.after()` calls from worker threads.
+- `config` - `PluginConfig` instance scoped to this plugin. See PluginConfig API below.
+- `hotkeys` - Shared `HotkeyRegistry`. Plugins register combos here; the host's pynput listener fans out presses.
+- `assets_dir` - `Path(plugin_dir / "assets")`. Use for loading plugin-specific images, fonts, etc.
+- `host` - Reference to the running `PluginHost`. Use sparingly; prefer events/services for cross-plugin communication.
+- `state` - Current host state string. Updated when the global calibrate/locked mode changes.
+- `events` - `EventBus` for pub/sub.
+- `services` - `ServiceRegistry` for inter-plugin APIs.
+- `manifest_hotkeys` - Dict loaded from the plugin's `manifest.json` `"hotkeys"` section.
+- `extras` - Empty dict reserved for plugin-private runtime state. The host never reads or writes this.
+- `logger` - A `loguru` logger bound with `plugin=<plugin_id>`. Log lines are tagged per-plugin in session files.
 
 **`ctx.hotkey_for(name, fallback="")`**
 
@@ -355,7 +355,7 @@ Entry types: `bool`, `int`, `float`, `str`, `choice`, `position`.
 
 #### GameMemory
 
-Typed memory reader for Windows processes via pointer chains. Uses `ctypes` + `kernel32` -no external dependencies.
+Typed memory reader for Windows processes via pointer chains. Uses `ctypes` + `kernel32` - no external dependencies.
 
 ```python
 from fuse.utils.game_memory import GameMemory
@@ -383,10 +383,10 @@ Supported dtypes: `uint8`, `int8`, `uint16`, `int16`, `uint32`, `int32`, `uint64
 
 Lower-level primitives in `fuse.utils.memory_reader`:
 
-- `find_pid_by_name(name)` -first matching PID.
-- `ProcessHandle(pid, write=False)` -context-managed `OpenProcess` handle.
-- `resolve_pointer_chain(proc, base, offsets)` -follows offsets, returns final address.
-- `get_module_base(pid, name)` -module base address.
+- `find_pid_by_name(name)` - first matching PID.
+- `ProcessHandle(pid, write=False)` - context-managed `OpenProcess` handle.
+- `resolve_pointer_chain(proc, base, offsets)` - follows offsets, returns final address.
+- `get_module_base(pid, name)` - module base address.
 
 ---
 
@@ -483,8 +483,8 @@ if TESSERACT_OK:
 
 **Filters**
 
-- `TemporalOCRFilter(window=3, tolerance=0.10)` -sliding-window confirmation. Requires >=2 agreeing reads within tolerance.
-- `IntHysteresisFilter(jump_tol=12)` -hysteresis for monotonic-ish integer streams. Outliers must appear twice consecutively before adoption.
+- `TemporalOCRFilter(window=3, tolerance=0.10)` - sliding-window confirmation. Requires >=2 agreeing reads within tolerance.
+- `IntHysteresisFilter(jump_tol=12)` - hysteresis for monotonic-ish integer streams. Outliers must appear twice consecutively before adoption.
 
 ---
 
@@ -556,9 +556,9 @@ injected_dx, injected_dy, elapsed = replay_full_scenario(
    - If `setup()` raises an exception, the plugin is marked `ERROR` and the queue advances without waiting.
 
 3. **Global Hotkeys**
-   - `Ctrl+L` -toggle calibrate/locked for the active plugin(s).
-   - `Ctrl+P` -quit. Sets `_quitting = True` and destroys the Tk root.
-   - `Ctrl+M` -open/close the Plugin Manager window.
+   - `Ctrl+L` - toggle calibrate/locked for the active plugin(s).
+   - `Ctrl+P` - quit. Sets `_quitting = True` and destroys the Tk root.
+   - `Ctrl+M` - open/close the Plugin Manager window.
 
 4. **Idle Loop**
    - `tick(dt)` is called on every active plugin every ~50 ms.
@@ -575,9 +575,9 @@ injected_dx, injected_dy, elapsed = replay_full_scenario(
 
 Press `Ctrl+M` to open a dark `tk.Toplevel` with three tabs. The window uses a custom dark theme (`clam` ttk theme with `#1a1a1a` background).
 
-- **Plugins** -scrollable list of every discovered plugin with a coloured state dot, version, author, and an Enable/Disable toggle. Toggle takes effect at runtime without restart: active plugins are torn down (`teardown()` + removed from the tick loop); disabled ones are re-instantiated via `_instantiate()` and entered into the current host state.
-- **Settings** -left panel lists plugins that called `ctx.config.schema([...])`. Right panel renders per-category forms with appropriate widgets (checkbox for `bool`, validated Entry for `int`/`float`, Combobox for `choice`, read-only label for `position`). Changes are tracked in a pending buffer; unsaved edits block tab switching with a flash warning. Save writes through `PluginConfig.set()`; Discard rebuilds the form.
-- **Keybindings** -all registered bindings with action label and current combo. Click **Rebind**, press a new key combo in the focused window, and the binding updates live. The pynput listener is suspended (`_capturing_rebind = True`) during capture so host hotkeys (`Ctrl+L`, `Ctrl+P`) do not fire.
+- **Plugins** - scrollable list of every discovered plugin with a coloured state dot, version, author, and an Enable/Disable toggle. Toggle takes effect at runtime without restart: active plugins are torn down (`teardown()` + removed from the tick loop); disabled ones are re-instantiated via `_instantiate()` and entered into the current host state.
+- **Settings** - left panel lists plugins that called `ctx.config.schema([...])`. Right panel renders per-category forms with appropriate widgets (checkbox for `bool`, validated Entry for `int`/`float`, Combobox for `choice`, read-only label for `position`). Changes are tracked in a pending buffer; unsaved edits block tab switching with a flash warning. Save writes through `PluginConfig.set()`; Discard rebuilds the form.
+- **Keybindings** - all registered bindings with action label and current combo. Click **Rebind**, press a new key combo in the focused window, and the binding updates live. The pynput listener is suspended (`_capturing_rebind = True`) during capture so host hotkeys (`Ctrl+L`, `Ctrl+P`) do not fire.
 
 ---
 
@@ -617,7 +617,7 @@ Memory-driven (or OCR-driven) energy / progress scale HUD. Composites a backgrou
 
 Assets: `bg_progress.png`, `progress.png` (auto-scaled to 40 % screen width).
 
-Hotkeys: `T` -toggle OCR region setup (calibrate only). `RMB` on bar -toggle center/custom position.
+Hotkeys: `T` - toggle OCR region setup (calibrate only). `RMB` on bar - toggle center/custom position.
 
 Requires calibration for positioning.
 
@@ -631,7 +631,7 @@ HEAT_SACLOS/
 │   ├── api.py                     # FusePlugin, FuseContext, HotkeyRegistry
 │   ├── discovery.py               # Plugin scanning & manifest parsing
 │   ├── resolver.py                # Dependency resolution & topological sort
-│   ├── host.py                    # PluginHost -lifecycle, listeners, idle loop
+│   ├── host.py                    # PluginHost - lifecycle, listeners, idle loop
 │   ├── events.py                  # EventBus
 │   ├── services.py                # ServiceRegistry
 │   ├── runner.py                  # CLI entry point
