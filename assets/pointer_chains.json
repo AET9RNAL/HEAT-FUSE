@@ -7,7 +7,7 @@
     "module": "cohtml.WindowsDesktop.dll",
     "offsets": ["0x64D218", "0x10", "0x48", "0x80", "0x20", "0xC8", "0x60", "0x258"],
     "dtype": "uint32",
-    "readonly": false
+    "readonly": true
   },
 
   "multiplayer_vehicle_health": {
@@ -15,7 +15,7 @@
     "module": "cohtml.WindowsDesktop.dll",
     "offsets": ["0x64D218", "0x10", "0x48", "0x80", "0x20", "0xC8", "0x1D0", "0x48"],
     "dtype": "uint32",
-    "readonly": false
+    "readonly": true
   },
 
   "multiplayer_vehicle_boost": {
@@ -23,7 +23,7 @@
     "module": "cohtml.WindowsDesktop.dll",
     "offsets": ["0x64D218", "0x10", "0x48", "0x80", "0x20", "0xC8", "0x68", "0x260"],
     "dtype": "uint32",
-    "readonly": false
+    "readonly": true
   },
 
   "multiplayer_hud_score": {
@@ -55,7 +55,7 @@
     "module": "cohtml.WindowsDesktop.dll",
     "offsets": ["0x64D218", "0x10", "0x48", "0x80", "0x08", "0xC8", "0x10", "0x7C0"],
     "dtype": "uint32",
-    "readonly": false
+    "readonly": true
   },
 
   "training_vehicle_rangefinder": {
