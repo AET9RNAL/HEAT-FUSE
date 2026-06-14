@@ -4,22 +4,29 @@
 
   "energy_training_range": {
     "module": "cohtml.WindowsDesktop.dll",
-    "offsets": [6607384, 16, 72, 128, 8, 200, 16, 1984],
+    "offsets": ["0x64D218", "0x10", "0x48", "0x80", "0x08", "0xC8", "0x10", "0x7C0"],
     "dtype": "uint32",
     "readonly": false
   },
 
   "energy_multiplayer": {
     "module": "cohtml.WindowsDesktop.dll",
-    "offsets": [6607384, 16, 72, 128, 32, 200, 96, 600],
+    "offsets": ["0x64D218", "0x10", "0x48", "0x80", "0x20", "0xC8", "0x60", "0x258"],
     "dtype": "uint32",
     "readonly": false
   },
 
   "health_multiplayer": {
     "module": "cohtml.WindowsDesktop.dll",
-    "offsets": [6607384, 16, 72, 128, 32, 200, 464, 72],
-    "dtype": "float",
+    "offsets": ["0x64D218", "0x10", "0x48", "0x80", "0x20", "0xC8", "0x1D0", "0x48"],
+    "dtype": "uint32",
+    "readonly": false
+  },
+
+  "boost_multiplayer": {
+    "module": "cohtml.WindowsDesktop.dll",
+    "offsets": ["0x64D218", "0x10", "0x48", "0x80", "0x20", "0xC8", "0x68", "0x260"],
+    "dtype": "uint32",
     "readonly": false
   },
 
