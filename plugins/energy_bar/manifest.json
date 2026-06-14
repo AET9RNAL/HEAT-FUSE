@@ -11,6 +11,6 @@
     "bar_custom_pos": null,
     "bg_image": "bg_progress.png",
     "fg_image": "progress.png",
-    "memory_chain": "energy_multiplayer"
+    "memory_chain": "multiplayer_energy"
   }
 }

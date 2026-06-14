@@ -2,43 +2,64 @@
   "_comment": "Pointer chains for HEAT memory mod API. Each entry maps a friendly name to a module + offsets.",
   "_howto": "To populate: find base pointer in CE, copy module+offset chain here, then restart overlay.",
 
-  "energy_training_range": {
-    "module": "cohtml.WindowsDesktop.dll",
-    "offsets": ["0x64D218", "0x10", "0x48", "0x80", "0x08", "0xC8", "0x10", "0x7C0"],
-    "dtype": "uint32",
-    "readonly": false
-  },
-
-  "energy_multiplayer": {
+  "multiplayer_vehicle_energy": {
+    "_note": "Returns vehicle energy",
     "module": "cohtml.WindowsDesktop.dll",
     "offsets": ["0x64D218", "0x10", "0x48", "0x80", "0x20", "0xC8", "0x60", "0x258"],
     "dtype": "uint32",
     "readonly": false
   },
 
-  "health_multiplayer": {
+  "multiplayer_vehicle_health": {
+    "_note": "Returns vehicle health",
     "module": "cohtml.WindowsDesktop.dll",
     "offsets": ["0x64D218", "0x10", "0x48", "0x80", "0x20", "0xC8", "0x1D0", "0x48"],
     "dtype": "uint32",
     "readonly": false
   },
 
-  "boost_multiplayer": {
+  "multiplayer_vehicle_boost": {
+    "_note": "Returns vehicle engine boost value",
     "module": "cohtml.WindowsDesktop.dll",
     "offsets": ["0x64D218", "0x10", "0x48", "0x80", "0x20", "0xC8", "0x68", "0x260"],
     "dtype": "uint32",
     "readonly": false
   },
 
-  "zoom_unified_multiplayer": {
+  "multiplayer_hud_score": {
+    "_note": "Returns the scoreboard score, not agent skill",
+    "module": "cohtml.WindowsDesktop.dll",
+    "offsets": ["0x64D218", "0x10", "0x48", "0x80", "0x20", "0xC8", "0x148", "0x268"],
+    "dtype": "uint32",
+    "readonly": true
+  },
+
+  "multiplayer_hud_rangefinder": {
+    "_note": "Returns the rangefinder displayed in multiplayer HUD when aiming at a target",
+    "module": "cohtml.WindowsDesktop.dll",
+    "offsets": ["0x64D218", "0x10", "0x48", "0x80", "0x20", "0xC8", "0x190", "0xA8"],
+    "dtype": "uint32",
+    "readonly": true
+  },
+
+  "multiplayer_camera_zoom": {
+    "_note": "Returns camera zoom level for both 3rd and first person views. values between 0-4 are 3rd person values, it then wraps to 0 when transitioning to first person zoom, value then increses depending on hom many zoom stages the vehicle has",
     "module": "plugin_sound.dll",
     "offsets": ["0x43B508", "0x10", "0x0", "0x10", "0x70", "0x308", "0xD4"],
     "dtype": "uint32",
     "readonly": true
   },
 
-  "rangefinder": {
-    "_note": "Rangefinder distance to currently aimed-at enemy (meters, integer). Static cohtml.WindowsDesktop.dll chain.",
+  "training_vehicle_energy": {
+    "_note": "Returns vehicle energy value in training range",
+    "module": "cohtml.WindowsDesktop.dll",
+    "offsets": ["0x64D218", "0x10", "0x48", "0x80", "0x08", "0xC8", "0x10", "0x7C0"],
+    "dtype": "uint32",
+    "readonly": false
+  },
+
+  "training_vehicle_rangefinder": {
+    "_note": "Returns rangefinder value in training range",
     "module": "cohtml.WindowsDesktop.dll",
     "offsets": ["0x64D218", "0x10", "0x48", "0x80", "0x08", "0xC8", "0x188", "0x110"],
     "dtype": "uint32",

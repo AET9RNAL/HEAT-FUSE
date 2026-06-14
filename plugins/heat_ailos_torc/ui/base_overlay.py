@@ -837,7 +837,7 @@ class BaseSACLOSOverlay(OCRUiMixin, RangefinderUiMixin, HudUiMixin):
         if USE_MEMORY_API:
             mem = self._game_memory
             if mem is not None and getattr(mem, "connected", False):
-                v = mem.read("rangefinder")
+                v = mem.read("multiplayer_rangefinder")
                 if v is not None:
                     return float(v)
         return ocr_capture_range(self.ocr_region)
