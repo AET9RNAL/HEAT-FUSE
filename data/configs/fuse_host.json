@@ -1,7 +1,7 @@
 {
   "enabled_plugins": null,
   "disabled_plugins": [
-    "heat_ailos_torc"
+    "energy_bar"
   ],
   "extra_plugin_dirs": []
 }
