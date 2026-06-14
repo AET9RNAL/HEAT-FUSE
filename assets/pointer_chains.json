@@ -30,6 +30,13 @@
     "readonly": false
   },
 
+  "zoom_unified_multiplayer": {
+    "module": "plugin_sound.dll",
+    "offsets": ["0x43B508", "0x10", "0x0", "0x10", "0x70", "0x308", "0xD4"],
+    "dtype": "uint32",
+    "readonly": true
+  },
+
   "rangefinder": {
     "_note": "Rangefinder distance to currently aimed-at enemy (meters, integer). Static cohtml.WindowsDesktop.dll chain.",
     "module": "cohtml.WindowsDesktop.dll",
