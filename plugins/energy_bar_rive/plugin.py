@@ -1,8 +1,9 @@
 """Energy bar overlay driven by Rive animation (energyBar.riv).
 
 ViewModel: energyBarVM
-  energyValue  — float 0.0-1.0
+  energyValue   — float 0.0-1.0
   colorProperty — color (ARGB int)
+  strokeWeight  — float, default 1.5
 Timeline: energyEngine
 """
 from __future__ import annotations
@@ -18,14 +19,21 @@ from fuse.ui.config_schema import ConfigCategory, ConfigEntry
 
 _RIV_PATH = Path(__file__).resolve().parents[2] / "assets" / "energyBar.riv"
 
+_DEFAULT_COLOR_HIGH = "84FFB1"
+_DEFAULT_COLOR_MID  = "FF9800"
+_DEFAULT_COLOR_LOW  = "FF3935"
 
-def _energy_color(pct: int) -> int:
-    """Map energy percentage to ARGB color."""
-    if pct > 60:
-        return 0x84ffb1  # green
-    if pct > 30:
-        return 0xff9800  # orange
-    return 0xff3935      # red
+
+def _hex_to_argb(hex_str: str, fallback: int) -> int:
+    try:
+        s = str(hex_str).strip().lstrip("#")
+        if len(s) == 6:
+            return 0xFF000000 | int(s, 16)
+        if len(s) == 8:
+            return int(s, 16)
+    except (ValueError, AttributeError):
+        pass
+    return fallback
 
 
 class EnergyBarRivePlugin(FusePlugin):
@@ -38,6 +46,26 @@ class EnergyBarRivePlugin(FusePlugin):
         self._mem = None
         self._anim = None
         self._panel: Optional[FusePanel] = None
+        self._color_high    = 0xFF84FFB1
+        self._color_mid     = 0xFFFF9800
+        self._color_low     = 0xFFFF3935
+        self._stroke_weight = 1.5
+
+    def _energy_color(self, pct: int) -> int:
+        if pct > 60:
+            return self._color_high
+        if pct > 30:
+            return self._color_mid
+        return self._color_low
+
+    def _apply_stroke(self, raw: str) -> None:
+        try:
+            w = float(raw)
+        except (TypeError, ValueError):
+            return
+        self._stroke_weight = w
+        if self._anim:
+            self._anim.vm_set_number("strokeWeight", w)
 
     def setup(self, ctx: FuseContext) -> None:
         self.ctx = ctx
@@ -50,6 +78,10 @@ class EnergyBarRivePlugin(FusePlugin):
             memory_chain="multiplayer_vehicle_energy",
             anim_width=300,
             anim_height=300,
+            color_high=_DEFAULT_COLOR_HIGH,
+            color_mid=_DEFAULT_COLOR_MID,
+            color_low=_DEFAULT_COLOR_LOW,
+            stroke_weight="1.5",
         ).load()
 
         ctx.config.schema([
@@ -58,14 +90,34 @@ class EnergyBarRivePlugin(FusePlugin):
                             choices=["multiplayer_vehicle_energy", "training_vehicle_energy"],
                             description="Which pointer chain to read energy from"),
             ]),
+            ConfigCategory("Colors", [
+                ConfigEntry("color_high", "High Energy >60% (hex RGB)",
+                            type="str", description="e.g. 84FFB1"),
+                ConfigEntry("color_mid",  "Mid Energy >30% (hex RGB)",
+                            type="str", description="e.g. FF9800"),
+                ConfigEntry("color_low",  "Low Energy ≤30% (hex RGB)",
+                            type="str", description="e.g. FF3935"),
+            ]),
+            ConfigCategory("Style", [
+                ConfigEntry("stroke_weight", "Stroke Weight",
+                            type="str", description="e.g. 1.5"),
+            ]),
             ConfigCategory("Animation", [
-                ConfigEntry("anim_width", "Render Width", type="int", min=64, max=1024),
+                ConfigEntry("anim_width",  "Render Width",  type="int", min=64, max=1024),
                 ConfigEntry("anim_height", "Render Height", type="int", min=64, max=1024),
             ]),
             ConfigCategory("Position", [
                 ConfigEntry("bar_custom_pos", "Bar Position", type="position"),
             ]),
         ])
+
+        self._color_high    = _hex_to_argb(ctx.config.get("color_high"), 0xFF84FFB1)
+        self._color_mid     = _hex_to_argb(ctx.config.get("color_mid"),  0xFFFF9800)
+        self._color_low     = _hex_to_argb(ctx.config.get("color_low"),  0xFFFF3935)
+        try:
+            self._stroke_weight = float(ctx.config.get("stroke_weight") or 1.5)
+        except (TypeError, ValueError):
+            self._stroke_weight = 1.5
 
         w = ctx.config.get("anim_width")
         h = ctx.config.get("anim_height")
@@ -80,9 +132,11 @@ class EnergyBarRivePlugin(FusePlugin):
         if not self._anim.load(_RIV_PATH):
             logger.error(f"energy_bar_rive: failed to load {_RIV_PATH}")
         else:
+            self._anim.set_state_machine("energyEngine")
             self._anim.vm_bind("energyBarVM")
             self._anim.vm_set_number("energyValue", 0.5)
-            self._anim.vm_set_color("colorProperty", _energy_color(50))
+            self._anim.vm_set_color("colorProperty", self._energy_color(50))
+            self._anim.vm_set_number("strokeWeight", self._stroke_weight)
             self._anim.advance(0)
 
         sw = ctx.tk_root.winfo_screenwidth()
@@ -97,6 +151,14 @@ class EnergyBarRivePlugin(FusePlugin):
         self._panel.create(self._anim.get_image())
         self._panel.show()
 
+        ctx.config.watch("color_high",
+            lambda v: setattr(self, "_color_high", _hex_to_argb(v, 0xFF84FFB1)))
+        ctx.config.watch("color_mid",
+            lambda v: setattr(self, "_color_mid",  _hex_to_argb(v, 0xFFFF9800)))
+        ctx.config.watch("color_low",
+            lambda v: setattr(self, "_color_low",  _hex_to_argb(v, 0xFFFF3935)))
+        ctx.config.watch("stroke_weight", self._apply_stroke)
+
     def enter_calibrate(self) -> None:
         if self._panel:
             self._panel.enter_calibrate()
@@ -110,6 +172,8 @@ class EnergyBarRivePlugin(FusePlugin):
             self._panel.enter_locked()
 
     def tick(self, dt: float) -> None:
+        if self.ctx:
+            self.ctx.config.check_reload()
         if not (self.ctx and self.ctx.state == "locked" and self._anim and self._panel):
             return
 
@@ -120,7 +184,8 @@ class EnergyBarRivePlugin(FusePlugin):
                 pct = max(0, min(100, int(val)))
 
         self._anim.vm_set_number("energyValue", pct / 100.0)
-        self._anim.vm_set_color("colorProperty", _energy_color(pct))
+        self._anim.vm_set_color("colorProperty", self._energy_color(pct))
+        self._anim.vm_set_number("strokeWeight", self._stroke_weight)
         self._anim.advance(dt)
         self._panel.update(self._anim.get_image())
 

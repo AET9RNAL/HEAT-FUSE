@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
@@ -32,6 +33,8 @@ class PluginConfig:
         self._loaded = False
         self._log = logger.bind(plugin=name)
         self._schema = None  # list[ConfigCategory] registered via schema()
+        self._mtime: float = 0.0
+        self._next_mtime_check: float = 0.0
 
     # ------------------------------------------------------------------
     # Defaults
@@ -77,6 +80,10 @@ class PluginConfig:
         # defaults are the base; on-disk values override them
         self._data = {**self._defaults, **on_disk}
         self._loaded = True
+        try:
+            self._mtime = self._path.stat().st_mtime if self._path.exists() else 0.0
+        except OSError:
+            self._mtime = 0.0
         if from_disk:
             self._log.debug(
                 f"Config loaded from {self._path} ({len(on_disk)} disk key(s))"
@@ -106,6 +113,26 @@ class PluginConfig:
         self._log.debug(f"Config reloaded: {len(changed)} key(s) changed ({changed})")
         for key in changed:
             self._notify(key, self._data[key])
+
+    def check_reload(self) -> bool:
+        """Poll file mtime (at most 1×/sec); reload + fire watchers if changed on disk.
+
+        Call from plugin tick() to pick up direct JSON edits without a restart.
+        Returns True if the file was reloaded.
+        """
+        now = time.monotonic()
+        if now < self._next_mtime_check:
+            return False
+        self._next_mtime_check = now + 1.0
+        try:
+            mtime = self._path.stat().st_mtime
+        except OSError:
+            return False
+        if mtime == self._mtime:
+            return False
+        self._mtime = mtime
+        self.reload()
+        return True
 
     # ------------------------------------------------------------------
     # Read / write

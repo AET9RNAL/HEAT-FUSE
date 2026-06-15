@@ -84,7 +84,7 @@ RiveHandle rive_create(int width, int height) {
     c->width  = width;
     c->height = height;
 
-    /* Create WARP D3D11 device (software rasterizer — no GPU required) */
+    /* Create D3D11 device — hardware GPU preferred, WARP as fallback */
     D3D_FEATURE_LEVEL fl;
     UINT flags = 0;
 #ifdef _DEBUG
@@ -92,13 +92,24 @@ RiveHandle rive_create(int width, int height) {
 #endif
     HRESULT hr = D3D11CreateDevice(
         nullptr,
-        D3D_DRIVER_TYPE_WARP,
+        D3D_DRIVER_TYPE_HARDWARE,
         nullptr, flags,
         nullptr, 0,
         D3D11_SDK_VERSION,
         c->device.GetAddressOf(), &fl,
         c->ctx11.GetAddressOf()
     );
+    if (FAILED(hr)) {
+        hr = D3D11CreateDevice(
+            nullptr,
+            D3D_DRIVER_TYPE_WARP,
+            nullptr, flags,
+            nullptr, 0,
+            D3D11_SDK_VERSION,
+            c->device.GetAddressOf(), &fl,
+            c->ctx11.GetAddressOf()
+        );
+    }
     if (FAILED(hr)) { delete c; return nullptr; }
 
     /* Render target texture (GPU-writable, RGBA8) */
@@ -310,9 +321,8 @@ void rive_advance(RiveHandle h, float dt_seconds) {
     if (!c->artboard) return;
     if (c->sm) {
         c->sm->advance(dt_seconds);
-    } else {
-        c->artboard->advance(dt_seconds);
     }
+    c->artboard->advance(dt_seconds);
 }
 
 void rive_render(RiveHandle h, uint8_t* out_rgba) {

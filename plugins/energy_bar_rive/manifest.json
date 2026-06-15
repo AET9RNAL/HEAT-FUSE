@@ -9,7 +9,7 @@
   "default_config": {
     "bar_custom_pos": null,
     "memory_chain": "multiplayer_vehicle_energy",
-    "anim_width": 300,
-    "anim_height": 300
+    "anim_width": 600,
+    "anim_height": 600
   }
 }
