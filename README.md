@@ -41,8 +41,8 @@ Any modifications to FUSE that would allow reading, exposing, or exploiting clie
 
 FUSE provides:
 
-- **Per-pixel-alpha HUD overlays** via Win32 `LayeredWindow` (`CreateWindowExW` + `UpdateLayeredWindow`). No chroma-key artifacts, no grey borders, no drop shadows. Each pixel carries its own alpha channel.
-- **In-game memory reading** via pointer chains (`ctypes` + `kernel32`, zero external dependencies for the core runtime).
+- **Per-pixel-alpha HUD overlays** via Win32 `LayeredWindow` (`CreateWindowExW` + `UpdateLayeredWindow`). Each pixel carries its own alpha channel.
+- **In-game memory reading** via pointer chains (`ctypes` + `kernel32`).
 - **Plugin-based architecture** - FUSE discovers, resolves dependencies, calibrates, and manages overlays sequentially. Plugins never create global state.
 
 ### Entry Points
@@ -51,13 +51,13 @@ FUSE provides:
 |--------|---------|
 | `run.bat` | Conda env setup + interactive launcher menu |
 | `run_heat_overlay.py` | Boots FUSE; `plugins/` at repo root is auto-scanned |
-| `rebuild_dll.ps1` | Rebuild `native/bin/rive_plugin.dll` (see [BUILD.md](BUILD.md)) |
+| `rebuild_dll.ps1` | Rebuild `native/bin/rive_plugin.dll`|
 
 ---
 
 ## Getting Started
 
-1. Install [Miniconda](https://docs.anaconda.com/miniconda/) and run `run.bat` - it creates the `heat_saclos` env, installs deps, and shows a menu.
+1. Install [Miniconda](https://docs.anaconda.com/miniconda/) and run `run.bat` - it creates the `heat_fuse` env, installs deps, and shows a menu.
 2. Install [Tesseract OCR](https://github.com/tesseract-ocr/tesseract) if using OCR features.
 
 
@@ -401,7 +401,7 @@ Lower-level primitives in `fuse.utils.memory_reader`:
 
 #### LayeredWindow
 
-Win32 per-pixel-alpha overlay window via `CreateWindowExW` + `UpdateLayeredWindow`. No grey borders, no drop shadows, no chroma-key. Works alongside the tkinter mainloop (tkinter's Tcl event loop dispatches Win32 messages on the same thread, so no separate message pump is required).
+Win32 per-pixel-alpha overlay window via `CreateWindowExW` + `UpdateLayeredWindow`. Works alongside the tkinter mainloop (tkinter's Tcl event loop dispatches Win32 messages on the same thread, so no separate message pump is required).
 
 Internally, each `update_image()` call:
 1. Converts the PIL RGBA image to **premultiplied BGRA** bytes (numpy vectorised multiply + channel reorder).
