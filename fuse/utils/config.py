@@ -33,6 +33,7 @@ class PluginConfig:
         self._loaded = False
         self._log = logger.bind(plugin=name)
         self._schema = None  # list[ConfigCategory] registered via schema()
+        self._constraints: Dict[str, tuple] = {}  # key -> (type, min, max)
         self._mtime: float = 0.0
         self._next_mtime_check: float = 0.0
 
@@ -55,6 +56,11 @@ class PluginConfig:
     def schema(self, categories: list) -> "PluginConfig":
         """Register a declarative UI schema (list of ConfigCategory). Fluent."""
         self._schema = categories
+        self._constraints = {}
+        for cat in categories:
+            for entry in cat.entries:
+                if entry.type in ("int", "float") and (entry.min is not None or entry.max is not None):
+                    self._constraints[entry.key] = (entry.type, entry.min, entry.max)
         return self
 
     # ------------------------------------------------------------------
@@ -151,8 +157,25 @@ class PluginConfig:
     def __contains__(self, key: str) -> bool:
         return key in self._data
 
+    def _clamp(self, key: str, value: Any) -> Any:
+        """Apply min/max constraints from schema if the key has them."""
+        constraint = self._constraints.get(key)
+        if constraint is None:
+            return value
+        typ, lo, hi = constraint
+        try:
+            v = int(value) if typ == "int" else float(value)
+            if lo is not None:
+                v = max(type(v)(lo), v)
+            if hi is not None:
+                v = min(type(v)(hi), v)
+            return v
+        except (TypeError, ValueError):
+            return value
+
     def set(self, key: str, value: Any) -> None:
         """Set one value, auto-save, notify watchers if value changed."""
+        value = self._clamp(key, value)
         old = self._data.get(key, _MISSING)
         self._data[key] = value
         self.save()
@@ -165,6 +188,7 @@ class PluginConfig:
         """Batch-set multiple values, save once, notify watchers for each changed key."""
         changed: Dict[str, Any] = {}
         for key, value in data.items():
+            value = self._clamp(key, value)
             old = self._data.get(key, _MISSING)
             self._data[key] = value
             if old is _MISSING or old != value:

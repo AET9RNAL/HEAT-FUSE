@@ -420,27 +420,49 @@ class FuseManager:
             )
             ent.pack(side="left")
 
-            def _on_numeric(event, k=entry.key, v=var, t=entry.type):
+            has_bounds = entry.min is not None or entry.max is not None
+            if has_bounds:
+                if entry.min is not None and entry.max is not None:
+                    _hint_text = f"({entry.min}–{entry.max})"
+                elif entry.min is not None:
+                    _hint_text = f"≥{entry.min}"
+                else:
+                    _hint_text = f"≤{entry.max}"
+                range_lbl = tk.Label(row, text=_hint_text, fg=FG_DIM, bg=BG, font=FONT_SMALL)
+                range_lbl.pack(side="left", padx=4)
+            else:
+                range_lbl = None
+
+            def _on_numeric(event, k=entry.key, v=var, t=entry.type,
+                            lo=entry.min, hi=entry.max, lbl=range_lbl, on_blur=False):
+                raw = v.get()
                 try:
-                    nv = int(v.get()) if t == "int" else float(v.get())
-                    if entry.min is not None:
-                        nv = max(type(nv)(entry.min), nv)
-                    if entry.max is not None:
-                        nv = min(type(nv)(entry.max), nv)
-                    self._on_field_change(plugin_name, config, k, nv)
+                    nv = int(raw) if t == "int" else float(raw)
                 except ValueError:
-                    pass  # partial input — leave pending as-is
+                    return  # partial input
+                out_of_range = (lo is not None and nv < lo) or (hi is not None and nv > hi)
+                clamped = nv
+                if lo is not None:
+                    clamped = max(type(nv)(lo), clamped)
+                if hi is not None:
+                    clamped = min(type(nv)(hi), clamped)
+                if out_of_range:
+                    ent.config(highlightbackground=RED, highlightcolor=RED, bg="#3a1a1a")
+                    if lbl is not None:
+                        lbl.config(fg=RED)
+                    if on_blur:
+                        v.set(str(clamped))
+                        ent.config(highlightbackground=BG3, highlightcolor=ACCENT, bg=BG2)
+                        if lbl is not None:
+                            lbl.config(fg=FG_DIM)
+                else:
+                    ent.config(highlightbackground=BG3, highlightcolor=ACCENT, bg=BG2)
+                    if lbl is not None:
+                        lbl.config(fg=FG_DIM)
+                self._on_field_change(plugin_name, config, k, clamped)
 
             ent.bind("<KeyRelease>", _on_numeric)
-            ent.bind("<FocusOut>",   _on_numeric)
-            if entry.min is not None or entry.max is not None:
-                if entry.min is not None and entry.max is not None:
-                    hint = f"({entry.min}–{entry.max})"
-                elif entry.min is not None:
-                    hint = f"≥{entry.min}"
-                else:
-                    hint = f"≤{entry.max}"
-                tk.Label(row, text=hint, fg=FG_DIM, bg=BG, font=FONT_SMALL).pack(side="left", padx=4)
+            ent.bind("<FocusOut>",   lambda e: _on_numeric(e, on_blur=True))
 
         elif entry.type == "position":
             display = str(val) if val else "(drag to calibrate)"

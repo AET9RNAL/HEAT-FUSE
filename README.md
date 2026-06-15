@@ -25,10 +25,15 @@ Any modifications to FUSE that would allow reading, exposing, or exploiting clie
    - [Built-in Utilities](#built-in-utilities)
    - [Host Lifecycle](#host-lifecycle)
    - [Plugin Manager](#plugin-manager)
-4. [Overlay Plugins](#overlay-plugins)
+4. [Built-in Plugins](#built-in-plugins)
    - [game_memory](#game_memory)
+   - [rive_animation](#rive_animation)
+5. [Overlay Plugins](#overlay-plugins)
    - [energy_bar](#energy_bar)
-5. [Project Layout](#project-layout)
+   - [energy_bar_rive](#energy_bar_rive)
+   - [heat_ailos_torc](#heat_ailos_torc)
+6. [Native (rive_plugin.dll)](#native-rive_plugindll)
+7. [Project Layout](#project-layout)
 
 ---
 
@@ -46,6 +51,7 @@ FUSE provides:
 |--------|---------|
 | `run.bat` | Conda env setup + interactive launcher menu |
 | `run_heat_overlay.py` | Boots FUSE; `plugins/` at repo root is auto-scanned |
+| `rebuild_dll.ps1` | Rebuild `native/bin/rive_plugin.dll` (see [BUILD.md](BUILD.md)) |
 
 ---
 
@@ -53,6 +59,7 @@ FUSE provides:
 
 1. Install [Miniconda](https://docs.anaconda.com/miniconda/) and run `run.bat` - it creates the `heat_saclos` env, installs deps, and shows a menu.
 2. Install [Tesseract OCR](https://github.com/tesseract-ocr/tesseract) if using OCR features.
+
 
 ---
 
@@ -134,6 +141,7 @@ Each plugin directory must contain a `manifest.json`:
   "plugin_id": "my_plugin",
   "name": "My Plugin",
   "version": "1.0",
+  "author": "AETERNAL",
   "description": "What it does.",
   "entry": "plugin:MyPlugin",
   "min_host_version": "1.0",
@@ -149,6 +157,7 @@ Each plugin directory must contain a `manifest.json`:
 | `plugin_id` | yes | Programmatic identifier used for config files, deps, enable/disable. |
 | `name` | yes | Display name shown in UI and logs. |
 | `version` | yes | Semver string. |
+| `author` | no | Display author shown in Plugin Manager. |
 | `description` | no | Short human-readable summary. |
 | `entry` | yes | `"module:ClassName"`. Module resolved relative to the plugin package. |
 | `min_host_version` | no | Minimum FUSE host version. |
@@ -422,17 +431,20 @@ win.destroy()
 `LayeredWindow` wrapper with config-backed position and calibrate/locked lifecycle management.
 
 ```python
-from fuse.utils.panel import FusePanel
+from fuse.utils.panel import FusePanel, FusePanelGroup, calibrate_overlay
 
+# Accepts a FuseContext OR a raw PluginConfig as the third arg.
 panel = FusePanel("hud_name", "hud_name_pos", ctx,
                   title="SACLOS HUD Name", default_x=100, default_y=50)
 panel.create(pil_rgba_image)
-panel.enter_calibrate()   # draggable, click-enabled, visible
-panel.enter_locked()      # saves position, click-through, visible
-panel.update(new_image)   # animation frame (no position snap)
+panel.enter_calibrate()                    # draggable, click-enabled, visible
+panel.update(calibrate_overlay(image))     # add center-X crosshair frame
+panel.enter_locked()                       # saves position, click-through, visible
+panel.update(new_image)                    # animation frame (no position snap)
+panel.update(new_image, x=100, y=200)      # atomic reposition + repaint
 ```
 
-`FusePanelGroup` fans out `enter_calibrate` / `enter_locked` / `show_all` / `hide_all` to a collection.
+`FusePanelGroup` fans out `enter_calibrate` / `enter_locked` / `show_all` / `hide_all` to a collection. `calibrate_overlay(img, size=5)` returns a copy of *img* with a small white X composited at center for calibrate-mode framing.
 
 ---
 
@@ -461,6 +473,47 @@ logo_anim.stop()    # cancels pending callback
 ```
 
 Exceptions in the callback are caught per-frame and logged without stopping the loop.
+
+---
+
+#### RiveAnimation
+
+`ctypes` wrapper around `native/bin/rive_plugin.dll`. Each instance owns its own D3D11 WARP device and pixel buffer; render to a straight-alpha RGBA `PIL.Image` ready for `FusePanel.update()`.
+
+```python
+from pathlib import Path
+from fuse.utils.rive_animation import RiveAnimation
+
+anim = RiveAnimation(256, 256)
+anim.load(Path("assets/gauge.riv"))
+anim.set_state_machine("engine")
+anim.vm_bind("GaugeVM")
+
+# each frame:
+anim.vm_set_number("heat", 0.42)
+anim.vm_set_color("colorProperty", 0xFFFF9800)   # ARGB
+anim.advance(1 / 30)
+img = anim.get_image()                            # PIL RGBA
+
+anim.close()
+```
+
+**ViewModel API** (modern data binding, path syntax `"property"` or `"nested/property"`):
+
+- `vm_bind(name)`
+- `vm_set_number(path, float)` / `vm_get_number(path)`
+- `vm_set_bool(path, bool)` / `vm_get_bool(path)`
+- `vm_set_string(path, str)`
+- `vm_set_color(path, argb)` - 32-bit ARGB integer
+- `vm_set_enum(path, label)`
+- `vm_trigger(path)`
+
+**State Machine API** (legacy input):
+
+- `set_state_machine(name)`
+- `sm_bool(name, bool)`, `sm_number(name, float)`, `sm_trigger(name)`
+
+Plugins should normally consume the `rive_animation` core service (`ctx.services.get("rive_animation")`) instead of importing this module directly.
 
 ---
 
@@ -581,7 +634,9 @@ Press `Ctrl+M` to open a dark `tk.Toplevel` with three tabs. The window uses a c
 
 ---
 
-## Overlay Plugins
+## Built-in Plugins
+
+Shipped under `fuse/plugins/`. Loaded before user plugins.
 
 ### game_memory
 
@@ -608,6 +663,40 @@ Config keys: `process_name`, `chains_file`, `reconnect_interval_s`. The plugin a
 
 ---
 
+### rive_animation
+
+Core built-in plugin that wraps `native/bin/rive_plugin.dll` (Rive C++ runtime, D3D11/WARP) and registers it as the `rive_animation` service.
+
+```json
+{
+  "plugin_id": "rive_animation",
+  "name": "Rive Animation",
+  "version": "1.0",
+  "description": "Exposes Rive C++ runtime (D3D11/WARP) as a service.",
+  "entry": "plugin:RiveAnimationPlugin"
+}
+```
+
+Consumer plugins declare `"dependencies": ["rive_animation"]` and call:
+
+```python
+svc  = ctx.services.require("rive_animation")   # RiveAnimationService
+anim = svc.create(width, height)                 # RiveAnimation
+anim.load(Path("assets/yourAnim.riv"))
+anim.set_state_machine("yourStateMachine")
+anim.vm_bind("YourVM")
+```
+
+If the DLL is missing the plugin logs an error and the service is **not** registered. Dependent plugins should `ctx.services.get("rive_animation")` and gracefully self-disable when `None`.
+
+See [Built-in Utilities → RiveAnimation](#riveanimation) for the full method surface.
+
+---
+
+## Overlay Plugins
+
+User plugins shipped under `plugins/`.
+
 ### energy_bar
 
 Memory-driven (or OCR-driven) energy / progress scale HUD. Composites a background PNG with a vertically-clipped foreground PNG driven by fill percentage.
@@ -621,7 +710,61 @@ Hotkeys: `T` - toggle OCR region setup (calibrate only). `RMB` on bar - toggle c
 
 Requires calibration for positioning.
 
+---
 
+### energy_bar_rive
+
+Rive-driven energy bar overlay. Replaces PIL compositing with a real-time Rive animation rendered through `rive_plugin.dll`.
+
+```json
+{
+  "plugin_id": "energy_bar_rive",
+  "name": "Energy Bar Rive",
+  "version": "1.0",
+  "entry": "plugin:EnergyBarRivePlugin",
+  "dependencies": ["game_memory", "rive_animation"]
+}
+```
+
+**Rive contract** (`assets/energyBar.riv`)
+
+- ViewModel `energyBarVM`
+  - `energyValue` - float `0.0`-`1.0`
+  - `colorProperty` - 32-bit ARGB color
+  - `strokeWeight` - float (default `1.5`)
+  - `rotation` - float (degrees)
+- State machine: `energyEngine`
+
+**Config keys** (Plugin Manager UI)
+
+| Category | Key | Type | Description |
+|----------|-----|------|-------------|
+| Memory Source | `memory_chain` | choice | `multiplayer_vehicle_energy` \| `training_vehicle_energy` |
+| Colors | `color_high` / `color_mid` / `color_low` | hex RGB string | Color thresholds at 60% / 30%. |
+| Style | `stroke_weight` | float `0.5`-`3.0` | Forwarded to `strokeWeight` VM property. |
+| Animation | `anim_width` / `anim_height` | int `10`-`3000` | Render-target pixel dimensions. |
+| Rotation | `rotation` | float `-360`-`360` | Forwarded to `rotation` VM property. |
+| Position | `bar_custom_pos` | position | `[x, y]` of overlay top-left. |
+
+Reads energy from the `game_memory` service via the configured pointer chain, drives the Rive ViewModel, and pushes each frame to a `FusePanel`. Requires calibration for positioning. Defaults centered horizontally at 70% screen height.
+
+---
+
+## Native (rive_plugin.dll)
+
+The `rive_animation` core plugin requires `native/bin/rive_plugin.dll`, a thin C ABI over the [rive-runtime](https://github.com/rive-app/rive-runtime) C++ library (D3D11 with WARP fallback).
+
+**Quick rebuild:** `rebuild_dll.ps1` kills any python process holding the DLL and runs MSBuild against the existing VS solution.
+
+**Exposed C ABI** (consumed by `fuse/utils/rive_animation.py`):
+
+- `rive_create(w, h)` / `rive_destroy(handle)`
+- `rive_load_file(handle, path)` / `rive_load_bytes(handle, data, size)`
+- State machine: `rive_set_state_machine`, `rive_sm_bool`, `rive_sm_number`, `rive_sm_trigger`
+- ViewModel: `rive_vm_bind`, `rive_vm_set_{number,bool,string,color,enum}`, `rive_vm_trigger`, `rive_vm_get_{number,bool}`
+- Rendering: `rive_advance(handle, dt)`, `rive_render(handle, pixel_buffer)`
+
+---
 
 ## Project Layout
 
@@ -637,7 +780,10 @@ HEAT_SACLOS/
 │   ├── runner.py                  # CLI entry point
 │   ├── log.py                     # loguru session logging
 │   ├── plugins/                   # Built-in core plugins
-│   │   └── game_memory/
+│   │   ├── game_memory/
+│   │   │   ├── manifest.json
+│   │   │   └── plugin.py
+│   │   └── rive_animation/
 │   │       ├── manifest.json
 │   │       └── plugin.py
 │   ├── ui/                        # Framework UI
@@ -658,14 +804,18 @@ HEAT_SACLOS/
 │       ├── hardware_inject_arduino.py  # Arduino HID backend
 │       ├── hardware_inject_router.py   # Backend router
 │       ├── trajectory_replay.py   # Mouse trajectory replay
+│       ├── rive_animation.py      # ctypes wrapper around rive_plugin.dll
 │       └── window_utils.py        # Win32 window helpers
 │
 ├── plugins/                       # User drop-in plugins
-│   ├── energy_bar/                # Energy/progress HUD
+│   ├── energy_bar/                # PIL-composited energy/progress HUD
 │   │   ├── manifest.json
 │   │   ├── plugin.py
 │   │   ├── ocr_bar.py
 │   │   └── assets/
+│   ├── energy_bar_rive/           # Rive-driven energy bar
+│   │   ├── manifest.json
+│   │   └── plugin.py
 │   └── heat_ailos_torc/           # SACLOS ML overlay
 │       ├── manifest.json
 │       ├── plugin.py
@@ -675,6 +825,7 @@ HEAT_SACLOS/
 │       ├── trainer/
 │       ├── refiner/
 │       ├── ocr/
+│       ├── ui/
 │       └── assets/
 │
 ├── data/                          # Persistent data
@@ -683,23 +834,32 @@ HEAT_SACLOS/
 │       ├── ml_profiles.json
 │       └── profiles/
 │
-├── assets/                        # Framework fonts, pointer chains, images
+├── assets/                        # Framework fonts, pointer chains, images, .riv files
 │   ├── NotoSans-VariableFont_wdth,wght.ttf
 │   ├── NotoSans-Italic-VariableFont_wdth,wght.ttf
 │   ├── logo.png
+│   ├── fuse_banner.png
+│   ├── energyBar.riv
 │   └── pointer_chains.json
 │
-├── tools/                         # Calibration utilities
-│   └── calibrate_envelope.py
+├── native/                        # C++ Rive runtime wrapper
+│   ├── bin/
+│   │   └── rive_plugin.dll        # Built artifact (see BUILD.md)
+│   └── rive_plugin/
+│       ├── rive_plugin.cpp
+│       ├── rive_plugin.h
+│       └── premake5.lua
 │
-├── arduino/                       # Hardware injection firmware
-│   ├── mouse_hid/
-│   └── flash_leonardo.py
+├── tools/                         # Calibration utilities + firmware
+│   ├── calibrate_envelope.py
+│   └── arduino/                   # Mouse-HID firmware (mouse_hid/, flash_leonardo.py)
 │
 ├── logs/                          # Session logs (auto-created)
 │
 ├── run.bat                        # Windows launcher menu
 ├── run_heat_overlay.py            # FUSE overlay entry
+├── rebuild_dll.ps1                # Rebuild rive_plugin.dll via MSBuild
+├── BUILD.md                       # rive_plugin.dll build instructions
 ├── requirements.txt               # pynput, Pillow, pytesseract, numpy, mss, loguru, pyserial
 └── README.md                      # This file
 ```

@@ -1,16 +1,15 @@
 {
   "plugin_id": "energy_bar",
   "name": "Energy Bar",
-  "version": "2.0",
+  "version": "1.0",
   "author": "AETERNAL",
-  "description": "Reskin of the game's energy bar",
+  "description": "Energy bar overlay, driven by Rive",
   "entry": "plugin:EnergyBarPlugin",
-  "dependencies": ["game_memory"],
+  "dependencies": ["game_memory", "rive_animation"],
   "default_config": {
-    "bar_pos_mode": "custom",
     "bar_custom_pos": null,
-    "bg_image": "bg_progress.png",
-    "fg_image": "progress.png",
-    "memory_chain": "multiplayer_vehicle_energy"
+    "memory_chain": "multiplayer_vehicle_energy",
+    "anim_width": 600,
+    "anim_height": 600
   }
 }
