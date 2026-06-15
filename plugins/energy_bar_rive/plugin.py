@@ -22,10 +22,10 @@ _RIV_PATH = Path(__file__).resolve().parents[2] / "assets" / "energyBar.riv"
 def _energy_color(pct: int) -> int:
     """Map energy percentage to ARGB color."""
     if pct > 60:
-        return 0xFF4CAF50  # green
+        return 0x84ffb1  # green
     if pct > 30:
-        return 0xFFFF9800  # orange
-    return 0xFFE53935      # red
+        return 0xff9800  # orange
+    return 0xff3935      # red
 
 
 class EnergyBarRivePlugin(FusePlugin):
