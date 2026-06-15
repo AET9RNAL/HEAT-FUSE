@@ -1,0 +1,9 @@
+{
+  "plugin_id": "rive_animation",
+  "name": "Rive Animation",
+  "version": "1.0",
+  "author": "AETERNAL",
+  "description": "Exposes Rive C++ runtime (D3D11/WARP) as a service. Other plugins declare 'rive_animation' as a dependency and call svc.create(w, h) to get a RiveAnimation instance.",
+  "entry": "plugin:RiveAnimationPlugin",
+  "default_config": {}
+}
