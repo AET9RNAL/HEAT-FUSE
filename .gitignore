@@ -2,8 +2,6 @@ __pycache__
 untracked/
 rive-runtime/
 .windsurf
-tools/
-arduino/
 .claude
 .devin
 .qwen
