@@ -699,21 +699,6 @@ User plugins shipped under `plugins/`.
 
 ### energy_bar
 
-Memory-driven (or OCR-driven) energy / progress scale HUD. Composites a background PNG with a vertically-clipped foreground PNG driven by fill percentage.
-
-- **Mode A**: Reads `energy` from `game_memory` service (`USE_MEMORY_API = True`).
-- **Mode B**: OCR-scans a user-defined screen region (`T` hotkey to set region in calibrate mode).
-
-Assets: `bg_progress.png`, `progress.png` (auto-scaled to 40 % screen width).
-
-Hotkeys: `T` - toggle OCR region setup (calibrate only). `RMB` on bar - toggle center/custom position.
-
-Requires calibration for positioning.
-
----
-
-### energy_bar_rive
-
 Rive-driven energy bar overlay. Replaces PIL compositing with a real-time Rive animation rendered through `rive_plugin.dll`.
 
 ```json
