@@ -37,30 +37,41 @@ project "rive_plugin"
     kind        "SharedLib"
     language    "C++"
     cppdialect  "C++17"
+    toolset     "clang"
 
     files { "rive_plugin.cpp", "rive_plugin.h" }
 
-    defines { "RIVE_PLUGIN_EXPORTS" }
+    defines       { "RIVE_PLUGIN_EXPORTS", "NOMINMAX", "WIN32_LEAN_AND_MEAN", "_USE_MATH_DEFINES" }
+    staticruntime "on"
 
     includedirs {
         riveDir .. "/include",
+        riveDir .. "/renderer/include",
     }
 
     libdirs {
-        riveDir .. "/build/lib/%{cfg.buildcfg}",
+        riveDir .. "/tests/out/release",
     }
 
     links {
         "rive",
-        "rive_renderer",
+        "rive_pls_renderer",
         "rive_decoders",
+        "rive_harfbuzz",
+        "rive_sheenbidi",
+        "rive_yoga",
+        "libpng",
+        "libjpeg",
+        "libwebp",
+        "zlib",
         "d3d11",
+        "d3dcompiler",
         "dxgi",
         "dxguid",
     }
 
-    -- Drop DLL directly into native/bin/
-    targetdir  "../../bin"
+    -- Drop DLL into native/bin/
+    targetdir  "../bin"
     implibdir  ("build/" .. _ACTION .. "/%{cfg.buildcfg}")
     objdir     ("build/" .. _ACTION .. "/obj/%{cfg.buildcfg}")
 

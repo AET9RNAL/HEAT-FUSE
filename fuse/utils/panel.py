@@ -33,7 +33,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from PIL import Image
+from PIL import Image, ImageDraw
 
 from fuse.utils.layered_window import LayeredWindow
 
@@ -196,4 +196,19 @@ class FusePanelGroup:
         return len(self._panels)
 
 
-__all__ = ["FusePanel", "FusePanelGroup"]
+def calibrate_overlay(img: Image.Image, size: int = 5) -> Image.Image:
+    """Return a copy of *img* with an X crosshair composited at center.
+
+    Intended for calibrate-mode frames so the user can align the panel.
+    Import from any plugin: ``from fuse.utils.panel import calibrate_overlay``
+    """
+    cx, cy = img.width // 2, img.height // 2
+    overlay = Image.new("RGBA", img.size, (0, 0, 0, 0))
+    d = ImageDraw.Draw(overlay)
+    color = (255, 255, 255, 210)
+    d.line((cx - size, cy - size, cx + size, cy + size), fill=color, width=2)
+    d.line((cx - size, cy + size, cx + size, cy - size), fill=color, width=2)
+    return Image.alpha_composite(img, overlay)
+
+
+__all__ = ["FusePanel", "FusePanelGroup", "calibrate_overlay"]

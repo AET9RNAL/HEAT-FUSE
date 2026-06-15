@@ -3,114 +3,64 @@
  *
  * Renderer: D3D11 (WARP software adapter by default, no GPU required).
  * Pixel format: DXGI_FORMAT_R8G8B8A8_UNORM, straight alpha, top-row first.
- *
- * Build prerequisites:
- *   1. Clone rive-app/rive-runtime and build it with Premake5 + MSVC.
- *   2. Set RIVE_RUNTIME_DIR in CMakeLists.txt to the checkout root.
- *
- * Header paths verified against rive-runtime @ main (2025).
- * If a header moves, search rive-runtime/include for the class name.
  */
 
-#define RIVE_PLUGIN_EXPORTS
 #include "rive_plugin.h"
 
 #include <d3d11.h>
 #include <dxgi.h>
+#include <wrl/client.h>
 #include <string>
 #include <vector>
 #include <memory>
 #include <cstring>
 #include <fstream>
 
-/* rive-runtime headers — paths relative to RIVE_RUNTIME_DIR/include */
+using Microsoft::WRL::ComPtr;
+
 #include <rive/file.hpp>
 #include <rive/artboard.hpp>
 #include <rive/animation/state_machine_instance.hpp>
 #include <rive/animation/state_machine_input_instance.hpp>
-#include <rive/viewmodel/viewmodel_instance_runtime.hpp>
+#include <rive/viewmodel/runtime/viewmodel_runtime.hpp>
+#include <rive/viewmodel/runtime/viewmodel_instance_runtime.hpp>
 #include <rive/renderer/render_context.hpp>
 #include <rive/renderer/rive_renderer.hpp>
-#include <rive/renderer/d3d11/render_context_d3d11_impl.hpp>
+#include <rive/renderer/d3d11/render_context_d3d_impl.hpp>
 
 /* ============================================================ */
 /*  Internal context struct                                      */
 /* ============================================================ */
 
 struct RiveCtx {
-    /* D3D11 objects */
-    ID3D11Device*           device      = nullptr;
-    ID3D11DeviceContext*    ctx11       = nullptr;
-    ID3D11Texture2D*        rtTex       = nullptr;  /* render target texture */
-    ID3D11RenderTargetView* rtv         = nullptr;
-    ID3D11Texture2D*        stagingTex  = nullptr;  /* CPU-readable copy */
+    ComPtr<ID3D11Device>           device;
+    ComPtr<ID3D11DeviceContext>    ctx11;
+    ComPtr<ID3D11Texture2D>        rtTex;      /* render target texture */
+    ComPtr<ID3D11RenderTargetView> rtv;        /* for explicit pre-frame clear */
+    ComPtr<ID3D11Texture2D>        stagingTex; /* CPU-readable copy */
 
     int width  = 0;
     int height = 0;
 
-    /* Rive render context (owns GPU resources) */
     std::unique_ptr<rive::gpu::RenderContext> riveCtx;
+    rive::rcp<rive::gpu::RenderTargetD3D>     renderTarget;
 
-    /* Rive content */
-    std::unique_ptr<rive::File>                 file;
+    rive::rcp<rive::File>                       file;
     std::unique_ptr<rive::ArtboardInstance>     artboard;
     std::unique_ptr<rive::StateMachineInstance> sm;
 
-    /* ViewModel */
-    std::unique_ptr<rive::ViewModelInstanceRuntime> vmInst;
+    rive::rcp<rive::ViewModelInstanceRuntime> vmInst;
+
+    uint64_t frameNumber = 0;
 };
+
+static RiveCtx* ctx_of(RiveHandle h) { return static_cast<RiveCtx*>(h); }
 
 /* ============================================================ */
 /*  Helpers                                                      */
 /* ============================================================ */
 
-static RiveCtx* ctx_of(RiveHandle h) { return static_cast<RiveCtx*>(h); }
-
-static bool create_d3d11(RiveCtx* c, int w, int h) {
-    D3D_FEATURE_LEVEL fl;
-    UINT flags = 0;
-#ifdef _DEBUG
-    flags |= D3D11_CREATE_DEVICE_DEBUG;
-#endif
-    HRESULT hr = D3D11CreateDevice(
-        nullptr,
-        D3D_DRIVER_TYPE_WARP,  /* software rasterizer — no GPU required */
-        nullptr, flags,
-        nullptr, 0,
-        D3D11_SDK_VERSION,
-        &c->device, &fl, &c->ctx11
-    );
-    if (FAILED(hr)) return false;
-
-    /* Render target texture (GPU-writable) */
-    D3D11_TEXTURE2D_DESC rtDesc = {};
-    rtDesc.Width            = w;
-    rtDesc.Height           = h;
-    rtDesc.MipLevels        = 1;
-    rtDesc.ArraySize        = 1;
-    rtDesc.Format           = DXGI_FORMAT_R8G8B8A8_UNORM;
-    rtDesc.SampleDesc.Count = 1;
-    rtDesc.Usage            = D3D11_USAGE_DEFAULT;
-    rtDesc.BindFlags        = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
-    hr = c->device->CreateTexture2D(&rtDesc, nullptr, &c->rtTex);
-    if (FAILED(hr)) return false;
-
-    hr = c->device->CreateRenderTargetView(c->rtTex, nullptr, &c->rtv);
-    if (FAILED(hr)) return false;
-
-    /* Staging texture (CPU-readable) */
-    D3D11_TEXTURE2D_DESC stageDesc = rtDesc;
-    stageDesc.Usage          = D3D11_USAGE_STAGING;
-    stageDesc.BindFlags      = 0;
-    stageDesc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
-    hr = c->device->CreateTexture2D(&stageDesc, nullptr, &c->stagingTex);
-    if (FAILED(hr)) return false;
-
-    return true;
-}
-
-/* Unpremultiply RGBA in-place.
-   Rive renders premultiplied alpha; LayeredWindow expects straight alpha. */
+/* Unpremultiply RGBA in-place. Rive renders premultiplied alpha. */
 static void unpremultiply(uint8_t* rgba, int pixels) {
     for (int i = 0; i < pixels; ++i) {
         uint8_t a = rgba[3];
@@ -134,19 +84,58 @@ RiveHandle rive_create(int width, int height) {
     c->width  = width;
     c->height = height;
 
-    if (!create_d3d11(c, width, height)) {
-        delete c;
-        return nullptr;
-    }
+    /* Create WARP D3D11 device (software rasterizer — no GPU required) */
+    D3D_FEATURE_LEVEL fl;
+    UINT flags = 0;
+#ifdef _DEBUG
+    flags |= D3D11_CREATE_DEVICE_DEBUG;
+#endif
+    HRESULT hr = D3D11CreateDevice(
+        nullptr,
+        D3D_DRIVER_TYPE_WARP,
+        nullptr, flags,
+        nullptr, 0,
+        D3D11_SDK_VERSION,
+        c->device.GetAddressOf(), &fl,
+        c->ctx11.GetAddressOf()
+    );
+    if (FAILED(hr)) { delete c; return nullptr; }
 
-    /* Create Rive D3D11 render context.
-       verify: RenderContextD3D11Impl::Make signature in
-       rive-runtime/include/rive/renderer/d3d11/render_context_d3d11_impl.hpp */
-    c->riveCtx = rive::gpu::RenderContextD3D11Impl::Make(c->device, c->ctx11, {});
-    if (!c->riveCtx) {
-        delete c;
-        return nullptr;
-    }
+    /* Render target texture (GPU-writable, RGBA8) */
+    D3D11_TEXTURE2D_DESC rtDesc = {};
+    rtDesc.Width            = (UINT)width;
+    rtDesc.Height           = (UINT)height;
+    rtDesc.MipLevels        = 1;
+    rtDesc.ArraySize        = 1;
+    rtDesc.Format           = DXGI_FORMAT_R8G8B8A8_UNORM;
+    rtDesc.SampleDesc.Count = 1;
+    rtDesc.Usage            = D3D11_USAGE_DEFAULT;
+    rtDesc.BindFlags        = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE
+                            | D3D11_BIND_UNORDERED_ACCESS;
+    hr = c->device->CreateTexture2D(&rtDesc, nullptr, c->rtTex.GetAddressOf());
+    if (FAILED(hr)) { delete c; return nullptr; }
+
+    hr = c->device->CreateRenderTargetView(c->rtTex.Get(), nullptr, c->rtv.GetAddressOf());
+    if (FAILED(hr)) { delete c; return nullptr; }
+
+    /* Staging texture (CPU-readable) */
+    D3D11_TEXTURE2D_DESC stageDesc = rtDesc;
+    stageDesc.Usage          = D3D11_USAGE_STAGING;
+    stageDesc.BindFlags      = 0;
+    stageDesc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+    hr = c->device->CreateTexture2D(&stageDesc, nullptr, c->stagingTex.GetAddressOf());
+    if (FAILED(hr)) { delete c; return nullptr; }
+
+    /* Rive D3D11 render context */
+    c->riveCtx = rive::gpu::RenderContextD3DImpl::MakeContext(
+        c->device, c->ctx11, {}
+    );
+    if (!c->riveCtx) { delete c; return nullptr; }
+
+    /* Render target — wraps our D3D11 texture */
+    auto* d3dImpl = c->riveCtx->static_impl_cast<rive::gpu::RenderContextD3DImpl>();
+    c->renderTarget = d3dImpl->makeRenderTarget((uint32_t)width, (uint32_t)height);
+    c->renderTarget->setTargetTexture(c->rtTex);
 
     return c;
 }
@@ -154,16 +143,13 @@ RiveHandle rive_create(int width, int height) {
 void rive_destroy(RiveHandle h) {
     if (!h) return;
     auto* c = ctx_of(h);
-    c->vmInst.reset();
+    c->vmInst = nullptr;
     c->sm.reset();
     c->artboard.reset();
-    c->file.reset();
+    c->file = nullptr;
+    c->renderTarget.reset();
     c->riveCtx.reset();
-    if (c->stagingTex) c->stagingTex->Release();
-    if (c->rtv)        c->rtv->Release();
-    if (c->rtTex)      c->rtTex->Release();
-    if (c->ctx11)      c->ctx11->Release();
-    if (c->device)     c->device->Release();
+    /* ComPtr members release automatically */
     delete c;
 }
 
@@ -172,13 +158,11 @@ void rive_destroy(RiveHandle h) {
 /* ============================================================ */
 
 static bool load_riv(RiveCtx* c, const uint8_t* data, size_t len) {
-    c->vmInst.reset();
+    c->vmInst = nullptr;
     c->sm.reset();
     c->artboard.reset();
-    c->file.reset();
+    c->file = nullptr;
 
-    /* Factory is obtained from the render context.
-       verify: cast to RenderContextD3D11Impl to get Factory* if needed */
     rive::Factory* factory = c->riveCtx.get();
 
     rive::ImportResult result;
@@ -188,14 +172,14 @@ static bool load_riv(RiveCtx* c, const uint8_t* data, size_t len) {
         &result
     );
     if (!c->file || result != rive::ImportResult::success) {
-        c->file.reset();
+        c->file = nullptr;
         return false;
     }
 
     c->artboard = c->file->artboardDefault();
     if (!c->artboard) return false;
 
-    c->artboard->advance(0);  /* initialise layout */
+    c->artboard->advance(0);
     return true;
 }
 
@@ -205,7 +189,7 @@ int rive_load_file(RiveHandle h, const char* path) {
     if (!f.is_open()) return 0;
     std::streamsize size = f.tellg();
     f.seekg(0);
-    std::vector<uint8_t> buf(size);
+    std::vector<uint8_t> buf((size_t)size);
     f.read(reinterpret_cast<char*>(buf.data()), size);
     return load_riv(c, buf.data(), buf.size()) ? 1 : 0;
 }
@@ -224,7 +208,7 @@ void rive_set_state_machine(RiveHandle h, const char* name) {
     c->sm.reset();
     c->sm = c->artboard->stateMachineNamed(name);
     if (!c->sm)
-        c->sm = c->artboard->stateMachineAt(0);  /* fallback to first */
+        c->sm = c->artboard->stateMachineAt(0);
 }
 
 void rive_sm_bool(RiveHandle h, const char* name, int value) {
@@ -256,16 +240,15 @@ void rive_vm_bind(RiveHandle h, const char* vm_name) {
     auto* c = ctx_of(h);
     if (!c->file || !c->artboard) return;
 
-    auto* vmRuntime = c->file->viewModelByName(vm_name);
+    rive::ViewModelRuntime* vmRuntime = c->file->viewModelByName(vm_name);
     if (!vmRuntime) return;
 
-    c->vmInst.reset(vmRuntime->createDefaultInstance());
+    c->vmInst = vmRuntime->createDefaultInstance();
     if (!c->vmInst) return;
 
-    /* Bind to artboard and state machine so both receive updates */
-    c->artboard->bindViewModelInstance(c->vmInst.get());
+    c->artboard->bindViewModelInstance(c->vmInst->instance());
     if (c->sm)
-        c->sm->bindViewModelInstance(c->vmInst.get());
+        c->sm->bindViewModelInstance(c->vmInst->instance());
 }
 
 void rive_vm_set_number(RiveHandle h, const char* path, float value) {
@@ -283,19 +266,19 @@ void rive_vm_set_bool(RiveHandle h, const char* path, int value) {
 void rive_vm_set_string(RiveHandle h, const char* path, const char* value) {
     auto* c = ctx_of(h);
     if (!c->vmInst) return;
-    if (auto* p = c->vmInst->propertyString(path)) p->value(value);
+    if (auto* p = c->vmInst->propertyString(path)) p->value(std::string(value));
 }
 
 void rive_vm_set_color(RiveHandle h, const char* path, uint32_t argb) {
     auto* c = ctx_of(h);
     if (!c->vmInst) return;
-    if (auto* p = c->vmInst->propertyColor(path)) p->value(argb);
+    if (auto* p = c->vmInst->propertyColor(path)) p->value((int)argb);
 }
 
 void rive_vm_set_enum(RiveHandle h, const char* path, const char* label) {
     auto* c = ctx_of(h);
     if (!c->vmInst) return;
-    if (auto* p = c->vmInst->propertyEnum(path)) p->value(label);
+    if (auto* p = c->vmInst->propertyEnum(path)) p->value(std::string(label));
 }
 
 void rive_vm_trigger(RiveHandle h, const char* path) {
@@ -326,7 +309,7 @@ void rive_advance(RiveHandle h, float dt_seconds) {
     auto* c = ctx_of(h);
     if (!c->artboard) return;
     if (c->sm) {
-        c->sm->advance(dt_seconds);  /* state machine drives artboard */
+        c->sm->advance(dt_seconds);
     } else {
         c->artboard->advance(dt_seconds);
     }
@@ -336,14 +319,18 @@ void rive_render(RiveHandle h, uint8_t* out_rgba) {
     auto* c = ctx_of(h);
     if (!c->artboard || !out_rgba) return;
 
-    /* --- Begin Rive frame --- */
+    ++c->frameNumber;
+
+    /* Guarantee transparent background regardless of Rive's internal clear */
+    const float kTransparent[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+    c->ctx11->ClearRenderTargetView(c->rtv.Get(), kTransparent);
+
     rive::gpu::RenderContext::FrameDescriptor fd;
     fd.renderTargetWidth  = (uint32_t)c->width;
     fd.renderTargetHeight = (uint32_t)c->height;
-    fd.clearColor         = 0x00000000;  /* transparent black */
+    fd.clearColor         = 0x00000000;
     c->riveCtx->beginFrame(std::move(fd));
 
-    /* Draw artboard centred + fitted */
     rive::RiveRenderer renderer(c->riveCtx.get());
     renderer.save();
     renderer.align(
@@ -355,35 +342,25 @@ void rive_render(RiveHandle h, uint8_t* out_rgba) {
     c->artboard->draw(&renderer);
     renderer.restore();
 
-    /* Flush to render target.
-       verify: flush() signature in rive-runtime/include/rive/renderer/render_context.hpp
-       The render target wrapper may differ — check RenderContextD3D11Impl for
-       makeRenderTarget() or equivalent. */
-    auto* d3dImpl = static_cast<rive::gpu::RenderContextD3D11Impl*>(c->riveCtx->impl());
-    auto rt = d3dImpl->makeRenderTarget(
-        DXGI_FORMAT_R8G8B8A8_UNORM,
-        (uint32_t)c->width,
-        (uint32_t)c->height,
-        c->rtTex
-    );
-    c->riveCtx->flush({.renderTarget = rt.get()});
+    c->riveCtx->flush({
+        .renderTarget      = c->renderTarget.get(),
+        .currentFrameNumber = c->frameNumber,
+        .safeFrameNumber    = c->frameNumber > 1 ? c->frameNumber - 1 : 0,
+    });
 
-    /* --- D3D11 readback --- */
-    c->ctx11->CopyResource(c->stagingTex, c->rtTex);
+    /* CPU readback */
+    c->ctx11->CopyResource(c->stagingTex.Get(), c->rtTex.Get());
 
     D3D11_MAPPED_SUBRESOURCE mapped = {};
-    HRESULT hr = c->ctx11->Map(c->stagingTex, 0, D3D11_MAP_READ, 0, &mapped);
+    HRESULT hr = c->ctx11->Map(c->stagingTex.Get(), 0, D3D11_MAP_READ, 0, &mapped);
     if (FAILED(hr)) return;
 
-    /* Row pitch from D3D11 may be padded; copy row-by-row */
-    const uint8_t* src = static_cast<const uint8_t*>(mapped.pData);
-    const int rowBytes = c->width * 4;
+    const uint8_t* src  = static_cast<const uint8_t*>(mapped.pData);
+    const int       rowBytes = c->width * 4;
     for (int y = 0; y < c->height; ++y) {
         std::memcpy(out_rgba + y * rowBytes, src + y * mapped.RowPitch, rowBytes);
     }
 
-    c->ctx11->Unmap(c->stagingTex, 0);
-
-    /* Rive renders premultiplied alpha; convert to straight for PIL pipeline */
+    c->ctx11->Unmap(c->stagingTex.Get(), 0);
     unpremultiply(out_rgba, c->width * c->height);
 }

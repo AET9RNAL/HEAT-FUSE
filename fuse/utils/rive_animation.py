@@ -98,7 +98,7 @@ try:
     _lib.rive_advance.argtypes = [ctypes.c_void_p, ctypes.c_float]
     _lib.rive_advance.restype  = None
 
-    _lib.rive_render.argtypes  = [ctypes.c_void_p, ctypes.c_char_p]
+    _lib.rive_render.argtypes  = [ctypes.c_void_p, ctypes.c_void_p]
     _lib.rive_render.restype   = None
 
 except OSError as exc:
