@@ -321,8 +321,12 @@ void rive_advance(RiveHandle h, float dt_seconds) {
     if (!c->artboard) return;
     if (c->sm) {
         c->sm->advance(dt_seconds);
+        /* dt=0 forces the artboard to re-evaluate VM bindings (color, stroke, etc.)
+           without double-stepping the animation timeline that sm->advance already drove. */
+        c->artboard->advance(0.0f);
+    } else {
+        c->artboard->advance(dt_seconds);
     }
-    c->artboard->advance(dt_seconds);
 }
 
 void rive_render(RiveHandle h, uint8_t* out_rgba) {

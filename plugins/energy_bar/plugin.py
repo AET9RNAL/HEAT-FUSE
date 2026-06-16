@@ -17,7 +17,7 @@ from fuse.api import FuseContext, FusePlugin
 from fuse.utils.panel import FusePanel, calibrate_overlay
 from fuse.ui.config_schema import ConfigCategory, ConfigEntry
 
-_RIV_PATH = Path(__file__).resolve().parents[2] / "assets" / "energyBar.riv"
+_RIV_PATH = Path(__file__).resolve().parent / "rive" / "energyBar.riv"
 
 _DEFAULT_COLOR_HIGH = "84FFB1"
 _DEFAULT_COLOR_MID  = "FF9800"
