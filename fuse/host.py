@@ -20,6 +20,7 @@ do not need calibration are locked and advanced automatically.
 """
 from __future__ import annotations
 
+import sys
 import time
 from enum import Enum
 from pathlib import Path
@@ -37,7 +38,12 @@ except ImportError:  # pragma: no cover
 from fuse.utils.config import ConfigManager, PluginConfig
 
 from fuse.api import FuseContext, FusePlugin, HotkeyRegistry
-from fuse.discovery import DiscoveredPlugin, discover
+from fuse.discovery import (
+    BUILTIN_PLUGINS_DIR,
+    DiscoveredPlugin,
+    USER_PLUGINS_DIR,
+    discover,
+)
 from fuse.resolver import resolve_load_order
 from fuse.events import EventBus
 from fuse.services import ServiceRegistry
@@ -117,6 +123,7 @@ class PluginHost:
         # Setup queue — plugins are instantiated one at a time.
         self._setup_pending: List[DiscoveredPlugin] = []
         self._setup_active: Optional[DiscoveredPlugin] = None  # currently being calibrated
+        self._auto_lock_queue = False  # True while draining a reload queue — skip calibrate UI
 
         self._manager: Optional["FuseManager"] = None
 
@@ -210,6 +217,60 @@ class PluginHost:
         self._context_map[spec.plugin_id] = ctx
         plugin_logger.info(f"Loaded v{spec.version}")
 
+    def reload_plugins(self) -> None:
+        """Tear down every active plugin and reload all enabled plugins from disk.
+
+        Purges plugin modules from ``sys.modules`` first so edited source files
+        are re-read rather than reused from import cache. Bound to Ctrl+R.
+        """
+        _root_logger.info("FUSE: hot-reloading plugins...")
+
+        self._setup_pending = []
+        self._setup_active = None
+
+        for plugin in reversed(self.plugins):
+            try:
+                plugin.teardown()
+            except Exception as e:
+                _root_logger.exception(f"{plugin.name}: teardown during reload failed: {e}")
+
+        self.plugins.clear()
+        self.contexts.clear()
+        self._plugin_map.clear()
+        self._context_map.clear()
+        self._plugin_states.clear()
+        self._discovered.clear()
+
+        self._purge_plugin_modules()
+
+        self._state = "locked"
+        self._auto_lock_queue = True
+        self.load_plugins()
+        self.root.after(0, self._dequeue_next_plugin)
+        _root_logger.info("FUSE: plugin reload queued.")
+
+    def _purge_plugin_modules(self) -> None:
+        """Drop cached imports for plugin source files so reload re-reads them."""
+        roots = [BUILTIN_PLUGINS_DIR, USER_PLUGINS_DIR]
+        roots += [Path(p) for p in self.host_state.get("extra_plugin_dirs", [])]
+        roots = [r.resolve() for r in roots if r.exists()]
+
+        for mod_name, mod in list(sys.modules.items()):
+            mod_file = getattr(mod, "__file__", None)
+            if not mod_file:
+                continue
+            try:
+                mod_path = Path(mod_file).resolve()
+            except OSError:
+                continue
+            for root in roots:
+                try:
+                    mod_path.relative_to(root)
+                except ValueError:
+                    continue
+                del sys.modules[mod_name]
+                break
+
     def _dequeue_next_plugin(self) -> None:
         """Instantiate the next queued plugin and enter its calibrate phase.
 
@@ -221,25 +282,37 @@ class PluginHost:
 
         if not self._setup_pending:
             _root_logger.info("All plugins initialized.")
+            self._auto_lock_queue = False
             self.events.emit("host_ready")
             return
 
         spec = self._setup_pending.pop(0)
-        self._setup_active = spec
 
-        # Reset host state to calibrate for this plugin's setup phase.
-        self._state = "calibrate"
+        # Reset host state to calibrate for this plugin's setup phase, unless
+        # we're draining a reload queue — those skip calibration entirely.
+        self._state = "locked" if self._auto_lock_queue else "calibrate"
         self._instantiate(spec)
 
         state = self._plugin_states.get(spec.plugin_id)
         if state != PluginState.ACTIVE:
             # Error / skip — advance without waiting for user.
-            self._setup_active = None
             self.root.after(0, self._dequeue_next_plugin)
             return
 
         plugin = self._plugin_map[spec.plugin_id]
         ctx = self._context_map[spec.plugin_id]
+
+        if self._auto_lock_queue:
+            # Hot-reload: restore straight to locked, no calibrate UI.
+            ctx.state = "locked"
+            try:
+                plugin.enter_locked()
+            except Exception as e:
+                _root_logger.exception(f"{spec.name}: enter_locked failed: {e}")
+            self.root.after(0, self._dequeue_next_plugin)
+            return
+
+        self._setup_active = spec
         ctx.state = "calibrate"
 
         try:
@@ -429,6 +502,7 @@ class PluginHost:
         self.hotkeys.register("ctrl+l", self.toggle_lock,    label="Toggle Calibrate/Lock")
         self.hotkeys.register("ctrl+p", self.quit,           label="Quit FUSE")
         self.hotkeys.register("ctrl+m", self._open_manager,  label="Open Plugin Manager")
+        self.hotkeys.register("ctrl+r", self.reload_plugins, label="Hot-Reload Plugins")
 
     def _open_manager(self) -> None:
         _root_logger.debug("host: _open_manager called")

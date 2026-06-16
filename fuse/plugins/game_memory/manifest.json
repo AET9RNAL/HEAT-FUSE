@@ -1,7 +1,7 @@
 {
   "plugin_id": "game_memory",
   "name": "Game Memory",
-  "version": "1.1",
+  "version": "1.2.0",
   "author": "AETERNAL",
   "description": "Reads in-game values via pointer chains. Registers the 'game_memory' service for other plugins.",
   "entry": "plugin:GameMemoryPlugin",
