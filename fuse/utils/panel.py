@@ -227,10 +227,16 @@ class FusePanel:
         Uses ``_last_view_fp`` to decide: FP key when in 1P view, 3P key
         otherwise.  Safe to call from ``teardown()``.
         """
-        if self._last_view_fp:
+        if self._last_view_fp is True:
             self._save_position_fp()
-        else:
+        elif self._last_view_fp is False:
             self._save_position()
+        elif not self._config_key_fp:
+            # Single-view panel: always safe to save current position.
+            self._save_position()
+        # Dual-view with unknown current view (None): positions were already
+        # saved correctly at calibration/lock time — skip to avoid overwriting
+        # bar_custom_pos with the FP-calibrated window position.
 
     def _save_position(self) -> None:
         if self._config_key and self._config is not None and self._win.is_created:
