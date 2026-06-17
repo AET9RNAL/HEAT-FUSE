@@ -8,10 +8,7 @@ from fuse.utils.game_memory import GameMemory
 
 PROCESS     = "engine_launcher.exe"
 CHAINS_FILE = Path(__file__).resolve().parent / "assets" / "pointer_chains.json"
-WATCH       = ["multiplayer_primary_ammo_current", "multiplayer_primary_ammo_max",
-               "multiplayer_secondary_ammo_current", "multiplayer_secondary_ammo_max",
-               "multiplayer_reload_time_remaining", "multiplayer_reload_time_total",
-               "multiplayer_active_reload_time_remaining"]
+WATCH       = ["multiplayer_camera_zoom", "multiplayer_is_fp_view"]
 
 def main():
     print(f"Connecting to {PROCESS!r}...")

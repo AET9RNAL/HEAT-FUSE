@@ -125,6 +125,11 @@ class PluginHost:
         self._setup_active: Optional[DiscoveredPlugin] = None  # currently being calibrated
         self._auto_lock_queue = False  # True while draining a reload queue — skip calibrate UI
 
+        # Calibration stage tracking (1-based). Separate counters for setup
+        # queue mode vs. normal (runtime) toggle mode.
+        self._setup_calib_stage: int = 1
+        self._calib_stage: int = 1
+
         self._manager: Optional["FuseManager"] = None
 
         self._register_global_hotkeys()
@@ -313,10 +318,11 @@ class PluginHost:
             return
 
         self._setup_active = spec
+        self._setup_calib_stage = 1
         ctx.state = "calibrate"
 
         try:
-            plugin.enter_calibrate()
+            plugin.enter_calibrate(1)
         except Exception as e:
             _root_logger.exception(f"{spec.name}: enter_calibrate failed: {e}")
 
@@ -434,7 +440,7 @@ class PluginHost:
             if self._state == "locked":
                 plugin.enter_locked()
             else:
-                plugin.enter_calibrate()
+                plugin.enter_calibrate(self._calib_stage)
         except Exception as e:
             _root_logger.exception(f"{plugin_id}: state entry on enable failed: {e}")
         _root_logger.info(f"Plugin {plugin_id!r} enabled at runtime (state={self._state}).")
@@ -457,26 +463,77 @@ class PluginHost:
             if plugin is None or self._plugin_states.get(spec.plugin_id) != PluginState.ACTIVE:
                 return
 
-            new_state = "locked" if self._state == "calibrate" else "calibrate"
-            self._state = new_state
-            _root_logger.info(f"FUSE host state -> {self._state}")
-            if ctx:
-                ctx.state = self._state
-            try:
-                if self._state == "locked":
+            if self._state == "calibrate":
+                stages = getattr(plugin, "calibration_stages", 1)
+                if self._setup_calib_stage < stages:
+                    # More stages remain — advance without locking.
+                    self._setup_calib_stage += 1
+                    _root_logger.info(
+                        f"FUSE setup calibration stage -> {self._setup_calib_stage}/{stages}"
+                    )
+                    try:
+                        plugin.enter_calibrate(self._setup_calib_stage)
+                    except Exception as e:
+                        _root_logger.exception(f"{spec.name}: enter_calibrate({self._setup_calib_stage}) failed: {e}")
+                    self.events.emit("host_state_changed", state=self._state,
+                                     calib_stage=self._setup_calib_stage)
+                    return
+
+                # All stages done — lock and advance setup queue.
+                self._state = "locked"
+                self._setup_calib_stage = 1
+                if ctx:
+                    ctx.state = "locked"
+                _root_logger.info(f"FUSE host state -> locked")
+                try:
                     plugin.enter_locked()
-                    # First lock after setup — advance to next plugin.
-                    self._setup_active = None
-                    self.root.after(0, self._dequeue_next_plugin)
-                else:
-                    plugin.enter_calibrate()
-            except Exception as e:
-                _root_logger.exception(f"{spec.name}: state change error: {e}")
-            self.events.emit("host_state_changed", state=self._state)
+                except Exception as e:
+                    _root_logger.exception(f"{spec.name}: enter_locked failed: {e}")
+                self._setup_active = None
+                self.root.after(0, self._dequeue_next_plugin)
+            else:
+                # Was locked — re-enter calibrate at stage 1.
+                self._state = "calibrate"
+                self._setup_calib_stage = 1
+                if ctx:
+                    ctx.state = "calibrate"
+                _root_logger.info(f"FUSE host state -> calibrate")
+                try:
+                    plugin.enter_calibrate(1)
+                except Exception as e:
+                    _root_logger.exception(f"{spec.name}: enter_calibrate(1) failed: {e}")
+            self.events.emit("host_state_changed", state=self._state,
+                             calib_stage=self._setup_calib_stage)
             return
 
         # Normal mode: toggle all active plugins.
-        self._state = "locked" if self._state == "calibrate" else "calibrate"
+        if self._state == "calibrate":
+            max_stages = max(
+                (getattr(p, "calibration_stages", 1) for p in self.plugins), default=1
+            )
+            if self._calib_stage < max_stages:
+                # Advance calibration stage without locking yet.
+                self._calib_stage += 1
+                _root_logger.info(f"FUSE calibration stage -> {self._calib_stage}/{max_stages}")
+                for ctx in self.contexts:
+                    pass  # ctx.state stays "calibrate"
+                for plugin in self.plugins:
+                    try:
+                        plugin.enter_calibrate(self._calib_stage)
+                    except Exception as e:
+                        _root_logger.exception(f"{plugin.name}: enter_calibrate({self._calib_stage}) failed: {e}")
+                self.events.emit("host_state_changed", state=self._state,
+                                 calib_stage=self._calib_stage)
+                return
+
+            # All stages done — lock.
+            self._state = "locked"
+            self._calib_stage = 1
+        else:
+            # Was locked — go back to calibrate stage 1.
+            self._state = "calibrate"
+            self._calib_stage = 1
+
         _root_logger.info(f"FUSE host state -> {self._state}")
         for ctx in self.contexts:
             ctx.state = self._state
@@ -485,10 +542,10 @@ class PluginHost:
                 if self._state == "locked":
                     plugin.enter_locked()
                 else:
-                    plugin.enter_calibrate()
+                    plugin.enter_calibrate(1)
             except Exception as e:
                 _root_logger.exception(f"{plugin.name}: state change error: {e}")
-        self.events.emit("host_state_changed", state=self._state)
+        self.events.emit("host_state_changed", state=self._state, calib_stage=self._calib_stage)
 
     @property
     def state(self) -> str:

@@ -14,7 +14,7 @@ from typing import Optional
 from loguru import logger
 
 from fuse.api import FuseContext, FusePlugin
-from fuse.utils.panel import FusePanel, calibrate_overlay
+from fuse.utils.panel import FusePanel
 from fuse.ui.config_schema import ConfigCategory, ConfigEntry
 
 _RIV_PATH = Path(__file__).resolve().parent / "rive" / "energyBar.riv"
@@ -40,6 +40,7 @@ class EnergyBarPlugin(FusePlugin):
     """Energy bar overlay powered by Rive animation."""
 
     requires_calibration = True
+    calibration_stages = 2
 
     def __init__(self) -> None:
         self.ctx: Optional[FuseContext] = None
@@ -76,6 +77,7 @@ class EnergyBarPlugin(FusePlugin):
 
         ctx.config.defaults(
             bar_custom_pos=None,
+            bar_custom_pos_fp=None,
             memory_chain="multiplayer_vehicle_energy",
             anim_width=300,
             anim_height=300,
@@ -112,7 +114,8 @@ class EnergyBarPlugin(FusePlugin):
                 ConfigEntry("rotation", "Rotation (degrees)", type="float", min=-360.0, max=360.0),
             ]),
             ConfigCategory("Position", [
-                ConfigEntry("bar_custom_pos", "Bar Position", type="position"),
+                ConfigEntry("bar_custom_pos",    "3rd Person Position", type="position"),
+                ConfigEntry("bar_custom_pos_fp", "1st Person Position", type="position"),
             ]),
         ])
 
@@ -146,6 +149,8 @@ class EnergyBarPlugin(FusePlugin):
             self._anim.vm_set_number("energyValue", 0.5)
             self._anim.vm_set_color("colorProperty", self._energy_color(50))
             self._anim.vm_set_number("strokeWeight", self._stroke_weight)
+            self._anim.vm_set_bool("isSetupComplete", False)
+            self._anim.vm_set_string("state", "CALIBRATING 3rd PERSON")
             self._anim.advance(0)
 
         sw = ctx.tk_root.winfo_screenwidth()
@@ -155,6 +160,7 @@ class EnergyBarPlugin(FusePlugin):
 
         self._panel = FusePanel(
             "HEAT Energy Bar Rive", "bar_custom_pos", ctx.config,
+            config_key_fp="bar_custom_pos_fp",
             default_x=default_x, default_y=default_y,
         )
         self._panel.create(self._anim.get_image())
@@ -178,42 +184,48 @@ class EnergyBarPlugin(FusePlugin):
         if self._anim:
             self._anim.vm_set_number("rotation", r)
     
-    def enter_calibrate(self) -> None:
+    def enter_calibrate(self, stage: int = 1) -> None:
         if self._panel:
-            self._panel.enter_calibrate()
-            if self._anim:
-                self._panel.update(calibrate_overlay(self._anim.get_image()))
+            self._panel.enter_calibrate(stage)
+        if self._anim:
+            state_str = "CALIBRATING 1st PERSON" if stage == 2 else "CALIBRATING 3rd PERSON"
+            self._anim.vm_set_bool("isSetupComplete", False)
+            self._anim.vm_set_string("state", state_str)
 
     def enter_locked(self) -> None:
         if self._panel:
-            pos = self._panel.get_position()
-            self.ctx.config.update({"bar_custom_pos": list(pos)})
             self._panel.enter_locked()
+        if self._anim:
+            self._anim.vm_set_bool("isSetupComplete", True)
+            self._anim.vm_set_string("state", "COMPLETE")
 
     def tick(self, dt: float) -> None:
         if self.ctx:
             self.ctx.config.check_reload()
-        if not (self.ctx and self.ctx.state == "locked" and self._anim and self._panel):
+        if not (self._anim and self._panel):
             return
 
-        pct = 0
-        if self._mem is not None:
-            val = self._mem.read(self.ctx.config.get("memory_chain", "multiplayer_vehicle_energy"))
-            if val is not None:
-                pct = max(0, min(100, int(val)))
+        if self.ctx and self.ctx.state == "locked":
+            pct = 0
+            fp_flag = None
+            if self._mem is not None:
+                val = self._mem.read(self.ctx.config.get("memory_chain", "multiplayer_vehicle_energy"))
+                if val is not None:
+                    pct = max(0, min(100, int(val)))
+                fp_flag = self._mem.read("multiplayer_is_fp_view")
+            self._panel.update_view(fp_flag)
+            self._anim.vm_set_number("energyValue", pct / 100.0)
+            self._anim.vm_set_color("colorProperty", self._energy_color(pct))
+            self._anim.vm_set_number("strokeWeight", self._stroke_weight)
+            self._anim.vm_set_number("rotation", self._rotation)
 
-        self._anim.vm_set_number("energyValue", pct / 100.0)
-        self._anim.vm_set_color("colorProperty", self._energy_color(pct))
-        self._anim.vm_set_number("strokeWeight", self._stroke_weight)
-        self._anim.vm_set_number("rotation", self._rotation)
         self._anim.advance(dt)
         self._panel.update(self._anim.get_image())
 
     def teardown(self) -> None:
         if self._panel:
             try:
-                pos = self._panel.get_position()
-                self.ctx.config.update({"bar_custom_pos": list(pos)})
+                self._panel.persist_position()
             except Exception:
                 pass
             try:

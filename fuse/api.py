@@ -155,12 +155,23 @@ class FusePlugin(ABC):
     #: this False and are advanced automatically after setup().
     requires_calibration: bool = False
 
+    #: Number of Ctrl+L presses required to complete calibration.
+    #: 1 = single-pass (default). 2 = two-pass (e.g. 3rd-person then 1st-person).
+    #: The host calls enter_calibrate(stage) for stages 1..N-1 and enter_locked()
+    #: on the final press.
+    calibration_stages: int = 1
+
     @abstractmethod
     def setup(self, ctx: FuseContext) -> None:
         """Construct widgets, load config, register hotkeys."""
 
-    def enter_calibrate(self) -> None:  # pragma: no cover
-        """Switch the plugin into calibrate mode (interactive)."""
+    def enter_calibrate(self, stage: int = 1) -> None:  # pragma: no cover
+        """Switch the plugin into calibrate mode (interactive).
+
+        stage is 1-based. Stage 1 is the initial (or only) calibration pass.
+        For calibration_stages > 1, the host calls enter_calibrate(2), etc.
+        on subsequent Ctrl+L presses before the final enter_locked() call.
+        """
 
     def enter_locked(self) -> None:  # pragma: no cover
         """Switch the plugin into locked mode (click-through, scanning)."""

@@ -125,7 +125,7 @@ class HeatAilosTorcPlugin(FusePlugin):
                 )
             self._setup_config_watchers(ctx)
 
-    def enter_calibrate(self) -> None:
+    def enter_calibrate(self, stage: int = 1) -> None:
         if self._overlay and hasattr(self._overlay, "_on_calibrate"):
             self._overlay._on_calibrate()
 
