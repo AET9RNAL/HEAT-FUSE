@@ -1,189 +1,97 @@
-"""Typed in-game memory reader built on pointer chains.
-
-Loads chain definitions from a JSON file and exposes a clean read API:
-
-    mem = GameMemory("engine_launcher.exe", "assets/pointer_chains.json")
-    mem.open()
-    energy = mem.read("energy")    # → 100 (uint32)
-    mem.close()
-
-    # or as a context manager:
-    with GameMemory("engine_launcher.exe", "assets/pointer_chains.json") as mem:
-        print(mem.read("energy"))
-
-All reads are thread-safe.  On ``OSError`` the method returns ``None`` and
-marks the connection as broken only if the process is no longer alive
-(prevents reconnect-loops caused by bad chains resolving to unmapped memory).
-"""
 from __future__ import annotations
 
-import json
+import ctypes
 import struct
-import threading
-import time
-from dataclasses import dataclass
-from pathlib import Path
-from typing import Dict, List, Optional, Union
+from typing import Optional, Union
 
 from loguru import logger
 
-from fuse.utils.memory_reader import (
-    ProcessHandle,
-    find_pid_by_name,
-    get_module_base,
-    resolve_pointer_chain,
-)
-from fuse.utils.paths import resolve_data
+from fuse.utils.paths import REPO_ROOT
 
+_DLL_PATH = REPO_ROOT / "native" / "bin" / "game_memory.dll"
 
-_MISSING = object()  # sentinel for absent cache entries
-_CHAIN_RETRY_S = 3.0  # seconds to suppress retries after a chain error
+# gm_result_t codes (must match game_memory.h)
+_GM_OK              = 0
+_GM_ERR_NOT_FOUND   = 1
+_GM_ERR_ACCESS      = 2
+_GM_ERR_DISCONNECTED = 3
+_GM_ERR_UNKNOWN     = 4
+_GM_ERR_NULL_PTR    = 5
+_GM_ERR_READ        = 6
+_GM_ERR_COOLDOWN    = 7
 
-# ---------------------------------------------------------------------------
-# dtype tables
-# ---------------------------------------------------------------------------
-
-_DTYPE_SIZE: Dict[str, int] = {
-    "uint8": 1,  "int8": 1,
-    "uint16": 2, "int16": 2,
-    "uint32": 4, "int32": 4,
-    "uint64": 8, "int64": 8,
-    "float": 4,  "double": 8,
+# gm_dtype_t → struct format (must match game_memory.h enum order)
+_DTYPE_FMT: dict[int, tuple[str, bool]] = {
+    0: ("<B", False),  # GM_UINT8
+    1: ("<b", False),  # GM_INT8
+    2: ("<H", False),  # GM_UINT16
+    3: ("<h", False),  # GM_INT16
+    4: ("<I", False),  # GM_UINT32
+    5: ("<i", False),  # GM_INT32
+    6: ("<Q", False),  # GM_UINT64
+    7: ("<q", False),  # GM_INT64
+    8: ("<f", True),   # GM_FLOAT
+    9: ("<d", True),   # GM_DOUBLE
 }
 
-
-def _parse_offset(value: object) -> int:
-    """Accept ints or strings like ``"0x208"`` / ``"520"``."""
-    if isinstance(value, bool):  # bool is subclass of int — reject explicitly
-        raise ValueError(f"bool is not a valid offset: {value!r}")
-    if isinstance(value, int):
-        return value
-    if isinstance(value, str):
-        return int(value, 0)
-    raise ValueError(f"bad offset type {type(value).__name__}: {value!r}")
+_dll: ctypes.CDLL | None = None
 
 
-def _decode(dtype: str, raw: bytes) -> Union[int, float]:
-    if dtype == "float":
-        return struct.unpack("<f", raw)[0]
-    if dtype == "double":
-        return struct.unpack("<d", raw)[0]
-    signed = dtype.startswith("int")
-    return int.from_bytes(raw, "little", signed=signed)
+def _load_dll() -> ctypes.CDLL:
+    global _dll
+    if _dll is not None:
+        return _dll
+    if not _DLL_PATH.exists():
+        raise RuntimeError(
+            f"game_memory.dll not found at {_DLL_PATH}. "
+            "Build it first: python scripts/gen_chains.py, "
+            "then premake5 + msbuild in native/game_memory/."
+        )
+    lib = ctypes.CDLL(str(_DLL_PATH))
+    lib.gm_open.argtypes         = [ctypes.c_char_p]
+    lib.gm_open.restype          = ctypes.c_int
+    lib.gm_close.argtypes        = []
+    lib.gm_close.restype         = None
+    lib.gm_is_connected.argtypes = []
+    lib.gm_is_connected.restype  = ctypes.c_int
+    lib.gm_read.argtypes         = [ctypes.c_char_p, ctypes.c_void_p]
+    lib.gm_read.restype          = ctypes.c_int
+    lib.gm_dtype.argtypes        = [ctypes.c_char_p]
+    lib.gm_dtype.restype         = ctypes.c_int
+    _dll = lib
+    return lib
 
-
-# ---------------------------------------------------------------------------
-# ChainDef
-# ---------------------------------------------------------------------------
-
-@dataclass(frozen=True)
-class ChainDef:
-    name: str
-    module: str
-    offsets: List[int]
-    dtype: str = "uint32"
-
-
-# ---------------------------------------------------------------------------
-# GameMemory
-# ---------------------------------------------------------------------------
 
 class GameMemory:
-    """High-level read-only memory accessor for a running game process."""
+    """High-level read-only accessor for in-game values via game_memory.dll."""
 
-    def __init__(
-        self,
-        process_name: str,
-        chains: Union[str, Path, dict],
-    ) -> None:
+    def __init__(self, process_name: str, chains=None) -> None:
         self._process_name = process_name
-        self._lock = threading.Lock()
-        self._proc: Optional[ProcessHandle] = None
-        self._pid: Optional[int] = None
-        self._module_bases: Dict[str, Optional[int]] = {}
-        self._chains: Dict[str, ChainDef] = {}
-        self._connected = False
-        # Per-chain cooldown: after an OSError the chain is skipped until this
-        # time passes, avoiding log spam and repeated EnumProcessModules calls.
-        self._chain_retry_after: Dict[str, float] = {}
+        self._dll          = _load_dll()
+        self._dtype_cache: dict[str, int] = {}
+        # chains arg accepted for API compat but ignored — baked into DLL
+        if chains is not None:
+            logger.debug("GameMemory: chains arg ignored (compiled into DLL)")
 
-        if isinstance(chains, dict):
-            self._load_chains_dict(chains)
-        else:
-            self.load_chains(chains)
-
-    # ------------------------------------------------------------------ load
-
-    def load_chains(self, path: Union[str, Path]) -> None:
-        """Load / reload chain definitions from a JSON file."""
-        resolved = resolve_data(str(path))
-        with open(resolved, "r") as f:
-            data = json.load(f)
-        self._load_chains_dict(data)
-        logger.debug(f"GameMemory: loaded {len(self._chains)} chains from {resolved}")
-
-    def _load_chains_dict(self, data: dict) -> None:
-        chains: Dict[str, ChainDef] = {}
-        for key, val in data.items():
-            if key.startswith("_"):
-                continue
-            try:
-                dtype = val.get("dtype", "uint32")
-                if dtype not in _DTYPE_SIZE:
-                    raise ValueError(f"unknown dtype {dtype!r}")
-                chains[key] = ChainDef(
-                    name=key,
-                    module=val["module"],
-                    offsets=[_parse_offset(o) for o in val["offsets"]],
-                    dtype=dtype,
-                )
-            except (KeyError, ValueError) as e:
-                logger.warning(f"GameMemory: skipping bad chain {key!r}: {e}")
-        self._chains = chains
-
-    # --------------------------------------------------------------- connect
+    # ---------------------------------------------------------------- connect
 
     def open(self) -> bool:
-        """Find the process and open a read handle.  Returns True if connected."""
-        with self._lock:
-            self._close_unlocked()
-            pid = find_pid_by_name(self._process_name)
-            if pid is None:
-                logger.debug(f"GameMemory: process '{self._process_name}' not found")
-                return False
-            try:
-                proc = ProcessHandle(pid, write=False)
-            except OSError as e:
-                logger.warning(f"GameMemory: OpenProcess failed: {e}")
-                return False
-            self._pid = pid
-            self._proc = proc
-            self._module_bases = {}
-            self._chain_retry_after = {}
-            self._connected = True
-            logger.info(
-                f"GameMemory: connected to '{self._process_name}' (PID {pid})"
-            )
+        rc = self._dll.gm_open(self._process_name.encode())
+        if rc == _GM_OK:
+            logger.info(f"GameMemory: connected to '{self._process_name}'")
             return True
+        if rc == _GM_ERR_NOT_FOUND:
+            logger.debug(f"GameMemory: process '{self._process_name}' not found")
+        else:
+            logger.warning(f"GameMemory: gm_open failed (rc={rc})")
+        return False
 
     def close(self) -> None:
-        with self._lock:
-            self._close_unlocked()
-
-    def _close_unlocked(self) -> None:
-        if self._proc is not None:
-            try:
-                self._proc.__exit__(None, None, None)
-            except Exception:
-                pass
-        self._proc = None
-        self._pid = None
-        self._module_bases = {}
-        self._connected = False
+        self._dll.gm_close()
 
     @property
     def connected(self) -> bool:
-        return self._connected
+        return bool(self._dll.gm_is_connected())
 
     def __enter__(self) -> "GameMemory":
         self.open()
@@ -192,95 +100,25 @@ class GameMemory:
     def __exit__(self, *_) -> None:
         self.close()
 
-    # ----------------------------------------------------------------- query
-
-    def chain_names(self) -> List[str]:
-        """Return all loaded chain names."""
-        return list(self._chains.keys())
-
-    def chain_def(self, name: str) -> Optional[ChainDef]:
-        return self._chains.get(name)
-
     # ------------------------------------------------------------------ read
 
-    def _get_module_base(self, module: str) -> Optional[int]:
-        # Only serve from cache when we have a valid (non-None) entry.
-        cached = self._module_bases.get(module, _MISSING)
-        if cached is not _MISSING and cached is not None:
-            return cached
-        base = get_module_base(self._pid, module)
-        if base is not None:
-            self._module_bases[module] = base
-        else:
-            # Don't cache None — module may reappear on next read (e.g. reloading between matches).
-            logger.debug(f"GameMemory: module '{module}' not found in process (will retry)")
-        return base
-
     def read(self, name: str) -> Optional[Union[int, float]]:
-        """Read the value for chain *name*.  Returns ``None`` on any failure."""
-        with self._lock:
-            if not self._connected:
-                return None
-            chain = self._chains.get(name)
-            if chain is None:
-                logger.warning(f"GameMemory: unknown chain {name!r}")
-                return None
+        buf = (ctypes.c_uint8 * 8)()
+        rc  = self._dll.gm_read(name.encode(), buf)
 
-            # Cooldown: skip expensive retries while chain is known-broken.
-            now = time.monotonic()
-            retry_at = self._chain_retry_after.get(name, 0.0)
-            if now < retry_at:
-                return None
+        if rc == _GM_OK:
+            dtype = self._dtype_cache.get(name)
+            if dtype is None:
+                dtype = self._dll.gm_dtype(name.encode())
+                self._dtype_cache[name] = dtype
 
-            try:
-                base = self._get_module_base(chain.module)
-                if base is None:
-                    return None
-                addr = resolve_pointer_chain(self._proc, base, chain.offsets)
-                if addr is None:
-                    return None
-                size = _DTYPE_SIZE[chain.dtype]
-                raw = self._proc.read(addr, size)
-                value = _decode(chain.dtype, raw)
-                # Successful read — clear any previous cooldown entry.
-                if name in self._chain_retry_after:
-                    del self._chain_retry_after[name]
-                    logger.debug(f"GameMemory: read({name!r}) recovered")
-                return value
-            except OSError as e:
-                if find_pid_by_name(self._process_name) is None:
-                    logger.warning("GameMemory: process gone, marking disconnected")
-                    self._connected = False
-                else:
-                    # Stale module base (DLL reloaded between matches). Clear
-                    # the base cache and suppress retries for a few seconds to
-                    # avoid log spam while the game reloads its UI.
-                    first_error = name not in self._chain_retry_after
-                    self._module_bases.clear()
-                    self._chain_retry_after[name] = now + _CHAIN_RETRY_S
-                    if first_error:
-                        logger.debug(
-                            f"GameMemory: read({name!r}) chain error: {e} "
-                            f"— retrying in {_CHAIN_RETRY_S:.0f}s"
-                        )
-                return None
+            fmt, is_float = _DTYPE_FMT.get(dtype, ("<I", False))
+            value = struct.unpack_from(fmt, bytes(buf))[0]
+            return float(value) if is_float else int(value)
 
-    def resolve_address(self, name: str) -> Optional[int]:
-        """Resolve chain *name* to its final address without reading the value."""
-        with self._lock:
-            if not self._connected:
-                return None
-            chain = self._chains.get(name)
-            if chain is None:
-                return None
-            try:
-                base = self._get_module_base(chain.module)
-                if base is None:
-                    return None
-                return resolve_pointer_chain(self._proc, base, chain.offsets)
-            except OSError:
-                self._connected = False
-                return None
+        if rc not in (_GM_ERR_COOLDOWN, _GM_ERR_DISCONNECTED, _GM_ERR_NULL_PTR):
+            logger.debug(f"GameMemory: read({name!r}) rc={rc}")
+        return None
 
 
-__all__ = ["GameMemory", "ChainDef"]
+__all__ = ["GameMemory"]

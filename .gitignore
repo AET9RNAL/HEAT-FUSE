@@ -1,6 +1,11 @@
 __pycache__
 untracked/
 rive-runtime/
+
+# game_memory sources — private (HEAT-FUSE-PRIVATE). DLL ships, sources don't.
+native/game_memory/
+scripts/gen_chains.py
+assets/pointer_chains.json
 .windsurf
 .claude
 .devin
