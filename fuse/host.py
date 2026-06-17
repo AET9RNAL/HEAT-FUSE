@@ -49,7 +49,7 @@ from fuse.events import EventBus
 from fuse.services import ServiceRegistry
 from fuse.ui.manager import FuseManager
 
-HOST_VERSION = "2.0.1"
+HOST_VERSION = "2.1.1"
 
 MouseCallback = Callable[[int, int, "pynmouse.Button", bool], None]
 
