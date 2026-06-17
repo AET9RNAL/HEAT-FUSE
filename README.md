@@ -1,6 +1,6 @@
 # ![alt text](assets/fuse_banner.png)
 
-# ![alt text](assets/logo.png) FUSE - an external modding runtime for WoT:HEAT - Project Documentation
+# ![alt text](assets/logo.png) FUSE - an external modding runtime for WoT:HEAT
 
 **FUSE** is **not** affiliated, endorsed, or approved by World of Tanks: HEAT or Wargaming. It is a third-party modding toolkit built around a lightweight Python plugin framework for real-time Windows overlays.
 
@@ -16,39 +16,113 @@ Any modifications to FUSE that would allow reading, exposing, or exploiting clie
 ![Logo](https://img.shields.io/badge/-C++-f3f2f4?style=for-the-badge&logo=cplusplus&logoColor=f3f2f4&labelColor=1D1D1D&color=1D1D1D)
 
 ![Static Badge](https://img.shields.io/badge/RUNTIME_VERSION-2.1.1-1D1D1D?style=for-the-badge&labelColor=1D1D1D&color=434343)
----
-
-## Table of Contents
-
-1. [Project Overview](#project-overview)
-2. [Getting Started](#getting-started)
-3. [FUSE Framework](#fuse-framework)
-   - [Architecture](#architecture)
-   - [Plugin Contract](#plugin-contract)
-   - [Manifest](#manifest)
-   - [.fuse Archive Format](#fuse-archive-format)
-   - [Discovery & Load Order](#discovery--load-order)
-   - [Core APIs](#core-apis)
-   - [Built-in Utilities](#built-in-utilities)
-   - [FUSE Input API](#fuse-input-api)
-   - [Host Lifecycle](#host-lifecycle)
-   - [Plugin Manager](#plugin-manager)
-4. [Built-in Plugins](#built-in-plugins)
-   - [game_memory](#game_memory)
-   - [rive_animation](#rive_animation)
-5. [Overlay Plugins](#overlay-plugins)
-   - [energy_bar](#energy_bar)
-6. [Native (rive_plugin.dll)](#native-rive_plugindll)
-7. [Project Layout](#project-layout)
 
 ---
 
-## Project Overview
+## For Players
+
+- [Getting Started](#getting-started)
+- [Installing Plugins](#installing-plugins)
+- [Hotkeys](#hotkeys)
+- [Plugins](#plugins)
+  - [Energy Bar](#energy-bar)
+- [Game Values Reference](#game-values-reference)
+
+---
+
+## For Developers
+
+- [Architecture](#architecture)
+- [Plugin Contract](#plugin-contract)
+- [Manifest](#manifest)
+- [.fuse Archive Format](#fuse-archive-format)
+- [Discovery & Load Order](#discovery--load-order)
+- [Core APIs](#core-apis)
+- [Built-in Utilities](#built-in-utilities)
+- [FUSE Input API](#fuse-input-api)
+- [Host Lifecycle](#host-lifecycle)
+- [Plugin Manager](#plugin-manager)
+- [Built-in Plugins](#built-in-plugins)
+  - [game_memory](#game_memory)
+  - [rive_animation](#rive_animation)
+- [Native DLLs](#native-dlls)
+- [Project Layout](#project-layout)
+
+---
+
+# For Players
+
+FUSE runs alongside WoT:HEAT and displays real-time HUD overlays driven by live game data: energy bars, rangefinders, cooldown trackers, and more. Plugins are distributed as single `.fuse` files and drop straight into the `plugins/` folder.
+
+## Getting Started
+
+1. Install [Miniconda](https://docs.anaconda.com/miniconda/).
+2. Run `run.bat` - it creates the `heat_fuse` conda environment, installs all dependencies, and shows a launch menu. (P.S. On first launch you may need to run the runner twice)
+3. Install [Tesseract OCR](https://github.com/tesseract-ocr/tesseract) if any plugin you use relies on OCR features.
+
+On first launch FUSE auto-registers the `.fuse` file extension in Windows so Explorer shows plugin files with the FUSE icon.
+
+---
+
+## Installing Plugins
+
+1. Drop any `.fuse` file into the `plugins/` folder.
+2. Launch FUSE via `run.bat`.
+
+FUSE scans `plugins/` on every startup and loads all valid archives automatically.
+
+---
+
+## Hotkeys
+
+These are registered globally by the FUSE host and active whenever FUSE is running. You are free to assign your own keys in the Plugin Manager.
+
+ **NOTE**: don't press Ctrl + M/F while the console is in focus. It's a known issue with Windows that the console intercepts these keys for it's own purposes, this may halt process execution.
+
+| Combo | Action |
+|-------|--------|
+| `Ctrl+L` | Confirm calibration / lock the current plugin in place. Press again to advance to the next calibration stage if the plugin has more than one. |
+| `Ctrl+M` | Open / close the Plugin Manager (enable, disable, configure plugins, rebind keys). |
+| `Ctrl+R` | Hot-reload all plugins from disk without restarting FUSE. |
+| `Ctrl+P` | Quit FUSE. |
+
+---
+
+## Plugins
+
+### Energy Bar
+
+`EnergyBar-2.0.1.fuse` - animated Rive energy bar that tracks vehicle energy in real time. Supports separate positions for 3rd-person and 1st-person views and switches between them automatically.
+
+**Calibration (two stages)**
+
+1. Launch FUSE. The bar appears on screen in calibration mode.
+2. Drag it to where you want it in **3rd-person** view, then press `Ctrl+L`.
+3. Drag it to where you want it in **1st-person** view, then press `Ctrl+L` again to lock.
+
+While locked the bar switches positions automatically when you zoom into first-person.
+
+**Configuration** - open Plugin Manager (`Ctrl+M`) → Settings → Energy Bar
+
+| Category | Key | Type | Description |
+|----------|-----|------|-------------|
+| Memory Source | `memory_chain` | choice | `multiplayer_vehicle_energy` or `training_vehicle_energy` - which game value drives the bar |
+| Colors | `color_high` | hex RGB | Bar color above 60% energy |
+| Colors | `color_mid` | hex RGB | Bar color between 30%–60% energy |
+| Colors | `color_low` | hex RGB | Bar color below 30% energy |
+| Style | `stroke_weight` | float `0.5`–`3.0` | Bar stroke thickness |
+| Animation | `anim_width` / `anim_height` | int `10`–`3000` | Render-target dimensions in pixels |
+| Rotation | `rotation` | float `-360`–`360` | Bar rotation in degrees |
+| Position | `bar_custom_pos` | position | 3rd-person position (set by stage-1 drag) |
+| Position | `bar_custom_pos_fp` | position | 1st-person position (set by stage-2 drag) |
+
+
+# For Developers
 
 FUSE provides:
 
 - **Per-pixel-alpha HUD overlays** via Win32 `LayeredWindow` (`CreateWindowExW` + `UpdateLayeredWindow`). Each pixel carries its own alpha channel.
-- **In-game state reads** via `game_memory.dll` — a compiled native reader;
+- **In-game state reads** via `game_memory.dll` - a compiled native reader; no plaintext offsets shipped at runtime.
 - **Rive animation rendering** via a native C++ runtime (`rive_plugin.dll`, D3D11/WARP).
 - **Plugin-based architecture** - FUSE discovers, resolves dependencies, calibrates, and manages overlays sequentially. Plugins never create global state.
 - **Distributable `.fuse` plugin archives** - single-file ZIP packages loaded via Python `zipimport`.
@@ -63,21 +137,7 @@ FUSE provides:
 
 ---
 
-## Getting Started
-
-1. Install [Miniconda](https://docs.anaconda.com/miniconda/) and run `run.bat` - it creates the `heat_fuse` env, installs deps, and shows a menu.
-2. Install [Tesseract OCR](https://github.com/tesseract-ocr/tesseract) if using OCR features.
-
-
-On first launch, FUSE auto-registers the `.fuse` extension under `HKCU`.
-
----
-
-## FUSE Framework
-
-**FUSE** is the plugin runtime. It owns all shared infrastructure; plugins never create global state.
-
-### Architecture
+## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -100,16 +160,9 @@ Plugins are instantiated **one at a time** in dependency order. After each `setu
 
 The host calls `tick(dt)` on every active plugin every ~50 ms from a single `root.after` idle loop. All teardown calls happen in reverse load order during shutdown.
 
-**Global hotkeys** (registered by the host):
+---
 
-| Combo | Action |
-|-------|--------|
-| `Ctrl+L` | Toggle calibrate / locked (advances calibration stage if `calibration_stages > 1`). |
-| `Ctrl+M` | Open / close the Plugin Manager window. |
-| `Ctrl+R` | Hot-reload all plugins from disk (purges module cache, re-runs `setup()`). |
-| `Ctrl+P` | Quit FUSE. |
-
-### Plugin Contract
+## Plugin Contract
 
 Every plugin subclasses `FusePlugin` and ships as a folder with `manifest.json` (built-ins) or inside a `.fuse` archive (user plugins).
 
@@ -153,7 +206,7 @@ class MyPlugin(FusePlugin):
 
 ---
 
-### Manifest
+## Manifest
 
 Each plugin must contain a `manifest.json` at the package root:
 
@@ -181,7 +234,7 @@ Each plugin must contain a `manifest.json` at the package root:
 | `author` | no | Display author shown in Plugin Manager. |
 | `description` | no | Short human-readable summary. |
 | `entry` | yes | `"module:ClassName"`. Module resolved relative to the plugin package. |
-| `min_host_version` | no | Minimum FUSE host version (current: `2.0.1`). |
+| `min_host_version` | no | Minimum FUSE host version (current: `2.1.1`). |
 | `dependencies` | no | Required plugin names. Supports versioned dict: `{"name": ">=1.0"}`. |
 | `optional_dependencies` | no | Soft load-order hints; missing plugins do not block loading. |
 | `hotkeys` | no | `{"logical_name": "combo"}` combos exposed via `ctx.hotkey_for()`. |
@@ -189,7 +242,7 @@ Each plugin must contain a `manifest.json` at the package root:
 
 ---
 
-### .fuse Archive Format
+## .fuse Archive Format
 
 User plugins are distributed as `.fuse` files - standard ZIP archives with the plugin package at the root:
 
@@ -210,17 +263,17 @@ The archive root **must** contain a single directory whose name matches `plugin_
 ```python
 from fuse.utils.pack import pack, verify
 
-pack("plugins/my_plugin")          # → plugins/my_plugin-1.0.fuse
-verify("plugins/my_plugin-1.0.fuse")  # bool — checks ZIP structure + manifest
+pack("dev/my_plugin")             # → out/MyPlugin-1.0.fuse
+verify("out/MyPlugin-1.0.fuse")   # bool - checks ZIP structure + manifest
 ```
 
-`pack()` excludes `__pycache__/`, `.git/`, `.pyc`, etc. Output filename is `<plugin_name>-<version>.fuse`.
+`pack()` excludes `__pycache__/`, `.git/`, `.pyc`, etc. Output filename is `<plugin_name>-<version>.fuse` written to `out/`.
 
 **Asset access** - because plugin code cannot use `pathlib.Path` against a ZIP, always read assets through `ctx.assets` (see [PluginAssets](#pluginassets)).
 
 ---
 
-### Discovery & Load Order
+## Discovery & Load Order
 
 FUSE scans plugins from these sources. Earlier sources win on `plugin_id` collision:
 
@@ -232,16 +285,16 @@ FUSE scans plugins from these sources. Earlier sources win on `plugin_id` collis
 After discovery the resolver:
 
 1. **Enable/disable filter** - `fuse_host.json` `disabled_plugins` excludes; non-null `enabled_plugins` is a whitelist.
-2. **Compatibility check** - `min_host_version` is compared against `HOST_VERSION` (`2.0.1`). Incompatible plugins are skipped.
+2. **Compatibility check** - `min_host_version` is compared against `HOST_VERSION` (`2.1.1`). Incompatible plugins are skipped.
 3. **Dependency filter** - missing or version-mismatched required deps drop the dependent plugin.
 4. **Topological sort** - required deps are hard edges; optional deps are soft edges. Providers always load before consumers.
 5. **Cycle detection** - cyclic dependencies are dropped with an error log.
 
 ---
 
-### Core APIs
+## Core APIs
 
-#### FuseContext
+### FuseContext
 
 `FuseContext` is a `@dataclass` handed to every plugin during `setup()`. It bundles every shared service so plugins never construct global state.
 
@@ -254,7 +307,7 @@ class FuseContext:
     assets: PluginAssets       # ctx.assets.load_image("logo.png"), .read(), .load_font(), ...
     host: PluginHost
     state: str                 # "calibrate" | "locked"
-    package_root: Traversable  # raw root — prefer ctx.assets for normal access
+    package_root: Traversable  # raw root - prefer ctx.assets for normal access
     events: EventBus
     services: ServiceRegistry
     manifest_hotkeys: dict
@@ -278,7 +331,7 @@ class FuseContext:
 
 ---
 
-#### PluginAssets
+### PluginAssets
 
 `ctx.assets` exposes the plugin's `assets/` directory through a uniform API. Works for both folder plugins and `.fuse` archives.
 
@@ -295,7 +348,7 @@ Always prefer `ctx.assets` over `importlib.resources` or raw `Path` arithmetic -
 
 ---
 
-#### EventBus
+### EventBus
 
 Lightweight pub/sub for cross-plugin communication. All handler invocations are dispatched on the Tk thread via `root.after(0, ...)`, so callbacks can safely mutate widgets.
 
@@ -315,7 +368,7 @@ ctx.events.emit("game_memory.connected")
 
 ---
 
-#### ServiceRegistry
+### ServiceRegistry
 
 Named object registry for inter-plugin APIs. Because the resolver loads providers before consumers, `require()` is safe inside a consumer's `setup()`.
 
@@ -331,7 +384,7 @@ A consumer should list the provider in `dependencies` so the resolver orders the
 
 ---
 
-#### HotkeyRegistry
+### HotkeyRegistry
 
 Global keyboard listener (pynput) fanned out to registered callbacks. The host owns the single `pynput.keyboard.Listener`; plugins never create their own.
 
@@ -344,7 +397,7 @@ Combos are parsed as `modifier+modifier+key`. Supported modifiers: `ctrl`, `shif
 
 ---
 
-#### PluginConfig
+### PluginConfig
 
 Per-plugin JSON config with auto-save, watchers, schema-driven UI, and hot-reload from disk.
 
@@ -398,9 +451,9 @@ Entry types: `bool`, `int`, `float`, `str`, `choice`, `position`.
 
 ---
 
-### Built-in Utilities
+## Built-in Utilities
 
-#### LayeredWindow
+### LayeredWindow
 
 Win32 per-pixel-alpha overlay window via `CreateWindowExW` + `UpdateLayeredWindow`. Works alongside the Tkinter mainloop (Tcl's event loop dispatches Win32 messages on the same thread).
 
@@ -426,7 +479,7 @@ win.destroy()
 
 ---
 
-#### FusePanel
+### FusePanel
 
 `LayeredWindow` wrapper with config-backed position and calibrate/locked lifecycle.
 
@@ -466,7 +519,7 @@ def tick(self, dt):
 
 ---
 
-#### Screen Capture
+### Screen Capture
 
 ```python
 from fuse.utils.screen_capture import grab_region_np
@@ -474,11 +527,11 @@ from fuse.utils.screen_capture import grab_region_np
 arr = grab_region_np((x1, y1, x2, y2))   # np.ndarray (H, W, 3) RGB uint8
 ```
 
-Prefers `mss` (~3-8 ms), falls back to PIL `ImageGrab` (~20 ms). Thread-safe via thread-local `mss` instances.
+Prefers `mss` (~3–8 ms), falls back to PIL `ImageGrab` (~20 ms). Thread-safe via thread-local `mss` instances.
 
 ---
 
-#### AnimationLoop
+### AnimationLoop
 
 `root.after`-based animation helper with fps control and clean stop.
 
@@ -494,7 +547,7 @@ Exceptions in the callback are caught per-frame and logged without stopping the 
 
 ---
 
-#### RiveAnimation
+### RiveAnimation
 
 `ctypes` wrapper around `native/bin/rive_plugin.dll`. Each instance owns its own D3D11 WARP device + pixel buffer; renders a straight-alpha RGBA `PIL.Image` ready for `FusePanel.update()`.
 
@@ -530,9 +583,9 @@ Prefer consuming the `rive_animation` service (`ctx.services.get("rive_animation
 
 ---
 
-#### GameMemory
+### GameMemory
 
-`ctypes` wrapper around `native/bin/game_memory.dll` — a compiled native reader. Game values are read by name; no offsets or module names are exposed to plugin code.
+`ctypes` wrapper around `native/bin/game_memory.dll` - a compiled native reader. Game values are read by name; no offsets or module names are exposed to plugin code.
 
 ```python
 from fuse.utils.game_memory import GameMemory
@@ -549,11 +602,47 @@ with GameMemory("engine_launcher.exe") as mem:
 
 `read(name)` returns `int` for integer dtypes, `float` for `float`/`double`, or `None` on failure (process gone, chain error, or cooldown). Errors are suppressed for 3 s after a bad read to avoid log spam.
 
-See [game_memory plugin](#game_memory) for the full list of available value names.
+For the full list of available value names see [Game Values Reference](#game-values-reference).
 
 ---
 
-#### OCR
+## Game Values Reference
+
+Named game values available to plugins via the `game_memory` service. Plugin authors use these names in their `manifest.json` and call `mem.read("name")` at runtime.
+
+| Name | Type | Description |
+|------|------|-------------|
+| `multiplayer_vehicle_energy` | `uint32` | Vehicle energy |
+| `multiplayer_vehicle_health` | `uint32` | Vehicle health |
+| `multiplayer_vehicle_boost` | `uint32` | Engine boost value |
+| `multiplayer_vehicle_autocannon_overheat` | `float` | Autocannon overheat `0.0–1.0` |
+| `multiplayer_hud_score` | `uint32` | Scoreboard score |
+| `multiplayer_hud_rangefinder` | `uint32` | Rangefinder distance displayed when aiming at a target |
+| `multiplayer_camera_zoom` | `uint32` | Camera zoom level (3rd-person: `0–4`; wraps to `0` on entering 1st-person, then increases per zoom stage) |
+| `multiplayer_is_fp_view` | `uint8` | `1` = first-person view, `0` = third-person |
+| `multiplayer_primary_ammo_current` | `uint32` | Primary weapon current ammo count |
+| `multiplayer_primary_ammo_max` | `uint32` | Primary weapon max ammo count |
+| `multiplayer_secondary_ammo_current` | `uint32` | Secondary weapon current ammo count |
+| `multiplayer_secondary_ammo_max` | `uint32` | Secondary weapon max ammo count |
+| `multiplayer_reload_time_remaining` | `float` | Primary weapon reload time remaining (seconds). `0.0` = ready / not reloading |
+| `multiplayer_reload_time_total` | `float` | Primary weapon total reload duration (seconds) |
+| `multiplayer_active_reload_time_remaining` | `float` | Alternate reload-remaining source; coarser update granularity |
+| `multiplayer_ability_slot_0_cooldown` | `float` | Ability slot 0 time remaining (seconds). `0.0` = ready |
+| `multiplayer_ability_slot_1_cooldown` | `float` | Ability slot 1 time remaining (seconds) |
+| `multiplayer_ability_slot_2_cooldown` | `float` | Ability slot 2 time remaining (seconds) |
+| `multiplayer_ability_slot_3_cooldown` | `float` | Ability slot 3 time remaining (seconds) |
+| `multiplayer_ability_slot_0_progress` | `float` | Ability slot 0 charge progress `0.0–1.0` (`1.0` = ready) |
+| `multiplayer_equipment_slot_0_cooldown` | `float` | Equipment slot 0 time remaining (seconds) |
+| `multiplayer_equipment_slot_1_cooldown` | `float` | Equipment slot 1 time remaining (seconds) |
+| `multiplayer_equipment_slot_0_progress` | `float` | Equipment slot 0 charge progress `0.0–1.0` |
+| `multiplayer_equipment_slot_1_progress` | `float` | Equipment slot 1 charge progress `0.0–1.0` |
+| `training_vehicle_energy` | `uint32` | Vehicle energy in training range |
+| `training_vehicle_rangefinder` | `uint32` | Rangefinder value in training range |
+
+---
+
+
+### OCR
 
 Tesseract-based screen-OCR utilities. No game-specific masks live here; callers supply regions.
 
@@ -572,25 +661,25 @@ if TESSERACT_OK:
 
 **Filters**
 
-- `TemporalOCRFilter(window=3, tolerance=0.10)` - sliding-window confirmation (>=2 agreeing reads).
+- `TemporalOCRFilter(window=3, tolerance=0.10)` - sliding-window confirmation (≥2 agreeing reads).
 - `IntHysteresisFilter(jump_tol=12)` - outliers must repeat before adoption.
 
 ---
 
-#### Fonts
+### Fonts
 
 ```python
 from fuse.utils.fonts import load_font, load_font_from_bytes, unload_mem_fonts
 
-load_font("assets/MyFont.ttf")                # path-based (built-ins + dev)
-load_font_from_bytes(ctx.assets.read("F.ttf"), key="myfont")   # .fuse-safe
+load_font("assets/MyFont.ttf")                                    # path-based (built-ins + dev)
+load_font_from_bytes(ctx.assets.read("F.ttf"), key="myfont")      # .fuse-safe
 ```
 
 `load_font_from_bytes` uses `AddFontMemResourceEx` - no temp file needed, works inside `.fuse` archives. The host calls `unload_mem_fonts()` on shutdown.
 
 ---
 
-#### Trajectory Replay
+### Trajectory Replay
 
 Replays timestamped mouse-delta trajectories with precise timing.
 
@@ -614,20 +703,20 @@ dx, dy, elapsed = replay_full_scenario(
 
 ---
 
-#### Packing (`fuse.utils.pack`)
+### Packing (`fuse.utils.pack`)
 
 ```python
 from fuse.utils.pack import pack, verify
 
-archive = pack("plugins/my_plugin")          # → plugins/my_plugin-1.0.fuse
-verify(archive)                              # → bool
+archive = pack("dev/my_plugin")    # → out/MyPlugin-1.0.fuse
+verify(archive)                    # → bool
 ```
 
 Excludes `__pycache__/`, `.git/`, `*.pyc/.pyo/.pyd`. `verify()` checks ZIP validity, single top-level directory, and that the embedded `manifest.json` has an `entry` field.
 
 ---
 
-### FUSE Input API
+## FUSE Input API
 
 `fuse.utils.hardware_inject_router` - abstract mouse output for plugins that drive the cursor (e.g. guidance / trajectory replay). Backend is selected by config key `input_backend`: `"arduino" | "sendinput" | "none"`. Default is `"arduino"`.
 
@@ -658,7 +747,7 @@ Windows `SendInput` with `MOUSEEVENTF_MOVE`. Enables 1 ms timer granularity via 
 
 ---
 
-### Host Lifecycle
+## Host Lifecycle
 
 1. **Boot** (`fuse/runner.py`)
    - Sets up logging (`logs/fuse_YYYY-MM-DD--HH-MM.log`, `enqueue=True` for background sink).
@@ -684,7 +773,7 @@ Windows `SendInput` with `MOUSEEVENTF_MOVE`. Enables 1 ms timer granularity via 
 
 ---
 
-### Plugin Manager
+## Plugin Manager
 
 Press `Ctrl+M` to open a dark `tk.Toplevel` with three tabs (custom `clam` theme, `#1a1a1a` background).
 
@@ -700,7 +789,7 @@ Shipped under `fuse/plugins/`. Always loaded before user plugins.
 
 ### game_memory
 
-Opens the game process and registers a `GameMemory` instance as the `"game_memory"` service. Acts as the **FUSE Game API provider** — the single authorised channel through which plugins read live game state.
+Opens the game process and registers a `GameMemory` instance as the `"game_memory"` service. Acts as the **FUSE Game API provider** - the single authorised channel through which plugins read live game state.
 
 ```json
 {
@@ -725,39 +814,10 @@ def tick(self, dt):
 
 Config keys:
 
-- `process_name` — default `"engine_launcher.exe"`.
-- `reconnect_interval_s` — default `5.0`. Auto-reconnects when the process restarts.
+- `process_name` - default `"engine_launcher.exe"`.
+- `reconnect_interval_s` - default `5.0`. Auto-reconnects when the process restarts.
 
-#### Available Game Values
-
-| Name | Type | Description |
-|------|------|-------------|
-| `multiplayer_vehicle_energy` | `uint32` | Vehicle energy `0-100` |
-| `multiplayer_vehicle_health` | `uint32` | Vehicle health `0-n` |
-| `multiplayer_vehicle_boost` | `uint32` | Engine boost value `0-100` |
-| `multiplayer_vehicle_autocannon_overheat` | `float` | Autocannon overheat `0.0–1.0` |
-| `multiplayer_hud_score` | `uint32` | Scoreboard score `0-n` |
-| `multiplayer_hud_rangefinder` | `uint32` | Rangefinder distance displayed when aiming at a target `0-n` |
-| `multiplayer_camera_zoom` | `uint32` | Camera zoom level (3rd-person: `0–4`; wraps to `0` on entering 1st-person, then increases per zoom stage) |
-| `multiplayer_is_fp_view` | `uint8` | `1` = first-person view, `0` = third-person |
-| `multiplayer_primary_ammo_current` | `uint32` | Primary weapon current ammo count `0-n` |
-| `multiplayer_primary_ammo_max` | `uint32` | Primary weapon max ammo count `0-n` |
-| `multiplayer_secondary_ammo_current` | `uint32` | Secondary weapon current ammo count `0-n` |
-| `multiplayer_secondary_ammo_max` | `uint32` | Secondary weapon max ammo count `0-n` |
-| `multiplayer_reload_time_remaining` | `float` | Primary weapon reload time remaining (seconds). `0.0` = ready / not reloading |
-| `multiplayer_reload_time_total` | `float` | Primary weapon total reload duration (seconds) |
-| `multiplayer_active_reload_time_remaining` | `float` | Alternate reload-remaining source; coarser update granularity |
-| `multiplayer_ability_slot_0_cooldown` | `float` | Ability slot 0 time remaining (seconds). `0.0` = ready |
-| `multiplayer_ability_slot_1_cooldown` | `float` | Ability slot 1 time remaining (seconds) |
-| `multiplayer_ability_slot_2_cooldown` | `float` | Ability slot 2 time remaining (seconds) |
-| `multiplayer_ability_slot_3_cooldown` | `float` | Ability slot 3 time remaining (seconds) |
-| `multiplayer_ability_slot_0_progress` | `float` | Ability slot 0 charge progress `0.0–1.0` (`1.0` = ready) |
-| `multiplayer_equipment_slot_0_cooldown` | `float` | Equipment slot 0 time remaining (seconds) |
-| `multiplayer_equipment_slot_1_cooldown` | `float` | Equipment slot 1 time remaining (seconds) |
-| `multiplayer_equipment_slot_0_progress` | `float` | Equipment slot 0 charge progress `0.0–1.0` |
-| `multiplayer_equipment_slot_1_progress` | `float` | Equipment slot 1 charge progress `0.0–1.0` |
-| `training_vehicle_energy` | `uint32` | Vehicle energy in training range |
-| `training_vehicle_rangefinder` | `uint32` | Rangefinder value in training range |
+For the full list of readable value names and types see [Game Values Reference](#game-values-reference).
 
 ---
 
@@ -784,32 +844,22 @@ anim.vm_bind("GaugeVM")
 
 If the DLL is missing, the plugin logs an error and **does not register** the service. Dependent plugins should `ctx.services.get("rive_animation")` and self-disable gracefully when `None`.
 
-See [Built-in Utilities → RiveAnimation](#riveanimation) for the full API and [BUILD.md](BUILD.md) for build instructions.
+See [RiveAnimation](#riveanimation) for the full API and [BUILD.md](BUILD.md) for build instructions.
 
 ---
 
-## Overlay Plugins
+## Overlay Plugins - Technical Notes
 
-User plugins shipped under `plugins/` as `.fuse` archives.
+User plugins shipped under `plugins/` as `.fuse` archives. For end-user configuration see [Plugins](#plugins).
 
 ### energy_bar
 
-Rive-driven energy bar overlay (`plugins/energy_bar-2.0.1.fuse`). Reads energy from the `game_memory` service, drives a Rive ViewModel, and pushes each frame to a `FusePanel`.
-
-```json
-{
-  "plugin_id": "energy_bar",
-  "name": "Energy Bar",
-  "version": "2.0.1",
-  "entry": "plugin:EnergyBarPlugin",
-  "dependencies": ["game_memory", "rive_animation"]
-}
-```
+`EnergyBar-2.0.1.fuse` - see [Energy Bar](#energy-bar) for calibration and configuration details.
 
 **Rive contract** (`assets/rive/energyBar.riv`)
 
 - ViewModel `energyBarVM`
-  - `energyValue` - float `0.0`-`1.0`
+  - `energyValue` - float `0.0`–`1.0`
   - `colorProperty` - 32-bit ARGB color
   - `strokeWeight` - float (default `1.5`)
   - `rotation` - float (degrees)
@@ -819,25 +869,15 @@ Rive-driven energy bar overlay (`plugins/energy_bar-2.0.1.fuse`). Reads energy f
 
 **Dual-view calibration** - `calibration_stages = 2`. First `Ctrl+L` saves the 3rd-person bar position, second saves the 1st-person position. While locked, `panel.update_view(mem.read("multiplayer_is_fp_view"))` swaps positions automatically when the in-game view changes.
 
-**Config keys** (Plugin Manager → Settings → energy_bar)
-
-| Category | Key | Type | Description |
-|----------|-----|------|-------------|
-| Memory Source | `memory_chain` | choice | `multiplayer_vehicle_energy` \| `training_vehicle_energy` |
-| Colors | `color_high` / `color_mid` / `color_low` | hex RGB | Thresholds at 60% / 30%. |
-| Style | `stroke_weight` | float `0.5`-`3.0` | Forwarded to `strokeWeight` VM property. |
-| Animation | `anim_width` / `anim_height` | int `10`-`3000` | Render-target pixel dimensions. |
-| Rotation | `rotation` | float `-360`-`360` | Forwarded to `rotation` VM property. |
-| Position | `bar_custom_pos` | position | 3rd-person `[x, y]` (set via stage-1 drag). |
-| Position | `bar_custom_pos_fp` | position | 1st-person `[x, y]` (set via stage-2 drag). |
-
 ---
 
-## Native (rive_plugin.dll)
+## Native DLLs
 
-The `rive_animation` core plugin requires `native/bin/rive_plugin.dll` - a thin C ABI over [rive-runtime](https://github.com/rive-app/rive-runtime) (D3D11 with WARP fallback). Source: `native/rive_plugin/{rive_plugin.cpp,rive_plugin.h,premake5.lua}`.
+### rive_plugin.dll
 
-**Build:** see [BUILD.md](BUILD.md) - clones rive-runtime, builds with clang-cl + premake, then builds `rive_plugin.dll`.
+Required by the `rive_animation` core plugin. Thin C ABI over [rive-runtime](https://github.com/rive-app/rive-runtime) (D3D11 with WARP fallback). Source: `native/rive_plugin/`.
+
+**Build:** see [BUILD.md](BUILD.md).
 
 **Quick rebuild:** `rebuild_dll.ps1` kills any python process holding the DLL and runs MSBuild against the existing VS solution.
 
@@ -849,6 +889,10 @@ The `rive_animation` core plugin requires `native/bin/rive_plugin.dll` - a thin 
 - ViewModel: `rive_vm_bind`, `rive_vm_set_{number,bool,string,color,enum}`, `rive_vm_trigger`, `rive_vm_get_{number,bool}`
 - Rendering: `rive_advance(handle, dt)`, `rive_render(handle, pixel_buffer)`
 
+### game_memory.dll
+
+Required by the `game_memory` core plugin. Compiled native reader; sources are not distributed. The DLL exposes a narrow named-read API - no offsets or module names are accessible from Python.
+
 ---
 
 ## Project Layout
@@ -859,7 +903,7 @@ HEAT_SACLOS/
 │   ├── api.py                     # FusePlugin, FuseContext, HotkeyRegistry
 │   ├── discovery.py               # Folder + .fuse scanning, manifest parsing
 │   ├── resolver.py                # Dependency resolution & topological sort
-│   ├── host.py                    # PluginHost — lifecycle, listeners, idle loop
+│   ├── host.py                    # PluginHost - lifecycle, listeners, idle loop
 │   ├── events.py                  # EventBus
 │   ├── services.py                # ServiceRegistry
 │   ├── runner.py                  # CLI entry point
@@ -875,7 +919,7 @@ HEAT_SACLOS/
 │       ├── assets.py              # PluginAssets (.fuse-safe asset accessor)
 │       ├── pack.py                # pack() / verify() for .fuse archives
 │       ├── file_assoc.py          # HKCU registration for .fuse extension
-│       ├── game_memory.py         # GameMemory — ctypes wrapper around game_memory.dll
+│       ├── game_memory.py         # GameMemory - ctypes wrapper around game_memory.dll
 │       ├── layered_window.py      # Win32 LayeredWindow
 │       ├── panel.py               # FusePanel / FusePanelGroup
 │       ├── screen_capture.py      # mss / PIL grab_region_np
@@ -890,8 +934,13 @@ HEAT_SACLOS/
 │       ├── rive_animation.py      # ctypes wrapper around rive_plugin.dll
 │       └── window_utils.py        # Win32 window helpers
 │
-├── plugins/                       # User drop-in directory — place .fuse archives here
-│   └── energy_bar-2.0.1.fuse      # Example plugin archive
+├── plugins/                       # User drop-in directory - place .fuse archives here
+│   └── EnergyBar-2.0.1.fuse
+│
+├── dev/                           # Plugin source trees (pack to .fuse before deploying)
+│   └── energy_bar/
+│
+├── out/                           # Packed .fuse archives (output of pack())
 │
 ├── native/                        # Native DLL plugins
 │   ├── bin/
