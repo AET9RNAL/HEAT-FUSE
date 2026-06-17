@@ -891,7 +891,7 @@ Required by the `rive_animation` core plugin. Thin C ABI over [rive-runtime](htt
 
 ### game_memory.dll
 
-Required by the `game_memory` core plugin. Compiled native reader; sources are not distributed. The DLL exposes a narrow named-read API - no offsets or module names are accessible from Python.
+Required by the `game_memory` core plugin. Compiled native reader; sources are not distributed. The DLL exposes a narrow named-read API.
 
 ---
 
