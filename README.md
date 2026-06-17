@@ -26,7 +26,7 @@ Any modifications to FUSE that would allow reading, exposing, or exploiting clie
 - [Hotkeys](#hotkeys)
 - [Plugins](#plugins)
   - [Energy Bar](#energy-bar)
-- [Game Values Reference](#game-values-reference)
+
 
 ---
 
