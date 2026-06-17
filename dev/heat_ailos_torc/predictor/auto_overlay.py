@@ -21,23 +21,21 @@ try:
     import winsound as _winsound
     from heat_ailos_torc import ASSETS_DIR as _ASSETS_DIR
     _SOUNDS_DIR = _ASSETS_DIR / 'sounds'
-    _LOCK_SOUND = str(_SOUNDS_DIR / 'lock.wav')
-    _INTERCEPT_SOUND = str(_SOUNDS_DIR / 'intercept.wav')
 except ImportError:
     _winsound = None
-    _LOCK_SOUND = None
-    _INTERCEPT_SOUND = None
+    _SOUNDS_DIR = None
 
 # Preload WAV files into memory so playback never touches disk.
 _LOCK_SOUND_BUF = None
 _INTERCEPT_SOUND_BUF = None
-if _winsound:
-    for _path, _attr in [(_LOCK_SOUND, '_LOCK_SOUND_BUF'),
-                          (_INTERCEPT_SOUND, '_INTERCEPT_SOUND_BUF')]:
+if _winsound and _SOUNDS_DIR is not None:
+    for _traversable, _attr in [
+        (_SOUNDS_DIR / 'lock.wav',      '_LOCK_SOUND_BUF'),
+        (_SOUNDS_DIR / 'intercept.wav', '_INTERCEPT_SOUND_BUF'),
+    ]:
         try:
-            if _path and os.path.exists(_path):
-                with open(_path, 'rb') as _f:
-                    globals()[_attr] = _f.read()
+            if _traversable.is_file():
+                globals()[_attr] = _traversable.read_bytes()
         except Exception:
             pass
 

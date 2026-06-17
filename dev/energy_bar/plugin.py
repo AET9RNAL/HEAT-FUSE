@@ -8,7 +8,6 @@ Timeline: energyEngine
 """
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Optional
 
 from loguru import logger
@@ -16,8 +15,6 @@ from loguru import logger
 from fuse.api import FuseContext, FusePlugin
 from fuse.utils.panel import FusePanel
 from fuse.ui.config_schema import ConfigCategory, ConfigEntry
-
-_RIV_PATH = Path(__file__).resolve().parent / "rive" / "energyBar.riv"
 
 _DEFAULT_COLOR_HIGH = "84FFB1"
 _DEFAULT_COLOR_MID  = "FF9800"
@@ -141,8 +138,8 @@ class EnergyBarPlugin(FusePlugin):
 
         self._anim = svc.create(w, h)
 
-        if not self._anim.load(_RIV_PATH):
-            logger.error(f"energy_bar_rive: failed to load {_RIV_PATH}")
+        if not self._anim.load_bytes(ctx.assets.read("rive/energyBar.riv")):
+            logger.error("energy_bar_rive: failed to load energyBar.riv")
         else:
             self._anim.set_state_machine("energyEngine")
             self._anim.vm_bind("energyBarVM")

@@ -15,8 +15,6 @@ from typing import TYPE_CHECKING
 
 from fuse.api import FuseContext, FusePlugin
 from fuse.ui.config_schema import ConfigCategory, ConfigEntry
-from fuse.utils.fonts import load_font
-from heat_ailos_torc import ASSETS_DIR as _AILOS_ASSETS_DIR
 
 if TYPE_CHECKING:
     from heat_ailos_torc.ui.base_overlay import BaseSACLOSOverlay
@@ -28,8 +26,8 @@ class HeatAilosTorcPlugin(FusePlugin):
     requires_calibration = True
 
     def setup(self, ctx: FuseContext) -> None:
-        load_font(_AILOS_ASSETS_DIR / "Montserrat-VariableFont_wght.ttf")
-        load_font(_AILOS_ASSETS_DIR / "Montserrat-Italic-VariableFont_wght.ttf")
+        ctx.assets.load_font("Montserrat-VariableFont_wght.ttf", key="montserrat")
+        ctx.assets.load_font("Montserrat-Italic-VariableFont_wght.ttf", key="montserrat-italic")
         # Host pre-seeds manifest default_config; load merges with on-disk.
         ctx.config.load()
 

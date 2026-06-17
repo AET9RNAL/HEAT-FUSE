@@ -49,8 +49,7 @@ from fuse.events import EventBus
 from fuse.services import ServiceRegistry
 from fuse.ui.manager import FuseManager
 
-# Bump when the plugin API surface changes in a breaking way.
-HOST_VERSION = "1.0"
+HOST_VERSION = "2.0.1"
 
 MouseCallback = Callable[[int, int, "pynmouse.Button", bool], None]
 
@@ -184,9 +183,11 @@ class PluginHost:
 
     def _instantiate(self, spec: DiscoveredPlugin) -> None:
         """Create and call setup() for one plugin. Called by the queue."""
+        from fuse.utils.assets import PluginAssets
+
         plugin = spec.cls()
         plugin_logger = _root_logger.bind(plugin=spec.plugin_id)
-        plugin_assets_dir = Path(spec.package_dir) / "assets"
+        plugin_assets = PluginAssets(spec.package_root / "assets")
 
         cfg = PluginConfig(spec.plugin_id)
         cfg.defaults(spec.manifest.get("default_config", {}))
@@ -195,7 +196,8 @@ class PluginHost:
             tk_root=self.root,
             config=cfg,
             hotkeys=self.hotkeys,
-            assets_dir=plugin_assets_dir,
+            assets=plugin_assets,
+            package_root=spec.package_root,
             host=self,
             state=self._state,
             events=self.events,
@@ -365,7 +367,6 @@ class PluginHost:
                 "homepage":    str,
                 "tags":        list[str],
                 "state":       str,          # PluginState value
-                "is_external": bool,
             }
         """
         result = []
@@ -379,7 +380,6 @@ class PluginHost:
                 "homepage":    spec.homepage,
                 "tags":        list(spec.tags),
                 "state":       self._plugin_states.get(plugin_id, PluginState.PENDING).value,
-                "is_external": spec.is_external,
             })
         return result
 
@@ -686,6 +686,8 @@ class PluginHost:
                 plugin.teardown()
             except Exception as e:
                 _root_logger.exception(f"{plugin.name}: teardown error: {e}")
+        from fuse.utils.fonts import unload_mem_fonts
+        unload_mem_fonts()
 
 
 __all__ = ["PluginHost", "PluginState", "HOST_VERSION"]

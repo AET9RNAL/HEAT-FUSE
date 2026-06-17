@@ -21,10 +21,13 @@ from heat_ailos_torc.ocr.range_ocr import reset_ocr_filter
 
 def _rf_font(size=14):
     """Get rangefinder font from the bundled plugin assets."""
+    import io
     from heat_ailos_torc import ASSETS_DIR as _AILOS_ASSETS_DIR
-    path = _AILOS_ASSETS_DIR / "Montserrat-VariableFont_wght.ttf"
     try:
-        font = ImageFont.truetype(str(path), size)
+        font = ImageFont.truetype(
+            io.BytesIO((_AILOS_ASSETS_DIR / "Montserrat-VariableFont_wght.ttf").read_bytes()),
+            size,
+        )
         try:
             font.set_variation_by_axes([600])  # Semi Bold
         except Exception:

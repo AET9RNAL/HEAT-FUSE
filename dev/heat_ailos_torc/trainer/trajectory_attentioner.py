@@ -49,12 +49,11 @@ class TrajectoryAttentioner:
     # ---- persistence ----
 
     def _weights_path(self):
-        """Resolve weights file path relative to data file location."""
+        """Resolve weights file path inside data/ml/."""
         if os.path.isabs(self.weights_file):
             return self.weights_file
-        # Place alongside the data file in the project root
-        base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        return os.path.join(base, self.weights_file)
+        from fuse.utils.paths import REPO_ROOT
+        return str(REPO_ROOT / "data" / "ml" / self.weights_file)
 
     def _load(self):
         path = self._weights_path()

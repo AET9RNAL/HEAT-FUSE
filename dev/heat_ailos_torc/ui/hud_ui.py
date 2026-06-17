@@ -38,10 +38,13 @@ _HUD_FONT_SMALL = None
 
 def _get_hud_font(size=16):
     """Get a PIL TrueType font from the bundled plugin assets."""
+    import io
     from heat_ailos_torc import ASSETS_DIR as _AILOS_ASSETS_DIR
-    path = _AILOS_ASSETS_DIR / "Montserrat-VariableFont_wght.ttf"
     try:
-        font = ImageFont.truetype(str(path), size)
+        font = ImageFont.truetype(
+            io.BytesIO((_AILOS_ASSETS_DIR / "Montserrat-VariableFont_wght.ttf").read_bytes()),
+            size,
+        )
         try:
             font.set_variation_by_axes([600])  # Semi Bold weight
         except Exception:
@@ -136,29 +139,17 @@ class HudUiMixin:
             self._create_hud_windows()
 
     def _load_hud_images(self):
-        """Load all HUD images as raw PIL RGBA — no chroma-key needed.
-
-        Asset resolution:
-          * an absolute ``hud_assets_dir`` is honoured verbatim;
-          * any other value is treated as a directory **inside** the
-            AILOS-TORC vertical's package-local ``assets/`` folder. This
-            keeps HUD media co-located with the code that owns it.
-        """
+        """Load all HUD images as raw PIL RGBA — no chroma-key needed."""
+        import io
         from heat_ailos_torc import ASSETS_DIR as _AILOS_ASSETS_DIR
-        if os.path.isabs(self.hud_assets_dir):
-            assets_base = self.hud_assets_dir
-        elif self.hud_assets_dir in ("", ".", "assets"):
-            assets_base = str(_AILOS_ASSETS_DIR)
-        else:
-            assets_base = str(_AILOS_ASSETS_DIR / self.hud_assets_dir)
 
         def load_png(name):
-            path = os.path.join(assets_base, name)
-            if not os.path.exists(path):
-                logger.warning(f"HUD image not found: {path}")
+            asset = _AILOS_ASSETS_DIR / name
+            if not asset.is_file():
+                logger.warning(f"HUD image not found: {name}")
                 return None
             try:
-                return Image.open(path).convert("RGBA")
+                return Image.open(io.BytesIO(asset.read_bytes())).convert("RGBA")
             except Exception as e:
                 logger.warning(f"Could not load HUD image {name}: {e}")
                 return None
@@ -174,10 +165,10 @@ class HudUiMixin:
         self.hud_img_designator_intercept = load_png(self.hud_designator_intercept)
 
         # Load logo raw RGBA for rotation animation
-        logo_path = os.path.join(assets_base, self.hud_logo_image)
-        if os.path.exists(logo_path):
+        logo_asset = _AILOS_ASSETS_DIR / self.hud_logo_image
+        if logo_asset.is_file():
             try:
-                self.hud_img_logo_raw = Image.open(logo_path).convert("RGBA")
+                self.hud_img_logo_raw = Image.open(io.BytesIO(logo_asset.read_bytes())).convert("RGBA")
                 self._prerender_logo_frames()
             except Exception as e:
                 logger.warning(f"Could not load logo: {e}")

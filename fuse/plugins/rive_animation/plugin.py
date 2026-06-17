@@ -8,7 +8,7 @@ Then consume it in setup()::
 
     svc = ctx.services.require("rive_animation")   # → RiveAnimationService
     anim = svc.create(256, 256)                    # → RiveAnimation
-    anim.load(ctx.assets_dir / "gauge.riv")
+    anim.load_bytes(ctx.assets.read("gauge.riv"))
     anim.vm_bind("GaugeVM")
 
     # each frame (drive via AnimationLoop):

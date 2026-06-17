@@ -3,21 +3,21 @@
 Every plugin subclasses :class:`FusePlugin` and is handed a
 :class:`FuseContext` instance during :meth:`FusePlugin.setup`. The context
 owns shared infrastructure (the Tk root, hotkey registry, per-plugin
-:class:`~fuse.utils.config.PluginConfig`, assets directory, event bus,
-service registry, and a per-plugin logger) so plugins never create global
-state on their own.
+:class:`~fuse.utils.config.PluginConfig`, :class:`~fuse.utils.assets.PluginAssets`,
+event bus, service registry, and a per-plugin logger) so plugins never create
+global state on their own.
 """
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Any, Callable, Dict, Optional
 
 import tkinter as tk
 from loguru import logger
 
 from fuse.utils.config import PluginConfig
+from fuse.utils.assets import PluginAssets
 
 
 class HotkeyRegistry:
@@ -112,9 +112,13 @@ class FuseContext:
     tk_root: tk.Tk
     config: PluginConfig
     hotkeys: HotkeyRegistry
-    assets_dir: Path
+    assets: PluginAssets          # high-level asset loader — use ctx.assets.load_image() etc.
     host: "PluginHost"  # noqa: F821
     state: str = "calibrate"  # "calibrate" | "locked"
+
+    # Raw Traversable root of the entire plugin package (parent of assets/).
+    # Use ctx.assets for all normal asset access; this is for advanced use only.
+    package_root: object = None
 
     # Cross-plugin event bus.
     events: Optional["EventBus"] = None  # noqa: F821
@@ -183,4 +187,4 @@ class FusePlugin(ABC):
         """Persist state and release resources."""
 
 
-__all__ = ["FusePlugin", "FuseContext", "HotkeyRegistry"]
+__all__ = ["FusePlugin", "FuseContext", "HotkeyRegistry", "PluginAssets"]

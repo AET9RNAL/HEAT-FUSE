@@ -24,6 +24,8 @@ def run(
     """Boot FUSE with all enabled plugins."""
     del argv  # reserved for future CLI flags
     _setup_logging()
+    from fuse.utils.file_assoc import ensure_registered
+    ensure_registered(_ASSETS_DIR / "logo.png")
     for name in _FUSE_FONTS:
         load_font(_ASSETS_DIR / name)
     root = tk.Tk()

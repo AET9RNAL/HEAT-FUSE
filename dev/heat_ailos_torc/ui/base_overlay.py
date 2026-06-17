@@ -32,20 +32,22 @@ USE_MEMORY_API: bool = True
 def _resolve_overlay_image(path):
     """Resolve a calibration overlay image path.
 
-    Accepts absolute paths verbatim. Bare filenames or relative paths are
-    interpreted against the AILOS-TORC vertical's package-local
-    ``assets/`` directory.
+    Returns a Traversable (pathlib.Path or zipfile.Path) or None.
+    Accepts absolute filesystem paths verbatim. Bare filenames or relative
+    paths are looked up inside the plugin's assets/ directory.
     """
     if not path:
         return None
-    if os.path.isabs(path) and os.path.exists(path):
-        return path
+    from pathlib import Path as _Path
+    abs_p = _Path(path)
+    if abs_p.is_absolute() and abs_p.exists():
+        return abs_p
     candidate = _AILOS_ASSETS_DIR / os.path.basename(path)
-    if candidate.exists():
-        return str(candidate)
-    # Last-resort: honour the literal value (legacy configs that point
-    # somewhere outside the vertical).
-    return path if os.path.exists(path) else None
+    if candidate.is_file():
+        return candidate
+    if abs_p.exists():
+        return abs_p
+    return None
 
 try:
     from PIL import Image, ImageTk
@@ -308,21 +310,22 @@ class BaseSACLOSOverlay(OCRUiMixin, RangefinderUiMixin, HudUiMixin):
         self.status_lbl.config(text=f"CALIBRATE  |  Tracking key set to: {self.tracking_key_name}  |  Ctrl+L = lock", fg="#00ff00")
         self.root.after(2000, lambda: self.status_lbl.config(text="CALIBRATE  |  T=OCR region  |  Ctrl+L = lock    Ctrl+P = quit", fg="#555"))
 
-    def _load_images(self, normal_path, tracking_path=None):
+    def _load_images(self, normal_asset, tracking_asset=None):
         if not PIL_OK: return
-        # Store only the filename so config never persists absolute paths.
-        self.image_path = os.path.basename(normal_path) if normal_path else None
-        self.tracking_image_path = os.path.basename(tracking_path) if tracking_path else None
-        
-        img = Image.open(normal_path).convert("RGBA")
+        import io
+        # Store only the filename — config must never persist full paths.
+        self.image_path = normal_asset.name if normal_asset else None
+        self.tracking_image_path = tracking_asset.name if tracking_asset else None
+
+        img = Image.open(io.BytesIO(normal_asset.read_bytes())).convert("RGBA")
         self.img_w, self.img_h = img.size
         self.img_normal_pil = img  # Store raw RGBA for LayeredWindow
         bg = Image.new("RGBA", img.size, (0, 0, 1, 255))
         composed = Image.alpha_composite(bg, img).convert("RGB")
         self.img_normal = ImageTk.PhotoImage(composed)
 
-        if tracking_path and os.path.exists(tracking_path):
-            tracking_img = Image.open(tracking_path).convert("RGBA")
+        if tracking_asset and tracking_asset.is_file():
+            tracking_img = Image.open(io.BytesIO(tracking_asset.read_bytes())).convert("RGBA")
             if tracking_img.size != (self.img_w, self.img_h):
                 tracking_img = tracking_img.resize((self.img_w, self.img_h), Image.Resampling.LANCZOS)
             self.img_tracking_pil = tracking_img  # Store raw RGBA

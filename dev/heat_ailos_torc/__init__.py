@@ -10,10 +10,11 @@ Each mode is profile-aware: the active dataset / attention weights / biases
 triple is selected at startup via :mod:`heat_ailos_torc.profiles`.
 """
 
-from pathlib import Path
+import importlib.resources
 
-#: Vertical-local assets (HUD images, calibration BDC, sounds).
-ASSETS_DIR: Path = Path(__file__).resolve().parent / "assets"
+#: Traversable root of the plugin's assets/ directory.
+#: Works for both filesystem (pathlib.Path) and .fuse ZIP (zipfile.Path) loading.
+ASSETS_DIR = importlib.resources.files(__package__) / "assets"
 
 from .profiles import (  # noqa: F401, E402
     MLProfile,
