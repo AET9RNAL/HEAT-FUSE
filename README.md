@@ -585,7 +585,7 @@ Prefer consuming the `rive_animation` service (`ctx.services.get("rive_animation
 
 ### GameMemory
 
-`ctypes` wrapper around `native/bin/game_memory.dll` - a compiled native reader. Game values are read by name; no offsets or module names are exposed to plugin code.
+`ctypes` wrapper around `native/bin/game_memory.dll` - a compiled native reader.
 
 ```python
 from fuse.utils.game_memory import GameMemory
