@@ -122,7 +122,7 @@ While locked the bar switches positions automatically when you zoom into first-p
 FUSE provides:
 
 - **Per-pixel-alpha HUD overlays** via Win32 `LayeredWindow` (`CreateWindowExW` + `UpdateLayeredWindow`). Each pixel carries its own alpha channel.
-- **In-game state reads** via `game_memory.dll` - a compiled native reader; no plaintext offsets shipped at runtime.
+- **In-game state reads** via `game_memory.dll` - a compiled native reader.
 - **Rive animation rendering** via a native C++ runtime (`rive_plugin.dll`, D3D11/WARP).
 - **Plugin-based architecture** - FUSE discovers, resolves dependencies, calibrates, and manages overlays sequentially. Plugins never create global state.
 - **Distributable `.fuse` plugin archives** - single-file ZIP packages loaded via Python `zipimport`.
