@@ -10,6 +10,12 @@
 
 Any modifications to FUSE that would allow reading, exposing, or exploiting client information that wouldn't normally be available to the user, or that alters the game's runtime are strictly prohibited.
 
+![Static Badge](https://img.shields.io/badge/-BUILT_WITH-1D1D1D?style=for-the-badge&labelColor=1D1D1D&color=1D1D1D)
+![Logo](https://img.shields.io/badge/-RIVE-f3f2f4?style=for-the-badge&logo=rive&logoColor=f3f2f4&labelColor=1D1D1D&color=1D1D1D)
+![Logo](https://img.shields.io/badge/-PYTHON-f3f2f4?style=for-the-badge&logo=python&logoColor=f3f2f4&labelColor=1D1D1D&color=1D1D1D)
+![Logo](https://img.shields.io/badge/-C++-f3f2f4?style=for-the-badge&logo=cplusplus&logoColor=f3f2f4&labelColor=1D1D1D&color=1D1D1D)
+
+![Static Badge](https://img.shields.io/badge/RUNTIME_VERSION-2.0.1-1D1D1D?style=for-the-badge&labelColor=1D1D1D&color=434343)
 ---
 
 ## Table of Contents
