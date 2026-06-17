@@ -901,9 +901,3 @@ HEAT_SACLOS/
 ├── requirements.txt               # pynput, Pillow, pytesseract, numpy, mss, loguru, pyserial
 └── README.md                      # This file
 ```
-
----
-
-## Version
-
-Host version: `2.0.1`
