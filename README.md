@@ -48,7 +48,7 @@ Any modifications to FUSE that would allow reading, exposing, or exploiting clie
 FUSE provides:
 
 - **Per-pixel-alpha HUD overlays** via Win32 `LayeredWindow` (`CreateWindowExW` + `UpdateLayeredWindow`). Each pixel carries its own alpha channel.
-- **In-game memory reading** via pointer chains (`ctypes` + `kernel32`).
+- **In-game state reads** via `game_memory.dll` — a compiled native reader;
 - **Rive animation rendering** via a native C++ runtime (`rive_plugin.dll`, D3D11/WARP).
 - **Plugin-based architecture** - FUSE discovers, resolves dependencies, calibrates, and manages overlays sequentially. Plugins never create global state.
 - **Distributable `.fuse` plugin archives** - single-file ZIP packages loaded via Python `zipimport`.
@@ -532,33 +532,24 @@ Prefer consuming the `rive_animation` service (`ctx.services.get("rive_animation
 
 #### GameMemory
 
-Typed memory reader for Windows processes via pointer chains. `ctypes` + `kernel32`, no external deps.
+`ctypes` wrapper around `native/bin/game_memory.dll` — a compiled native reader. Game values are read by name; no offsets or module names are exposed to plugin code.
 
 ```python
 from fuse.utils.game_memory import GameMemory
 
-mem = GameMemory("engine_launcher.exe", "assets/pointer_chains.json")
+mem = GameMemory("engine_launcher.exe")
 mem.open()
-energy = mem.read("energy")          # int | float | None
-addr   = mem.resolve_address("ammo") # int | None
+energy = mem.read("multiplayer_vehicle_energy")   # int | float | None
 mem.close()
+
+# or as a context manager:
+with GameMemory("engine_launcher.exe") as mem:
+    zoom = mem.read("multiplayer_camera_zoom")
 ```
 
-Pointer chain JSON:
+`read(name)` returns `int` for integer dtypes, `float` for `float`/`double`, or `None` on failure (process gone, chain error, or cooldown). Errors are suppressed for 3 s after a bad read to avoid log spam.
 
-```json
-{
-  "energy": {
-    "module": "engine.dll",
-    "offsets": [0x10, 0x20, 0x8],
-    "dtype": "uint32"
-  }
-}
-```
-
-Supported dtypes: `uint8`, `int8`, `uint16`, `int16`, `uint32`, `int32`, `uint64`, `int64`, `float`, `double`.
-
-Lower-level primitives in `fuse.utils.memory_reader`: `find_pid_by_name`, `ProcessHandle`, `resolve_pointer_chain`, `get_module_base`.
+See [game_memory plugin](#game_memory) for the full list of available value names.
 
 ---
 
@@ -709,7 +700,7 @@ Shipped under `fuse/plugins/`. Always loaded before user plugins.
 
 ### game_memory
 
-Opens the game process and registers a `GameMemory` instance as the `game_memory` service.
+Opens the game process and registers a `GameMemory` instance as the `"game_memory"` service. Acts as the **FUSE Game API provider** — the single authorised channel through which plugins read live game state.
 
 ```json
 {
@@ -723,15 +714,50 @@ Opens the game process and registers a `GameMemory` instance as the `game_memory
 Consumer usage:
 
 ```python
-mem = ctx.services.require("game_memory")
-energy = mem.read("energy")
+# In manifest.json: "dependencies": ["game_memory"]
+
+mem = ctx.services.require("game_memory")   # → GameMemory
+
+def tick(self, dt):
+    energy = mem.read("multiplayer_vehicle_energy")   # int | None
+    zoom   = mem.read("multiplayer_camera_zoom")      # int | None
 ```
 
-Config keys (with defaults from `manifest.json`):
+Config keys:
 
-- `process_name` - default `"engine_launcher.exe"`.
-- `chains_file` - default `"assets/pointer_chains.json"`.
-- `reconnect_interval_s` - default `5.0`. Auto-reconnects on process-gone or `OSError` reads.
+- `process_name` — default `"engine_launcher.exe"`.
+- `reconnect_interval_s` — default `5.0`. Auto-reconnects when the process restarts.
+
+#### Available Game Values
+
+| Name | Type | Description |
+|------|------|-------------|
+| `multiplayer_vehicle_energy` | `uint32` | Vehicle energy `0-100` |
+| `multiplayer_vehicle_health` | `uint32` | Vehicle health `0-n` |
+| `multiplayer_vehicle_boost` | `uint32` | Engine boost value `0-100` |
+| `multiplayer_vehicle_autocannon_overheat` | `float` | Autocannon overheat `0.0–1.0` |
+| `multiplayer_hud_score` | `uint32` | Scoreboard score `0-n` |
+| `multiplayer_hud_rangefinder` | `uint32` | Rangefinder distance displayed when aiming at a target `0-n` |
+| `multiplayer_camera_zoom` | `uint32` | Camera zoom level (3rd-person: `0–4`; wraps to `0` on entering 1st-person, then increases per zoom stage) |
+| `multiplayer_is_fp_view` | `uint8` | `1` = first-person view, `0` = third-person |
+| `multiplayer_primary_ammo_current` | `uint32` | Primary weapon current ammo count `0-n` |
+| `multiplayer_primary_ammo_max` | `uint32` | Primary weapon max ammo count `0-n` |
+| `multiplayer_secondary_ammo_current` | `uint32` | Secondary weapon current ammo count `0-n` |
+| `multiplayer_secondary_ammo_max` | `uint32` | Secondary weapon max ammo count `0-n` |
+| `multiplayer_reload_time_remaining` | `float` | Primary weapon reload time remaining (seconds). `0.0` = ready / not reloading |
+| `multiplayer_reload_time_total` | `float` | Primary weapon total reload duration (seconds) |
+| `multiplayer_active_reload_time_remaining` | `float` | Alternate reload-remaining source; coarser update granularity |
+| `multiplayer_ability_slot_0_cooldown` | `float` | Ability slot 0 time remaining (seconds). `0.0` = ready |
+| `multiplayer_ability_slot_1_cooldown` | `float` | Ability slot 1 time remaining (seconds) |
+| `multiplayer_ability_slot_2_cooldown` | `float` | Ability slot 2 time remaining (seconds) |
+| `multiplayer_ability_slot_3_cooldown` | `float` | Ability slot 3 time remaining (seconds) |
+| `multiplayer_ability_slot_0_progress` | `float` | Ability slot 0 charge progress `0.0–1.0` (`1.0` = ready) |
+| `multiplayer_equipment_slot_0_cooldown` | `float` | Equipment slot 0 time remaining (seconds) |
+| `multiplayer_equipment_slot_1_cooldown` | `float` | Equipment slot 1 time remaining (seconds) |
+| `multiplayer_equipment_slot_0_progress` | `float` | Equipment slot 0 charge progress `0.0–1.0` |
+| `multiplayer_equipment_slot_1_progress` | `float` | Equipment slot 1 charge progress `0.0–1.0` |
+| `training_vehicle_energy` | `uint32` | Vehicle energy in training range |
+| `training_vehicle_rangefinder` | `uint32` | Rangefinder value in training range |
 
 ---
 
@@ -849,8 +875,7 @@ HEAT_SACLOS/
 │       ├── assets.py              # PluginAssets (.fuse-safe asset accessor)
 │       ├── pack.py                # pack() / verify() for .fuse archives
 │       ├── file_assoc.py          # HKCU registration for .fuse extension
-│       ├── game_memory.py         # GameMemory, ChainDef
-│       ├── memory_reader.py       # ctypes kernel32 wrappers
+│       ├── game_memory.py         # GameMemory — ctypes wrapper around game_memory.dll
 │       ├── layered_window.py      # Win32 LayeredWindow
 │       ├── panel.py               # FusePanel / FusePanelGroup
 │       ├── screen_capture.py      # mss / PIL grab_region_np
@@ -865,12 +890,13 @@ HEAT_SACLOS/
 │       ├── rive_animation.py      # ctypes wrapper around rive_plugin.dll
 │       └── window_utils.py        # Win32 window helpers
 │
-├── plugins/                       # User drop-in plugins
-│   ├── energy_bar-2.0.1.fuse      # Distributable archive (loaded by FUSE)
-│   └── energy_bar/                # Source folder (loose folders are ignored at runtime — pack to .fuse)
+├── plugins/                       # User drop-in directory — place .fuse archives here
+│   └── energy_bar-2.0.1.fuse      # Example plugin archive
 │
-├── native/                        # C++ Rive runtime wrapper
-│   ├── bin/rive_plugin.dll        # Built artifact (see BUILD.md)
+├── native/                        # Native DLL plugins
+│   ├── bin/
+│   │   ├── rive_plugin.dll        # Rive runtime (see BUILD.md)
+│   │   └── game_memory.dll        # Compiled game reader (sources: private)
 │   └── rive_plugin/
 │       ├── rive_plugin.cpp
 │       ├── rive_plugin.h
@@ -880,8 +906,7 @@ HEAT_SACLOS/
 │   ├── NotoSans-VariableFont_wdth,wght.ttf
 │   ├── NotoSans-Italic-VariableFont_wdth,wght.ttf
 │   ├── logo.png
-│   ├── fuse_banner.png
-│   └── pointer_chains.json
+│   └── fuse_banner.png
 │
 ├── data/                          # Persistent data (gitignored)
 │   ├── configs/                   # fuse_<plugin>.json + fuse_host.json
