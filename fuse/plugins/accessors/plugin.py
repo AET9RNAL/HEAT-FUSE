@@ -35,8 +35,8 @@ import threading
 
 from loguru import logger
 
-from fuse.api import FuseContext, FusePlugin
-from fuse.utils.accessors import Accessors
+from fuse.core.api import FuseContext, FusePlugin
+from fuse.vision.accessors import Accessors
 from fuse.ui.config_schema import ConfigCategory, ConfigEntry
 
 

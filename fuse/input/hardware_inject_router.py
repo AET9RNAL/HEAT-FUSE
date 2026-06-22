@@ -50,7 +50,7 @@ def _apply_backend(name: str) -> None:
     _current_backend = name
 
     if name == "arduino":
-        from fuse.utils import hardware_inject_arduino as _m
+        from fuse.input import hardware_inject_arduino as _m
         inject_mouse_movement = _m.inject_mouse_movement
         inject_mouse_click    = _m.inject_mouse_click
         set_cursor_pos        = _m.set_cursor_pos
@@ -61,7 +61,7 @@ def _apply_backend(name: str) -> None:
         disconnect            = _m.disconnect
         is_connected          = _m.is_connected
     else:
-        from fuse.utils import hardware_inject as _m
+        from fuse.input import hardware_inject as _m
         inject_mouse_movement = _m.inject_mouse_movement
         inject_mouse_click    = _m.inject_mouse_click
         set_cursor_pos        = _m.set_cursor_pos

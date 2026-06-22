@@ -220,7 +220,7 @@ class OCRUiMixin:
     # def _set_ocr_display_clickthrough(self, enable):
     #     try:
     #         import ctypes
-    #         from fuse.utils.window_utils import set_window_clickthrough
+    #         from fuse.ui.window_utils import set_window_clickthrough
     #         if self.ocr_display_hwnd is None:
     #             self.ocr_display_hwnd = ctypes.windll.user32.FindWindowW(None, "SACLOS OCR Display")
     #         if self.ocr_display_hwnd:

@@ -3,7 +3,7 @@
 Every plugin subclasses :class:`FusePlugin` and is handed a
 :class:`FuseContext` instance during :meth:`FusePlugin.setup`. The context
 owns shared infrastructure (the Tk root, hotkey registry, per-plugin
-:class:`~fuse.utils.config.PluginConfig`, :class:`~fuse.utils.assets.PluginAssets`,
+:class:`~fuse.core.config.PluginConfig`, :class:`~fuse.ui.assets.PluginAssets`,
 event bus, service registry, and a per-plugin logger) so plugins never create
 global state on their own.
 """
@@ -16,8 +16,8 @@ from typing import Any, Callable, Dict, Optional
 import tkinter as tk
 from loguru import logger
 
-from fuse.utils.config import PluginConfig
-from fuse.utils.assets import PluginAssets
+from fuse.core.config import PluginConfig
+from fuse.ui.assets import PluginAssets
 
 
 class HotkeyRegistry:

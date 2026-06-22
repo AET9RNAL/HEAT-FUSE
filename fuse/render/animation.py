@@ -6,7 +6,7 @@ the loop.
 
 Usage::
 
-    from fuse.utils.animation import AnimationLoop
+    from fuse.render.animation import AnimationLoop
 
     logo_anim = AnimationLoop(ctx.tk_root, self._tick_logo, fps=30)
     logo_anim.start()   # in _show_hud_setup / _show_hud_locked

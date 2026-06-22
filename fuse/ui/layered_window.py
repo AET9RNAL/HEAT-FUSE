@@ -5,7 +5,7 @@ Wraps CreateWindowExW + UpdateLayeredWindow for true RGBA transparency.
 No grey borders, no drop shadows, no chroma-key. Works alongside tkinter mainloop.
 
 Usage:
-    from fuse.utils.layered_window import LayeredWindow
+    from fuse.ui.layered_window import LayeredWindow
     win = LayeredWindow("My Overlay")
     win.create(pil_rgba_image, global_alpha=220)
     win.show()

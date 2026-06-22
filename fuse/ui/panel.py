@@ -50,10 +50,10 @@ from typing import TYPE_CHECKING
 
 from PIL import Image
 
-from fuse.utils.layered_window import LayeredWindow
+from fuse.ui.layered_window import LayeredWindow
 
 if TYPE_CHECKING:
-    from fuse.api import FuseContext
+    from fuse.core.api import FuseContext
 
 
 class FusePanel:

@@ -2,7 +2,7 @@
 
 Usage::
 
-    from fuse.utils.rive_animation import RiveAnimation
+    from fuse.render.rive_animation import RiveAnimation
 
     anim = RiveAnimation(256, 256)
     anim.load(Path("assets/gauge.riv"))

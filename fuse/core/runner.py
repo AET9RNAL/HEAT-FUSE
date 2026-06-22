@@ -5,9 +5,9 @@ import tkinter as tk
 from pathlib import Path
 from loguru import logger
 
-from fuse.log import setup as _setup_logging
-from fuse.host import PluginHost
-from fuse.utils.fonts import load_font
+from fuse.core.log import setup as _setup_logging
+from fuse.core.host import PluginHost
+from fuse.ui.fonts import load_font
 
 _ASSETS_DIR = Path(__file__).resolve().parent.parent / "assets"
 
@@ -24,7 +24,7 @@ def run(
     """Boot FUSE with all enabled plugins."""
     del argv  # reserved for future CLI flags
     _setup_logging()
-    from fuse.utils.file_assoc import ensure_registered
+    from fuse.packaging.file_assoc import ensure_registered
     ensure_registered(_ASSETS_DIR / "logo.png")
     for name in _FUSE_FONTS:
         load_font(_ASSETS_DIR / name)

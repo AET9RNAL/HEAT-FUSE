@@ -6,7 +6,7 @@ Owns:
   layered windows),
 * one ``pynput`` keyboard listener (fanned out via :class:`HotkeyRegistry`),
 * one ``pynput`` mouse listener (broadcast to plugins that opt-in),
-* per-plugin :class:`~fuse.utils.config.PluginConfig` instances,
+* per-plugin :class:`~fuse.core.config.PluginConfig` instances,
 * the calibrate/locked global state machine (``Ctrl+L`` toggle, ``Ctrl+P`` quit),
 * a shared :class:`~fuse.events.EventBus` for cross-plugin events,
 * a shared :class:`~fuse.services.ServiceRegistry` for inter-plugin APIs,
@@ -35,18 +35,18 @@ try:
 except ImportError:  # pragma: no cover
     PYNPUT_OK = False
 
-from fuse.utils.config import ConfigManager, PluginConfig
+from fuse.core.config import ConfigManager, PluginConfig
 
-from fuse.api import FuseContext, FusePlugin, HotkeyRegistry
-from fuse.discovery import (
+from fuse.core.api import FuseContext, FusePlugin, HotkeyRegistry
+from fuse.core.discovery import (
     BUILTIN_PLUGINS_DIR,
     DiscoveredPlugin,
     USER_PLUGINS_DIR,
     discover,
 )
-from fuse.resolver import resolve_load_order
-from fuse.events import EventBus
-from fuse.services import ServiceRegistry
+from fuse.core.resolver import resolve_load_order
+from fuse.core.events import EventBus
+from fuse.core.services import ServiceRegistry
 from fuse.ui.manager import FuseManager
 
 HOST_VERSION = "2.1.1"
@@ -183,7 +183,7 @@ class PluginHost:
 
     def _instantiate(self, spec: DiscoveredPlugin) -> None:
         """Create and call setup() for one plugin. Called by the queue."""
-        from fuse.utils.assets import PluginAssets
+        from fuse.ui.assets import PluginAssets
 
         plugin = spec.cls()
         plugin_logger = _root_logger.bind(plugin=spec.plugin_id)
@@ -686,7 +686,7 @@ class PluginHost:
                 plugin.teardown()
             except Exception as e:
                 _root_logger.exception(f"{plugin.name}: teardown error: {e}")
-        from fuse.utils.fonts import unload_mem_fonts
+        from fuse.ui.fonts import unload_mem_fonts
         unload_mem_fonts()
 
 

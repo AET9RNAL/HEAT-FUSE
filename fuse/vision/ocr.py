@@ -24,7 +24,7 @@ from typing import Optional, Sequence
 import numpy as np
 from loguru import logger
 
-from fuse.utils.screen_capture import grab_region_np
+from fuse.ui.screen_capture import grab_region_np
 
 try:
     from PIL import Image  # type: ignore

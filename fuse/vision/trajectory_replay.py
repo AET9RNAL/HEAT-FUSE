@@ -12,7 +12,7 @@ Used by:
 import time
 from loguru import logger
 
-from fuse.utils.hardware_inject_router import inject_mouse_movement, inject_mouse_click, set_cursor_pos
+from fuse.input.hardware_inject_router import inject_mouse_movement, inject_mouse_click, set_cursor_pos
 
 
 def replay_movements(trajectory, abort_event=None):

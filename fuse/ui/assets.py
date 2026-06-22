@@ -73,7 +73,7 @@ class PluginAssets:
         Idempotent — calling twice with the same key is a no-op.
         Returns True on success, False on failure or non-Windows.
         """
-        from fuse.utils.fonts import load_font_from_bytes
+        from fuse.ui.fonts import load_font_from_bytes
         try:
             data = self.read(rel_path)
         except Exception as e:

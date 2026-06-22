@@ -13,7 +13,7 @@ from typing import Dict, List, Set
 
 from loguru import logger
 
-from fuse.discovery import DiscoveredPlugin
+from fuse.core.discovery import DiscoveredPlugin
 
 
 def _version_tuple(v: str) -> tuple:

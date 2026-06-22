@@ -49,7 +49,7 @@ from typing import List, Optional, Type
 
 from loguru import logger
 
-from fuse.api import FusePlugin
+from fuse.core.api import FusePlugin
 from fuse.utils.paths import REPO_ROOT
 
 BUILTIN_PLUGINS_DIR: Path = Path(__file__).resolve().parent / "plugins"
