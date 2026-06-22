@@ -11,7 +11,7 @@ except ImportError:
     PIL_OK = False
 
 try:
-    from fuse.utils.layered_window import LayeredWindow
+    from fuse.ui.layered_window import LayeredWindow
     LAYERED_OK = True
 except ImportError:
     LAYERED_OK = False

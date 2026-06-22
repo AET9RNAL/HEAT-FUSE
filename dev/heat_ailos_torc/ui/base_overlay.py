@@ -7,8 +7,8 @@ import threading
 import time
 import traceback
 
-from fuse.utils.config import ConfigManager
-from fuse.utils.window_utils import apply_geometry_fast, set_window_clickthrough, force_focus
+from fuse.core.config import ConfigManager
+from fuse.ui.window_utils import apply_geometry_fast, set_window_clickthrough, force_focus
 from heat_ailos_torc import ASSETS_DIR as _AILOS_ASSETS_DIR
 from heat_ailos_torc.ocr.range_ocr import TESSERACT_OK, ocr_capture_range
 from heat_ailos_torc.ocr.ocr_ui import OCRUiMixin
@@ -56,7 +56,7 @@ except ImportError:
     PIL_OK = False
 
 try:
-    from fuse.utils.layered_window import LayeredWindow
+    from fuse.ui.layered_window import LayeredWindow
     LAYERED_OK = True
 except ImportError:
     LAYERED_OK = False
@@ -896,7 +896,7 @@ class BaseSACLOSOverlay(OCRUiMixin, RangefinderUiMixin, HudUiMixin):
         self._destroy_locked_overlay()
 
         try:
-            from fuse.utils.hardware_inject_router import disable_hires_timer
+            from fuse.input.hardware_inject_router import disable_hires_timer
             disable_hires_timer()
         except Exception:
             pass
@@ -945,7 +945,7 @@ class BaseSACLOSOverlay(OCRUiMixin, RangefinderUiMixin, HudUiMixin):
         self._cleanup_hud()
         self._destroy_locked_overlay()
         try:
-            from fuse.utils.hardware_inject_router import disable_hires_timer
+            from fuse.input.hardware_inject_router import disable_hires_timer
             disable_hires_timer()
         except Exception:
             pass

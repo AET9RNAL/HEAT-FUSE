@@ -13,7 +13,7 @@ import threading
 import tkinter as tk
 from typing import TYPE_CHECKING
 
-from fuse.api import FuseContext, FusePlugin
+from fuse.core.api import FuseContext, FusePlugin
 from fuse.ui.config_schema import ConfigCategory, ConfigEntry
 
 if TYPE_CHECKING:
@@ -63,7 +63,7 @@ class HeatAilosTorcPlugin(FusePlugin):
             ]),
         ])
 
-        from fuse.utils.hardware_inject_router import is_admin, init_backend
+        from fuse.input.hardware_inject_router import is_admin, init_backend
         init_backend(ctx.config.get("input_backend", "arduino"))
         if not is_admin():
             ctx.logger.warning(
@@ -76,7 +76,7 @@ class HeatAilosTorcPlugin(FusePlugin):
         # has pointed the router at the correct backend module.
         self._hw_connected = False
         def _connect_hw():
-            from fuse.utils.hardware_inject_router import connect
+            from fuse.input.hardware_inject_router import connect
             if connect():
                 self._hw_connected = True
         threading.Thread(target=_connect_hw, daemon=True).start()
@@ -135,7 +135,7 @@ class HeatAilosTorcPlugin(FusePlugin):
         pass  # overlay drives itself via pynput listeners and root.after() chains
 
     def teardown(self) -> None:
-        from fuse.utils.hardware_inject_router import disconnect
+        from fuse.input.hardware_inject_router import disconnect
         if getattr(self, "_hw_connected", False):
             try:
                 disconnect()
@@ -200,7 +200,7 @@ class HeatAilosTorcPlugin(FusePlugin):
         # input_backend: update both overlay attr AND the router so the change
         # takes effect immediately without a restart.
         def _on_backend_change(v):
-            from fuse.utils.hardware_inject_router import init_backend
+            from fuse.input.hardware_inject_router import init_backend
             init_backend(v)
             if hasattr(overlay, "input_backend"):
                 overlay.input_backend = v

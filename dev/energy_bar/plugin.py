@@ -12,8 +12,8 @@ from typing import Optional
 
 from loguru import logger
 
-from fuse.api import FuseContext, FusePlugin
-from fuse.utils.panel import FusePanel
+from fuse.core.api import FuseContext, FusePlugin
+from fuse.ui.panel import FusePanel
 from fuse.ui.config_schema import ConfigCategory, ConfigEntry
 
 _DEFAULT_COLOR_HIGH = "84FFB1"

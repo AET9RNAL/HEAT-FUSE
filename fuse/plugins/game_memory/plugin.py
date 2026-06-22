@@ -17,8 +17,8 @@ from pathlib import Path
 
 from loguru import logger
 
-from fuse.api import FuseContext, FusePlugin
-from fuse.utils.game_memory import GameMemory
+from fuse.core.api import FuseContext, FusePlugin
+from fuse.vision.game_memory import GameMemory
 from fuse.ui.config_schema import ConfigCategory, ConfigEntry
 
 
