@@ -5,7 +5,7 @@ Wraps the generic FUSE OCR infrastructure with War Thunder's HUD colour mask
 
 Public API:
 
-* :data:`TESSERACT_OK` — re-exported from ``fuse.utils.ocr``.
+* :data:`TESSERACT_OK` — re-exported from ``fuse.vision.ocr``.
 * :data:`OCR_MIN_RANGE_M`, :data:`OCR_MAX_RANGE_M` — accepted range domain.
 * :func:`ocr_capture_range` — read range from screen region, returns metres or None.
 * :func:`ocr_capture_int` — re-exported generic integer OCR.
@@ -20,19 +20,19 @@ from typing import Optional, Sequence
 import numpy as np
 from loguru import logger
 
-from fuse.utils.ocr import (
+from fuse.vision.ocr import (
     TESSERACT_OK,
     PIL_OK,
     TemporalOCRFilter,
     IntHysteresisFilter,
     ocr_capture_int,
 )
-from fuse.utils.screen_capture import grab_region_np
+from fuse.ui.screen_capture import grab_region_np
 
 try:
     from PIL import Image  # type: ignore
 except ImportError:
-    pass  # PIL_OK from fuse.utils.ocr guards all PIL usage
+    pass  # PIL_OK from fuse.vision.ocr guards all PIL usage
 
 
 OCR_MIN_RANGE_M = 20.0

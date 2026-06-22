@@ -24,7 +24,7 @@ from loguru import logger
 from heat_ailos_torc.profiles import MLProfile, default_profile_name, load_profile
 from heat_ailos_torc.trainer.training_overlay import TrainingOverlay
 from heat_ailos_torc.trainer.correction_learner import CorrectionLearner
-from fuse.utils.hardware_inject_router import connect, disconnect
+from fuse.input.hardware_inject_router import connect, disconnect
 
 
 def _build_parser() -> argparse.ArgumentParser:

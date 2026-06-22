@@ -1,7 +1,3 @@
-"""FUSE — mod loader core.
-
-Import the public API surface from here:
-
-    from fuse.api import FusePlugin, FuseContext
-    from fuse.host import PluginHost
-"""
+"""FUSE — mod loader core."""
+from fuse.core.api import FusePlugin, FuseContext, HotkeyRegistry
+from fuse.core.host import PluginHost

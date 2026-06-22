@@ -25,9 +25,9 @@ except ImportError:
     PIL_OK = False
 
 try:
-    from fuse.utils.layered_window import LayeredWindow
-    from fuse.utils.panel import FusePanel, FusePanelGroup
-    from fuse.utils.animation import AnimationLoop
+    from fuse.ui.layered_window import LayeredWindow
+    from fuse.ui.panel import FusePanel, FusePanelGroup
+    from fuse.render.animation import AnimationLoop
     LAYERED_OK = True
 except ImportError:
     LAYERED_OK = False
@@ -655,7 +655,7 @@ class HudUiMixin:
             # Fallback for tkinter Toplevel (used by QL HUD)
             try:
                 import ctypes
-                from fuse.utils.window_utils import set_window_clickthrough
+                from fuse.ui.window_utils import set_window_clickthrough
                 hwnd = ctypes.windll.user32.FindWindowW(None, win.title())
                 if hwnd:
                     set_window_clickthrough(hwnd, enable)

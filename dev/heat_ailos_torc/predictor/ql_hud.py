@@ -16,7 +16,7 @@ import tkinter as tk
 from loguru import logger
 
 try:
-    from fuse.utils.window_utils import set_window_clickthrough
+    from fuse.ui.window_utils import set_window_clickthrough
     WINDOW_UTILS_OK = True
 except ImportError:
     WINDOW_UTILS_OK = False

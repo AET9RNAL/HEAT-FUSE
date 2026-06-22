@@ -1905,7 +1905,7 @@ class TrajectoryEditorWindow(tk.Toplevel):
         self._replay_thread.start()
 
     def _replay_thread_func(self, traj, countdown_s):
-        from fuse.utils.trajectory_replay import replay_full_scenario
+        from fuse.vision.trajectory_replay import replay_full_scenario
 
         dx, dy, elapsed = replay_full_scenario(
             trajectory=traj,

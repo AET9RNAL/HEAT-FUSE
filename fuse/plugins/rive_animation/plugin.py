@@ -22,8 +22,8 @@ from __future__ import annotations
 
 from loguru import logger
 
-from fuse.api import FuseContext, FusePlugin
-from fuse.utils.rive_animation import RiveAnimation, _DLL_PATH
+from fuse.core.api import FuseContext, FusePlugin
+from fuse.render.rive_animation import RiveAnimation, _DLL_PATH
 
 
 class RiveAnimationService:

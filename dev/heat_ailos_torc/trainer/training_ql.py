@@ -403,7 +403,7 @@ class TrainingQuickLabelMixin:
 
     def _tql_replay_thread_func(self, return_state):
         """Replay: countdown → teleport → pre-fire → click → biased trajectory."""
-        from fuse.utils.trajectory_replay import replay_full_scenario
+        from fuse.vision.trajectory_replay import replay_full_scenario
         from heat_ailos_torc.trainer.correction_session import CorrectionSession
 
         ctx = self._tql_context

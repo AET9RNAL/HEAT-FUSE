@@ -4,7 +4,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from fuse.utils.game_memory import GameMemory
+from fuse.vision.game_memory import GameMemory
 
 PROCESS     = "engine_launcher.exe"
 CHAINS_FILE = Path(__file__).resolve().parent / "assets" / "pointer_chains.json"

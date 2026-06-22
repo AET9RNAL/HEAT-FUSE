@@ -17,7 +17,7 @@ from loguru import logger
 
 from heat_ailos_torc.predictor.auto_overlay import AutoOverlay
 from heat_ailos_torc.profiles import MLProfile, default_profile_name, load_profile
-from fuse.utils.hardware_inject_router import is_admin, connect, disconnect
+from fuse.input.hardware_inject_router import is_admin, connect, disconnect
 
 
 def _build_parser() -> argparse.ArgumentParser:

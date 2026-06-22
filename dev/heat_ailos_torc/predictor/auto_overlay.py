@@ -52,7 +52,7 @@ def _play_sound_async(buf):
 from heat_ailos_torc.ui.base_overlay import BaseSACLOSOverlay
 from heat_ailos_torc.ui.tce import TCE
 from heat_ailos_torc.predictor.ql_hud import QuickLabelHudMixin
-from fuse.utils.hardware_inject_router import inject_mouse_movement, inject_mouse_click
+from fuse.input.hardware_inject_router import inject_mouse_movement, inject_mouse_click
 from heat_ailos_torc.ocr.range_ocr import OCR_MIN_RANGE_M, OCR_MAX_RANGE_M
 
 
@@ -630,7 +630,7 @@ class AutoOverlay(QuickLabelHudMixin, BaseSACLOSOverlay):
 
         Each entry in trajectory is {'t': seconds, 'dx': pixels, 'dy': pixels}.
         """
-        from fuse.utils.trajectory_replay import replay_movements
+        from fuse.vision.trajectory_replay import replay_movements
 
         inject_mouse_click()
 
@@ -1120,7 +1120,7 @@ class AutoOverlay(QuickLabelHudMixin, BaseSACLOSOverlay):
 
     def _ql_replay_thread_func(self, return_state):
         """Replay: countdown → teleport → pre-fire → click → biased trajectory."""
-        from fuse.utils.trajectory_replay import replay_full_scenario
+        from fuse.vision.trajectory_replay import replay_full_scenario
 
         ctx = self._ql_context
         if ctx is None:
