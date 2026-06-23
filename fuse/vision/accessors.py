@@ -23,6 +23,7 @@ from __future__ import annotations
 import json
 import threading
 import urllib.request
+from pathlib import Path
 from typing import Optional, Union
 
 from loguru import logger
@@ -34,80 +35,8 @@ except ImportError:
     _ws_mod = None  # type: ignore[assignment]
     _WS_AVAILABLE = False
 
-# Single JS expression that reads all available DOM values in one round-trip.
-_JS_READ_ALL = r"""
-(function() {
-  var r = {};
-  try {
-    // ── HP ──────────────────────────────────────────────────────────────────
-    var hpEl = document.querySelector('[class*="HpBar_base"]');
-    if (hpEl) {
-      var m = hpEl.textContent.match(/^(\d+)([+\-])(\d+)/);
-      if (m) {
-        r.health = parseInt(m[1]);
-        r.health_regen = parseInt(m[3]) * (m[2] === '+' ? 1 : -1);
-      }
-      var prog = document.querySelector('[class*="HpBar"] [class*="ProgressBar_progress"]');
-      if (prog) {
-        var pm = prog.style.transform.match(/translateX\((-?[\d.]+)%\)/);
-        if (pm) r.health_pct = parseFloat(pm[1]);
-      }
-    }
-    // ── Mana / Ability Energy ───────────────────────────────────────────────
-    var manaEl = document.querySelector('[class*="ManaBar_base"]');
-    if (manaEl) {
-      var mm = manaEl.textContent.match(/^(\d+(?:\.\d+)?)([+\-])(\d+(?:\.\d+)?)/);
-      if (mm) {
-        r.energy = Math.round(parseFloat(mm[1]));
-        r.energy_regen = parseFloat(mm[3]) * (mm[2] === '+' ? 1 : -1);
-      }
-    }
-    // ── Sprint / Boost ──────────────────────────────────────────────────────
-    var spEl = document.querySelector('[class*="SprintDrain_drainProgress"]');
-    if (spEl) {
-      var sm = spEl.style.transform.match(/translateX\((-?[\d.]+)%\)/);
-      if (sm) {
-        // translateX(0%) = full, translateX(-100%) = empty.
-        // 100 + raw gives energy-remaining in [0, 100].
-        var raw = parseFloat(sm[1]);
-        r.boost = Math.round(Math.max(0, Math.min(100, 100 + raw)));
-      }
-    }
-    var glowEl = document.querySelector('[class*="SprintDrain_glow"]');
-    if (glowEl) {
-      r.boost_active = (glowEl.style.visibility !== 'hidden') ? 1 : 0;
-    }
-    // ── Zoom / First-Person ─────────────────────────────────────────────────
-    var widget = document.querySelector('zoom-indicator-widget');
-    if (widget) {
-      var base = widget.querySelector('[class*="ZoomIndicator_base"]');
-      if (base) {
-        r.is_fp = window.getComputedStyle(base).visibility !== 'hidden' ? 1 : 0;
-        var wrappers = base.querySelectorAll('[class*="valueWrapper"]');
-        var zooms = [];
-        var zoomIdx = 0;
-        for (var i = 0; i < wrappers.length; i++) {
-          var valEl = wrappers[i].querySelector('[class*="ZoomIndicator_value"]');
-          if (valEl) {
-            var zm = valEl.textContent.match(/([\d.]+)x/);
-            if (zm) zooms.push(parseFloat(zm[1]));
-          }
-          // "active" class detection is unreliable (see docs/COHTML_CDP_DEBUGGER.md
-          // §Limitations #5) but still the best available DOM signal.
-          if (wrappers[i].className.indexOf('active') !== -1) zoomIdx = i;
-        }
-        r.zooms     = zooms;
-        r.num_zooms = zooms.length;
-        r.zoom_idx  = zoomIdx;
-        r.zoom_val  = zooms[zoomIdx] || 0;
-      }
-    }
-  } catch(e) {
-    r._err = e.message;
-  }
-  return JSON.stringify(r);
-})()
-"""
+_JS_READ_ALL:     str = (Path(__file__).parent / "js" / "read_all.js").read_text(encoding="utf-8")
+_JS_READ_MARKERS: str = (Path(__file__).parent / "js" / "read_markers.js").read_text(encoding="utf-8")
 
 # game_memory-compatible field names → (JS result key, Python type).
 # Consumers using game_memory can call accessors.read("multiplayer_vehicle_health")
@@ -126,6 +55,18 @@ _EXTRA_KEYS = (
     "energy_regen",
     "boost_active",
     "zoom_val", "zoom_idx", "num_zooms", "zooms",
+    "speed",
+    "ab1_state", "ab1_cd", "ab1_charges",
+    "ab2_state", "ab2_cd", "ab2_charges",
+    "ult_state", "ult_charge_pct",
+    "xp_action", "xp_action_type",
+    "equip1_state", "equip1_cd", "equip1_charges",
+    "equip2_state", "equip2_cd", "equip2_charges",
+    "trait_state", "trait_cur_time", "trait_time", "trait_type",
+    "battle_state", "battle_countdown",
+    # from markers page
+    "on_fire", "debuff_count", "debuff_tags", "buff_count", "buff_tags",
+    "major_effect_count",
 )
 
 
@@ -142,8 +83,10 @@ class Accessors:
         self._connect_timeout = connect_timeout
         self._recv_timeout    = recv_timeout
         self._lock            = threading.Lock()
-        self._ws: object | None = None
-        self._msg_id  = 0
+        self._ws: object | None         = None
+        self._ws_markers: object | None = None
+        self._msg_id    = 0
+        self._msg_id_m  = 0
         self._connected = False
         self._cache: dict[str, Optional[Union[int, float, list]]] = {}
 
@@ -155,10 +98,11 @@ class Accessors:
             return self._connected
 
     def open(self) -> bool:
-        """Discover the battle_hud CDP target and open a WebSocket connection.
+        """Discover battle_hud and markers CDP targets and open WebSocket connections.
 
         Blocks for up to connect_timeout seconds — call from a background thread
         inside the plugin so the FUSE main loop stays responsive.
+        markers connection is optional; battle_hud is required.
         """
         if not _WS_AVAILABLE:
             logger.error(
@@ -182,44 +126,63 @@ class Accessors:
             logger.debug("Accessors: CDP /json returned non-list response")
             return False
 
-        # 2. Find the battle_hud page
-        ws_url: str | None = None
+        # 2. Find battle_hud (required) and markers (optional)
+        ws_url: str | None         = None
+        ws_url_markers: str | None = None
         for t in targets:
-            if t.get("type") == "page" and "battle_hud" in t.get("url", ""):
-                ws_url = t.get("webSocketDebuggerUrl")
-                break
+            url = t.get("url", "")
+            if t.get("type") == "page":
+                if "battle_hud" in url:
+                    ws_url = t.get("webSocketDebuggerUrl")
+                elif "markers" in url:
+                    ws_url_markers = t.get("webSocketDebuggerUrl")
 
         if ws_url is None:
             logger.debug("Accessors: battle_hud target not in CDP target list (not in battle?)")
             return False
 
         # 3. WebSocket handshake — may take several seconds during game startup
-        try:
-            ws = _ws_mod.WebSocket()
-            ws.settimeout(self._connect_timeout)
-            ws.connect(ws_url)
-            ws.settimeout(self._recv_timeout)
-        except Exception as exc:
-            logger.debug(f"Accessors: WebSocket connect failed: {exc}")
+        def _connect(url: str) -> object | None:
+            try:
+                ws = _ws_mod.WebSocket()
+                ws.settimeout(self._connect_timeout)
+                ws.connect(url)
+                ws.settimeout(self._recv_timeout)
+                return ws
+            except Exception as exc:
+                logger.debug(f"Accessors: WebSocket connect to {url} failed: {exc}")
+                return None
+
+        ws         = _connect(ws_url)
+        ws_markers = _connect(ws_url_markers) if ws_url_markers else None
+
+        if ws is None:
             return False
 
         with self._lock:
-            self._ws        = ws
-            self._connected = True
-            self._msg_id    = 0
-        logger.info(f"Accessors: connected to CDP battle_hud at {ws_url}")
+            self._ws         = ws
+            self._ws_markers = ws_markers
+            self._connected  = True
+            self._msg_id     = 0
+            self._msg_id_m   = 0
+        logger.info(
+            f"Accessors: connected to CDP battle_hud at {ws_url}"
+            + (f" + markers at {ws_url_markers}" if ws_markers else "")
+        )
         return True
 
     def close(self) -> None:
         with self._lock:
-            ws, self._ws = self._ws, None
+            ws, self._ws               = self._ws, None
+            wsm, self._ws_markers      = self._ws_markers, None
             self._connected = False
             self._cache.clear()
-        if ws is not None:
-            try:
-                ws.close()  # type: ignore[union-attr]
-            except Exception:
-                pass
+        for sock in (ws, wsm):
+            if sock is not None:
+                try:
+                    sock.close()  # type: ignore[union-attr]
+                except Exception:
+                    pass
 
     def __enter__(self) -> "Accessors":
         self.open()
@@ -231,36 +194,49 @@ class Accessors:
     # ──────────────────────────────────────────────────── polling
 
     def refresh(self) -> bool:
-        """Send one Runtime.evaluate and update the value cache. Returns True on success."""
+        """Send Runtime.evaluate to battle_hud (and markers if connected). Returns True on success."""
         with self._lock:
             if not self._connected or self._ws is None:
                 return False
-            ws       = self._ws
-            msg_id   = self._msg_id + 1
-            self._msg_id = msg_id
+            ws         = self._ws
+            ws_markers = self._ws_markers
+            msg_id     = self._msg_id + 1
+            msg_id_m   = self._msg_id_m + 1
+            self._msg_id   = msg_id
+            self._msg_id_m = msg_id_m
 
-        try:
-            ws.send(json.dumps({  # type: ignore[union-attr]
-                "id":     msg_id,
-                "method": "Runtime.evaluate",
-                "params": {"expression": _JS_READ_ALL, "returnByValue": True},
-            }))
-            resp = json.loads(ws.recv())  # type: ignore[union-attr]
-            raw  = resp.get("result", {}).get("result", {}).get("value")
-            if not raw:
-                return False
-            data = json.loads(raw)
-            if data.get("_err"):
-                logger.warning(f"Accessors: JS runtime error: {data['_err']}")
-            self._update_cache(data)
-            return True
+        def _eval(sock, expr: str, mid: int) -> dict | None:
+            try:
+                sock.send(json.dumps({
+                    "id": mid, "method": "Runtime.evaluate",
+                    "params": {"expression": expr, "returnByValue": True},
+                }))
+                resp = json.loads(sock.recv())
+                raw  = resp.get("result", {}).get("result", {}).get("value")
+                return json.loads(raw) if raw else None
+            except Exception as exc:
+                logger.warning(f"Accessors: eval failed — {exc}")
+                return None
 
-        except Exception as exc:
-            logger.warning(f"Accessors: refresh failed — {exc}")
+        data = _eval(ws, _JS_READ_ALL, msg_id)
+        if data is None:
             with self._lock:
                 self._connected = False
                 self._cache.clear()
             return False
+
+        if data.get("_err"):
+            logger.warning(f"Accessors: JS error (hud): {data['_err']}")
+        self._update_cache(data)
+
+        if ws_markers is not None:
+            mdata = _eval(ws_markers, _JS_READ_MARKERS, msg_id_m)
+            if mdata is not None:
+                if mdata.get("_err"):
+                    logger.warning(f"Accessors: JS error (markers): {mdata['_err']}")
+                self._update_cache(mdata)
+
+        return True
 
     def _update_cache(self, data: dict) -> None:
         for field, (key, typ) in _FIELD_MAP.items():

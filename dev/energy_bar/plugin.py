@@ -68,9 +68,9 @@ class EnergyBarPlugin(FusePlugin):
 
     def setup(self, ctx: FuseContext) -> None:
         self.ctx = ctx
-        self._mem = ctx.services.get("game_memory")
+        self._mem = ctx.services.get("accessors")
         if self._mem is None:
-            logger.warning("energy_bar_rive: 'game_memory' service not available — energy will read 0")
+            logger.warning("energy_bar_rive: 'accessors' service not available — energy will read 0")
 
         ctx.config.defaults(
             bar_custom_pos=None,

@@ -5,7 +5,7 @@
   "author": "AETERNAL",
   "description": "Energy bar overlay, driven by Rive",
   "entry": "plugin:EnergyBarPlugin",
-  "dependencies": ["game_memory", "rive_animation"],
+  "dependencies": ["accessors", "rive_animation"],
   "default_config": {
     "bar_custom_pos": null,
     "memory_chain": "multiplayer_vehicle_energy",
