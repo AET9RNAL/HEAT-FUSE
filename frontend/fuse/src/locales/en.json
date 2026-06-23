@@ -1,0 +1,17 @@
+{
+    "common": {
+        "cancel": "Cancel",
+        "confirm": "Confirm",
+        "ok": "OK",
+        "brandName": "FUSE"
+    },
+    "appnav": {
+        "home": "Home",
+        "settings": "Settings",
+        "about": "About"
+    },
+    "components": {
+        "loading": "Loading...",
+        "error": "Something went wrong"
+    }
+}

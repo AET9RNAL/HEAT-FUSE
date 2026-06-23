@@ -827,6 +827,20 @@ All values return `None` when not in battle or the relevant HUD element is absen
 | `trait_time` | `float` | Total time for current state |
 | `trait_type` | `str\|None` | Trait type identifier string |
 
+**Rangefinder** (from `battle_hud`)
+
+| Name | Type | Description |
+|------|------|-------------|
+| `target_dist` | `int\|None` | Distance to crosshair target in metres; retains last value when hidden |
+| `target_dist_vis` | `int` | 1 = rangefinder currently visible (reticle on target), 0 = stale/hidden |
+
+**ATGMs** (from `markers` page)
+
+| Name | Type | Description |
+|------|------|-------------|
+| `missile_in_flight` | `int` | 1 = missile is airborne, 0 = no missile |
+| `missile_dist` | `int\|None` | Distance from player to missile in metres (0–n); `None` when not in flight |
+
 **Status Effects** (from `markers` page)
 
 | Name | Type | Description |
