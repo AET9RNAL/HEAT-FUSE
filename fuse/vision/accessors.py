@@ -35,8 +35,9 @@ except ImportError:
     _ws_mod = None  # type: ignore[assignment]
     _WS_AVAILABLE = False
 
-_JS_READ_ALL:     str = (Path(__file__).parent / "js" / "read_all.js").read_text(encoding="utf-8")
-_JS_READ_MARKERS: str = (Path(__file__).parent / "js" / "read_markers.js").read_text(encoding="utf-8")
+_JS_READ_ALL:        str = (Path(__file__).parent / "js" / "read_all.js").read_text(encoding="utf-8")
+_JS_READ_MARKERS:    str = (Path(__file__).parent / "js" / "read_markers.js").read_text(encoding="utf-8")
+_JS_READ_BATTLE_APP: str = (Path(__file__).parent / "js" / "read_battle_app.js").read_text(encoding="utf-8")
 
 # game_memory-compatible field names → (JS result key, Python type).
 # Consumers using game_memory can call accessors.read("multiplayer_vehicle_health")
@@ -65,10 +66,24 @@ _EXTRA_KEYS = (
     "equip2_state", "equip2_cd", "equip2_charges",
     "trait_state", "trait_cur_time", "trait_time", "trait_type",
     "battle_state", "battle_countdown",
+    # ping / fps
+    "ping", "fps",
+    # game info
+    "game_mode", "match_state", "map_slug",
+    # team scores / zones
+    "ally_score", "enemy_score", "allied_zones", "enemy_zones",
+    # player match stats
+    "player_kills", "player_deaths", "player_damage", "player_role_pts",
+    "player_is_dead", "player_role", "player_vehicle", "player_agent_id", "player_name",
     # from markers page
     "on_fire", "debuff_count", "debuff_tags", "buff_count", "buff_tags",
     "major_effect_count",
     "missile_dist", "missile_in_flight",
+    # from battle_app page (scoreboard)
+    "sb_open", "sb_map_name", "sb_game_mode_name",
+    "sb_ally_rows", "sb_enemy_rows",
+    # debug
+    "_dbg_phm", "_dbg_mam",
 )
 
 
@@ -85,10 +100,12 @@ class Accessors:
         self._connect_timeout = connect_timeout
         self._recv_timeout    = recv_timeout
         self._lock            = threading.Lock()
-        self._ws: object | None         = None
-        self._ws_markers: object | None = None
+        self._ws: object | None              = None
+        self._ws_markers: object | None      = None
+        self._ws_battle_app: object | None   = None
         self._msg_id    = 0
         self._msg_id_m  = 0
+        self._msg_id_a  = 0
         self._connected = False
         self._cache: dict[str, Optional[Union[int, float, list]]] = {}
 
@@ -128,9 +145,10 @@ class Accessors:
             logger.debug("Accessors: CDP /json returned non-list response")
             return False
 
-        # 2. Find battle_hud (required) and markers (optional)
-        ws_url: str | None         = None
-        ws_url_markers: str | None = None
+        # 2. Find battle_hud (required), markers and battle_app (optional)
+        ws_url: str | None             = None
+        ws_url_markers: str | None     = None
+        ws_url_battle_app: str | None  = None
         for t in targets:
             url = t.get("url", "")
             if t.get("type") == "page":
@@ -138,6 +156,8 @@ class Accessors:
                     ws_url = t.get("webSocketDebuggerUrl")
                 elif "markers" in url:
                     ws_url_markers = t.get("webSocketDebuggerUrl")
+                elif "battle_app" in url:
+                    ws_url_battle_app = t.get("webSocketDebuggerUrl")
 
         if ws_url is None:
             logger.debug("Accessors: battle_hud target not in CDP target list (not in battle?)")
@@ -155,31 +175,36 @@ class Accessors:
                 logger.debug(f"Accessors: WebSocket connect to {url} failed: {exc}")
                 return None
 
-        ws         = _connect(ws_url)
-        ws_markers = _connect(ws_url_markers) if ws_url_markers else None
+        ws            = _connect(ws_url)
+        ws_markers    = _connect(ws_url_markers)    if ws_url_markers    else None
+        ws_battle_app = _connect(ws_url_battle_app) if ws_url_battle_app else None
 
         if ws is None:
             return False
 
         with self._lock:
-            self._ws         = ws
-            self._ws_markers = ws_markers
-            self._connected  = True
-            self._msg_id     = 0
-            self._msg_id_m   = 0
+            self._ws             = ws
+            self._ws_markers     = ws_markers
+            self._ws_battle_app  = ws_battle_app
+            self._connected      = True
+            self._msg_id         = 0
+            self._msg_id_m       = 0
+            self._msg_id_a       = 0
         logger.info(
             f"Accessors: connected to CDP battle_hud at {ws_url}"
             + (f" + markers at {ws_url_markers}" if ws_markers else "")
+            + (f" + battle_app at {ws_url_battle_app}" if ws_battle_app else "")
         )
         return True
 
     def close(self) -> None:
         with self._lock:
-            ws, self._ws               = self._ws, None
-            wsm, self._ws_markers      = self._ws_markers, None
+            ws,  self._ws             = self._ws,             None
+            wsm, self._ws_markers     = self._ws_markers,     None
+            wsa, self._ws_battle_app  = self._ws_battle_app,  None
             self._connected = False
             self._cache.clear()
-        for sock in (ws, wsm):
+        for sock in (ws, wsm, wsa):
             if sock is not None:
                 try:
                     sock.close()  # type: ignore[union-attr]
@@ -196,16 +221,19 @@ class Accessors:
     # ──────────────────────────────────────────────────── polling
 
     def refresh(self) -> bool:
-        """Send Runtime.evaluate to battle_hud (and markers if connected). Returns True on success."""
+        """Send Runtime.evaluate to battle_hud, markers, and battle_app. Returns True on success."""
         with self._lock:
             if not self._connected or self._ws is None:
                 return False
-            ws         = self._ws
-            ws_markers = self._ws_markers
-            msg_id     = self._msg_id + 1
-            msg_id_m   = self._msg_id_m + 1
+            ws             = self._ws
+            ws_markers     = self._ws_markers
+            ws_battle_app  = self._ws_battle_app
+            msg_id         = self._msg_id   + 1
+            msg_id_m       = self._msg_id_m + 1
+            msg_id_a       = self._msg_id_a + 1
             self._msg_id   = msg_id
             self._msg_id_m = msg_id_m
+            self._msg_id_a = msg_id_a
 
         def _eval(sock, expr: str, mid: int) -> dict | None:
             try:
@@ -238,12 +266,20 @@ class Accessors:
                     logger.warning(f"Accessors: JS error (markers): {mdata['_err']}")
                 self._update_cache(mdata)
 
+        if ws_battle_app is not None:
+            adata = _eval(ws_battle_app, _JS_READ_BATTLE_APP, msg_id_a)
+            if adata is not None:
+                if adata.get("_err"):
+                    logger.warning(f"Accessors: JS error (battle_app): {adata['_err']}")
+                self._update_cache(adata)
+
         return True
 
     def _update_cache(self, data: dict) -> None:
         for field, (key, typ) in _FIELD_MAP.items():
-            val = data.get(key)
-            self._cache[field] = typ(val) if val is not None else None
+            if key in data:
+                val = data[key]
+                self._cache[field] = typ(val) if val is not None else None
         for key in _EXTRA_KEYS:
             val = data.get(key)
             if val is not None:

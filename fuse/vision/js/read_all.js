@@ -2,71 +2,65 @@
   var r = {};
   try {
 
-    //  HP 
-    var hpEl = document.querySelector('[class*="HpBar_base"]');
-    if (hpEl) {
-      var m = hpEl.textContent.match(/^(\d+)([+\-])(\d+)/);
-      if (m) {
-        r.health = parseInt(m[1]);
-        r.health_regen = parseInt(m[3]) * (m[2] === '+' ? 1 : -1);
+    // HP — playerHealthModel is written atomically by the C++ engine; no DOM race condition.
+    try {
+      var _phmt = typeof playerHealthModel;
+      r._dbg_phm = _phmt + '/' + (_phmt !== 'undefined' && playerHealthModel ? (playerHealthModel.health !== undefined ? String(playerHealthModel.health) : 'h_undef') : 'absent');
+      if (_phmt !== 'undefined' && playerHealthModel) {
+        r.health       = playerHealthModel.health        != null ? Math.round(playerHealthModel.health)               : null;
+        r.health_regen = playerHealthModel.changePerSecond != null ? playerHealthModel.changePerSecond                : 0;
+        r.health_pct   = playerHealthModel.remainHealthPercentage != null ? playerHealthModel.remainHealthPercentage  : null;
       }
-      var prog = document.querySelector('[class*="HpBar"] [class*="ProgressBar_progress"]');
-      if (prog) {
-        var pm = prog.style.transform.match(/translateX\((-?[\d.]+)%\)/);
-        if (pm) r.health_pct = parseFloat(pm[1]);
-      }
-    }
+    } catch(e) { r._dbg_phm = 'ERR:' + e.message; }
 
-    //  Mana / Ability Energy 
-    var manaEl = document.querySelector('[class*="ManaBar_base"]');
-    if (manaEl) {
-      var mm = manaEl.textContent.match(/^(\d+(?:\.\d+)?)([+\-])(\d+(?:\.\d+)?)/);
-      if (mm) {
-        r.energy = Math.round(parseFloat(mm[1]));
-        r.energy_regen = parseFloat(mm[3]) * (mm[2] === '+' ? 1 : -1);
+    // Energy (mana) — manaAbilityModel
+    try {
+      var _mamt = typeof manaAbilityModel;
+      r._dbg_mam = _mamt + '/' + (_mamt !== 'undefined' && manaAbilityModel ? (manaAbilityModel.data ? String(manaAbilityModel.data.currentMana) : 'no_data') : 'absent');
+      if (_mamt !== 'undefined' && manaAbilityModel && manaAbilityModel.data) {
+        var _md = manaAbilityModel.data;
+        r.energy       = _md.currentMana     != null ? Math.round(_md.currentMana)  : null;
+        r.energy_regen = _md.changePerSecond != null ? _md.changePerSecond          : 0;
       }
-    }
+    } catch(e) { r._dbg_mam = 'ERR:' + e.message; }
 
-    // Sprint / Boost
-    var spEl = document.querySelector('[class*="SprintDrain_drainProgress"]');
-    if (spEl) {
-      var sm = spEl.style.transform.match(/translateX\((-?[\d.]+)%\)/);
-      if (sm) {
-        // translateX(0%) = full, translateX(-100%) = empty.
-        // 100 + raw gives energy-remaining in [0, 100].
-        var raw = parseFloat(sm[1]);
-        r.boost = Math.round(Math.max(0, Math.min(100, 100 + raw)));
+    // Sprint / Boost — manaSprintModel.data.leftManaPrc is 0-100 percentage remaining
+    try {
+      if (typeof manaSprintModel !== 'undefined' && manaSprintModel && manaSprintModel.data) {
+        var _sd = manaSprintModel.data;
+        r.boost = _sd.leftManaPrc != null ? Math.round(_sd.leftManaPrc) : null;
+        r.boost_active = (manaSprintModel.isSprintBoosted || manaSprintModel.isPressed) ? 1 : 0;
       }
-    }
-    var glowEl = document.querySelector('[class*="SprintDrain_glow"]');
-    if (glowEl) {
-      r.boost_active = (glowEl.style.visibility !== 'hidden') ? 1 : 0;
-    }
+    } catch(e) {}
 
     // Zoom / First-Person
-    var widget = document.querySelector('zoom-indicator-widget');
-    if (widget) {
-      var base = widget.querySelector('[class*="ZoomIndicator_base"]');
-      if (base) {
-        r.is_fp = window.getComputedStyle(base).visibility !== 'hidden' ? 1 : 0;
-        var wrappers = base.querySelectorAll('[class*="valueWrapper"]');
-        var zooms = [];
-        var zoomIdx = 0;
-        for (var i = 0; i < wrappers.length; i++) {
-          var valEl = wrappers[i].querySelector('[class*="ZoomIndicator_value"]');
-          if (valEl) {
-            var zm = valEl.textContent.match(/([\d.]+)x/);
-            if (zm) zooms.push(parseFloat(zm[1]));
+    // Wrapped in try-catch: getComputedStyle / querySelectorAll inside the custom element
+    // can throw in some Cohtml builds, which would abort the outer block.
+    try {
+      var widget = document.querySelector('zoom-indicator-widget');
+      if (widget) {
+        var base = widget.querySelector('[class*="ZoomIndicator_base"]');
+        if (base) {
+          r.is_fp = window.getComputedStyle(base).visibility !== 'hidden' ? 1 : 0;
+          var wrappers = base.querySelectorAll('[class*="valueWrapper"]');
+          var zooms = [];
+          var zoomIdx = 0;
+          for (var i = 0; i < wrappers.length; i++) {
+            var valEl = wrappers[i].querySelector('[class*="ZoomIndicator_value"]');
+            if (valEl) {
+              var zm = valEl.textContent.match(/([\d.]+)x/);
+              if (zm) zooms.push(parseFloat(zm[1]));
+            }
+            // "active" class detection is unreliable - see docs/COHTML_CDP_DEBUGGER.md §Limitations #5.
+            if (typeof wrappers[i].className === 'string' && wrappers[i].className.indexOf('active') !== -1) zoomIdx = i;
           }
-          // "active" class detection is unreliable - see docs/COHTML_CDP_DEBUGGER.md §Limitations #5.
-          if (wrappers[i].className.indexOf('active') !== -1) zoomIdx = i;
+          r.zooms     = zooms;
+          r.num_zooms = zooms.length;
+          r.zoom_idx  = zoomIdx;
+          r.zoom_val  = zooms[zoomIdx] || 0;
         }
-        r.zooms     = zooms;
-        r.num_zooms = zooms.length;
-        r.zoom_idx  = zoomIdx;
-        r.zoom_val  = zooms[zoomIdx] || 0;
       }
-    }
+    } catch(e) {}
 
     // Speed
     var speedEl = document.querySelector('[class*="Speedometer_speedValue"]');
@@ -174,6 +168,65 @@
         r.battle_state     = battleInfoModel.state || 0;
         r.battle_countdown = battleInfoModel.countdownTimer != null
                              ? Math.round(battleInfoModel.countdownTimer) : null;
+      }
+    } catch(e) {}
+
+    // Ping / FPS
+    // Cohtml rejects :not() with attribute selectors — filter Wrapper elements in JS.
+    try {
+      var _allPerf = document.querySelectorAll('[class*="PerfInfo_statValue"]');
+      var _perfVals = [];
+      for (var _pi = 0; _pi < _allPerf.length; _pi++) {
+        if (_allPerf[_pi].className.indexOf('Wrapper') === -1) _perfVals.push(_allPerf[_pi]);
+      }
+      if (_perfVals.length >= 1) r.ping = parseInt(_perfVals[0].textContent) || null;
+      if (_perfVals.length >= 2) r.fps  = parseInt(_perfVals[1].textContent) || null;
+    } catch(e) {}
+
+    // Game mode / match state / map slug
+    try {
+      if (typeof gameModeInfo !== 'undefined' && gameModeInfo) {
+        r.game_mode   = gameModeInfo.gameModeName  || null;
+        r.match_state = gameModeInfo.gameModeState || null;
+      }
+    } catch(e) {}
+    try {
+      if (typeof matchInfoModel !== 'undefined' && matchInfoModel && matchInfoModel.background) {
+        var _bgm = matchInfoModel.background.match(/\/worlds\/([^/]+)\//);
+        r.map_slug = _bgm ? _bgm[1] : null;
+      }
+    } catch(e) {}
+
+    // Team scores / zone control
+    try {
+      if (typeof scoreInfoModel !== 'undefined' && scoreInfoModel) {
+        r.ally_score   = scoreInfoModel.ally        != null ? scoreInfoModel.ally        : null;
+        r.enemy_score  = scoreInfoModel.enemy       != null ? scoreInfoModel.enemy       : null;
+        r.allied_zones = scoreInfoModel.alliedZones != null ? scoreInfoModel.alliedZones : null;
+        r.enemy_zones  = scoreInfoModel.enemyZones  != null ? scoreInfoModel.enemyZones  : null;
+      }
+    } catch(e) {}
+
+    // Player match stats
+    try {
+      if (typeof playerInfoModel !== 'undefined' && playerInfoModel) {
+        r.player_kills    = playerInfoModel.kill             != null ? playerInfoModel.kill             : null;
+        r.player_damage   = playerInfoModel.damage           != null ? playerInfoModel.damage           : null;
+        r.player_role_pts = playerInfoModel.currentRolePoints != null ? playerInfoModel.currentRolePoints : null;
+        r.player_is_dead  = playerInfoModel.isDead ? 1 : 0;
+        var _pi = playerInfoModel.info;
+        if (_pi) {
+          r.player_role = _pi.role || null;
+          r.player_vehicle = _pi.vehicleName ? _pi.vehicleName.split('.')[0] : null;
+          var _agm = _pi.agentName ? _pi.agentName.match(/frontmen\.(\d+)\./) : null;
+          r.player_agent_id = _agm ? parseInt(_agm[1]) : null;
+          r.player_name = _pi.displayName || null;
+        }
+      }
+    } catch(e) {}
+    try {
+      if (typeof deathInfoModel !== 'undefined' && deathInfoModel) {
+        r.player_deaths = deathInfoModel.deadCount != null ? deathInfoModel.deadCount : null;
       }
     } catch(e) {}
 
