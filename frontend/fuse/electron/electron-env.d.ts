@@ -33,5 +33,18 @@ interface Window {
     onSuspended: (cb: () => void) => void
     onResumed: (cb: () => void) => void
     setAutostart: (value: boolean) => Promise<void>
+    setMinimizeToTrayOnStart: (value: boolean) => Promise<void>
+    applyMinimizeToTrayOnStart: () => Promise<void>
+    setMinimizeToTrayOnClose: (value: boolean) => Promise<void>
+    closeWindow: () => Promise<void>
+    minimizeWindow: () => Promise<void>
+    maximizeWindow: () => Promise<void>
+  }
+  fuseAPI: {
+    spawn: () => Promise<{ success: boolean; pid?: number; port?: number; connectionToken?: string; error?: string }>
+    kill: () => Promise<{ success: boolean }>
+    status: () => Promise<{ running: boolean; pid: number | null; port: number | null }>
+    onExited: (cb: (data: { code: number | null; signal: string | null }) => void) => void
+    offExited: () => void
   }
 }

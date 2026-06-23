@@ -16,6 +16,12 @@ type Events = {
     'agent:stopped': { code?: number | null; signal?: string | null }
     'agent:crashed': { code: number | null; signal: string | null }
     'agent:error': { error: string }
+
+    // Plugin lifecycle
+    'fuse:stalled': { stale_seconds: number }
+    'plugin:registered': { plugin_id: string; name: string; version: string; description: string; status: string; configSchema: unknown[]; hotkeys: { action: string; combo: string }[] }
+    'plugin:deregistered': { plugin_id: string }
+    'plugin:status_changed': { plugin_id: string; status: string }
 }
 
 export const eventBus = mitt<Events>()

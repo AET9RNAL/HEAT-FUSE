@@ -24,7 +24,10 @@ import sys
 import time
 from enum import Enum
 from pathlib import Path
-from typing import Callable, Dict, List, Optional
+from typing import TYPE_CHECKING, Callable, Dict, List, Optional
+
+if TYPE_CHECKING:
+    from fuse.core.core import FuseCore
 
 import tkinter as tk
 from loguru import logger as _root_logger
@@ -89,8 +92,9 @@ class PluginHost:
 
     HOST_CONFIG_FILENAME = "fuse_host.json"
 
-    def __init__(self, root: tk.Tk):
+    def __init__(self, root: tk.Tk, server: "Optional[FuseCore]" = None):
         self.root = root
+        self._server = server
         self.root.withdraw()
         self.root.title("FUSE")
 
@@ -223,6 +227,8 @@ class PluginHost:
         self._plugin_map[spec.plugin_id] = plugin
         self._context_map[spec.plugin_id] = ctx
         plugin_logger.info(f"Loaded v{spec.version}")
+        if self._server is not None:
+            self._server.notify_plugin_registered(spec, PluginState.ACTIVE.value)
 
     def reload_plugins(self) -> None:
         """Tear down every active plugin and reload all enabled plugins from disk.
@@ -391,6 +397,8 @@ class PluginHost:
             self.host_state["disabled_plugins"] = disabled
             self.host_config.save(self.host_state)
         self._plugin_states[plugin_id] = PluginState.DISABLED
+        if self._server is not None:
+            self._server.notify_plugin_status_changed(plugin_id, PluginState.DISABLED.value)
 
         # Tear down if currently active.
         plugin = self._plugin_map.pop(plugin_id, None)
@@ -444,6 +452,8 @@ class PluginHost:
         except Exception as e:
             _root_logger.exception(f"{plugin_id}: state entry on enable failed: {e}")
         _root_logger.info(f"Plugin {plugin_id!r} enabled at runtime (state={self._state}).")
+        if self._server is not None:
+            self._server.notify_plugin_status_changed(plugin_id, PluginState.ACTIVE.value)
 
     # ------------------------------------------------------------------
     # State machine

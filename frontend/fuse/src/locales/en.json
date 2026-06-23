@@ -5,9 +5,16 @@
         "ok": "OK",
         "brandName": "FUSE"
     },
+    "apptitlebar": {
+        "close": "Close",
+        "minimize": "Minimize",
+        "maximize": "Maximize",
+        "windowControls": "Window controls"
+    },
     "appnav": {
         "home": "Home",
         "settings": "Settings",
+        "plugins": "Plugins",
         "about": "About"
     },
     "components": {

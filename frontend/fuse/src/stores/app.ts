@@ -14,15 +14,16 @@ export type AppLanguage = 'en'
 
 export const useAppStore = defineStore('app', () => {
 
-    // ── Refs ──
+    // Refs
 
     const appVersion = ref<string>('')
     const appLanguage = ref<AppLanguage>('en')
+    const enableFuse = ref<boolean>(false)
     const autostart = ref<boolean>(false)
     const minimizeToTray = ref<boolean>(false)
     const checkUpdatesOnStartup = ref<boolean>(true)
 
-    // ── Setting registry ──
+    // Setting registry
     // Each entry maps a ref to a DB column key and a load default.
     // Adding a setting = one line here.
 
@@ -34,12 +35,13 @@ export const useAppStore = defineStore('app', () => {
 
     const registry: Record<string, SettingEntry> = {
         appLanguage:           { ref: appLanguage,           db: 'app_language',              default: 'en' },
+        enableFuse:            { ref: enableFuse,            db: 'enable_fuse',               default: false },
         autostart:             { ref: autostart,             db: 'autostart',                 default: false },
         minimizeToTray:        { ref: minimizeToTray,        db: 'minimize_to_tray',          default: false },
         checkUpdatesOnStartup: { ref: checkUpdatesOnStartup, db: 'check_updates_on_startup',  default: true },
     }
 
-    // ── Batched save system (stub — wire DB when auth is ready) ──
+    // Batched save system (wire DB when auth is ready)
 
     const pendingChanges = ref<Record<string, any>>({})
     let isLoading = true
@@ -66,13 +68,13 @@ export const useAppStore = defineStore('app', () => {
         watch(entry.ref, (value) => queueSave(entry.db, value))
     }
 
-    // ── Electron IPC sync ──
+    // Electron IPC sync
 
     watch(autostart, (value) => {
         window.appAPI?.setAutostart(value)
     })
 
-    // ── Load / init ──
+    // Load / init
 
     function loadDefaults() {
         isLoading = true
@@ -89,6 +91,7 @@ export const useAppStore = defineStore('app', () => {
     return {
         appVersion,
         appLanguage,
+        enableFuse,
         autostart,
         minimizeToTray,
         checkUpdatesOnStartup,
@@ -98,6 +101,7 @@ export const useAppStore = defineStore('app', () => {
     persist: {
         pick: [
             'appLanguage',
+            'enableFuse',
             'autostart',
             'minimizeToTray',
             'checkUpdatesOnStartup',

@@ -5,3 +5,5 @@ numpy
 mss
 loguru
 pyserial
+fastapi
+uvicorn[standard]

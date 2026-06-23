@@ -1,79 +1,207 @@
+/* ========================================
+   Font Faces - Normalidad Compact
+   ======================================== */
+@font-face {
+  font-family: 'Normalidad';
+  src: url('./assets/types/Normalidad/Normalidad_Compact_Thin.otf') format('opentype');
+  font-weight: 100;
+  font-style: normal;
+  font-display: block;
+}
+
+@font-face {
+  font-family: 'Normalidad';
+  src: url('./assets/types/Normalidad/Normalidad_Compact_Light.otf') format('opentype');
+  font-weight: 300;
+  font-style: normal;
+  font-display: block;
+}
+
+@font-face {
+  font-family: 'Normalidad';
+  src: url('./assets/types/Normalidad/Normalidad_Compact_Regular.otf') format('opentype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: block;
+}
+
+@font-face {
+  font-family: 'Normalidad';
+  src: url('./assets/types/Normalidad/Normalidad_Compact_Medium.otf') format('opentype');
+  font-weight: 500;
+  font-style: normal;
+  font-display: block;
+}
+
+@font-face {
+  font-family: 'Normalidad';
+  src: url('./assets/types/Normalidad/Normalidad_Compact_Bold.otf') format('opentype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: block;
+}
+
+@font-face {
+  font-family: 'Normalidad';
+  src: url('./assets/types/Normalidad/Normalidad_Compact_Black.otf') format('opentype');
+  font-weight: 900;
+  font-style: normal;
+  font-display: block;
+}
+
 :root {
-  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-family: 'Normalidad', system-ui, sans-serif;
   line-height: 1.5;
   font-weight: 400;
 
   color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
+  background-color: transparent;
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+
+  --roundness: 9px;
+
+  /* Spacing scale */
+  --space-0: 2px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 42px;
+  --space-7: 48px;
+  --space-8: 96px;
+  --space-9: 192px;
+
+  /* Icon sizes */
+  --icon-small: 8px;
+  --icon-normal: 16px;
+  --icon-large: 24px;
+  --icon-xlarge: 64px;
+
+  /* Glass - Surfaces */
+  --glass-surfaces-accented-600: rgba(87, 112, 158, 0.4);
+  --glass-surfaces-close-600: rgba(82, 82, 82, 0.8);
+  --glass-surfaces-subtle-800: var(--black-3-a);
+  --glass-surfaces-elevated-900: var(--black-2-a);
+  --glass-surfaces-base-1000: var(--black-1-a);
+
+  /* Brand colors */
+  --tea-green: rgba(197, 255, 218, 1);
+  --light-green: rgba(132, 255, 177, 1);
+  --canary-yellow: rgba(254, 255, 123, 1);
+  --yellow: rgba(243, 245, 0, 1);
+
+  /* Blacks */
+  --black-1: rgba(7, 9, 14, 1);
+  --black-2: rgba(25, 25, 25, 1);
+  --black-3: rgba(51, 51, 51, 1);
+
+  /* Blacks w/ Alpha */
+  --black-1-a: rgba(7, 9, 14, 0.6);
+  --black-2-a: rgba(25, 25, 25, 0.6);
+  --black-3-a: rgba(51, 51, 51, 0.6);
+
+  /* Base colors */
+  --base-50: rgba(242, 242, 242, 1);
+  --base-100: rgba(217, 217, 217, 1);
+  --base-200: rgba(179, 179, 179, 1);
+  --base-600: rgba(82, 82, 82, 1);
+  --base-800: var(--black-3);
+  --base-900: var(--black-2);
+  --base-1000: var(--black-1);
+
+  --accent-50: var(--tea-green);
+  --accent-150: rgba(195, 218, 255, 1);
+  --accent-200: var(--light-green);
+  --accent-600: var(--canary-yellow);
+  --accent-800: var(--yellow);
+
+  /* State colors */
+  --success-color: rgba(113, 206, 113, 1);
+  --success-muted: rgba(28, 61, 28, 1);
+  --warning-color: rgba(255, 219, 140, 1);
+  --warning-muted: rgba(61, 51, 28, 1);
+  --error-base: rgba(200, 69, 84, 1);
+  --error-color: rgba(102, 35, 43, 1);
+  --error-highlight: rgba(255, 106, 98, 1);
+
+  /* Typography */
+  --font-primary: 'Normalidad', system-ui, sans-serif;
+
+  /* Font sizes */
+  --main-font-size-1: 24px;
+  --main-font-size-2: 20px;
+  --main-font-size-3: 16px;
+  --main-font-size-4: 12px;
+  --main-font-size-5: 8px;
+
+  /* Font weights */
+  --font-weight-1: 700;
+  --font-weight-2: 500;
+  --font-weight-3: 400;
+  --font-weight-4: 300;
+
+  /* Text colors */
+  --text-main: var(--base-50);
+  --text-muted: var(--base-200);
 }
 
-a {
-  font-weight: 500;
-  color: #646cff;
-  text-decoration: inherit;
-}
-a:hover {
-  color: #535bf2;
-}
-
-body {
+html, body {
   margin: 0;
-  display: flex;
-  place-items: center;
-  min-width: 320px;
-  min-height: 100vh;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
 }
 
-h1 {
-  font-size: 3.2em;
-  line-height: 1.1;
+h1, h2, h3, h4, h5, h6 {
+  margin: 0;
 }
 
-button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  background-color: #1a1a1a;
-  cursor: pointer;
-  transition: border-color 0.25s;
-}
-button:hover {
-  border-color: #646cff;
-}
-button:focus,
-button:focus-visible {
-  outline: 4px auto -webkit-focus-ring-color;
-}
-
-.card {
-  padding: 2em;
-}
+h1 { font-size: var(--main-font-size-1); font-weight: var(--font-weight-2); }
+h2 { font-size: var(--main-font-size-2); font-weight: var(--font-weight-2); }
+h3 { font-size: var(--main-font-size-3); font-weight: var(--font-weight-2); }
+h4 { font-size: var(--main-font-size-4); font-weight: var(--font-weight-2); }
+h5 { font-size: var(--main-font-size-5); font-weight: var(--font-weight-2); }
 
 #app {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 2rem;
-  text-align: center;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
-@media (prefers-color-scheme: light) {
-  :root {
-    color: #213547;
-    background-color: #ffffff;
-  }
-  a:hover {
-    color: #747bff;
-  }
-  button {
-    background-color: #f9f9f9;
-  }
+/* Backdrop blur */
+.bb-weak   { backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
+.bb-strong { backdrop-filter: blur(35px); -webkit-backdrop-filter: blur(35px); }
+
+.shadow-small {
+  background: rgba(25, 25, 25, 0.50);
+  box-shadow:
+    0 2px 0.1px 0 rgba(11, 11, 11, 0.50),
+    0 0.3px 0.9px 0 var(--alice-blue) inset;
+}
+
+/* Debug utilities */
+.debug {
+  outline: 2px dashed red;
+  outline-offset: -2px;
+  animation: debug-march 0.5s linear infinite;
+}
+.debug-blue {
+  outline: 2px dashed blue;
+  outline-offset: -2px;
+  animation: debug-blue-march 0.5s linear infinite;
+}
+
+@keyframes debug-march {
+  0%, 100% { outline-color: red; }
+  50%       { outline-color: transparent; }
+}
+@keyframes debug-blue-march {
+  0%, 100% { outline-color: blue; }
+  50%       { outline-color: transparent; }
 }

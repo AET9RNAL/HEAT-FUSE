@@ -33,4 +33,29 @@ contextBridge.exposeInMainWorld('appAPI', {
   onResumed: (cb: () => void) => ipcRenderer.on('app:resumed', cb),
   setAutostart: (value: boolean): Promise<void> =>
     ipcRenderer.invoke('app:set-autostart', value),
+  setMinimizeToTrayOnStart: (value: boolean): Promise<void> =>
+    ipcRenderer.invoke('app:set-minimize-to-tray-on-start', value),
+  applyMinimizeToTrayOnStart: (): Promise<void> =>
+    ipcRenderer.invoke('app:apply-minimize-to-tray-on-start'),
+  setMinimizeToTrayOnClose: (value: boolean): Promise<void> =>
+    ipcRenderer.invoke('app:set-minimize-to-tray-on-close', value),
+  closeWindow: (): Promise<void> =>
+    ipcRenderer.invoke('window:close'),
+  minimizeWindow: (): Promise<void> =>
+    ipcRenderer.invoke('window:minimize'),
+  maximizeWindow: (): Promise<void> =>
+    ipcRenderer.invoke('window:maximize'),
+})
+
+contextBridge.exposeInMainWorld('fuseAPI', {
+  spawn: (): Promise<{ success: boolean; pid?: number; port?: number; connectionToken?: string; error?: string }> =>
+    ipcRenderer.invoke('fuse:spawn'),
+  kill: (): Promise<{ success: boolean }> =>
+    ipcRenderer.invoke('fuse:kill'),
+  status: (): Promise<{ running: boolean; pid: number | null; port: number | null }> =>
+    ipcRenderer.invoke('fuse:status'),
+  onExited: (cb: (data: { code: number | null; signal: string | null }) => void) =>
+    ipcRenderer.on('fuse:exited', (_event, data) => cb(data)),
+  offExited: () =>
+    ipcRenderer.removeAllListeners('fuse:exited'),
 })

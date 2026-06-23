@@ -2,6 +2,8 @@
   "name": "fuse",
   "private": true,
   "version": "0.1.0",
+  "description": "FUSE modding runtime for WoT HEAT",
+  "author": "AET3RNAL",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -35,5 +37,50 @@
     "vite-plugin-vue-devtools": "^8.1.3",
     "vue-tsc": "^3.3.5"
   },
-  "main": "dist-electron/main.js"
+  "main": "dist-electron/main.js",
+  "build": {
+    "icon": "build/icon.png",
+    "appId": "com.heatfuse",
+    "productName": "FUSE",
+    "protocols": {
+      "name": "FUSE",
+      "schemes": ["fuse"]
+    },
+    "directories": {
+      "output": "release"
+    },
+    "extraResources": [
+      {
+        "from": "resources/fuse.exe",
+        "to": "fuse.exe"
+      },
+      {
+        "from": "build/icon.ico",
+        "to": "icon.ico"
+      }
+    ],
+    "files": [
+      "dist/**",
+      "dist-electron/**",
+      "package.json"
+    ],
+    "asar": true,
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
+  }
 }
