@@ -25,6 +25,19 @@
       r.on_fire      = _dTags.indexOf('burning') !== -1 ? 1 : 0;
     }
 
+    // Guided missile marker — distance from player to missile in flight.
+    // GuidedMissileMarker_distanceValue element present + visible only while missile is airborne.
+    var _gmEl = document.querySelector('[class*="GuidedMissileMarker_distanceValue"]');
+    if (_gmEl && window.getComputedStyle(_gmEl).visibility !== 'hidden') {
+      var _gmTxt = (_gmEl.textContent || '').trim().replace(/m$/i, '');
+      var _gmVal = parseInt(_gmTxt);
+      r.missile_dist         = isNaN(_gmVal) ? null : _gmVal;
+      r.missile_in_flight    = 1;
+    } else {
+      r.missile_dist         = null;
+      r.missile_in_flight    = 0;
+    }
+
     // Major effects (fire animation, visual CC, etc.)
     // majorEffectModel<id> globals - one per effect type. isActive = visible now.
     var _major = [];

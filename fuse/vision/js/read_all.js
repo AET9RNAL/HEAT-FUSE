@@ -107,6 +107,19 @@
       }
     } catch(e) {}
 
+    // Rangefinder — distance to crosshair target (battle_hud DOM).
+    // Visible only when reticle is on a target; retains stale text when hidden.
+    var _rfBase = document.querySelector('[class*="TargetDistance_base"]');
+    var _rfEl   = document.querySelector('[class*="TargetDistance_distance"]');
+    if (_rfEl) {
+      var _rfTxt = (_rfEl.textContent || '').trim().replace(/\s*M$/i, '');
+      var _rfVal = parseInt(_rfTxt);
+      r.target_dist     = isNaN(_rfVal) ? null : _rfVal;
+      r.target_dist_vis = (_rfBase
+        ? window.getComputedStyle(_rfBase).visibility
+        : window.getComputedStyle(_rfEl).visibility) !== 'hidden' ? 1 : 0;
+    }
+
     // XP log
     // LogXP_xpValue_e3c shows XP gained per action as a transient popup.
     // QuestAction1.points = same value from JS model (null between actions).

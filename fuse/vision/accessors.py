@@ -59,6 +59,7 @@ _EXTRA_KEYS = (
     "ab1_state", "ab1_cd", "ab1_charges",
     "ab2_state", "ab2_cd", "ab2_charges",
     "ult_state", "ult_charge_pct",
+    "target_dist", "target_dist_vis",
     "xp_action", "xp_action_type",
     "equip1_state", "equip1_cd", "equip1_charges",
     "equip2_state", "equip2_cd", "equip2_charges",
@@ -67,6 +68,7 @@ _EXTRA_KEYS = (
     # from markers page
     "on_fire", "debuff_count", "debuff_tags", "buff_count", "buff_tags",
     "major_effect_count",
+    "missile_dist", "missile_in_flight",
 )
 
 
