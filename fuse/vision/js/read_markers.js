@@ -2,7 +2,7 @@
   var r = {};
   try {
 
-    // ── Player status effects (playerEffectBar) ───────────────────────────────
+    // Player status effects (playerEffectBar)
     // debuffs/buffs arrays contain per-stack records; active:true = currently applied.
     // Unique tags of active entries are the current effect set.
     if (typeof playerEffectBar !== 'undefined' && playerEffectBar) {
@@ -25,8 +25,8 @@
       r.on_fire      = _dTags.indexOf('burning') !== -1 ? 1 : 0;
     }
 
-    // ── Major effects (fire animation, visual CC, etc.) ───────────────────────
-    // majorEffectModel<id> globals — one per effect type. isActive = visible now.
+    // Major effects (fire animation, visual CC, etc.)
+    // majorEffectModel<id> globals - one per effect type. isActive = visible now.
     var _major = [];
     for (var _k in window) {
       if (_k.indexOf('majorEffectModel') !== 0) continue;

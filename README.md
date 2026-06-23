@@ -15,7 +15,7 @@ Any modifications to FUSE that would allow reading, exposing, or exploiting clie
 ![Logo](https://img.shields.io/badge/-PYTHON-f3f2f4?style=for-the-badge&logo=python&logoColor=f3f2f4&labelColor=1D1D1D&color=1D1D1D)
 ![Logo](https://img.shields.io/badge/-C++-f3f2f4?style=for-the-badge&logo=cplusplus&logoColor=f3f2f4&labelColor=1D1D1D&color=1D1D1D)
 
-![Static Badge](https://img.shields.io/badge/RUNTIME_VERSION-2.1.1-1D1D1D?style=for-the-badge&labelColor=1D1D1D&color=434343)
+![Static Badge](https://img.shields.io/badge/RUNTIME_VERSION-2.2.0-1D1D1D?style=for-the-badge&labelColor=1D1D1D&color=434343)
 
 ---
 

@@ -5,13 +5,13 @@ Reads game values from the Coherent Gameface DOM via Chrome DevTools Protocol
 use either service interchangeably via the service registry.
 
 Supported fields (see _FIELD_MAP):
-    multiplayer_vehicle_health   — current HP (int)
-    multiplayer_vehicle_energy   — ability mana, rounded (int)
-    multiplayer_vehicle_boost    — sprint energy remaining 0–100 (int)
-    multiplayer_camera_zoom      — active FP zoom stage index 0-based (int)
-    multiplayer_is_fp_view       — 1 = sniper/FP, 0 = arcade (int)
+    multiplayer_vehicle_health   - current HP (int)
+    multiplayer_vehicle_energy   - ability mana, rounded (int)
+    multiplayer_vehicle_boost    - sprint energy remaining 0–100 (int)
+    multiplayer_camera_zoom      - active FP zoom stage index 0-based (int)
+    multiplayer_is_fp_view       - 1 = sniper/FP, 0 = arcade (int)
 
-All others return None — DOM has no selectors for ammo, reload, cooldowns, etc.
+All others return None - DOM has no selectors for ammo, reload, cooldowns, etc.
 
 Requires the Gameface CDP debugger enabled in coldwar.project:
     "Enable Debugger": true
@@ -73,7 +73,7 @@ _EXTRA_KEYS = (
 class Accessors:
     """High-level read-only accessor for in-game values via Coherent Gameface CDP.
 
-    open() is safe to call from a background thread — it acquires _lock before
+    open() is safe to call from a background thread - it acquires _lock before
     writing _ws/_connected.  refresh() and close() also use _lock so that the
     plugin can thread open() without racing the main-thread refresh() calls.
     """
@@ -100,18 +100,18 @@ class Accessors:
     def open(self) -> bool:
         """Discover battle_hud and markers CDP targets and open WebSocket connections.
 
-        Blocks for up to connect_timeout seconds — call from a background thread
+        Blocks for up to connect_timeout seconds - call from a background thread
         inside the plugin so the FUSE main loop stays responsive.
         markers connection is optional; battle_hud is required.
         """
         if not _WS_AVAILABLE:
             logger.error(
-                "Accessors: websocket-client not installed — "
+                "Accessors: websocket-client not installed - "
                 "run: pip install websocket-client"
             )
             return False
 
-        # 1. Discover targets via HTTP (short timeout — port is either open or not)
+        # 1. Discover targets via HTTP (short timeout - port is either open or not)
         try:
             resp = urllib.request.urlopen(
                 f"http://localhost:{self._port}/json",
@@ -141,7 +141,7 @@ class Accessors:
             logger.debug("Accessors: battle_hud target not in CDP target list (not in battle?)")
             return False
 
-        # 3. WebSocket handshake — may take several seconds during game startup
+        # 3. WebSocket handshake - may take several seconds during game startup
         def _connect(url: str) -> object | None:
             try:
                 ws = _ws_mod.WebSocket()
@@ -215,7 +215,7 @@ class Accessors:
                 raw  = resp.get("result", {}).get("result", {}).get("value")
                 return json.loads(raw) if raw else None
             except Exception as exc:
-                logger.warning(f"Accessors: eval failed — {exc}")
+                logger.warning(f"Accessors: eval failed - {exc}")
                 return None
 
         data = _eval(ws, _JS_READ_ALL, msg_id)

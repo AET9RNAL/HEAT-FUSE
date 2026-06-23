@@ -2,17 +2,17 @@
 
 Generic screen-OCR helpers usable by any plugin that needs to read
 digits from a game UI.  No game-specific colour masks or domain limits
-live here — those belong in the plugin.
+live here - those belong in the plugin.
 
 Public API:
 
-* :data:`TESSERACT_OK` — bool, whether Tesseract is reachable.
-* :data:`PIL_OK` — bool, whether Pillow is available.
-* :class:`TemporalOCRFilter` — sliding-window value confirmation filter.
-* :class:`IntHysteresisFilter` — hysteresis filter for integer OCR streams.
-* :func:`ocr_capture_int` — read an integer from a screen region.
-* :func:`binarize_bright_text` — pre-process bright-on-dark UI text.
-* :func:`otsu_threshold` — compute Otsu binarisation threshold.
+* :data:`TESSERACT_OK` - bool, whether Tesseract is reachable.
+* :data:`PIL_OK` - bool, whether Pillow is available.
+* :class:`TemporalOCRFilter` - sliding-window value confirmation filter.
+* :class:`IntHysteresisFilter` - hysteresis filter for integer OCR streams.
+* :func:`ocr_capture_int` - read an integer from a screen region.
+* :func:`binarize_bright_text` - pre-process bright-on-dark UI text.
+* :func:`otsu_threshold` - compute Otsu binarisation threshold.
 """
 from __future__ import annotations
 
@@ -93,7 +93,7 @@ def binarize_bright_text(
     """Return (binary_uint8, bright_pixel_count).
 
     Pixels where all channels ≥ *brightness* become 0 (black text);
-    everything else becomes 255 (white background) — Tesseract default.
+    everything else becomes 255 (white background) - Tesseract default.
     """
     r = img_rgb_np[:, :, 0]
     g = img_rgb_np[:, :, 1]
@@ -120,7 +120,7 @@ def _ocr_try_pass(pil_mask, psm: int) -> tuple[Optional[int], str]:
 # ---------------------------------------------------------------------------
 
 class TemporalOCRFilter:
-    """Sliding-window filter — confirms a value when ≥2 of the last reads agree."""
+    """Sliding-window filter - confirms a value when ≥2 of the last reads agree."""
 
     def __init__(self, window: int = 3, tolerance: float = 0.10, max_age_s: float = 1.5):
         self._buf: list = []
