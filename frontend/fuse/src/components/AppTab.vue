@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'motion-v'
 import { Dynamics } from '../composables/useMotion'
 import AppHome from './AppHome.vue'
 import AppSettings from './AppSettings.vue'
-import AppPlugins from './AppPlugins.vue'
+import AppDiscover from './AppDiscover.vue'
 import AppAbout from './AppAbout.vue'
 
 const store = useNavigationStore()
@@ -13,8 +13,8 @@ const containerRef = ref<HTMLElement>()
 
 const tabComponents = {
   home:     AppHome,
+  discover: AppDiscover,
   settings: AppSettings,
-  plugins:  AppPlugins,
   about:    AppAbout,
 } as const
 
@@ -75,12 +75,13 @@ watch(() => store.selectedOption, () => {
   overflow-anchor: none;
   padding-right: var(--space-2);
   contain: layout style paint;
+  
 }
 
 .tab-wrapper::-webkit-scrollbar { width: 6px; }
 .tab-wrapper::-webkit-scrollbar-track { background: transparent; }
 .tab-wrapper::-webkit-scrollbar-thumb {
-  background-color: rgba(255, 255, 255, 0.15);
+  background-color: hsla(0, 0%, 100%, 0.15);
   border-radius: 4px;
   border-left: 4px solid transparent;
   background-clip: padding-box;

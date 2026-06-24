@@ -2,6 +2,7 @@
 import { motion } from 'motion-v'
 import Icons from './Icons.vue'
 import { useI18n } from '../composables/useI18n'
+import AppLogoFull from '../assets/icons/app-logo-full.svg'
 
 const { t } = useI18n()
 const closeWindow    = () => window.appAPI?.closeWindow()
@@ -12,14 +13,14 @@ const maximizeWindow = () => window.appAPI?.maximizeWindow()
 <template>
   <header class="titlebar" role="banner">
     <div class="logo-holder">
-      <Icons kind="app-icon" size="large" class="app-icon" />
+      <img :src="AppLogoFull" class="app-logo" alt="HEAT FUSE" />
     </div>
     <div class="controls" role="group" :aria-label="t('apptitlebar.windowControls')">
       <button type="button" class="btn" :title="t('apptitlebar.minimize')" @click="minimizeWindow">
-        <Icons kind="missing" size="small" />
+        <Icons kind="minimize" size="small" />
       </button>
       <button type="button" class="btn" :title="t('apptitlebar.maximize')" @click="maximizeWindow">
-        <Icons kind="missing" size="small" />
+        <Icons kind="maximize" size="small" />
       </button>
       <motion.button
         type="button"
@@ -32,7 +33,7 @@ const maximizeWindow = () => window.appAPI?.maximizeWindow()
         }"
         @click="closeWindow"
       >
-        <Icons kind="missing" size="small" />
+        <Icons kind="cross" size="small" />
       </motion.button>
     </div>
   </header>
@@ -48,10 +49,16 @@ const maximizeWindow = () => window.appAPI?.maximizeWindow()
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: var(--base-1000);
+  background: var(--base-900);
   user-select: none;
 }
-
+.app-logo {
+  height: 32px;
+  width: auto;
+  -webkit-user-drag: none;
+  user-select: none;
+  pointer-events: none;
+}
 .logo-holder {
   margin: var(--space-3) 0 0 var(--space-3);
   display: flex;

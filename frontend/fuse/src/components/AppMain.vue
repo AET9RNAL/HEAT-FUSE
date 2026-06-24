@@ -46,6 +46,6 @@ import AppTab from './AppTab.vue'
   -webkit-mask-size: 4px 4px;
   mask-repeat: repeat;
   -webkit-mask-repeat: repeat;
-  background-color: var(--glass-surfaces-elevated-900);
+  background-color: var(--glass-surfaces-base-1000);
 }
 </style>

@@ -14,25 +14,25 @@ function handleSelect(option: NavigationOption) {
 <template>
   <ul class="sidebar">
     <SidebarOption
-      icon="missing"
+      icon="home"
       :label="t('appnav.home')"
       :selected="store.selectedOption === 'home'"
       @select="handleSelect('home')"
     />
     <SidebarOption
-      icon="missing"
+      icon="discover"
+      :label="t('appnav.discover')"
+      :selected="store.selectedOption === 'discover'"
+      @select="handleSelect('discover')"
+    />
+    <SidebarOption
+      icon="settings"
       :label="t('appnav.settings')"
       :selected="store.selectedOption === 'settings'"
       @select="handleSelect('settings')"
     />
     <SidebarOption
-      icon="missing"
-      :label="t('appnav.plugins')"
-      :selected="store.selectedOption === 'plugins'"
-      @select="handleSelect('plugins')"
-    />
-    <SidebarOption
-      icon="missing"
+      icon="about"
       :label="t('appnav.about')"
       :selected="store.selectedOption === 'about'"
       @select="handleSelect('about')"
@@ -44,10 +44,10 @@ function handleSelect(option: NavigationOption) {
 .sidebar {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
-  padding: var(--space-2) var(--space-1);
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-2);
   margin: 0;
-  background: var(--base-1000);
+  background: var(--base-900);
   height: 100%;
   flex-shrink: 0;
 }

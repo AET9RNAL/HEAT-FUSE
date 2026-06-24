@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 
-export type NavigationOption = 'home' | 'settings' | 'plugins' | 'about'
+export type NavigationOption = 'home' | 'discover' | 'settings' | 'about'
 
 export const useNavigationStore = defineStore('navigation', () => {
   const selectedOption = ref<NavigationOption>('home')

@@ -3,7 +3,7 @@
 
 <template>
   <div class="page">
-    <h2>Plugins</h2>
+    <h2>Discover</h2>
   </div>
 </template>
 

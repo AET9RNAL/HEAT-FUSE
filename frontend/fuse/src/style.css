@@ -83,27 +83,27 @@
   --icon-xlarge: 64px;
 
   /* Glass - Surfaces */
-  --glass-surfaces-accented-600: rgba(87, 112, 158, 0.4);
-  --glass-surfaces-close-600: rgba(82, 82, 82, 0.8);
+  --glass-surfaces-accented-600: hsla(142, 100%, 89%, 0.4);
+  --glass-surfaces-close-600: hsla(0, 0%, 32%, 0.8);
   --glass-surfaces-subtle-800: var(--black-3-a);
   --glass-surfaces-elevated-900: var(--black-2-a);
   --glass-surfaces-base-1000: var(--black-1-a);
 
   /* Brand colors */
-  --tea-green: rgba(197, 255, 218, 1);
-  --light-green: rgba(132, 255, 177, 1);
-  --canary-yellow: rgba(254, 255, 123, 1);
-  --yellow: rgba(243, 245, 0, 1);
+  --tea-green: hsl(142, 100%, 89%);
+  --light-green: hsl(142, 100%, 78%);
+  --canary-yellow: hsl(57, 100%, 74%);
+  --yellow: hsl(60, 100%, 48%);
 
   /* Blacks */
-  --black-1: rgba(7, 9, 14, 1);
-  --black-2: rgba(25, 25, 25, 1);
-  --black-3: rgba(51, 51, 51, 1);
+  --black-1: hsl(142, 1%, 4%);
+  --black-2: hsl(142, 1%, 10%);
+  --black-3: hsl(142, 1%, 20%);
 
   /* Blacks w/ Alpha */
-  --black-1-a: rgba(7, 9, 14, 0.6);
-  --black-2-a: rgba(25, 25, 25, 0.6);
-  --black-3-a: rgba(51, 51, 51, 0.6);
+  --black-1-a: hsla(142, 10%, 4%, 0.6);
+  --black-2-a: hsla(142, 10%, 10%, 0.6);
+  --black-3-a: hsla(142, 10%, 20%, 0.6);
 
   /* Base colors */
   --base-50: rgba(242, 242, 242, 1);
@@ -115,7 +115,7 @@
   --base-1000: var(--black-1);
 
   --accent-50: var(--tea-green);
-  --accent-150: rgba(195, 218, 255, 1);
+  --accent-150: hsl(219, 100%, 85%);
   --accent-200: var(--light-green);
   --accent-600: var(--canary-yellow);
   --accent-800: var(--yellow);
@@ -172,6 +172,7 @@ h5 { font-size: var(--main-font-size-5); font-weight: var(--font-weight-2); }
   height: 100%;
   display: flex;
   flex-direction: column;
+  clip-path: polygon(20px 0, 100% 0, 100% 100%, 0 100%, 0 20px);
 }
 
 /* Backdrop blur */

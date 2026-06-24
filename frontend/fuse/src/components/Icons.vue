@@ -8,6 +8,10 @@ export type IconKind =
   | 'plugins'
   | 'about'
   | 'missing'
+  | 'discover'
+  | 'minimize'
+  | 'maximize'
+  | 'app-logo-full'
 </script>
 
 <script setup lang="ts">

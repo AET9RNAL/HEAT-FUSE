@@ -1,168 +1,259 @@
-import { BrowserWindow as e, Menu as t, Tray as n, app as r, ipcMain as i, nativeImage as a, powerMonitor as o, safeStorage as s } from "electron";
-import { spawn as c } from "node:child_process";
-import { fileURLToPath as l } from "node:url";
-import u from "node:path";
+import { BrowserWindow, Menu, Tray, app, ipcMain, nativeImage, powerMonitor, safeStorage } from "electron";
+import { spawn } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import path from "node:path";
 //#region electron/main.ts
-var d = u.dirname(l(import.meta.url));
-process.env.APP_ROOT = u.join(d, "..");
-var f = process.env.VITE_DEV_SERVER_URL, p = u.join(process.env.APP_ROOT, "dist-electron"), m = u.join(process.env.APP_ROOT, "dist");
-process.env.VITE_PUBLIC = f ? u.join(process.env.APP_ROOT, "public") : m;
-var h = null, g = null, _ = !1, v = !1, y = !1, b = null, x = null;
-function S() {
-	if (g) return;
-	let e = f ? u.join(d, "..", "build", "icon.png") : u.join(process.resourcesPath, "icon.ico");
-	g = new n(a.createFromPath(e)), g.setToolTip("FUSE"), g.setContextMenu(t.buildFromTemplate([
+var __dirname = path.dirname(fileURLToPath(import.meta.url));
+process.env.APP_ROOT = path.join(__dirname, "..");
+var VITE_DEV_SERVER_URL = process.env["VITE_DEV_SERVER_URL"];
+var MAIN_DIST = path.join(process.env.APP_ROOT, "dist-electron");
+var RENDERER_DIST = path.join(process.env.APP_ROOT, "dist");
+process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL ? path.join(process.env.APP_ROOT, "public") : RENDERER_DIST;
+var win = null;
+var tray = null;
+var isQuitting = false;
+var minimizeToTrayOnStart = false;
+var minimizeToTrayOnClose = false;
+var fuseProcess = null;
+var fusePort = null;
+function createTray() {
+	if (tray) return;
+	const iconPath = VITE_DEV_SERVER_URL ? path.join(__dirname, "..", "build", "icon.png") : path.join(process.resourcesPath, "icon.ico");
+	tray = new Tray(nativeImage.createFromPath(iconPath));
+	tray.setToolTip("FUSE");
+	tray.setContextMenu(Menu.buildFromTemplate([
 		{
 			label: "Show",
 			click: () => {
-				h?.show(), h?.focus();
+				win?.show();
+				win?.focus();
 			}
 		},
 		{ type: "separator" },
 		{
 			label: "Quit",
 			click: () => {
-				_ = !0, r.quit();
+				isQuitting = true;
+				app.quit();
 			}
 		}
-	])), g.on("click", () => {
-		h?.show(), h?.focus();
+	]));
+	tray.on("click", () => {
+		win?.show();
+		win?.focus();
 	});
 }
-function C() {
-	g &&= (g.destroy(), null);
+function destroyTray() {
+	if (tray) {
+		tray.destroy();
+		tray = null;
+	}
 }
-function w() {
-	h = new e({
-		frame: !1,
+function createWindow() {
+	win = new BrowserWindow({
+		frame: false,
 		minWidth: 800,
 		minHeight: 600,
-		autoHideMenuBar: !0,
-		fullscreenable: !1,
-		transparent: !1,
-		backgroundColor: "#00000000",
+		autoHideMenuBar: true,
+		fullscreenable: false,
+		transparent: true,
+		backgroundColor: "rgba(0, 0, 0, 0.0)",
 		backgroundMaterial: "acrylic",
 		webPreferences: {
-			nodeIntegration: !1,
-			contextIsolation: !0,
-			devTools: !0,
-			preload: u.join(d, "preload.mjs")
+			nodeIntegration: false,
+			contextIsolation: true,
+			devTools: true,
+			preload: path.join(__dirname, "preload.mjs")
 		}
-	}), h.webContents.on("before-input-event", (e, t) => {
-		t.type === "keyDown" && t.control && t.key.toLowerCase() === "r" && e.preventDefault();
-	}), h.on("close", (e) => {
-		y && h && !_ && (e.preventDefault(), h.hide());
-	}), h.on("hide", () => {
-		h?.webContents.send("app:suspended");
-	}), h.on("show", () => {
-		h?.webContents.send("app:resumed");
-	}), h.webContents.session.webRequest.onHeadersReceived((e, t) => {
-		t({ responseHeaders: {
-			...e.responseHeaders,
-			"Content-Security-Policy": [`default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://us-assets.i.posthog.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self'; connect-src 'self' http://127.0.0.1:* ws://127.0.0.1:* https://*.supabase.co wss://*.supabase.co https://*.betterstackdata.com https://us.i.posthog.com https://us-assets.i.posthog.com; frame-src ${f ? "http://localhost:*" : "'none'"}; object-src 'none'; base-uri 'self'`]
+	});
+	win.webContents.on("before-input-event", (event, input) => {
+		if (input.type === "keyDown" && input.control && input.key.toLowerCase() === "r") event.preventDefault();
+	});
+	win.on("close", (e) => {
+		if (minimizeToTrayOnClose && win && !isQuitting) {
+			e.preventDefault();
+			win.hide();
+		}
+	});
+	win.on("hide", () => {
+		win?.webContents.send("app:suspended");
+	});
+	win.on("show", () => {
+		win?.webContents.send("app:resumed");
+	});
+	win.webContents.session.webRequest.onHeadersReceived((details, callback) => {
+		callback({ responseHeaders: {
+			...details.responseHeaders,
+			"Content-Security-Policy": [`default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://us-assets.i.posthog.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self'; connect-src 'self' http://127.0.0.1:* ws://127.0.0.1:* https://*.supabase.co wss://*.supabase.co https://*.betterstackdata.com https://us.i.posthog.com https://us-assets.i.posthog.com; frame-src ${VITE_DEV_SERVER_URL ? "http://localhost:*" : "'none'"}; object-src 'none'; base-uri 'self'`]
 		} });
-	}), f ? h.loadURL(f) : h.loadFile(u.join(m, "index.html"));
+	});
+	if (VITE_DEV_SERVER_URL) win.loadURL(VITE_DEV_SERVER_URL);
+	else win.loadFile(path.join(RENDERER_DIST, "index.html"));
 }
-r.on("window-all-closed", () => {
-	process.platform !== "darwin" && (r.quit(), h = null);
+app.on("window-all-closed", () => {
+	if (process.platform !== "darwin") {
+		app.quit();
+		win = null;
+	}
 });
-var T = !1;
-r.on("before-quit", (e) => {
-	if (_ = !0, T) return;
-	if (!b) {
-		T = !0;
+var fuseCleanupDone = false;
+app.on("before-quit", (event) => {
+	isQuitting = true;
+	if (fuseCleanupDone) return;
+	if (!fuseProcess) {
+		fuseCleanupDone = true;
 		return;
 	}
-	e.preventDefault();
-	let t = b;
-	b = null, x = null;
-	let n = setTimeout(() => t.kill("SIGKILL"), 3e3);
-	t.once("exit", () => {
-		clearTimeout(n), T = !0, r.quit();
-	}), t.kill("SIGTERM");
-}), r.on("activate", () => {
-	e.getAllWindows().length === 0 && w();
-}), r.whenReady().then(() => {
-	w(), o.on("suspend", () => {
-		h?.webContents.send("app:suspended");
-	}), o.on("resume", () => {
-		h?.webContents.send("app:resumed");
-	}), i.handle("window:close", () => {
-		(e.getFocusedWindow() || h)?.close();
-	}), i.handle("window:minimize", () => {
-		(e.getFocusedWindow() || h)?.minimize();
-	}), i.handle("window:maximize", () => {
-		let t = e.getFocusedWindow() || h;
-		t && (t.isMaximized() ? t.unmaximize() : t.maximize());
-	}), i.handle("fuse:spawn", async () => {
-		if (b) return {
-			success: !1,
+	event.preventDefault();
+	const proc = fuseProcess;
+	fuseProcess = null;
+	fusePort = null;
+	const forceKill = setTimeout(() => proc.kill("SIGKILL"), 3e3);
+	proc.once("exit", () => {
+		clearTimeout(forceKill);
+		fuseCleanupDone = true;
+		app.quit();
+	});
+	proc.kill("SIGTERM");
+});
+app.on("activate", () => {
+	if (BrowserWindow.getAllWindows().length === 0) createWindow();
+});
+app.whenReady().then(() => {
+	createWindow();
+	powerMonitor.on("suspend", () => {
+		win?.webContents.send("app:suspended");
+	});
+	powerMonitor.on("resume", () => {
+		win?.webContents.send("app:resumed");
+	});
+	ipcMain.handle("window:close", () => {
+		(BrowserWindow.getFocusedWindow() || win)?.close();
+	});
+	ipcMain.handle("window:minimize", () => {
+		(BrowserWindow.getFocusedWindow() || win)?.minimize();
+	});
+	ipcMain.handle("window:maximize", () => {
+		const target = BrowserWindow.getFocusedWindow() || win;
+		if (!target) return;
+		target.isMaximized() ? target.unmaximize() : target.maximize();
+	});
+	ipcMain.handle("fuse:spawn", async () => {
+		if (fuseProcess) return {
+			success: false,
 			error: "already running"
 		};
-		let e = !!f, t = e ? "python" : u.join(process.resourcesPath, "fuse.exe"), n = e ? [u.join(process.env.APP_ROOT, "..", "..", "run_heat_overlay.py")] : [];
-		return new Promise((e) => {
-			let r = c(t, n, {
+		const isDev = !!VITE_DEV_SERVER_URL;
+		const command = isDev ? "python" : path.join(process.resourcesPath, "fuse.exe");
+		const args = isDev ? [path.join(process.env.APP_ROOT, "..", "..", "run_heat_overlay.py")] : [];
+		return new Promise((resolve) => {
+			const proc = spawn(command, args, {
 				stdio: [
 					"pipe",
 					"pipe",
 					"pipe"
 				],
-				windowsHide: !0
-			}), i = !1, a = "", o = setTimeout(() => {
-				i || (i = !0, r.kill(), e({
-					success: !1,
-					error: "spawn timeout"
-				}));
+				windowsHide: true
+			});
+			let settled = false;
+			let stdoutBuf = "";
+			const timeout = setTimeout(() => {
+				if (!settled) {
+					settled = true;
+					proc.kill();
+					resolve({
+						success: false,
+						error: "spawn timeout"
+					});
+				}
 			}, 1e4);
-			r.stdout?.on("data", (t) => {
-				a += t.toString();
-				let n = a.indexOf("\n");
-				if (n === -1) return;
-				let s = a.slice(0, n).trim();
+			proc.stdout?.on("data", (chunk) => {
+				stdoutBuf += chunk.toString();
+				const nl = stdoutBuf.indexOf("\n");
+				if (nl === -1) return;
+				const line = stdoutBuf.slice(0, nl).trim();
 				try {
-					let { port: t, connectionToken: n } = JSON.parse(s);
-					t && n && !i && (i = !0, clearTimeout(o), b = r, x = t, r.on("exit", (e, t) => {
-						b = null, x = null, _ || h?.webContents.send("fuse:exited", {
-							code: e ?? null,
-							signal: t ?? null
+					const { port, connectionToken } = JSON.parse(line);
+					if (port && connectionToken && !settled) {
+						settled = true;
+						clearTimeout(timeout);
+						fuseProcess = proc;
+						fusePort = port;
+						proc.on("exit", (code, signal) => {
+							fuseProcess = null;
+							fusePort = null;
+							if (!isQuitting) win?.webContents.send("fuse:exited", {
+								code: code ?? null,
+								signal: signal ?? null
+							});
 						});
-					}), e({
-						success: !0,
-						pid: r.pid,
-						port: t,
-						connectionToken: n
-					}));
+						resolve({
+							success: true,
+							pid: proc.pid,
+							port,
+							connectionToken
+						});
+					}
 				} catch {}
-			}), r.on("error", (t) => {
-				i || (i = !0, clearTimeout(o), e({
-					success: !1,
-					error: t.message
-				}));
-			}), r.on("exit", (t) => {
-				i || (i = !0, clearTimeout(o), e({
-					success: !1,
-					error: `exited early with code ${t}`
-				}));
+			});
+			proc.on("error", (err) => {
+				if (!settled) {
+					settled = true;
+					clearTimeout(timeout);
+					resolve({
+						success: false,
+						error: err.message
+					});
+				}
+			});
+			proc.on("exit", (code) => {
+				if (!settled) {
+					settled = true;
+					clearTimeout(timeout);
+					resolve({
+						success: false,
+						error: `exited early with code ${code}`
+					});
+				}
 			});
 		});
-	}), i.handle("fuse:kill", async () => b ? new Promise((e) => {
-		let t = b, n = setTimeout(() => t.kill("SIGKILL"), 3e3);
-		t.once("exit", () => {
-			clearTimeout(n), e({ success: !0 });
-		}), t.kill("SIGTERM");
-	}) : { success: !0 }), i.handle("fuse:status", () => ({
-		running: !!b,
-		pid: b?.pid ?? null,
-		port: x
-	})), i.handle("safe-storage:is-available", () => s.isEncryptionAvailable()), i.handle("safe-storage:encrypt", (e, t) => s.encryptString(t).toJSON()), i.handle("safe-storage:decrypt", (e, t) => s.decryptString(Buffer.from(t.data))), i.handle("app:set-autostart", (e, t) => {
-		r.setLoginItemSettings({ openAtLogin: t });
-	}), i.handle("app:set-minimize-to-tray-on-start", (e, t) => {
-		v = t, t ? S() : y || C();
-	}), i.handle("app:apply-minimize-to-tray-on-start", () => {
-		v && h && r.getLoginItemSettings().wasOpenedAtLogin && h.hide();
-	}), i.handle("app:set-minimize-to-tray-on-close", (e, t) => {
-		y = t, t ? S() : v || C();
+	});
+	ipcMain.handle("fuse:kill", async () => {
+		if (!fuseProcess) return { success: true };
+		return new Promise((resolve) => {
+			const proc = fuseProcess;
+			const t = setTimeout(() => proc.kill("SIGKILL"), 3e3);
+			proc.once("exit", () => {
+				clearTimeout(t);
+				resolve({ success: true });
+			});
+			proc.kill("SIGTERM");
+		});
+	});
+	ipcMain.handle("fuse:status", () => ({
+		running: !!fuseProcess,
+		pid: fuseProcess?.pid ?? null,
+		port: fusePort
+	}));
+	ipcMain.handle("safe-storage:is-available", () => safeStorage.isEncryptionAvailable());
+	ipcMain.handle("safe-storage:encrypt", (_event, value) => safeStorage.encryptString(value).toJSON());
+	ipcMain.handle("safe-storage:decrypt", (_event, buf) => safeStorage.decryptString(Buffer.from(buf.data)));
+	ipcMain.handle("app:set-autostart", (_event, value) => {
+		app.setLoginItemSettings({ openAtLogin: value });
+	});
+	ipcMain.handle("app:set-minimize-to-tray-on-start", (_event, enabled) => {
+		minimizeToTrayOnStart = enabled;
+		if (enabled) createTray();
+		else if (!minimizeToTrayOnClose) destroyTray();
+	});
+	ipcMain.handle("app:apply-minimize-to-tray-on-start", () => {
+		if (minimizeToTrayOnStart && win && app.getLoginItemSettings().wasOpenedAtLogin) win.hide();
+	});
+	ipcMain.handle("app:set-minimize-to-tray-on-close", (_event, enabled) => {
+		minimizeToTrayOnClose = enabled;
+		if (enabled) createTray();
+		else if (!minimizeToTrayOnStart) destroyTray();
 	});
 });
 //#endregion
-export { p as MAIN_DIST, m as RENDERER_DIST, f as VITE_DEV_SERVER_URL };
+export { MAIN_DIST, RENDERER_DIST, VITE_DEV_SERVER_URL };

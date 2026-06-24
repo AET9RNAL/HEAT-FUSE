@@ -55,8 +55,8 @@ function createWindow() {
     minHeight: 600,
     autoHideMenuBar: true,
     fullscreenable: false,
-    transparent: false,
-    backgroundColor: '#00000000',
+    transparent: true,
+    backgroundColor: 'rgba(0, 0, 0, 0.0)',
     backgroundMaterial: 'acrylic',
     webPreferences: {
       nodeIntegration: false,
