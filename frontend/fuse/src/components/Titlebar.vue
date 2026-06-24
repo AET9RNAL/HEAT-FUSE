@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { motion } from 'motion-v'
 import Icons from './Icons.vue'
+import EStatus from './eStatus.vue'
 import { useI18n } from '../composables/useI18n'
 import AppLogoFull from '../assets/icons/app-logo-full.svg'
 
@@ -15,26 +16,29 @@ const maximizeWindow = () => window.appAPI?.maximizeWindow()
     <div class="logo-holder">
       <img :src="AppLogoFull" class="app-logo" alt="HEAT FUSE" />
     </div>
-    <div class="controls" role="group" :aria-label="t('apptitlebar.windowControls')">
-      <button type="button" class="btn" :title="t('apptitlebar.minimize')" @click="minimizeWindow">
-        <Icons kind="minimize" size="small" />
-      </button>
-      <button type="button" class="btn" :title="t('apptitlebar.maximize')" @click="maximizeWindow">
-        <Icons kind="maximize" size="small" />
-      </button>
-      <motion.button
-        type="button"
-        class="btn close"
-        :title="t('apptitlebar.close')"
-        :aria-label="t('apptitlebar.close')"
-        :whileHover="{
-          boxShadow: ['0 0 10px #ef4444', '0 0 30px #ef4444', '0 0 10px #ef4444'],
-          transition: { duration: 3, repeat: Infinity, ease: 'easeInOut' },
-        }"
-        @click="closeWindow"
-      >
-        <Icons kind="cross" size="small" />
-      </motion.button>
+    <div class="right-group">
+      <EStatus state="Running" status="Running" />
+      <div class="controls" role="group" :aria-label="t('apptitlebar.windowControls')">
+        <button type="button" class="btn" :title="t('apptitlebar.minimize')" @click="minimizeWindow">
+          <Icons kind="minimize" size="small" />
+        </button>
+        <button type="button" class="btn" :title="t('apptitlebar.maximize')" @click="maximizeWindow">
+          <Icons kind="maximize" size="small" />
+        </button>
+        <motion.button
+          type="button"
+          class="btn close"
+          :title="t('apptitlebar.close')"
+          :aria-label="t('apptitlebar.close')"
+          :whileHover="{
+            boxShadow: ['0 0 10px #ef4444', '0 0 30px #ef4444', '0 0 10px #ef4444'],
+            transition: { duration: 3, repeat: Infinity, ease: 'easeInOut' },
+          }"
+          @click="closeWindow"
+        >
+          <Icons kind="cross" size="small" />
+        </motion.button>
+      </div>
     </div>
   </header>
 </template>
@@ -68,11 +72,17 @@ const maximizeWindow = () => window.appAPI?.maximizeWindow()
 
 
 
-.controls {
+.right-group {
   -webkit-app-region: no-drag;
   display: flex;
+  align-items: center;
+  margin-left: auto;
+  gap: var(--space-6);
+}
+
+.controls {
+  display: flex;
   align-items: flex-start;
-  align-self: flex-start;
 }
 
 .btn {

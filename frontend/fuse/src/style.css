@@ -139,6 +139,12 @@
   --main-font-size-4: 12px;
   --main-font-size-5: 8px;
 
+  --secondary-font-size-1: 24px;
+  --secondary-font-size-2: 20px;
+  --secondary-font-size-3: 16px;
+  --secondary-font-size-4: 12px;
+  --secondary-font-size-5: 8px;
+
   /* Font weights */
   --font-weight-1: 700;
   --font-weight-2: 500;
