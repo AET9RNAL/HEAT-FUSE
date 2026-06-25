@@ -29,6 +29,8 @@ Any modifications to FUSE that would allow reading, exposing, or exploiting clie
 - [Plugins](#plugins)
   - [Energy Bar](#energy-bar)
 
+> **Launch order matters:** enable FUSE in Settings before starting the game if this is your first time. Changes take effect only on a fresh game session.
+
 
 ---
 
@@ -55,37 +57,38 @@ Any modifications to FUSE that would allow reading, exposing, or exploiting clie
 
 # For Players
 
-FUSE runs alongside WoT:HEAT and displays real-time HUD overlays driven by live game data: energy bars, rangefinders, cooldown trackers, and more. Plugins are distributed as single `.fuse` files and drop straight into the `plugins/` folder.
+FUSE runs alongside WoT:HEAT and displays real-time HUD overlays driven by live game data: energy bars, rangefinders, cooldown trackers, and more. Plugins are distributed as single `.fuse` files.
 
 ## Getting Started
 
-1. Install [Miniconda](https://docs.anaconda.com/miniconda/).
-2. Run `run.bat` - it creates the `heat_fuse` conda environment, installs all dependencies, and shows a launch menu. (P.S. On first launch you may need to run the runner twice)
-3. Install [Tesseract OCR](https://github.com/tesseract-ocr/tesseract) if any plugin you use relies on OCR features.
+1. Install FUSE using the latest installer in Releases.
+2. Open the FUSE launcher.
+3. Go to **Settings**, set your game instance and installation directory, and enable runtime under **Master Switch**. Important: path should resolve to the game's root directory (e.g., `C:\YourPath\HEAT`).
+4. Start WoT:HEAT (or restart it if already running - the runtime requires a fresh game session).
+5. Hit **Launch** in the FUSE launcher. Overlays will appear on screen.
+6. Each overlays goes through 2 calibration stages:
+   - First stage: Adjust the overlay position in 3rd person view.
+   - Second stage: Adjust the overlay position in 1st person view.
 
-On first launch FUSE auto-registers the `.fuse` file extension in Windows so Explorer shows plugin files with the FUSE icon.
+To cycle through stages press `Ctrl + L` by default.
+> Overlays take ~4 seconds to update after entering a battle. This is normal - the game HUD is not present before that point.
 
+> You may have to right-click the downloaded installer => properties => Unblock. This is because the installer is not digitally signed, so smart screen may silently prevent execution.
 ---
 
 ## Installing Plugins
 
-1. Drop any `.fuse` file into the `plugins/` folder.
-2. Launch FUSE via `run.bat`.
-
-FUSE scans `plugins/` on every startup and loads all valid archives automatically.
+Drop any `.fuse` file into the `plugins/` folder inside the FUSE install directory. The launcher scans it automatically on every launch. Use the **Plugins** tab in the launcher to enable or disable individual plugins without restarting.
 
 ---
 
 ## Hotkeys
 
-These are registered globally by the FUSE host and active whenever FUSE is running. You are free to assign your own keys in the Plugin Manager.
-
- **NOTE**: don't press Ctrl + M/F while the console is in focus. It's a known issue with Windows that the console intercepts these keys for it's own purposes, this may halt process execution.
+Active globally while FUSE is running.
 
 | Combo | Action |
 |-------|--------|
-| `Ctrl+L` | Confirm calibration / lock the current plugin in place. Press again to advance to the next calibration stage if the plugin has more than one. |
-| `Ctrl+M` | Open / close the Plugin Manager (enable, disable, configure plugins, rebind keys). |
+| `Ctrl+L` | Confirm calibration / advance to the next calibration stage. |
 | `Ctrl+R` | Hot-reload all plugins from disk without restarting FUSE. |
 | `Ctrl+P` | Quit FUSE. |
 
@@ -95,21 +98,21 @@ These are registered globally by the FUSE host and active whenever FUSE is runni
 
 ### Energy Bar
 
-`EnergyBar-2.0.1.fuse` - animated Rive energy bar that tracks vehicle energy in real time. Supports separate positions for 3rd-person and 1st-person views and switches between them automatically.
+`EnergyBar-2.0.1.fuse` — animated energy bar that tracks vehicle energy in real time. Supports separate positions for 3rd-person and 1st-person views and switches automatically.
 
 **Calibration (two stages)**
 
-1. Launch FUSE. The bar appears on screen in calibration mode.
-2. Drag it to where you want it in **3rd-person** view, then press `Ctrl+L`.
-3. Drag it to where you want it in **1st-person** view, then press `Ctrl+L` again to lock.
+1. Launch FUSE. The bar appears in calibration mode.
+2. Click the bar frame and drag it to position in **3rd-person** view, then press `Ctrl+L`.
+3. Drag to position in **1st-person** view, then press `Ctrl+L` again to lock.
 
-While locked the bar switches positions automatically when you zoom into first-person.
+While locked the bar switches positions automatically on zoom.
 
-**Configuration** - open Plugin Manager (`Ctrl+M`) → Settings → Energy Bar
+**Configuration**
 
 | Category | Key | Type | Description |
 |----------|-----|------|-------------|
-| Memory Source | `memory_chain` | choice | `multiplayer_vehicle_energy` or `training_vehicle_energy` - which game value drives the bar |
+| Memory Source | `memory_chain` | choice | `multiplayer_vehicle_energy` or `training_vehicle_energy` |
 | Colors | `color_high` | hex RGB | Bar color above 60% energy |
 | Colors | `color_mid` | hex RGB | Bar color between 30%–60% energy |
 | Colors | `color_low` | hex RGB | Bar color below 30% energy |
