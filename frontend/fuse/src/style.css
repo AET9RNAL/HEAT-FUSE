@@ -212,6 +212,19 @@ h5 { font-size: var(--main-font-size-5); font-weight: var(--font-weight-2); }
     0 0.3px 0.9px 0 var(--alice-blue) inset;
 }
 
+.shadows-hover-accented-inner-glass {
+  box-shadow:
+    0 0 0.6px 0.7px var(--Tea-Green, #C5FFDA) inset,
+    0 0 1px 0.5px var(--bg, #161616) inset;
+  filter:
+    drop-shadow(0 1px 0.8px var(--Tea-Green, #C5FFDA))
+    drop-shadow(0 0 3.1px var(--Branding-Green, #84FFB1))
+    drop-shadow(0 0 1px var(--Branding-Green, #84FFB1))
+    drop-shadow(0 2px 5px rgba(197, 255, 218, 0.20));
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
 /* Debug utilities */
 .debug {
   outline: 2px dashed red;
@@ -231,4 +244,12 @@ h5 { font-size: var(--main-font-size-5); font-weight: var(--font-weight-2); }
 @keyframes debug-blue-march {
   0%, 100% { outline-color: blue; }
   50%       { outline-color: transparent; }
+}
+
+/* Vue Devtools overlay must not be captured by the frameless titlebar drag region */
+body > iframe[src*="__devtools__"],
+body > div[data-v-inspector-container],
+#__vue-devtools-container__,
+body > div[class*="vue-devtools"] {
+  -webkit-app-region: no-drag !important;
 }

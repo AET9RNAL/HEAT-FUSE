@@ -65,8 +65,9 @@ async function startFuse(): Promise<boolean> {
             }
         })
 
+        let connectResult: { version?: string }
         try {
-            await connect(result.port, result.connectionToken)
+            connectResult = await connect(result.port, result.connectionToken)
         } catch (e: unknown) {
             const msg = e instanceof Error ? e.message : 'connect failed'
             _setState('error', msg)
@@ -74,6 +75,8 @@ async function startFuse(): Promise<boolean> {
             logger.error('FUSE: connect failed', { error: msg })
             return false
         }
+
+        if (connectResult.version) useAppStore().backendVersion = connectResult.version
 
         _setState('running')
         eventBus.emit('agent:connected')

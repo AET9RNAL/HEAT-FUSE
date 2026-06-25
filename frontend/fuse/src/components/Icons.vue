@@ -26,6 +26,9 @@ export type IconKind =
   | 'play'
   | 'stop'
   | 'console'
+  | 'list'
+  | 'arrow-left'
+  | 'filter'
 </script>
 
 <script setup lang="ts">

@@ -17,6 +17,9 @@ type Events = {
     'agent:crashed': { code: number | null; signal: string | null }
     'agent:error': { error: string }
 
+    // Notifications
+    'notification': { title?: string; message: string }
+
     // Plugin lifecycle
     'fuse:stalled': { stale_seconds: number }
     'plugin:registered': { plugin_id: string; name: string; version: string; description: string; status: string; configSchema: unknown[]; hotkeys: { action: string; combo: string }[] }

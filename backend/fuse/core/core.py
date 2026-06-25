@@ -64,7 +64,8 @@ class FuseCore:
             if msg.get("type") != "auth" or msg.get("token") != self._connection_token:
                 await websocket.close(code=4401)
                 return
-            await websocket.send_text(json.dumps({"type": "auth:ok"}))
+            from fuse.core.host import HOST_VERSION
+            await websocket.send_text(json.dumps({"type": "auth:ok", "version": HOST_VERSION}))
 
             # First authenticated client triggers plugin initialization.
             if self._host is not None:
@@ -109,7 +110,7 @@ class FuseCore:
             if method == "config.update":
                 result = self._rpc_config_update(params)
             elif method == "plugin.setEnabled":
-                result = self._rpc_set_enabled(params)
+                result = await self._rpc_set_enabled(params)
             elif method == "hotkey.rebind":
                 result = self._rpc_hotkey_rebind(params)
             else:
@@ -142,15 +143,26 @@ class FuseCore:
                 return {"updated": {key: value}}
         return {"updated": {}}
 
-    def _rpc_set_enabled(self, params: dict) -> dict:
+    async def _rpc_set_enabled(self, params: dict) -> dict:
         if self._host is None:
             return {"ok": False}
         plugin_id: str = params["plugin_id"]
         enabled: bool = params["enabled"]
-        if enabled:
-            self._host.enable_plugin(plugin_id)
-        else:
-            self._host.disable_plugin(plugin_id)
+        loop = asyncio.get_event_loop()
+        future: asyncio.Future = loop.create_future()
+
+        def _do() -> None:
+            try:
+                if enabled:
+                    self._host.enable_plugin(plugin_id)
+                else:
+                    self._host.disable_plugin(plugin_id)
+                loop.call_soon_threadsafe(future.set_result, None)
+            except Exception as exc:
+                loop.call_soon_threadsafe(future.set_exception, exc)
+
+        self._host.root.after(0, _do)
+        await asyncio.wait_for(future, timeout=5.0)
         return {"ok": True, "plugin_id": plugin_id, "enabled": enabled}
 
     def _rpc_hotkey_rebind(self, params: dict) -> dict:
@@ -233,12 +245,22 @@ class FuseCore:
         server = uvicorn.Server(config)
         loop_ready = threading.Event()
 
+        _thread_error: list[Exception] = []
+
         def _run() -> None:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            self._loop = loop
-            loop_ready.set()
-            loop.run_until_complete(server.serve())
+            async def _serve() -> None:
+                self._loop = asyncio.get_running_loop()
+                loop_ready.set()
+                await server.serve()
+
+            try:
+                asyncio.run(_serve())
+            except Exception as exc:
+                from loguru import logger as _log
+                _log.error(f"uvicorn thread error: {exc!r}", exc_info=True)
+                _thread_error.append(exc)
+            finally:
+                loop_ready.set()  # always unblock main thread
 
         t = threading.Thread(target=_run, daemon=True, name="fuse-ws-server")
         t.start()
@@ -247,7 +269,12 @@ class FuseCore:
         for _ in range(50):
             if server.started:
                 break
+            if _thread_error:
+                raise RuntimeError(f"uvicorn failed to start: {_thread_error[0]}") from _thread_error[0]
             time.sleep(0.1)
+
+        if not server.started:
+            raise RuntimeError("uvicorn server did not start within 5 seconds")
 
         return port
 
@@ -271,7 +298,12 @@ class FuseCore:
         # Start WebSocket server before printing startup JSON so Electron
         # won't connect before the server is ready.
         self._connection_token = secrets.token_hex(32)
-        port = self.start_server()
+        try:
+            port = self.start_server()
+        except Exception as exc:
+            from loguru import logger as _log
+            _log.error(f"Failed to start WebSocket server: {exc!r}", exc_info=True)
+            raise
 
         # Electron reads this line from stdout to learn the port and token.
         print(json.dumps({"port": port, "connectionToken": self._connection_token}), flush=True)

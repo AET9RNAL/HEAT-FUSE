@@ -5,17 +5,36 @@ import eCheckbox from './eCheckbox.vue'
 import { usePluginsStore } from '../stores/plugins'
 import type { MenuOption } from './eContextMenu.vue'
 
+const props = withDefaults(defineProps<{
+  search?: string
+  filterMode?: string
+}>(), {
+  search: '',
+  filterMode: 'all',
+})
+
 const store = usePluginsStore()
 
 const selected = ref<Record<string, boolean>>({})
 
+const filteredPlugins = computed(() => {
+  const q = props.search.trim().toLowerCase()
+  const mode = props.filterMode
+  return store.plugins.filter(p => {
+    if (mode === 'active'   && p.status === 'disabled') return false
+    if (mode === 'disabled' && p.status !== 'disabled') return false
+    if (!q) return true
+    return p.name.toLowerCase().includes(q) || p.description.toLowerCase().includes(q)
+  })
+})
+
 const allSelected = computed(() =>
-  store.plugins.length > 0 && store.plugins.every(p => selected.value[p.plugin_id])
+  filteredPlugins.value.length > 0 && filteredPlugins.value.every(p => selected.value[p.plugin_id])
 )
 
 function toggleAll(val: boolean) {
-  const next: Record<string, boolean> = {}
-  store.plugins.forEach(p => { next[p.plugin_id] = val })
+  const next: Record<string, boolean> = { ...selected.value }
+  filteredPlugins.value.forEach(p => { next[p.plugin_id] = val })
   selected.value = next
 }
 
@@ -103,7 +122,7 @@ onUnmounted(() => ro?.disconnect())
 
       <div class="list-body">
         <ePlugin
-          v-for="plugin in store.plugins"
+          v-for="plugin in filteredPlugins"
           :key="plugin.plugin_id"
           :plugin="plugin"
           :selected="selected[plugin.plugin_id] ?? false"
@@ -113,8 +132,8 @@ onUnmounted(() => ro?.disconnect())
           @update:enabled="handleToggle(plugin.plugin_id, $event)"
         />
 
-        <div v-if="store.plugins.length === 0" class="empty">
-          <span class="empty-text">No plugins discovered</span>
+        <div v-if="filteredPlugins.length === 0" class="empty">
+          <span class="empty-text">{{ store.plugins.length === 0 ? 'No plugins discovered' : 'No plugins match' }}</span>
         </div>
       </div>
 

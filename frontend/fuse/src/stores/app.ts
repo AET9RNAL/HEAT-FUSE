@@ -114,12 +114,16 @@ export const useAppStore = defineStore('app', () => {
         gameVersion.value = result.version ?? ''
     }
 
+    async function checkDebugger(dirPath: string) {
+        return window.gameAPI.checkDebugger(dirPath)
+    }
+
     async function enableDebugger(dirPath: string) {
         return window.gameAPI.enableDebugger(dirPath)
     }
 
-    async function fetchBackendVersion() {
-        backendVersion.value = await window.appAPI.getBackendVersion()
+    async function disableDebugger(dirPath: string) {
+        return window.gameAPI.disableDebugger(dirPath)
     }
 
     return {
@@ -136,8 +140,9 @@ export const useAppStore = defineStore('app', () => {
         gameVersion,
         setGameDirPath,
         scanGameDir,
+        checkDebugger,
         enableDebugger,
-        fetchBackendVersion,
+        disableDebugger,
         loadDefaults,
     }
 }, {
@@ -152,6 +157,7 @@ export const useAppStore = defineStore('app', () => {
             'gamePlatform',
             'gameDirPaths',
             'gameVersion',
+            'backendVersion',
         ],
     },
 })

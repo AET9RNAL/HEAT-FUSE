@@ -256,29 +256,44 @@ app.whenReady().then(() => {
     if (fuseProcess) return { success: false, error: 'already running' }
 
     const isDev = !!VITE_DEV_SERVER_URL
-    const backendRoot = isDev
-      ? path.join(process.env.APP_ROOT!, '..', '..', 'backend')
-      : process.resourcesPath
-    const scriptPath = path.join(backendRoot, 'fuse', 'run_heat_overlay.py')
-    const venvPython = path.join(backendRoot, '.venv', 'Scripts', 'python.exe')
-    const requirementsTxt = path.join(backendRoot, 'fuse', 'requirements.txt')
+    let executable: string
+    let args: string[]
+    let spawnEnv: NodeJS.ProcessEnv
 
-    try {
-      if (!fs.existsSync(venvPython)) {
-        await execFileAsync('python', ['-m', 'venv', path.join(backendRoot, '.venv')])
+    if (isDev) {
+      const backendRoot = path.join(process.env.APP_ROOT!, '..', '..', 'backend')
+      const venvPython = path.join(backendRoot, '.venv', 'Scripts', 'python.exe')
+      const requirementsTxt = path.join(backendRoot, 'fuse', 'requirements.txt')
+
+      try {
+        if (!fs.existsSync(venvPython)) {
+          await execFileAsync('python', ['-m', 'venv', path.join(backendRoot, '.venv')])
+        }
+        await execFileAsync(venvPython, ['-m', 'pip', 'install', '-r', requirementsTxt, '--quiet'])
+      } catch (e: unknown) {
+        return { success: false, error: `venv setup failed: ${(e as Error).message}` }
       }
-      await execFileAsync(venvPython, ['-m', 'pip', 'install', '-r', requirementsTxt, '--quiet'])
-    } catch (e: unknown) {
-      return { success: false, error: `venv setup failed: ${(e as Error).message}` }
+
+      executable = venvPython
+      args = [path.join(backendRoot, 'fuse', 'run_fuse.py')]
+      spawnEnv = { ...process.env, PYTHONPATH: backendRoot }
+    } else {
+      executable = path.join(process.resourcesPath, 'fuse-backend.dist', 'fuse-backend.exe')
+      args = []
+      spawnEnv = {
+        ...process.env,
+        FUSE_PLUGIN_DIRS: [
+          path.join(process.resourcesPath, 'fuse', 'plugins'),
+          path.join(process.resourcesPath, 'plugins'),
+        ].join(';'),
+      }
     }
 
-    const args = [scriptPath]
-
     return new Promise<{ success: boolean; pid?: number; port?: number; connectionToken?: string; error?: string }>((resolve) => {
-      const proc = spawn(venvPython, args, {
+      const proc = spawn(executable, args, {
         stdio: ['pipe', 'pipe', 'pipe'],
         windowsHide: true,
-        env: { ...process.env, PYTHONPATH: backendRoot },
+        env: spawnEnv,
       })
 
       let settled = false
@@ -462,17 +477,6 @@ app.whenReady().then(() => {
     return shell.openPath(dir)
   })
 
-  ipcMain.handle('app:get-backend-version', () => {
-    try {
-      const isDev = !!VITE_DEV_SERVER_URL
-      const hostPath = isDev
-        ? path.join(process.env.APP_ROOT!, '..', '..', 'backend', 'fuse', 'core', 'host.py')
-        : path.join(process.resourcesPath, 'fuse', 'core', 'host.py')
-      const src = fs.readFileSync(hostPath, 'utf-8')
-      const m = src.match(/HOST_VERSION\s*=\s*["']([^"']+)["']/)
-      return m ? m[1] : ''
-    } catch { return '' }
-  })
 
   ipcMain.handle('game:scan-dir', (_event, dirPath: string) => {
     try {
@@ -490,12 +494,35 @@ app.whenReady().then(() => {
     }
   })
 
+  ipcMain.handle('game:check-debugger', (_event, dirPath: string) => {
+    try {
+      const projectPath = path.join(dirPath, 'coldwar.project')
+      const content = fs.readFileSync(projectPath, 'utf-8')
+      const enabled = /"Enable Debugger"\s*:\s*true/.test(content)
+      return { success: true, enabled }
+    } catch (e: unknown) {
+      return { success: false, error: (e as Error).message }
+    }
+  })
+
   ipcMain.handle('game:enable-debugger', (_event, dirPath: string) => {
     try {
       const projectPath = path.join(dirPath, 'coldwar.project')
       let content = fs.readFileSync(projectPath, 'utf-8')
       content = content.replace(/"Debugger Port"\s*:\s*\d+/g, '"Debugger Port": 9222')
       content = content.replace(/"Enable Debugger"\s*:\s*false/g, '"Enable Debugger": true')
+      fs.writeFileSync(projectPath, content, 'utf-8')
+      return { success: true }
+    } catch (e: unknown) {
+      return { success: false, error: (e as Error).message }
+    }
+  })
+
+  ipcMain.handle('game:disable-debugger', (_event, dirPath: string) => {
+    try {
+      const projectPath = path.join(dirPath, 'coldwar.project')
+      let content = fs.readFileSync(projectPath, 'utf-8')
+      content = content.replace(/"Enable Debugger"\s*:\s*true/g, '"Enable Debugger": false')
       fs.writeFileSync(projectPath, content, 'utf-8')
       return { success: true }
     } catch (e: unknown) {

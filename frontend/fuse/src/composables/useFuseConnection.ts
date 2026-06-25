@@ -129,11 +129,11 @@ function _scheduleReconnect(): void {
 
 // ── Core WebSocket connect ─────────────────────────────────────────────────
 
-async function _doConnect(port: number, token: string): Promise<void> {
+async function _doConnect(port: number, token: string): Promise<{ version?: string }> {
     const healthy = await _healthCheck(port)
     if (!healthy) throw new Error('health check failed')
 
-    await new Promise<void>((resolve, reject) => {
+    return new Promise<{ version?: string }>((resolve, reject) => {
         const socket = new WebSocket(`ws://127.0.0.1:${port}/ws`)
         const connectTimeout = setTimeout(() => {
             socket.close()
@@ -179,7 +179,7 @@ async function _doConnect(port: number, token: string): Promise<void> {
                     }
                 }
 
-                resolve()
+                resolve({ version: msg['version'] as string | undefined })
             }
 
             socket.send(JSON.stringify({ type: 'auth', token }))
@@ -194,12 +194,12 @@ async function _doConnect(port: number, token: string): Promise<void> {
 
 // ── Public API ─────────────────────────────────────────────────────────────
 
-async function connect(port: number, token: string): Promise<void> {
+async function connect(port: number, token: string): Promise<{ version?: string }> {
     _intentionalClose = false
     _currentPort = port
     _currentToken = token
     _reconnectAttempt = 0
-    await _doConnect(port, token)
+    return _doConnect(port, token)
 }
 
 function disconnect(): void {

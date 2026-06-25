@@ -1,14 +1,16 @@
 {
   "name": "fuse",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.2",
   "description": "FUSE modding runtime for WoT HEAT",
   "author": "AET3RNAL",
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vue-tsc && vite build && electron-builder",
-    "preview": "vite preview"
+    "build": "vue-tsc && npm run compile:py && vite build && electron-builder",
+    "preview": "vite preview",
+    "compile:py": "node scripts/compile-python.cjs",
+    "compile:py:force": "node scripts/compile-python.cjs --force"
   },
   "dependencies": {
     "@rive-app/canvas": "^2.38.2",
@@ -58,19 +60,22 @@
         "to": "icon.ico"
       },
       {
-        "from": "../../backend/fuse",
-        "to": "fuse",
-        "filter": ["**/*", "!**/__pycache__/**", "!**/*.pyc", "!**/*.pyd"]
+        "from": "resources/fuse-backend.dist",
+        "to": "fuse-backend.dist"
+      },
+      {
+        "from": "../../backend/fuse/manifest.json",
+        "to": "fuse/manifest.json"
+      },
+      {
+        "from": "../../backend/fuse/plugins",
+        "to": "fuse/plugins",
+        "filter": ["**/*.fuse"]
       },
       {
         "from": "../../backend/plugins",
         "to": "plugins",
         "filter": ["**/*.fuse"]
-      },
-      {
-        "from": "../../backend/native/bin",
-        "to": "native/bin",
-        "filter": ["*.dll"]
       }
     ],
     "files": [

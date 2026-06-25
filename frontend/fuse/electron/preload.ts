@@ -41,8 +41,6 @@ contextBridge.exposeInMainWorld('appAPI', {
     ipcRenderer.invoke('app:set-minimize-to-tray-on-close', value),
   openBackendDir: (): Promise<string> =>
     ipcRenderer.invoke('app:open-backend-dir'),
-  getBackendVersion: (): Promise<string> =>
-    ipcRenderer.invoke('app:get-backend-version'),
   closeWindow: (): Promise<void> =>
     ipcRenderer.invoke('window:close'),
   minimizeWindow: (): Promise<void> =>
@@ -76,8 +74,12 @@ contextBridge.exposeInMainWorld('configAPI', {
 contextBridge.exposeInMainWorld('gameAPI', {
   scanDir: (dirPath: string): Promise<{ version?: string; hasProject: boolean; error?: string }> =>
     ipcRenderer.invoke('game:scan-dir', dirPath),
+  checkDebugger: (dirPath: string): Promise<{ success: boolean; enabled?: boolean; error?: string }> =>
+    ipcRenderer.invoke('game:check-debugger', dirPath),
   enableDebugger: (dirPath: string): Promise<{ success: boolean; error?: string }> =>
     ipcRenderer.invoke('game:enable-debugger', dirPath),
+  disableDebugger: (dirPath: string): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke('game:disable-debugger', dirPath),
 })
 
 contextBridge.exposeInMainWorld('fuseAPI', {

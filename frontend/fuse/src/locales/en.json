@@ -19,6 +19,11 @@
     },
     "components": {
         "loading": "Loading...",
-        "error": "Something went wrong"
+        "error": "Something went wrong",
+        "button": {
+            "processing": "Working",
+            "success": "Done",
+            "error": "Failed"
+        }
     }
 }

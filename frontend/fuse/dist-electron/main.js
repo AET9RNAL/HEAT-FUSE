@@ -473,41 +473,47 @@ r.on("before-quit", (e) => {
 			success: !1,
 			error: "already running"
 		};
-		let e = q ? m.join(process.env.APP_ROOT, "..", "..", "backend") : process.resourcesPath, t = m.join(e, "fuse", "run_heat_overlay.py"), n = m.join(e, ".venv", "Scripts", "python.exe"), r = m.join(e, "fuse", "requirements.txt");
-		try {
-			h.existsSync(n) || await G("python", [
-				"-m",
-				"venv",
-				m.join(e, ".venv")
-			]), await G(n, [
-				"-m",
-				"pip",
-				"install",
-				"-r",
-				r,
-				"--quiet"
-			]);
-		} catch (e) {
-			return {
-				success: !1,
-				error: `venv setup failed: ${e.message}`
+		let e = !!q, t, n, r;
+		if (e) {
+			let e = m.join(process.env.APP_ROOT, "..", "..", "backend"), i = m.join(e, ".venv", "Scripts", "python.exe"), a = m.join(e, "fuse", "requirements.txt");
+			try {
+				h.existsSync(i) || await G("python", [
+					"-m",
+					"venv",
+					m.join(e, ".venv")
+				]), await G(i, [
+					"-m",
+					"pip",
+					"install",
+					"-r",
+					a,
+					"--quiet"
+				]);
+			} catch (e) {
+				return {
+					success: !1,
+					error: `venv setup failed: ${e.message}`
+				};
+			}
+			t = i, n = [m.join(e, "fuse", "run_fuse.py")], r = {
+				...process.env,
+				PYTHONPATH: e
 			};
-		}
-		let i = [t];
-		return new Promise((t) => {
-			let r = d(n, i, {
+		} else t = m.join(process.resourcesPath, "fuse-backend.dist", "fuse-backend.exe"), n = [], r = {
+			...process.env,
+			FUSE_PLUGIN_DIRS: [m.join(process.resourcesPath, "fuse", "plugins"), m.join(process.resourcesPath, "plugins")].join(";")
+		};
+		return new Promise((e) => {
+			let i = d(t, n, {
 				stdio: [
 					"pipe",
 					"pipe",
 					"pipe"
 				],
 				windowsHide: !0,
-				env: {
-					...process.env,
-					PYTHONPATH: e
-				}
+				env: r
 			}), a = !1, o = "", s = "", c = setTimeout(() => {
-				a || (a = !0, r.kill(), t({
+				a || (a = !0, i.kill(), e({
 					success: !1,
 					error: "spawn timeout"
 				}));
@@ -522,43 +528,43 @@ r.on("before-quit", (e) => {
 					timestamp: Date.now()
 				});
 			};
-			r.stderr?.on("data", (e) => {
+			i.stderr?.on("data", (e) => {
 				s += e.toString();
 				let t;
 				for (; (t = s.indexOf("\n")) !== -1;) {
 					let e = s.slice(0, t).trim();
 					s = s.slice(t + 1), e && l(e);
 				}
-			}), r.stdout?.on("data", (e) => {
-				o += e.toString();
+			}), i.stdout?.on("data", (t) => {
+				o += t.toString();
 				let n;
 				for (; (n = o.indexOf("\n")) !== -1;) {
-					let e = o.slice(0, n).trim();
-					if (o = o.slice(n + 1), e) if (a) l(e);
+					let t = o.slice(0, n).trim();
+					if (o = o.slice(n + 1), t) if (a) l(t);
 					else try {
-						let { port: n, connectionToken: i } = JSON.parse(e);
-						n && i && (a = !0, clearTimeout(c), Q = r, $ = n, r.on("exit", (e, t) => {
+						let { port: n, connectionToken: r } = JSON.parse(t);
+						n && r && (a = !0, clearTimeout(c), Q = i, $ = n, i.on("exit", (e, t) => {
 							Q = null, $ = null, Z || Y?.webContents.send("fuse:exited", {
 								code: e ?? null,
 								signal: t ?? null
 							});
-						}), t({
+						}), e({
 							success: !0,
-							pid: r.pid,
+							pid: i.pid,
 							port: n,
-							connectionToken: i
+							connectionToken: r
 						}));
 					} catch {}
 				}
-			}), r.on("error", (e) => {
-				a || (a = !0, clearTimeout(c), t({
+			}), i.on("error", (t) => {
+				a || (a = !0, clearTimeout(c), e({
 					success: !1,
-					error: e.message
+					error: t.message
 				}));
-			}), r.on("exit", (e) => {
-				a || (a = !0, clearTimeout(c), t({
+			}), i.on("exit", (t) => {
+				a || (a = !0, clearTimeout(c), e({
 					success: !1,
-					error: `exited early with code ${e}: ${s.trim()}`
+					error: `exited early with code ${t}: ${s.trim()}`
 				}));
 			});
 		});
@@ -619,13 +625,6 @@ r.on("before-quit", (e) => {
 	}), a.handle("app:open-backend-dir", () => {
 		let e = q ? m.join(process.env.APP_ROOT, "..", "..", "backend") : process.resourcesPath;
 		return l.openPath(e);
-	}), a.handle("app:get-backend-version", () => {
-		try {
-			let e = q ? m.join(process.env.APP_ROOT, "..", "..", "backend", "fuse", "core", "host.py") : m.join(process.resourcesPath, "fuse", "core", "host.py"), t = h.readFileSync(e, "utf-8").match(/HOST_VERSION\s*=\s*["']([^"']+)["']/);
-			return t ? t[1] : "";
-		} catch {
-			return "";
-		}
 	}), a.handle("game:scan-dir", (e, t) => {
 		try {
 			let e, n = m.join(t, "game_info.xml");
@@ -641,10 +640,33 @@ r.on("before-quit", (e) => {
 		} catch (e) {
 			return { error: e.message };
 		}
+	}), a.handle("game:check-debugger", (e, t) => {
+		try {
+			let e = m.join(t, "coldwar.project"), n = h.readFileSync(e, "utf-8");
+			return {
+				success: !0,
+				enabled: /"Enable Debugger"\s*:\s*true/.test(n)
+			};
+		} catch (e) {
+			return {
+				success: !1,
+				error: e.message
+			};
+		}
 	}), a.handle("game:enable-debugger", (e, t) => {
 		try {
 			let e = m.join(t, "coldwar.project"), n = h.readFileSync(e, "utf-8");
 			return n = n.replace(/"Debugger Port"\s*:\s*\d+/g, "\"Debugger Port\": 9222"), n = n.replace(/"Enable Debugger"\s*:\s*false/g, "\"Enable Debugger\": true"), h.writeFileSync(e, n, "utf-8"), { success: !0 };
+		} catch (e) {
+			return {
+				success: !1,
+				error: e.message
+			};
+		}
+	}), a.handle("game:disable-debugger", (e, t) => {
+		try {
+			let e = m.join(t, "coldwar.project"), n = h.readFileSync(e, "utf-8");
+			return n = n.replace(/"Enable Debugger"\s*:\s*true/g, "\"Enable Debugger\": false"), h.writeFileSync(e, n, "utf-8"), { success: !0 };
 		} catch (e) {
 			return {
 				success: !1,

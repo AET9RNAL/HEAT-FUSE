@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
+import { useFuseConnection } from '../composables/useFuseConnection'
 
 export type PluginStatus = 'active' | 'disabled' | 'error' | 'skipped' | 'pending' | 'loading'
 
@@ -71,7 +72,12 @@ export const usePluginsStore = defineStore('plugins', () => {
 
     async function setEnabled(id: string, enabled: boolean) {
         await window.configAPI.setPluginEnabled(id, enabled)
-        setStatus(id, enabled ? 'pending' : 'disabled')
+        const { connected, setPluginEnabled } = useFuseConnection()
+        if (connected.value) {
+            await setPluginEnabled(id, enabled)
+        } else {
+            setStatus(id, enabled ? 'pending' : 'disabled')
+        }
     }
 
     async function rebindHotkey(id: string, action: string, combo: string) {

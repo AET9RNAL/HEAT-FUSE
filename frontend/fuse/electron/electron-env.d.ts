@@ -37,7 +37,6 @@ interface Window {
     applyMinimizeToTrayOnStart: () => Promise<void>
     setMinimizeToTrayOnClose: (value: boolean) => Promise<void>
     openBackendDir: () => Promise<string>
-    getBackendVersion: () => Promise<string>
     closeWindow: () => Promise<void>
     minimizeWindow: () => Promise<void>
     maximizeWindow: () => Promise<void>
@@ -68,7 +67,9 @@ interface Window {
   }
   gameAPI: {
     scanDir: (dirPath: string) => Promise<{ version?: string; hasProject: boolean; error?: string }>
+    checkDebugger: (dirPath: string) => Promise<{ success: boolean; enabled?: boolean; error?: string }>
     enableDebugger: (dirPath: string) => Promise<{ success: boolean; error?: string }>
+    disableDebugger: (dirPath: string) => Promise<{ success: boolean; error?: string }>
   }
   fuseAPI: {
     spawn: () => Promise<{ success: boolean; pid?: number; port?: number; connectionToken?: string; error?: string }>

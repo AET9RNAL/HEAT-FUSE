@@ -3,8 +3,11 @@ import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import eCheckbox from './eCheckbox.vue'
 import eSwitch from './eSwitch.vue'
 import eDirSelector from './eDirSelector.vue'
+import eButton from './eButton.vue'
+import type { SystemState } from './eButton.vue'
 import type { eSwitchOption } from './eSwitch.vue'
 import { useAppStore } from '../stores/app'
+import { eventBus } from '../events/eventBus'
 
 const store = useAppStore()
 
@@ -18,7 +21,39 @@ const gameDirPath = computed({
   set: (val) => store.setGameDirPath(store.gamePlatform, val),
 })
 
-watch(gameDirPath, (dir) => store.scanGameDir(dir), { immediate: true })
+const debuggerEnabled = ref<boolean | null>(null)
+const debuggerBtnState = ref<SystemState>('idle')
+
+async function refreshDebuggerState(dir: string) {
+  if (!dir) { debuggerEnabled.value = null; return }
+  const result = await store.checkDebugger(dir)
+  debuggerEnabled.value = result.success ? (result.enabled ?? false) : null
+}
+
+watch(gameDirPath, (dir) => {
+  store.scanGameDir(dir)
+  refreshDebuggerState(dir)
+}, { immediate: true })
+
+async function handleDebuggerToggle() {
+  const dir = gameDirPath.value
+  if (!dir || debuggerBtnState.value !== 'idle') return
+  debuggerBtnState.value = 'processing'
+  const result = debuggerEnabled.value
+    ? await store.disableDebugger(dir)
+    : await store.enableDebugger(dir)
+  if (result.success) {
+    debuggerEnabled.value = !debuggerEnabled.value
+    debuggerBtnState.value = 'success'
+    eventBus.emit('notification', {
+      title: 'Game Configuration Changed',
+      message: 'Restart the game for changes to take effect.',
+    })
+  } else {
+    debuggerBtnState.value = 'error'
+  }
+  setTimeout(() => { debuggerBtnState.value = 'idle' }, 2000)
+}
 
 const CUT = 10
 const panelEl = ref<HTMLElement | null>(null)
@@ -68,6 +103,22 @@ onUnmounted(() => ro?.disconnect())
               </div>
             </div>
 
+          </div>
+        </div>
+
+        <div class="section">
+          <h2 class="section-header">Master Switch</h2>
+          <div class="section-body">
+            <div class="setting-row">
+              <span class="setting-label">Enable FUSE</span>
+              <eButton
+                :label="debuggerEnabled ? 'Disable' : 'Enable'"
+                size="half"
+                :systemState="debuggerBtnState"
+                :disabled="debuggerEnabled === null || !gameDirPath"
+                @click="handleDebuggerToggle"
+              />
+            </div>
           </div>
         </div>
 
