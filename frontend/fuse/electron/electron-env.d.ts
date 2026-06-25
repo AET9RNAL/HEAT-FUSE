@@ -36,9 +36,39 @@ interface Window {
     setMinimizeToTrayOnStart: (value: boolean) => Promise<void>
     applyMinimizeToTrayOnStart: () => Promise<void>
     setMinimizeToTrayOnClose: (value: boolean) => Promise<void>
+    openBackendDir: () => Promise<string>
+    getBackendVersion: () => Promise<string>
     closeWindow: () => Promise<void>
     minimizeWindow: () => Promise<void>
     maximizeWindow: () => Promise<void>
+  }
+  pluginsAPI: {
+    scan: () => Promise<Array<{
+      plugin_id: string
+      name: string
+      version: string
+      description: string
+      author?: string
+      status: 'pending'
+      configSchema: unknown[]
+      hotkeys: unknown[]
+      filePath: string
+    }>>
+    showFile: (filePath: string) => Promise<void>
+    deleteFile: (filePath: string) => Promise<{ success: boolean; error?: string }>
+  }
+  dialogAPI: {
+    selectDir: () => Promise<string | null>
+  }
+  configAPI: {
+    readHost: () => Promise<{ disabled_plugins: string[]; enabled_plugins: string[] | null; extra_plugin_dirs: string[] }>
+    setPluginEnabled: (pluginId: string, enabled: boolean) => Promise<{ success: boolean; error?: string }>
+    onHostChanged: (cb: (cfg: { disabled_plugins: string[] }) => void) => void
+    offHostChanged: () => void
+  }
+  gameAPI: {
+    scanDir: (dirPath: string) => Promise<{ version?: string; hasProject: boolean; error?: string }>
+    enableDebugger: (dirPath: string) => Promise<{ success: boolean; error?: string }>
   }
   fuseAPI: {
     spawn: () => Promise<{ success: boolean; pid?: number; port?: number; connectionToken?: string; error?: string }>
@@ -46,5 +76,7 @@ interface Window {
     status: () => Promise<{ running: boolean; pid: number | null; port: number | null }>
     onExited: (cb: (data: { code: number | null; signal: string | null }) => void) => void
     offExited: () => void
+    onLog: (cb: (entry: { level: string; text: string; timestamp: number }) => void) => void
+    offLog: () => void
   }
 }

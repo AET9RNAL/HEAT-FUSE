@@ -1,0 +1,8 @@
+{
+  "enabled_plugins": null,
+  "disabled_plugins": [
+    "heat_ailos_torc",
+    "game_memory"
+  ],
+  "extra_plugin_dirs": []
+}

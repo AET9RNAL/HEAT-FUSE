@@ -12,6 +12,20 @@ export type IconKind =
   | 'minimize'
   | 'maximize'
   | 'app-logo-full'
+  | 'content'
+  | 'more'
+  | 'delete'
+  | 'downloading'
+  | 'file'
+  | 'folder'
+  | 'reload'
+  | 'reset'
+  | 'steam'
+  | 'wgc'
+  | 'missingImage'
+  | 'play'
+  | 'stop'
+  | 'console'
 </script>
 
 <script setup lang="ts">
@@ -34,7 +48,7 @@ const sizeMap: Record<IconSize, number> = {
   small:  12,
   normal: 16,
   large:  24,
-  xlarge: 64,
+  xlarge: 48,
 }
 
 const iconSize = computed(() => sizeMap[props.size])

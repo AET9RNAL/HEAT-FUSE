@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Optional, Set, TYPE_CHECKING
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
 if TYPE_CHECKING:
@@ -34,6 +35,12 @@ class FuseCore:
         self._host: Optional["PluginHost"] = None
 
         self._app = FastAPI()
+        self._app.add_middleware(
+            CORSMiddleware,
+            allow_origins=["*"],
+            allow_methods=["GET"],
+            allow_headers=["*"],
+        )
 
         @self._app.get("/health")
         async def health() -> dict:
@@ -58,6 +65,10 @@ class FuseCore:
                 await websocket.close(code=4401)
                 return
             await websocket.send_text(json.dumps({"type": "auth:ok"}))
+
+            # First authenticated client triggers plugin initialization.
+            if self._host is not None:
+                self._host.root.after(0, self._host.begin_plugin_init)
 
             # Send current plugin list so late-connecting clients are hydrated.
             if self._host is not None:

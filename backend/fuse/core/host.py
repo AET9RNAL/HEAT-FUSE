@@ -135,6 +135,8 @@ class PluginHost:
 
         self._manager: Optional["FuseManager"] = None
 
+        self._dequeue_started: bool = False
+
         self._register_global_hotkeys()
 
     # ------------------------------------------------------------------
@@ -671,12 +673,18 @@ class PluginHost:
     # Lifecycle
     # ------------------------------------------------------------------
 
+    def begin_plugin_init(self) -> None:
+        """Trigger plugin instantiation. Called by FuseCore after first WS auth."""
+        if self._dequeue_started:
+            return
+        self._dequeue_started = True
+        self.root.after(0, self._dequeue_next_plugin)
+
     def run(self) -> None:
         if not self._setup_pending:
             _root_logger.warning("No plugins queued — starting with empty host. Use Ctrl+M to enable plugins.")
         self._start_listeners()
         self.root.after(50, self._tick)
-        self.root.after(0, self._dequeue_next_plugin)
         try:
             self.root.mainloop()
         finally:

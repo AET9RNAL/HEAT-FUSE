@@ -15,6 +15,7 @@ const fusePid = ref<number | null>(null)
 
 let _actionInProgress = false
 let _exitHandlerRegistered = false
+let _watcherSetUp = false
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -85,6 +86,7 @@ async function startFuse(): Promise<boolean> {
                 disconnect()
                 fusePid.value = null
 
+                usePluginsStore().resetRuntimeStatuses()
                 if (fuseState.value === 'running') {
                     _setState('idle')
                     eventBus.emit('agent:crashed', { code, signal })
@@ -114,6 +116,7 @@ async function stopFuse(): Promise<void> {
 
         await window.fuseAPI.kill()
         fusePid.value = null
+        usePluginsStore().resetRuntimeStatuses()
         _setState('idle')
         eventBus.emit('agent:stopped', { code: null, signal: null })
         logger.info('FUSE: stopped')
@@ -125,16 +128,18 @@ async function stopFuse(): Promise<void> {
 // ── Composable ─────────────────────────────────────────────────────────────
 
 export function useFuseControl() {
-    const appStore = useAppStore()
-
-    watch(() => appStore.enableFuse, async (enabled) => {
-        if (enabled) {
-            const ok = await startFuse()
-            if (!ok) appStore.enableFuse = false
-        } else {
-            await stopFuse()
-        }
-    }, { immediate: true })
+    if (!_watcherSetUp) {
+        _watcherSetUp = true
+        const appStore = useAppStore()
+        watch(() => appStore.enableFuse, async (enabled) => {
+            if (enabled) {
+                const ok = await startFuse()
+                if (!ok) appStore.enableFuse = false
+            } else {
+                await stopFuse()
+            }
+        }, { immediate: true })
+    }
 
     return {
         fuseState: readonly(fuseState),

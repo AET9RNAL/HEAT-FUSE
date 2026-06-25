@@ -1,0 +1,6 @@
+{
+  "cdp_port": 9222,
+  "connect_timeout_s": 8.0,
+  "reconnect_interval_s": 2.0,
+  "poll_interval_s": 0.05
+}

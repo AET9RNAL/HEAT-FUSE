@@ -136,4 +136,28 @@ def verify(fuse_path: Path | str) -> bool:
         return False
 
 
-__all__ = ["pack", "verify"]
+def pack_core(out_dir: Path | str | None = None) -> list[Path]:
+    """Pack every core plugin directory under ``fuse/plugins/`` into a ``.fuse`` archive.
+
+    Outputs archives to *out_dir* (defaults to ``fuse/plugins/`` itself so that
+    :func:`fuse.core.discovery.discover` picks them up immediately).
+
+    Returns a list of created archive paths.
+    """
+    from fuse.core.discovery import BUILTIN_PLUGINS_DIR
+
+    if out_dir is None:
+        out_dir = BUILTIN_PLUGINS_DIR
+
+    results: list[Path] = []
+    for entry in sorted(BUILTIN_PLUGINS_DIR.iterdir()):
+        if not entry.is_dir() or entry.name.startswith((".", "_")):
+            continue
+        if not (entry / "manifest.json").exists():
+            continue
+        results.append(pack(entry, out_dir=out_dir))
+
+    return results
+
+
+__all__ = ["pack", "pack_core", "verify"]

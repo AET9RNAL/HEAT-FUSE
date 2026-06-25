@@ -134,6 +134,7 @@ const gradientBg = computed(() => {
     z-index: 0;
     inset: 0;
     border-radius: inherit;
+    clip-path: inherit;
     overflow: hidden;
     isolation: isolate;
 }
@@ -143,6 +144,7 @@ const gradientBg = computed(() => {
     position: absolute;
     inset: 0;
     border-radius: inherit;
+    clip-path: inherit;
     pointer-events: none;
 }
 
@@ -151,6 +153,7 @@ const gradientBg = computed(() => {
     position: absolute;
     inset: 0;
     border-radius: inherit;
+    clip-path: inherit;
     pointer-events: none;
 }
 
@@ -159,6 +162,7 @@ const gradientBg = computed(() => {
     inset: 0;
     z-index: 2;
     border-radius: inherit;
+    clip-path: inherit;
     overflow: hidden;
     pointer-events: none;
 }
@@ -168,6 +172,7 @@ const gradientBg = computed(() => {
     inset: 0;
     z-index: -1;
     border-radius: inherit;
+    clip-path: inherit;
     pointer-events: none;
 }
 
@@ -176,6 +181,7 @@ const gradientBg = computed(() => {
     inset: 0;
     z-index: -2;
     border-radius: inherit;
+    clip-path: inherit;
     pointer-events: none;
 }
 

@@ -39,12 +39,45 @@ contextBridge.exposeInMainWorld('appAPI', {
     ipcRenderer.invoke('app:apply-minimize-to-tray-on-start'),
   setMinimizeToTrayOnClose: (value: boolean): Promise<void> =>
     ipcRenderer.invoke('app:set-minimize-to-tray-on-close', value),
+  openBackendDir: (): Promise<string> =>
+    ipcRenderer.invoke('app:open-backend-dir'),
+  getBackendVersion: (): Promise<string> =>
+    ipcRenderer.invoke('app:get-backend-version'),
   closeWindow: (): Promise<void> =>
     ipcRenderer.invoke('window:close'),
   minimizeWindow: (): Promise<void> =>
     ipcRenderer.invoke('window:minimize'),
   maximizeWindow: (): Promise<void> =>
     ipcRenderer.invoke('window:maximize'),
+})
+
+contextBridge.exposeInMainWorld('pluginsAPI', {
+  scan: () => ipcRenderer.invoke('plugins:scan'),
+  showFile: (filePath: string) => ipcRenderer.invoke('plugins:show-file', filePath),
+  deleteFile: (filePath: string): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke('plugins:delete', filePath),
+})
+
+contextBridge.exposeInMainWorld('dialogAPI', {
+  selectDir: (): Promise<string | null> => ipcRenderer.invoke('dialog:select-dir'),
+})
+
+contextBridge.exposeInMainWorld('configAPI', {
+  readHost: (): Promise<{ disabled_plugins: string[]; enabled_plugins: string[] | null; extra_plugin_dirs: string[] }> =>
+    ipcRenderer.invoke('config:host:read'),
+  setPluginEnabled: (pluginId: string, enabled: boolean): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke('config:plugin:set-enabled', pluginId, enabled),
+  onHostChanged: (cb: (cfg: { disabled_plugins: string[] }) => void) =>
+    ipcRenderer.on('config:host:changed', (_event, cfg) => cb(cfg)),
+  offHostChanged: () =>
+    ipcRenderer.removeAllListeners('config:host:changed'),
+})
+
+contextBridge.exposeInMainWorld('gameAPI', {
+  scanDir: (dirPath: string): Promise<{ version?: string; hasProject: boolean; error?: string }> =>
+    ipcRenderer.invoke('game:scan-dir', dirPath),
+  enableDebugger: (dirPath: string): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke('game:enable-debugger', dirPath),
 })
 
 contextBridge.exposeInMainWorld('fuseAPI', {
@@ -58,4 +91,8 @@ contextBridge.exposeInMainWorld('fuseAPI', {
     ipcRenderer.on('fuse:exited', (_event, data) => cb(data)),
   offExited: () =>
     ipcRenderer.removeAllListeners('fuse:exited'),
+  onLog: (cb: (entry: { level: string; text: string; timestamp: number }) => void) =>
+    ipcRenderer.on('fuse:log', (_event, entry) => cb(entry)),
+  offLog: () =>
+    ipcRenderer.removeAllListeners('fuse:log'),
 })

@@ -1,6 +1,5 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { useFuseConnection } from '../composables/useFuseConnection'
 
 export type PluginStatus = 'active' | 'disabled' | 'error' | 'skipped' | 'pending' | 'loading'
 
@@ -28,6 +27,7 @@ export interface PluginRecord {
     status: PluginStatus
     configSchema: PluginConfigField[]
     hotkeys: PluginHotkey[]
+    filePath?: string
 }
 
 export const usePluginsStore = defineStore('plugins', () => {
@@ -47,6 +47,7 @@ export const usePluginsStore = defineStore('plugins', () => {
                 status: (data.status as PluginStatus) ?? 'pending',
                 configSchema: data.configSchema ?? [],
                 hotkeys: data.hotkeys ?? [],
+                filePath: data.filePath,
             })
         }
     }
@@ -60,15 +61,20 @@ export const usePluginsStore = defineStore('plugins', () => {
         if (plugin) plugin.status = status
     }
 
+    function resetRuntimeStatuses() {
+        for (const p of plugins.value) {
+            if (p.status === 'active' || p.status === 'loading') {
+                p.status = 'pending'
+            }
+        }
+    }
+
     async function setEnabled(id: string, enabled: boolean) {
-        const { setPluginEnabled } = useFuseConnection()
-        await setPluginEnabled(id, enabled)
-        setStatus(id, enabled ? 'active' : 'disabled')
+        await window.configAPI.setPluginEnabled(id, enabled)
+        setStatus(id, enabled ? 'pending' : 'disabled')
     }
 
     async function rebindHotkey(id: string, action: string, combo: string) {
-        const { rebindHotkey: rpcRebind } = useFuseConnection()
-        await rpcRebind(id, action, combo)
         const plugin = plugins.value.find(p => p.plugin_id === id)
         if (plugin) {
             const hotkey = plugin.hotkeys.find(h => h.action === action)
@@ -76,5 +82,43 @@ export const usePluginsStore = defineStore('plugins', () => {
         }
     }
 
-    return { plugins, upsert, remove, setStatus, setEnabled, rebindHotkey }
+    async function scan() {
+        if (!window.pluginsAPI || !window.configAPI) return
+        const [results, hostCfg] = await Promise.all([
+            window.pluginsAPI.scan(),
+            window.configAPI.readHost(),
+        ])
+        const disabled = new Set(hostCfg.disabled_plugins ?? [])
+        for (const r of results) {
+            const existing = plugins.value.find(p => p.plugin_id === r.plugin_id)
+            const isDisabled = disabled.has(r.plugin_id)
+            upsert({
+                ...r,
+                status: existing?.status === 'active' ? 'active'
+                    : isDisabled ? 'disabled'
+                    : existing?.status ?? 'pending',
+                configSchema: (r.configSchema ?? []) as PluginConfigField[],
+                hotkeys: (r.hotkeys ?? []) as PluginHotkey[],
+            })
+        }
+    }
+
+    function applyHostConfig(cfg: { disabled_plugins: string[] }) {
+        const disabled = new Set(cfg.disabled_plugins ?? [])
+        for (const p of plugins.value) {
+            const shouldBeDisabled = disabled.has(p.plugin_id)
+            if (shouldBeDisabled && p.status !== 'disabled') setStatus(p.plugin_id, 'disabled')
+            else if (!shouldBeDisabled && p.status === 'disabled') setStatus(p.plugin_id, 'pending')
+        }
+    }
+
+    function watchHostConfig() {
+        window.configAPI.onHostChanged(applyHostConfig)
+    }
+
+    function unwatchHostConfig() {
+        window.configAPI.offHostChanged()
+    }
+
+    return { plugins, upsert, remove, setStatus, resetRuntimeStatuses, setEnabled, rebindHotkey, scan, watchHostConfig, unwatchHostConfig }
 })

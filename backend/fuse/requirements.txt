@@ -7,3 +7,4 @@ loguru
 pyserial
 fastapi
 uvicorn[standard]
+websocket-client

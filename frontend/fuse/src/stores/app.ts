@@ -21,7 +21,12 @@ export const useAppStore = defineStore('app', () => {
     const enableFuse = ref<boolean>(false)
     const autostart = ref<boolean>(false)
     const minimizeToTray = ref<boolean>(false)
+    const minimizeToTrayOnClose = ref<boolean>(false)
     const checkUpdatesOnStartup = ref<boolean>(true)
+    const gamePlatform = ref<'steam' | 'wgc'>('steam')
+    const gameDirPaths = ref<Record<string, string>>({ steam: '', wgc: '' })
+    const backendVersion = ref<string>('')
+    const gameVersion = ref<string>('')
 
     // Setting registry
     // Each entry maps a ref to a DB column key and a load default.
@@ -36,9 +41,12 @@ export const useAppStore = defineStore('app', () => {
     const registry: Record<string, SettingEntry> = {
         appLanguage:           { ref: appLanguage,           db: 'app_language',              default: 'en' },
         enableFuse:            { ref: enableFuse,            db: 'enable_fuse',               default: false },
-        autostart:             { ref: autostart,             db: 'autostart',                 default: false },
-        minimizeToTray:        { ref: minimizeToTray,        db: 'minimize_to_tray',          default: false },
-        checkUpdatesOnStartup: { ref: checkUpdatesOnStartup, db: 'check_updates_on_startup',  default: true },
+        autostart:              { ref: autostart,              db: 'autostart',                  default: false },
+        minimizeToTray:         { ref: minimizeToTray,         db: 'minimize_to_tray',           default: false },
+        minimizeToTrayOnClose:  { ref: minimizeToTrayOnClose,  db: 'minimize_to_tray_on_close',  default: false },
+        checkUpdatesOnStartup:  { ref: checkUpdatesOnStartup,  db: 'check_updates_on_startup',   default: true },
+        gamePlatform:           { ref: gamePlatform,           db: 'game_platform',              default: 'steam' },
+        gameDirPaths:           { ref: gameDirPaths,           db: 'game_dir_paths',             default: { steam: '', wgc: '' } },
     }
 
     // Batched save system (wire DB when auth is ready)
@@ -74,6 +82,14 @@ export const useAppStore = defineStore('app', () => {
         window.appAPI?.setAutostart(value)
     })
 
+    watch(minimizeToTray, (value) => {
+        window.appAPI?.setMinimizeToTrayOnStart(value)
+    })
+
+    watch(minimizeToTrayOnClose, (value) => {
+        window.appAPI?.setMinimizeToTrayOnClose(value)
+    })
+
     // Load / init
 
     function loadDefaults() {
@@ -88,13 +104,40 @@ export const useAppStore = defineStore('app', () => {
         }
     }
 
+    function setGameDirPath(platform: string, path: string) {
+        gameDirPaths.value = { ...gameDirPaths.value, [platform]: path }
+    }
+
+    async function scanGameDir(dirPath: string) {
+        if (!dirPath) { gameVersion.value = ''; return }
+        const result = await window.gameAPI.scanDir(dirPath)
+        gameVersion.value = result.version ?? ''
+    }
+
+    async function enableDebugger(dirPath: string) {
+        return window.gameAPI.enableDebugger(dirPath)
+    }
+
+    async function fetchBackendVersion() {
+        backendVersion.value = await window.appAPI.getBackendVersion()
+    }
+
     return {
         appVersion,
+        backendVersion,
         appLanguage,
         enableFuse,
         autostart,
         minimizeToTray,
+        minimizeToTrayOnClose,
         checkUpdatesOnStartup,
+        gamePlatform,
+        gameDirPaths,
+        gameVersion,
+        setGameDirPath,
+        scanGameDir,
+        enableDebugger,
+        fetchBackendVersion,
         loadDefaults,
     }
 }, {
@@ -104,7 +147,11 @@ export const useAppStore = defineStore('app', () => {
             'enableFuse',
             'autostart',
             'minimizeToTray',
+            'minimizeToTrayOnClose',
             'checkUpdatesOnStartup',
+            'gamePlatform',
+            'gameDirPaths',
+            'gameVersion',
         ],
     },
 })

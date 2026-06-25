@@ -1,4 +1,23 @@
 /* ========================================
+   Font Faces - Geist Mono (Variable)
+   ======================================== */
+@font-face {
+  font-family: 'Geist Mono';
+  src: url('./assets/types/GeistMono/GeistMono-VariableFont_wght.ttf') format('truetype-variations');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: block;
+}
+
+@font-face {
+  font-family: 'Geist Mono';
+  src: url('./assets/types/GeistMono/GeistMono-Italic-VariableFont_wght.ttf') format('truetype-variations');
+  font-weight: 100 900;
+  font-style: italic;
+  font-display: block;
+}
+
+/* ========================================
    Font Faces - Normalidad Compact
    ======================================== */
 @font-face {
@@ -131,6 +150,7 @@
 
   /* Typography */
   --font-primary: 'Normalidad', system-ui, sans-serif;
+  --font-microcopy: 'Geist Mono', 'Courier New', monospace;
 
   /* Font sizes */
   --main-font-size-1: 24px;

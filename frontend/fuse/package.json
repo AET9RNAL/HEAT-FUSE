@@ -15,6 +15,7 @@
     "@sentry/electron": "^7.13.0",
     "@supabase/supabase-js": "^2.108.2",
     "electron-updater": "^6.8.9",
+    "fflate": "^0.8.3",
     "lottie-web": "^5.13.0",
     "mitt": "^3.0.1",
     "motion-v": "^2.3.0",
@@ -44,19 +45,32 @@
     "productName": "FUSE",
     "protocols": {
       "name": "FUSE",
-      "schemes": ["fuse"]
+      "schemes": [
+        "fuse"
+      ]
     },
     "directories": {
       "output": "release"
     },
     "extraResources": [
       {
-        "from": "resources/fuse.exe",
-        "to": "fuse.exe"
-      },
-      {
         "from": "build/icon.ico",
         "to": "icon.ico"
+      },
+      {
+        "from": "../../backend/fuse",
+        "to": "fuse",
+        "filter": ["**/*", "!**/__pycache__/**", "!**/*.pyc", "!**/*.pyd"]
+      },
+      {
+        "from": "../../backend/plugins",
+        "to": "plugins",
+        "filter": ["**/*.fuse"]
+      },
+      {
+        "from": "../../backend/native/bin",
+        "to": "native/bin",
+        "filter": ["*.dll"]
       }
     ],
     "files": [
