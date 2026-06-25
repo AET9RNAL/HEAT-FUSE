@@ -23,7 +23,6 @@ interface FuseHotkey {
 
 const FUSE_HOTKEYS: FuseHotkey[] = [
     { action: 'Hot-Reload Plugins',    label: 'Hot-Reload Plugins',    defaultCombo: 'ctrl+r' },
-    { action: 'Open Plugin Manager',   label: 'Open Plugin Manager',   defaultCombo: 'ctrl+m' },
     { action: 'Quit FUSE',             label: 'Quit FUSE',             defaultCombo: 'ctrl+p' },
     { action: 'Toggle Calibrate/Lock', label: 'Toggle Calibrate/Lock', defaultCombo: 'ctrl+l' },
 ]

@@ -204,7 +204,7 @@ function formatTime(ts: number) {
 .log-empty {
   color: var(--text-muted);
   font-family: var(--font-microcopy);
-  font-size: var(--secondary-font-size-5);
+  font-size: var(--secondary-font-size-4);
   text-align: center;
   padding: var(--space-4);
   margin: auto;

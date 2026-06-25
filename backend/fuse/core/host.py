@@ -50,7 +50,6 @@ from fuse.core.discovery import (
 from fuse.core.resolver import resolve_load_order
 from fuse.core.events import EventBus
 from fuse.core.services import ServiceRegistry
-from fuse.ui.manager import FuseManager
 
 HOST_VERSION = "2.4.0"
 
@@ -132,8 +131,6 @@ class PluginHost:
         # queue mode vs. normal (runtime) toggle mode.
         self._setup_calib_stage: int = 1
         self._calib_stage: int = 1
-
-        self._manager: Optional["FuseManager"] = None
 
         self._dequeue_started: bool = False
 
@@ -600,15 +597,7 @@ class PluginHost:
     def _register_global_hotkeys(self) -> None:
         self.hotkeys.register("ctrl+l", self.toggle_lock,    label="Toggle Calibrate/Lock", owner="host")
         self.hotkeys.register("ctrl+p", self.quit,           label="Quit FUSE",             owner="host")
-        self.hotkeys.register("ctrl+m", self._open_manager,  label="Open Plugin Manager",   owner="host")
         self.hotkeys.register("ctrl+r", self.reload_plugins, label="Hot-Reload Plugins",    owner="host")
-
-    def _open_manager(self) -> None:
-        _root_logger.debug("host: _open_manager called")
-        if self._manager is None:
-            _root_logger.debug("host: creating FuseManager instance")
-            self._manager = FuseManager(self.root, self)
-        self._manager.toggle()
 
     def subscribe_mouse(self, cb: MouseCallback) -> None:
         self._mouse_subscribers.append(cb)
