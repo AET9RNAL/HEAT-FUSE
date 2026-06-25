@@ -3,7 +3,8 @@
         "cancel": "Cancel",
         "confirm": "Confirm",
         "ok": "OK",
-        "brandName": "FUSE"
+        "brandName": "FUSE",
+        "gameName": "WoT:HEAT"
     },
     "apptitlebar": {
         "close": "Close",
@@ -13,9 +14,63 @@
     },
     "appnav": {
         "home": "Home",
+        "discover": "Discover",
         "settings": "Settings",
         "plugins": "Plugins",
         "about": "About"
+    },
+    "apphome": {
+        "searchPlaceholder": "Search plugins...",
+        "discover": "Discover",
+        "filtering": "Filtering",
+        "refresh": "Refresh",
+        "filters": {
+            "all": "All",
+            "active": "Active",
+            "disabled": "Disabled"
+        }
+    },
+    "applaunch": {
+        "launch": "Launch",
+        "stop": "Stop",
+        "showInExplorer": "Show In Explorer",
+        "versionFallback": "m.m.p"
+    },
+    "appsettings": {
+        "gameInstallation": {
+            "title": "Game Installation",
+            "platform": "Platform",
+            "gameDirectory": "Path To Game Directory"
+        },
+        "masterSwitch": {
+            "title": "Master Switch",
+            "enableFuse": "Enable {brandName}",
+            "enable": "Enable",
+            "disable": "Disable"
+        },
+        "general": {
+            "title": "General",
+            "launchAtStartup": "Launch App At System Startup",
+            "startMinimized": "Start Minimized To Tray",
+            "closeMinimizes": "Close Button Minimizes To Tray",
+            "checkUpdates": "Check For Updates On Startup"
+        },
+        "notifications": {
+            "gameConfigChangedTitle": "Game Configuration Changed",
+            "gameConfigChangedMessage": "Restart the game for changes to take effect."
+        },
+        "keybindings": {
+            "title": "FUSE Keybindings",
+            "columnAction": "Action",
+            "columnBinding": "Binding",
+            "rebind": "Rebind"
+        }
+    },
+    "appabout": {
+        "wip": "WORK IN PROGRESS"
+    },
+    "appdiscover": {
+        "wip": "WORK IN PROGRESS"
     },
     "components": {
         "loading": "Loading...",
@@ -24,6 +79,54 @@
             "processing": "Working",
             "success": "Done",
             "error": "Failed"
+        },
+        "status": {
+            "none": "None",
+            "initializing": "Initializing",
+            "connecting": "Connecting",
+            "running": "Running",
+            "error": "Error"
+        },
+        "notification": {
+            "defaultTitle": "Notification"
+        },
+        "dirSelector": {
+            "placeholder": "Select directory..."
+        },
+        "pluginList": {
+            "columnPlugin": "Plugin",
+            "columnVersion": "Version",
+            "columnStatus": "Status",
+            "columnActions": "Actions",
+            "emptyNoPlugins": "No plugins discovered",
+            "emptyNoMatch": "No plugins match"
+        },
+        "plugin": {
+            "by": "by",
+            "status": {
+                "active": "Active",
+                "error": "Error",
+                "pending": "Pending",
+                "loading": "Loading",
+                "skipped": "Skipped",
+                "disabled": "Disabled"
+            },
+            "menu": {
+                "settings": "Settings",
+                "showInExplorer": "Show in Explorer",
+                "delete": "Delete"
+            }
+        },
+        "console": {
+            "searchPlaceholder": "Search logs...",
+            "clear": "Clear",
+            "empty": "Start the runtime to receive logs",
+            "filters": {
+                "all": "All",
+                "error": "Error",
+                "warn": "Warn",
+                "info": "Info"
+            }
         }
     }
 }

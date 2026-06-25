@@ -1,16 +1,18 @@
-import { BrowserWindow as e, Menu as t, Tray as n, app as r, dialog as i, ipcMain as a, nativeImage as o, powerMonitor as s, safeStorage as c, shell as l } from "electron";
-import { execFile as u, spawn as d } from "node:child_process";
-import { promisify as f } from "node:util";
-import { fileURLToPath as p } from "node:url";
-import m from "node:path";
-import h from "node:fs";
-import { createRequire as g } from "module";
+import { BrowserWindow, Menu, Tray, app, dialog, ipcMain, nativeImage, powerMonitor, safeStorage, shell } from "electron";
+import { execFile, spawn } from "node:child_process";
+import { promisify } from "node:util";
+import { fileURLToPath } from "node:url";
+import path from "node:path";
+import fs from "node:fs";
+import { createRequire } from "module";
 //#region node_modules/fflate/esm/index.mjs
-var _ = g("/"), v;
+var require = createRequire("/");
+var _a;
 try {
-	v = _("worker_threads"), v.Worker, v.isMarkedAsUntransferable;
-} catch {}
-var y = Uint8Array, b = Uint16Array, x = Int32Array, ee = new y([
+	_a = require("worker_threads"), _a.Worker, _a.isMarkedAsUntransferable;
+} catch (e) {}
+var u8 = Uint8Array, u16 = Uint16Array, i32 = Int32Array;
+var fleb = new u8([
 	0,
 	0,
 	0,
@@ -43,7 +45,8 @@ var y = Uint8Array, b = Uint16Array, x = Int32Array, ee = new y([
 	0,
 	0,
 	0
-]), te = new y([
+]);
+var fdeb = new u8([
 	0,
 	0,
 	0,
@@ -76,7 +79,8 @@ var y = Uint8Array, b = Uint16Array, x = Int32Array, ee = new y([
 	13,
 	0,
 	0
-]), ne = new y([
+]);
+var clim = new u8([
 	16,
 	17,
 	18,
@@ -96,51 +100,81 @@ var y = Uint8Array, b = Uint16Array, x = Int32Array, ee = new y([
 	14,
 	1,
 	15
-]), S = function(e, t) {
-	for (var n = new b(31), r = 0; r < 31; ++r) n[r] = t += 1 << e[r - 1];
-	for (var i = new x(n[30]), r = 1; r < 30; ++r) for (var a = n[r]; a < n[r + 1]; ++a) i[a] = a - n[r] << 5 | r;
+]);
+var freb = function(eb, start) {
+	var b = new u16(31);
+	for (var i = 0; i < 31; ++i) b[i] = start += 1 << eb[i - 1];
+	var r = new i32(b[30]);
+	for (var i = 1; i < 30; ++i) for (var j = b[i]; j < b[i + 1]; ++j) r[j] = j - b[i] << 5 | i;
 	return {
-		b: n,
-		r: i
+		b,
+		r
 	};
-}, v = S(ee, 2), re = v.b, C = v.r;
-re[28] = 258, C[258] = 28;
-var w = S(te, 0), ie = w.b;
-w.r;
-for (var T = new b(32768), E = 0; E < 32768; ++E) {
-	var D = (E & 43690) >> 1 | (E & 21845) << 1;
-	D = (D & 52428) >> 2 | (D & 13107) << 2, D = (D & 61680) >> 4 | (D & 3855) << 4, T[E] = ((D & 65280) >> 8 | (D & 255) << 8) >> 1;
+};
+var _a = freb(fleb, 2), fl = _a.b, revfl = _a.r;
+fl[28] = 258, revfl[258] = 28;
+var _b = freb(fdeb, 0), fd = _b.b;
+_b.r;
+var rev = new u16(32768);
+for (var i = 0; i < 32768; ++i) {
+	var x = (i & 43690) >> 1 | (i & 21845) << 1;
+	x = (x & 52428) >> 2 | (x & 13107) << 2;
+	x = (x & 61680) >> 4 | (x & 3855) << 4;
+	rev[i] = ((x & 65280) >> 8 | (x & 255) << 8) >> 1;
 }
-for (var O = (function(e, t, n) {
-	for (var r = e.length, i = 0, a = new b(t); i < r; ++i) e[i] && ++a[e[i] - 1];
-	var o = new b(t);
-	for (i = 1; i < t; ++i) o[i] = o[i - 1] + a[i - 1] << 1;
-	var s;
-	if (n) {
-		s = new b(1 << t);
-		var c = 15 - t;
-		for (i = 0; i < r; ++i) if (e[i]) for (var l = i << 4 | e[i], u = t - e[i], d = o[e[i] - 1]++ << u, f = d | (1 << u) - 1; d <= f; ++d) s[T[d] >> c] = l;
-	} else for (s = new b(r), i = 0; i < r; ++i) e[i] && (s[i] = T[o[e[i] - 1]++] >> 15 - e[i]);
-	return s;
-}), k = new y(288), E = 0; E < 144; ++E) k[E] = 8;
-for (var E = 144; E < 256; ++E) k[E] = 9;
-for (var E = 256; E < 280; ++E) k[E] = 7;
-for (var E = 280; E < 288; ++E) k[E] = 8;
-for (var A = new y(32), E = 0; E < 32; ++E) A[E] = 5;
-var ae = /*#__PURE__*/ O(k, 9, 1), oe = /*#__PURE__*/ O(A, 5, 1), j = function(e) {
-	for (var t = e[0], n = 1; n < e.length; ++n) e[n] > t && (t = e[n]);
-	return t;
-}, M = function(e, t, n) {
-	var r = t / 8 | 0;
-	return (e[r] | e[r + 1] << 8) >> (t & 7) & n;
-}, N = function(e, t) {
-	var n = t / 8 | 0;
-	return (e[n] | e[n + 1] << 8 | e[n + 2] << 16) >> (t & 7);
-}, se = function(e) {
-	return (e + 7) / 8 | 0;
-}, ce = function(e, t, n) {
-	return (t == null || t < 0) && (t = 0), (n == null || n > e.length) && (n = e.length), new y(e.subarray(t, n));
-}, le = [
+var hMap = (function(cd, mb, r) {
+	var s = cd.length;
+	var i = 0;
+	var l = new u16(mb);
+	for (; i < s; ++i) if (cd[i]) ++l[cd[i] - 1];
+	var le = new u16(mb);
+	for (i = 1; i < mb; ++i) le[i] = le[i - 1] + l[i - 1] << 1;
+	var co;
+	if (r) {
+		co = new u16(1 << mb);
+		var rvb = 15 - mb;
+		for (i = 0; i < s; ++i) if (cd[i]) {
+			var sv = i << 4 | cd[i];
+			var r_1 = mb - cd[i];
+			var v = le[cd[i] - 1]++ << r_1;
+			for (var m = v | (1 << r_1) - 1; v <= m; ++v) co[rev[v] >> rvb] = sv;
+		}
+	} else {
+		co = new u16(s);
+		for (i = 0; i < s; ++i) if (cd[i]) co[i] = rev[le[cd[i] - 1]++] >> 15 - cd[i];
+	}
+	return co;
+});
+var flt = new u8(288);
+for (var i = 0; i < 144; ++i) flt[i] = 8;
+for (var i = 144; i < 256; ++i) flt[i] = 9;
+for (var i = 256; i < 280; ++i) flt[i] = 7;
+for (var i = 280; i < 288; ++i) flt[i] = 8;
+var fdt = new u8(32);
+for (var i = 0; i < 32; ++i) fdt[i] = 5;
+var flrm = /*#__PURE__*/ hMap(flt, 9, 1), fdrm = /*#__PURE__*/ hMap(fdt, 5, 1);
+var max = function(a) {
+	var m = a[0];
+	for (var i = 1; i < a.length; ++i) if (a[i] > m) m = a[i];
+	return m;
+};
+var bits = function(d, p, m) {
+	var o = p / 8 | 0;
+	return (d[o] | d[o + 1] << 8) >> (p & 7) & m;
+};
+var bits16 = function(d, p) {
+	var o = p / 8 | 0;
+	return (d[o] | d[o + 1] << 8 | d[o + 2] << 16) >> (p & 7);
+};
+var shft = function(p) {
+	return (p + 7) / 8 | 0;
+};
+var slc = function(v, s, e) {
+	if (s == null || s < 0) s = 0;
+	if (e == null || e > v.length) e = v.length;
+	return new u8(v.subarray(s, e));
+};
+var ec = [
 	"unexpected EOF",
 	"invalid block type",
 	"invalid length/literal",
@@ -155,525 +189,779 @@ var ae = /*#__PURE__*/ O(k, 9, 1), oe = /*#__PURE__*/ O(A, 5, 1), j = function(e
 	"filename too long",
 	"stream finishing",
 	"invalid zip data"
-], P = function(e, t, n) {
-	var r = Error(t || le[e]);
-	if (r.code = e, Error.captureStackTrace && Error.captureStackTrace(r, P), !n) throw r;
-	return r;
-}, ue = function(e, t, n, r) {
-	var i = e.length, a = r ? r.length : 0;
-	if (!i || t.f && !t.l) return n || new y(0);
-	var o = !n, s = o || t.i != 2, c = t.i;
-	o && (n = new y(i * 3));
-	var l = function(e) {
-		var t = n.length;
-		if (e > t) {
-			var r = new y(Math.max(t * 2, e));
-			r.set(n), n = r;
+];
+var err = function(ind, msg, nt) {
+	var e = new Error(msg || ec[ind]);
+	e.code = ind;
+	if (Error.captureStackTrace) Error.captureStackTrace(e, err);
+	if (!nt) throw e;
+	return e;
+};
+var inflt = function(dat, st, buf, dict) {
+	var sl = dat.length, dl = dict ? dict.length : 0;
+	if (!sl || st.f && !st.l) return buf || new u8(0);
+	var noBuf = !buf;
+	var resize = noBuf || st.i != 2;
+	var noSt = st.i;
+	if (noBuf) buf = new u8(sl * 3);
+	var cbuf = function(l) {
+		var bl = buf.length;
+		if (l > bl) {
+			var nbuf = new u8(Math.max(bl * 2, l));
+			nbuf.set(buf);
+			buf = nbuf;
 		}
-	}, u = t.f || 0, d = t.p || 0, f = t.b || 0, p = t.l, m = t.d, h = t.m, g = t.n, _ = i * 8;
+	};
+	var final = st.f || 0, pos = st.p || 0, bt = st.b || 0, lm = st.l, dm = st.d, lbt = st.m, dbt = st.n;
+	var tbts = sl * 8;
 	do {
-		if (!p) {
-			u = M(e, d, 1);
-			var v = M(e, d + 1, 3);
-			if (d += 3, !v) {
-				var b = se(d) + 4, x = e[b - 4] | e[b - 3] << 8, S = b + x;
-				if (S > i) {
-					c && P(0);
+		if (!lm) {
+			final = bits(dat, pos, 1);
+			var type = bits(dat, pos + 1, 3);
+			pos += 3;
+			if (!type) {
+				var s = shft(pos) + 4, l = dat[s - 4] | dat[s - 3] << 8, t = s + l;
+				if (t > sl) {
+					if (noSt) err(0);
 					break;
 				}
-				s && l(f + x), n.set(e.subarray(b, S), f), t.b = f += x, t.p = d = S * 8, t.f = u;
+				if (resize) cbuf(bt + l);
+				buf.set(dat.subarray(s, t), bt);
+				st.b = bt += l, st.p = pos = t * 8, st.f = final;
 				continue;
-			} else if (v == 1) p = ae, m = oe, h = 9, g = 5;
-			else if (v == 2) {
-				var C = M(e, d, 31) + 257, w = M(e, d + 10, 15) + 4, T = C + M(e, d + 5, 31) + 1;
-				d += 14;
-				for (var E = new y(T), D = new y(19), k = 0; k < w; ++k) D[ne[k]] = M(e, d + k * 3, 7);
-				d += w * 3;
-				for (var A = j(D), le = (1 << A) - 1, ue = O(D, A, 1), k = 0; k < T;) {
-					var de = ue[M(e, d, le)];
-					d += de & 15;
-					var b = de >> 4;
-					if (b < 16) E[k++] = b;
+			} else if (type == 1) lm = flrm, dm = fdrm, lbt = 9, dbt = 5;
+			else if (type == 2) {
+				var hLit = bits(dat, pos, 31) + 257, hcLen = bits(dat, pos + 10, 15) + 4;
+				var tl = hLit + bits(dat, pos + 5, 31) + 1;
+				pos += 14;
+				var ldt = new u8(tl);
+				var clt = new u8(19);
+				for (var i = 0; i < hcLen; ++i) clt[clim[i]] = bits(dat, pos + i * 3, 7);
+				pos += hcLen * 3;
+				var clb = max(clt), clbmsk = (1 << clb) - 1;
+				var clm = hMap(clt, clb, 1);
+				for (var i = 0; i < tl;) {
+					var r = clm[bits(dat, pos, clbmsk)];
+					pos += r & 15;
+					var s = r >> 4;
+					if (s < 16) ldt[i++] = s;
 					else {
-						var F = 0, I = 0;
-						for (b == 16 ? (I = 3 + M(e, d, 3), d += 2, F = E[k - 1]) : b == 17 ? (I = 3 + M(e, d, 7), d += 3) : b == 18 && (I = 11 + M(e, d, 127), d += 7); I--;) E[k++] = F;
+						var c = 0, n = 0;
+						if (s == 16) n = 3 + bits(dat, pos, 3), pos += 2, c = ldt[i - 1];
+						else if (s == 17) n = 3 + bits(dat, pos, 7), pos += 3;
+						else if (s == 18) n = 11 + bits(dat, pos, 127), pos += 7;
+						while (n--) ldt[i++] = c;
 					}
 				}
-				var L = E.subarray(0, C), R = E.subarray(C);
-				h = j(L), g = j(R), p = O(L, h, 1), m = O(R, g, 1);
-			} else P(1);
-			if (d > _) {
-				c && P(0);
+				var lt = ldt.subarray(0, hLit), dt = ldt.subarray(hLit);
+				lbt = max(lt);
+				dbt = max(dt);
+				lm = hMap(lt, lbt, 1);
+				dm = hMap(dt, dbt, 1);
+			} else err(1);
+			if (pos > tbts) {
+				if (noSt) err(0);
 				break;
 			}
 		}
-		s && l(f + 131072);
-		for (var z = (1 << h) - 1, fe = (1 << g) - 1, B = d;; B = d) {
-			var F = p[N(e, d) & z], V = F >> 4;
-			if (d += F & 15, d > _) {
-				c && P(0);
+		if (resize) cbuf(bt + 131072);
+		var lms = (1 << lbt) - 1, dms = (1 << dbt) - 1;
+		var lpos = pos;
+		for (;; lpos = pos) {
+			var c = lm[bits16(dat, pos) & lms], sym = c >> 4;
+			pos += c & 15;
+			if (pos > tbts) {
+				if (noSt) err(0);
 				break;
 			}
-			if (F || P(2), V < 256) n[f++] = V;
-			else if (V == 256) {
-				B = d, p = null;
+			if (!c) err(2);
+			if (sym < 256) buf[bt++] = sym;
+			else if (sym == 256) {
+				lpos = pos, lm = null;
 				break;
 			} else {
-				var H = V - 254;
-				if (V > 264) {
-					var k = V - 257, U = ee[k];
-					H = M(e, d, (1 << U) - 1) + re[k], d += U;
+				var add = sym - 254;
+				if (sym > 264) {
+					var i = sym - 257, b = fleb[i];
+					add = bits(dat, pos, (1 << b) - 1) + fl[i];
+					pos += b;
 				}
-				var W = m[N(e, d) & fe], G = W >> 4;
-				W || P(3), d += W & 15;
-				var R = ie[G];
-				if (G > 3) {
-					var U = te[G];
-					R += N(e, d) & (1 << U) - 1, d += U;
+				var d = dm[bits16(dat, pos) & dms], dsym = d >> 4;
+				if (!d) err(3);
+				pos += d & 15;
+				var dt = fd[dsym];
+				if (dsym > 3) {
+					var b = fdeb[dsym];
+					dt += bits16(dat, pos) & (1 << b) - 1, pos += b;
 				}
-				if (d > _) {
-					c && P(0);
+				if (pos > tbts) {
+					if (noSt) err(0);
 					break;
 				}
-				s && l(f + 131072);
-				var K = f + H;
-				if (f < R) {
-					var q = a - R, pe = Math.min(R, K);
-					for (q + f < 0 && P(3); f < pe; ++f) n[f] = r[q + f];
+				if (resize) cbuf(bt + 131072);
+				var end = bt + add;
+				if (bt < dt) {
+					var shift = dl - dt, dend = Math.min(dt, end);
+					if (shift + bt < 0) err(3);
+					for (; bt < dend; ++bt) buf[bt] = dict[shift + bt];
 				}
-				for (; f < K; ++f) n[f] = n[f - R];
+				for (; bt < end; ++bt) buf[bt] = buf[bt - dt];
 			}
 		}
-		t.l = p, t.p = B, t.b = f, t.f = u, p && (u = 1, t.m = h, t.d = m, t.n = g);
-	} while (!u);
-	return f != n.length && o ? ce(n, 0, f) : n.subarray(0, f);
-}, de = /*#__PURE__*/ new y(0), F = function(e, t) {
-	return e[t] | e[t + 1] << 8;
-}, I = function(e, t) {
-	return (e[t] | e[t + 1] << 8 | e[t + 2] << 16 | e[t + 3] << 24) >>> 0;
-}, L = function(e, t) {
-	return I(e, t) + I(e, t + 4) * 4294967296;
+		st.l = lm, st.p = lpos, st.b = bt, st.f = final;
+		if (lm) final = 1, st.m = lbt, st.d = dm, st.n = dbt;
+	} while (!final);
+	return bt != buf.length && noBuf ? slc(buf, 0, bt) : buf.subarray(0, bt);
 };
-function R(e, t) {
-	return ue(e, { i: 2 }, t && t.out, t && t.dictionary);
+var et = /*#__PURE__*/ new u8(0);
+var b2 = function(d, b) {
+	return d[b] | d[b + 1] << 8;
+};
+var b4 = function(d, b) {
+	return (d[b] | d[b + 1] << 8 | d[b + 2] << 16 | d[b + 3] << 24) >>> 0;
+};
+var b8 = function(d, b) {
+	return b4(d, b) + b4(d, b + 4) * 4294967296;
+};
+function inflateSync(data, opts) {
+	return inflt(data, { i: 2 }, opts && opts.out, opts && opts.dictionary);
 }
-var z = typeof TextDecoder < "u" && /*#__PURE__*/ new TextDecoder();
+var td = typeof TextDecoder != "undefined" && /*#__PURE__*/ new TextDecoder();
 try {
-	z.decode(de, { stream: !0 });
-} catch {}
-var fe = function(e) {
-	for (var t = "", n = 0;;) {
-		var r = e[n++], i = (r > 127) + (r > 223) + (r > 239);
-		if (n + i > e.length) return {
-			s: t,
-			r: ce(e, n - 1)
+	td.decode(et, { stream: true });
+} catch (e) {}
+var dutf8 = function(d) {
+	for (var r = "", i = 0;;) {
+		var c = d[i++];
+		var eb = (c > 127) + (c > 223) + (c > 239);
+		if (i + eb > d.length) return {
+			s: r,
+			r: slc(d, i - 1)
 		};
-		i ? i == 3 ? (r = ((r & 15) << 18 | (e[n++] & 63) << 12 | (e[n++] & 63) << 6 | e[n++] & 63) - 65536, t += String.fromCharCode(55296 | r >> 10, 56320 | r & 1023)) : i & 1 ? t += String.fromCharCode((r & 31) << 6 | e[n++] & 63) : t += String.fromCharCode((r & 15) << 12 | (e[n++] & 63) << 6 | e[n++] & 63) : t += String.fromCharCode(r);
+		if (!eb) r += String.fromCharCode(c);
+		else if (eb == 3) c = ((c & 15) << 18 | (d[i++] & 63) << 12 | (d[i++] & 63) << 6 | d[i++] & 63) - 65536, r += String.fromCharCode(55296 | c >> 10, 56320 | c & 1023);
+		else if (eb & 1) r += String.fromCharCode((c & 31) << 6 | d[i++] & 63);
+		else r += String.fromCharCode((c & 15) << 12 | (d[i++] & 63) << 6 | d[i++] & 63);
 	}
 };
-function B(e, t) {
-	if (t) {
-		for (var n = "", r = 0; r < e.length; r += 16384) n += String.fromCharCode.apply(null, e.subarray(r, r + 16384));
-		return n;
-	} else if (z) return z.decode(e);
+/**
+* Converts a Uint8Array to a string
+* @param dat The data to decode to string
+* @param latin1 Whether or not to interpret the data as Latin-1. This should
+*               not need to be true unless encoding to binary string.
+* @returns The original UTF-8/Latin-1 string
+*/
+function strFromU8(dat, latin1) {
+	if (latin1) {
+		var r = "";
+		for (var i = 0; i < dat.length; i += 16384) r += String.fromCharCode.apply(null, dat.subarray(i, i + 16384));
+		return r;
+	} else if (td) return td.decode(dat);
 	else {
-		var i = fe(e), a = i.s, n = i.r;
-		return n.length && P(8), a;
+		var _a = dutf8(dat), s = _a.s, r = _a.r;
+		if (r.length) err(8);
+		return s;
 	}
 }
-var V = function(e, t) {
-	return t + 30 + F(e, t + 26) + F(e, t + 28);
-}, H = function(e, t, n) {
-	var r = F(e, t + 28), i = F(e, t + 30), a = B(e.subarray(t + 46, t + 46 + r), !(F(e, t + 8) & 2048)), o = t + 46 + r, s = U(e, o, i, n, I(e, t + 20), I(e, t + 24), I(e, t + 42)), c = s[0], l = s[1], u = s[2];
+var slzh = function(d, b) {
+	return b + 30 + b2(d, b + 26) + b2(d, b + 28);
+};
+var zh = function(d, b, z) {
+	var fnl = b2(d, b + 28), efl = b2(d, b + 30), fn = strFromU8(d.subarray(b + 46, b + 46 + fnl), !(b2(d, b + 8) & 2048)), es = b + 46 + fnl;
+	var _a = z64hs(d, es, efl, z, b4(d, b + 20), b4(d, b + 24), b4(d, b + 42)), sc = _a[0], su = _a[1], off = _a[2];
 	return [
-		F(e, t + 10),
-		c,
-		l,
-		a,
-		o + i + F(e, t + 32),
-		u
+		b2(d, b + 10),
+		sc,
+		su,
+		fn,
+		es + efl + b2(d, b + 32),
+		off
 	];
-}, U = function(e, t, n, r, i, a, o) {
-	var s = i == 4294967295, c = a == 4294967295, l = o == 4294967295, u = t + n, d = s + c + l;
-	if (r && d) {
-		for (; t + 4 < u; t += 4 + F(e, t + 2)) if (F(e, t) == 1) return [
-			s ? L(e, t + 4 + 8 * c) : i,
-			c ? L(e, t + 4) : a,
-			l ? L(e, t + 4 + 8 * (c + s)) : o,
+};
+var z64hs = function(d, b, l, z, sc, su, off) {
+	var nsc = sc == 4294967295, nsu = su == 4294967295, noff = off == 4294967295, e = b + l;
+	var nf = nsc + nsu + noff;
+	if (z && nf) {
+		for (; b + 4 < e; b += 4 + b2(d, b + 2)) if (b2(d, b) == 1) return [
+			nsc ? b8(d, b + 4 + 8 * nsu) : sc,
+			nsu ? b8(d, b + 4) : su,
+			noff ? b8(d, b + 4 + 8 * (nsu + nsc)) : off,
 			1
 		];
-		r < 2 && P(13);
+		if (z < 2) err(13);
 	}
 	return [
-		i,
-		a,
-		o,
+		sc,
+		su,
+		off,
 		0
 	];
 };
-function W(e, t) {
-	for (var n = {}, r = e.length - 22; I(e, r) != 101010256; --r) (!r || e.length - r > 65558) && P(13);
-	var i = F(e, r + 8);
-	if (!i) return {};
-	var a = I(e, r + 16), o = I(e, r - 20) == 117853008;
-	if (o) {
-		var s = I(e, r - 12);
-		o = I(e, s) == 101075792, o && (i = I(e, s + 32), a = I(e, s + 48));
+/**
+* Synchronously decompresses a ZIP archive. Prefer using `unzip` for better
+* performance with more than one file.
+* @param data The raw compressed ZIP file
+* @param opts The ZIP extraction options
+* @returns The decompressed files
+*/
+function unzipSync(data, opts) {
+	var files = {};
+	var e = data.length - 22;
+	for (; b4(data, e) != 101010256; --e) if (!e || data.length - e > 65558) err(13);
+	var c = b2(data, e + 8);
+	if (!c) return {};
+	var o = b4(data, e + 16);
+	var z = b4(data, e - 20) == 117853008;
+	if (z) {
+		var ze = b4(data, e - 12);
+		z = b4(data, ze) == 101075792;
+		if (z) {
+			c = b4(data, ze + 32);
+			o = b4(data, ze + 48);
+		}
 	}
-	for (var c = t && t.filter, l = 0; l < i; ++l) {
-		var u = H(e, a, o), d = u[0], f = u[1], p = u[2], m = u[3], h = u[4], g = u[5], _ = V(e, g);
-		a = h, (!c || c({
-			name: m,
-			size: f,
-			originalSize: p,
-			compression: d
-		})) && (d ? d == 8 ? n[m] = R(e.subarray(_, _ + f), { out: new y(p) }) : P(14, "unknown compression type " + d) : n[m] = ce(e, _, _ + f));
+	var fltr = opts && opts.filter;
+	for (var i = 0; i < c; ++i) {
+		var _a = zh(data, o, z), c_2 = _a[0], sc = _a[1], su = _a[2], fn = _a[3], no = _a[4], off = _a[5], b = slzh(data, off);
+		o = no;
+		if (!fltr || fltr({
+			name: fn,
+			size: sc,
+			originalSize: su,
+			compression: c_2
+		})) if (!c_2) files[fn] = slc(data, b, b + sc);
+		else if (c_2 == 8) files[fn] = inflateSync(data.subarray(b, b + sc), { out: new u8(su) });
+		else err(14, "unknown compression type " + c_2);
 	}
-	return n;
+	return files;
 }
 //#endregion
 //#region electron/main.ts
-var G = f(u), K = m.dirname(p(import.meta.url));
-process.env.APP_ROOT = m.join(K, "..");
-var q = process.env.VITE_DEV_SERVER_URL, pe = m.join(process.env.APP_ROOT, "dist-electron"), me = m.join(process.env.APP_ROOT, "dist");
-process.env.VITE_PUBLIC = q ? m.join(process.env.APP_ROOT, "public") : me;
-function J() {
-	return q ? m.join(process.env.APP_ROOT, "..", "..", "backend", "data", "configs") : m.join(r.getPath("userData"), "configs");
+var execFileAsync = promisify(execFile);
+var __dirname = path.dirname(fileURLToPath(import.meta.url));
+process.env.APP_ROOT = path.join(__dirname, "..");
+var VITE_DEV_SERVER_URL = process.env["VITE_DEV_SERVER_URL"];
+var MAIN_DIST = path.join(process.env.APP_ROOT, "dist-electron");
+var RENDERER_DIST = path.join(process.env.APP_ROOT, "dist");
+process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL ? path.join(process.env.APP_ROOT, "public") : RENDERER_DIST;
+function getConfigsDir() {
+	return !!VITE_DEV_SERVER_URL ? path.join(process.env.APP_ROOT, "..", "..", "backend", "data", "configs") : path.join(app.getPath("userData"), "configs");
 }
-function he() {
-	let e = m.join(J(), "fuse_host.json");
-	return h.existsSync(e) ? JSON.parse(h.readFileSync(e, "utf-8")) : {
+function readHostConfig() {
+	const p = path.join(getConfigsDir(), "fuse_host.json");
+	if (!fs.existsSync(p)) return {
 		disabled_plugins: [],
 		enabled_plugins: null,
 		extra_plugin_dirs: []
 	};
+	return JSON.parse(fs.readFileSync(p, "utf-8"));
 }
-function ge(e) {
-	let t = J();
-	h.existsSync(t) || h.mkdirSync(t, { recursive: !0 }), h.writeFileSync(m.join(t, "fuse_host.json"), JSON.stringify(e, null, 2), "utf-8");
+function writeHostConfig(cfg) {
+	const dir = getConfigsDir();
+	if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+	fs.writeFileSync(path.join(dir, "fuse_host.json"), JSON.stringify(cfg, null, 2), "utf-8");
 }
-function _e() {
-	let e = !!q, t = e ? m.join(process.env.APP_ROOT, "..", "..") : process.resourcesPath;
+function getPluginDirs() {
+	const isDev = !!VITE_DEV_SERVER_URL;
+	const root = isDev ? path.join(process.env.APP_ROOT, "..", "..") : process.resourcesPath;
 	return {
-		core: m.join(t, e ? "backend" : "", "fuse", "plugins"),
-		user: m.join(t, e ? "backend" : "", "plugins")
+		core: path.join(root, isDev ? "backend" : "", "fuse", "plugins"),
+		user: path.join(root, isDev ? "backend" : "", "plugins")
 	};
 }
-function ve(e) {
-	return h.existsSync(e) ? h.readdirSync(e).filter((e) => e.endsWith(".fuse")).flatMap((t) => {
+function scanPluginsDir(dir) {
+	if (!fs.existsSync(dir)) return [];
+	return fs.readdirSync(dir).filter((f) => f.endsWith(".fuse")).flatMap((file) => {
 		try {
-			let n = h.readFileSync(m.join(e, t)), r = W(new Uint8Array(n), { filter: (e) => e.name.endsWith("/manifest.json") }), i = Object.keys(r).find((e) => e.endsWith("/manifest.json"));
-			if (!i) return [];
-			let a = JSON.parse(B(r[i]));
+			const buf = fs.readFileSync(path.join(dir, file));
+			const entries = unzipSync(new Uint8Array(buf), { filter: (f) => f.name.endsWith("/manifest.json") });
+			const manifestKey = Object.keys(entries).find((k) => k.endsWith("/manifest.json"));
+			if (!manifestKey) return [];
+			const m = JSON.parse(strFromU8(entries[manifestKey]));
 			return [{
-				plugin_id: a.plugin_id ?? a.id ?? m.basename(t, ".fuse"),
-				name: a.name ?? m.basename(t, ".fuse"),
-				version: a.version ?? "0.0.0",
-				description: a.description ?? "",
-				author: a.author,
+				plugin_id: m.plugin_id ?? m.id ?? path.basename(file, ".fuse"),
+				name: m.name ?? path.basename(file, ".fuse"),
+				version: m.version ?? "0.0.0",
+				description: m.description ?? "",
+				author: m.author,
 				status: "pending",
-				configSchema: a.config_schema ?? [],
-				hotkeys: a.hotkeys ?? [],
-				filePath: m.join(e, t)
+				configSchema: m.config_schema ?? [],
+				hotkeys: m.hotkeys ?? [],
+				filePath: path.join(dir, file)
 			}];
 		} catch {
 			return [];
 		}
-	}) : [];
+	});
 }
-var Y = null, X = null, Z = !1, ye = !1, be = !1, Q = null, $ = null;
-function xe() {
-	if (X) return;
-	let e = q ? m.join(K, "..", "build", "icon.png") : m.join(process.resourcesPath, "icon.ico");
-	X = new n(o.createFromPath(e)), X.setToolTip("FUSE"), X.setContextMenu(t.buildFromTemplate([
+var win = null;
+var tray = null;
+var isQuitting = false;
+var minimizeToTrayOnStart = false;
+var minimizeToTrayOnClose = false;
+var fuseProcess = null;
+var fusePort = null;
+function createTray() {
+	if (tray) return;
+	const iconPath = VITE_DEV_SERVER_URL ? path.join(__dirname, "..", "build", "icon.png") : path.join(process.resourcesPath, "icon.ico");
+	tray = new Tray(nativeImage.createFromPath(iconPath));
+	tray.setToolTip("FUSE");
+	tray.setContextMenu(Menu.buildFromTemplate([
 		{
 			label: "Show",
 			click: () => {
-				Y?.show(), Y?.focus();
+				win?.show();
+				win?.focus();
 			}
 		},
 		{ type: "separator" },
 		{
 			label: "Quit",
 			click: () => {
-				Z = !0, r.quit();
+				isQuitting = true;
+				app.quit();
 			}
 		}
-	])), X.on("click", () => {
-		Y?.show(), Y?.focus();
+	]));
+	tray.on("click", () => {
+		win?.show();
+		win?.focus();
 	});
 }
-function Se() {
-	X &&= (X.destroy(), null);
+function destroyTray() {
+	if (tray) {
+		tray.destroy();
+		tray = null;
+	}
 }
-function Ce() {
-	Y = new e({
-		frame: !1,
+function createWindow() {
+	win = new BrowserWindow({
+		frame: false,
 		minWidth: 800,
 		minHeight: 600,
-		autoHideMenuBar: !0,
-		fullscreenable: !1,
-		transparent: !0,
+		autoHideMenuBar: true,
+		fullscreenable: false,
+		transparent: true,
 		backgroundColor: "rgba(0, 0, 0, 0.0)",
 		backgroundMaterial: "acrylic",
 		webPreferences: {
-			nodeIntegration: !1,
-			contextIsolation: !0,
-			devTools: !0,
-			preload: m.join(K, "preload.mjs")
+			nodeIntegration: false,
+			contextIsolation: true,
+			devTools: true,
+			preload: path.join(__dirname, "preload.mjs")
 		}
-	}), Y.webContents.on("before-input-event", (e, t) => {
-		t.type === "keyDown" && t.control && t.key.toLowerCase() === "r" && e.preventDefault();
-	}), Y.on("close", (e) => {
-		be && Y && !Z && (e.preventDefault(), Y.hide());
-	}), Y.on("hide", () => {
-		Y?.webContents.send("app:suspended");
-	}), Y.on("show", () => {
-		Y?.webContents.send("app:resumed");
-	}), Y.webContents.session.webRequest.onHeadersReceived((e, t) => {
-		t({ responseHeaders: {
-			...e.responseHeaders,
-			"Content-Security-Policy": [`default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://us-assets.i.posthog.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self'; connect-src 'self' http://127.0.0.1:* ws://127.0.0.1:* https://*.supabase.co wss://*.supabase.co https://*.betterstackdata.com https://us.i.posthog.com https://us-assets.i.posthog.com https://unpkg.com; frame-src ${q ? "http://localhost:*" : "'none'"}; object-src 'none'; base-uri 'self'`]
+	});
+	win.webContents.on("before-input-event", (event, input) => {
+		if (input.type === "keyDown" && input.control && input.key.toLowerCase() === "r") event.preventDefault();
+	});
+	win.on("close", (e) => {
+		if (minimizeToTrayOnClose && win && !isQuitting) {
+			e.preventDefault();
+			win.hide();
+		}
+	});
+	win.on("hide", () => {
+		win?.webContents.send("app:suspended");
+	});
+	win.on("show", () => {
+		win?.webContents.send("app:resumed");
+	});
+	win.webContents.session.webRequest.onHeadersReceived((details, callback) => {
+		callback({ responseHeaders: {
+			...details.responseHeaders,
+			"Content-Security-Policy": [`default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://us-assets.i.posthog.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self'; connect-src 'self' http://127.0.0.1:* ws://127.0.0.1:* https://*.supabase.co wss://*.supabase.co https://*.betterstackdata.com https://us.i.posthog.com https://us-assets.i.posthog.com https://unpkg.com; frame-src ${VITE_DEV_SERVER_URL ? "http://localhost:*" : "'none'"}; object-src 'none'; base-uri 'self'`]
 		} });
-	}), q ? Y.loadURL(q) : Y.loadFile(m.join(me, "index.html"));
+	});
+	if (VITE_DEV_SERVER_URL) win.loadURL(VITE_DEV_SERVER_URL);
+	else win.loadFile(path.join(RENDERER_DIST, "index.html"));
 }
-r.on("window-all-closed", () => {
-	process.platform !== "darwin" && (r.quit(), Y = null);
+app.on("window-all-closed", () => {
+	if (process.platform !== "darwin") {
+		app.quit();
+		win = null;
+	}
 });
-var we = !1;
-r.on("before-quit", (e) => {
-	if (Z = !0, we) return;
-	if (!Q) {
-		we = !0;
+var fuseCleanupDone = false;
+app.on("before-quit", (event) => {
+	isQuitting = true;
+	if (fuseCleanupDone) return;
+	if (!fuseProcess) {
+		fuseCleanupDone = true;
 		return;
 	}
-	e.preventDefault();
-	let t = Q;
-	Q = null, $ = null;
-	let n = setTimeout(() => t.kill("SIGKILL"), 3e3);
-	t.once("exit", () => {
-		clearTimeout(n), we = !0, r.quit();
-	}), t.kill("SIGTERM");
-}), r.on("activate", () => {
-	e.getAllWindows().length === 0 && Ce();
-}), r.whenReady().then(() => {
-	Ce(), s.on("suspend", () => {
-		Y?.webContents.send("app:suspended");
-	}), s.on("resume", () => {
-		Y?.webContents.send("app:resumed");
-	}), a.handle("window:close", () => {
-		(e.getFocusedWindow() || Y)?.close();
-	}), a.handle("window:minimize", () => {
-		(e.getFocusedWindow() || Y)?.minimize();
-	}), a.handle("window:maximize", () => {
-		let t = e.getFocusedWindow() || Y;
-		t && (t.isMaximized() ? t.unmaximize() : t.maximize());
-	}), a.handle("fuse:spawn", async () => {
-		if (Q) return {
-			success: !1,
+	event.preventDefault();
+	const proc = fuseProcess;
+	fuseProcess = null;
+	fusePort = null;
+	const forceKill = setTimeout(() => proc.kill("SIGKILL"), 3e3);
+	proc.once("exit", () => {
+		clearTimeout(forceKill);
+		fuseCleanupDone = true;
+		app.quit();
+	});
+	proc.kill("SIGTERM");
+});
+app.on("activate", () => {
+	if (BrowserWindow.getAllWindows().length === 0) createWindow();
+});
+app.whenReady().then(() => {
+	createWindow();
+	powerMonitor.on("suspend", () => {
+		win?.webContents.send("app:suspended");
+	});
+	powerMonitor.on("resume", () => {
+		win?.webContents.send("app:resumed");
+	});
+	ipcMain.handle("window:close", () => {
+		(BrowserWindow.getFocusedWindow() || win)?.close();
+	});
+	ipcMain.handle("window:minimize", () => {
+		(BrowserWindow.getFocusedWindow() || win)?.minimize();
+	});
+	ipcMain.handle("window:maximize", () => {
+		const target = BrowserWindow.getFocusedWindow() || win;
+		if (!target) return;
+		target.isMaximized() ? target.unmaximize() : target.maximize();
+	});
+	ipcMain.handle("fuse:spawn", async () => {
+		if (fuseProcess) return {
+			success: false,
 			error: "already running"
 		};
-		let e = !!q, t, n, r;
-		if (e) {
-			let e = m.join(process.env.APP_ROOT, "..", "..", "backend"), i = m.join(e, ".venv", "Scripts", "python.exe"), a = m.join(e, "fuse", "requirements.txt");
+		const isDev = !!VITE_DEV_SERVER_URL;
+		let executable;
+		let args;
+		let spawnEnv;
+		if (isDev) {
+			const backendRoot = path.join(process.env.APP_ROOT, "..", "..", "backend");
+			const venvPython = path.join(backendRoot, ".venv", "Scripts", "python.exe");
+			const requirementsTxt = path.join(backendRoot, "fuse", "requirements.txt");
 			try {
-				h.existsSync(i) || await G("python", [
+				if (!fs.existsSync(venvPython)) await execFileAsync("python", [
 					"-m",
 					"venv",
-					m.join(e, ".venv")
-				]), await G(i, [
+					path.join(backendRoot, ".venv")
+				]);
+				await execFileAsync(venvPython, [
 					"-m",
 					"pip",
 					"install",
 					"-r",
-					a,
+					requirementsTxt,
 					"--quiet"
 				]);
 			} catch (e) {
 				return {
-					success: !1,
+					success: false,
 					error: `venv setup failed: ${e.message}`
 				};
 			}
-			t = i, n = [m.join(e, "fuse", "run_fuse.py")], r = {
+			executable = venvPython;
+			args = [path.join(backendRoot, "fuse", "run_fuse.py")];
+			spawnEnv = {
 				...process.env,
-				PYTHONPATH: e
+				PYTHONPATH: backendRoot
 			};
-		} else t = m.join(process.resourcesPath, "fuse-backend.dist", "fuse-backend.exe"), n = [], r = {
-			...process.env,
-			FUSE_PLUGIN_DIRS: [m.join(process.resourcesPath, "fuse", "plugins"), m.join(process.resourcesPath, "plugins")].join(";")
-		};
-		return new Promise((e) => {
-			let i = d(t, n, {
+		} else {
+			executable = path.join(process.resourcesPath, "fuse-backend.dist", "fuse-backend.exe");
+			args = [];
+			spawnEnv = {
+				...process.env,
+				FUSE_PLUGIN_DIRS: [path.join(process.resourcesPath, "fuse", "plugins"), path.join(process.resourcesPath, "plugins")].join(";")
+			};
+		}
+		return new Promise((resolve) => {
+			const proc = spawn(executable, args, {
 				stdio: [
 					"pipe",
 					"pipe",
 					"pipe"
 				],
-				windowsHide: !0,
-				env: r
-			}), a = !1, o = "", s = "", c = setTimeout(() => {
-				a || (a = !0, i.kill(), e({
-					success: !1,
-					error: "spawn timeout"
-				}));
-			}, 1e4), l = (e) => {
-				if (!e) return;
-				let t = e.replace(/\x1b\[[0-9;]*m/g, "");
-				if (!t) return;
-				let n = "info", r = t.match(/\|\s*(DEBUG|INFO|SUCCESS|WARNING|ERROR|CRITICAL)\s*\|/);
-				r && (r[1] === "ERROR" || r[1] === "CRITICAL" ? n = "error" : r[1] === "WARNING" ? n = "warn" : r[1] === "DEBUG" && (n = "debug")), Y?.webContents.send("fuse:log", {
-					level: n,
-					text: t,
+				windowsHide: true,
+				env: spawnEnv
+			});
+			let settled = false;
+			let stdoutBuf = "";
+			let stderrBuf = "";
+			const timeout = setTimeout(() => {
+				if (!settled) {
+					settled = true;
+					proc.kill();
+					resolve({
+						success: false,
+						error: "spawn timeout"
+					});
+				}
+			}, 1e4);
+			const sendLog = (line) => {
+				if (!line) return;
+				const clean = line.replace(/\x1b\[[0-9;]*m/g, "");
+				if (!clean) return;
+				let level = "info";
+				const m = clean.match(/\|\s*(DEBUG|INFO|SUCCESS|WARNING|ERROR|CRITICAL)\s*\|/);
+				if (m) {
+					if (m[1] === "ERROR" || m[1] === "CRITICAL") level = "error";
+					else if (m[1] === "WARNING") level = "warn";
+					else if (m[1] === "DEBUG") level = "debug";
+				}
+				win?.webContents.send("fuse:log", {
+					level,
+					text: clean,
 					timestamp: Date.now()
 				});
 			};
-			i.stderr?.on("data", (e) => {
-				s += e.toString();
-				let t;
-				for (; (t = s.indexOf("\n")) !== -1;) {
-					let e = s.slice(0, t).trim();
-					s = s.slice(t + 1), e && l(e);
+			proc.stderr?.on("data", (chunk) => {
+				stderrBuf += chunk.toString();
+				let nl;
+				while ((nl = stderrBuf.indexOf("\n")) !== -1) {
+					const line = stderrBuf.slice(0, nl).trim();
+					stderrBuf = stderrBuf.slice(nl + 1);
+					if (line) sendLog(line);
 				}
-			}), i.stdout?.on("data", (t) => {
-				o += t.toString();
-				let n;
-				for (; (n = o.indexOf("\n")) !== -1;) {
-					let t = o.slice(0, n).trim();
-					if (o = o.slice(n + 1), t) if (a) l(t);
-					else try {
-						let { port: n, connectionToken: r } = JSON.parse(t);
-						n && r && (a = !0, clearTimeout(c), Q = i, $ = n, i.on("exit", (e, t) => {
-							Q = null, $ = null, Z || Y?.webContents.send("fuse:exited", {
-								code: e ?? null,
-								signal: t ?? null
+			});
+			proc.stdout?.on("data", (chunk) => {
+				stdoutBuf += chunk.toString();
+				let nl;
+				while ((nl = stdoutBuf.indexOf("\n")) !== -1) {
+					const line = stdoutBuf.slice(0, nl).trim();
+					stdoutBuf = stdoutBuf.slice(nl + 1);
+					if (!line) continue;
+					if (!settled) try {
+						const { port, connectionToken } = JSON.parse(line);
+						if (port && connectionToken) {
+							settled = true;
+							clearTimeout(timeout);
+							fuseProcess = proc;
+							fusePort = port;
+							proc.on("exit", (code, signal) => {
+								fuseProcess = null;
+								fusePort = null;
+								if (!isQuitting) win?.webContents.send("fuse:exited", {
+									code: code ?? null,
+									signal: signal ?? null
+								});
 							});
-						}), e({
-							success: !0,
-							pid: i.pid,
-							port: n,
-							connectionToken: r
-						}));
+							resolve({
+								success: true,
+								pid: proc.pid,
+								port,
+								connectionToken
+							});
+						}
 					} catch {}
+					else sendLog(line);
 				}
-			}), i.on("error", (t) => {
-				a || (a = !0, clearTimeout(c), e({
-					success: !1,
-					error: t.message
-				}));
-			}), i.on("exit", (t) => {
-				a || (a = !0, clearTimeout(c), e({
-					success: !1,
-					error: `exited early with code ${t}: ${s.trim()}`
-				}));
+			});
+			proc.on("error", (err) => {
+				if (!settled) {
+					settled = true;
+					clearTimeout(timeout);
+					resolve({
+						success: false,
+						error: err.message
+					});
+				}
+			});
+			proc.on("exit", (code) => {
+				if (!settled) {
+					settled = true;
+					clearTimeout(timeout);
+					resolve({
+						success: false,
+						error: `exited early with code ${code}: ${stderrBuf.trim()}`
+					});
+				}
 			});
 		});
-	}), a.handle("fuse:kill", async () => Q ? new Promise((e) => {
-		let t = Q, n = setTimeout(() => t.kill("SIGKILL"), 3e3);
-		t.once("exit", () => {
-			clearTimeout(n), e({ success: !0 });
-		}), t.kill("SIGTERM");
-	}) : { success: !0 }), a.handle("fuse:status", () => ({
-		running: !!Q,
-		pid: Q?.pid ?? null,
-		port: $
-	})), a.handle("plugins:scan", () => {
-		let { core: e, user: t } = _e();
-		return [...ve(e), ...ve(t)];
-	}), a.handle("plugins:show-file", (e, t) => {
-		l.showItemInFolder(t);
-	}), a.handle("plugins:delete", (e, t) => {
+	});
+	ipcMain.handle("fuse:kill", async () => {
+		if (!fuseProcess) return { success: true };
+		return new Promise((resolve) => {
+			const proc = fuseProcess;
+			const t = setTimeout(() => proc.kill("SIGKILL"), 3e3);
+			proc.once("exit", () => {
+				clearTimeout(t);
+				resolve({ success: true });
+			});
+			proc.kill("SIGTERM");
+		});
+	});
+	ipcMain.handle("fuse:status", () => ({
+		running: !!fuseProcess,
+		pid: fuseProcess?.pid ?? null,
+		port: fusePort
+	}));
+	ipcMain.handle("plugins:scan", () => {
+		const { core, user } = getPluginDirs();
+		return [...scanPluginsDir(core), ...scanPluginsDir(user)];
+	});
+	ipcMain.handle("plugins:show-file", (_event, filePath) => {
+		shell.showItemInFolder(filePath);
+	});
+	ipcMain.handle("plugins:delete", (_event, filePath) => {
 		try {
-			return h.unlinkSync(t), { success: !0 };
+			fs.unlinkSync(filePath);
+			return { success: true };
 		} catch (e) {
 			return {
-				success: !1,
+				success: false,
 				error: e.message
 			};
 		}
-	}), a.handle("dialog:select-dir", async () => {
-		let e = await i.showOpenDialog(Y, { properties: ["openDirectory"] });
-		return e.canceled ? null : e.filePaths[0] ?? null;
-	}), a.handle("config:host:read", () => he());
-	let t = m.join(J(), "fuse_host.json");
-	if (h.existsSync(t)) {
-		let e = null;
-		h.watch(t, () => {
-			e && clearTimeout(e), e = setTimeout(() => {
-				Y?.webContents.send("config:host:changed", he());
+	});
+	ipcMain.handle("dialog:select-dir", async () => {
+		const result = await dialog.showOpenDialog(win, { properties: ["openDirectory"] });
+		return result.canceled ? null : result.filePaths[0] ?? null;
+	});
+	ipcMain.handle("config:host:read", () => readHostConfig());
+	const hostCfgPath = path.join(getConfigsDir(), "fuse_host.json");
+	if (fs.existsSync(hostCfgPath)) {
+		let debounce = null;
+		fs.watch(hostCfgPath, () => {
+			if (debounce) clearTimeout(debounce);
+			debounce = setTimeout(() => {
+				win?.webContents.send("config:host:changed", readHostConfig());
 			}, 150);
 		});
 	}
-	a.handle("config:plugin:set-enabled", (e, t, n) => {
+	ipcMain.handle("config:plugin:set-enabled", (_event, pluginId, enabled) => {
 		try {
-			let e = he(), r = e.disabled_plugins ?? [];
-			return e.disabled_plugins = n ? r.filter((e) => e !== t) : r.includes(t) ? r : [...r, t], ge(e), { success: !0 };
+			const cfg = readHostConfig();
+			const disabled = cfg.disabled_plugins ?? [];
+			cfg.disabled_plugins = enabled ? disabled.filter((id) => id !== pluginId) : disabled.includes(pluginId) ? disabled : [...disabled, pluginId];
+			writeHostConfig(cfg);
+			return { success: true };
 		} catch (e) {
 			return {
-				success: !1,
+				success: false,
 				error: e.message
 			};
 		}
-	}), a.handle("safe-storage:is-available", () => c.isEncryptionAvailable()), a.handle("safe-storage:encrypt", (e, t) => c.encryptString(t).toJSON()), a.handle("safe-storage:decrypt", (e, t) => c.decryptString(Buffer.from(t.data))), a.handle("app:set-autostart", (e, t) => {
-		r.setLoginItemSettings({ openAtLogin: t });
-	}), a.handle("app:set-minimize-to-tray-on-start", (e, t) => {
-		ye = t, t ? xe() : be || Se();
-	}), a.handle("app:apply-minimize-to-tray-on-start", () => {
-		ye && Y && r.getLoginItemSettings().wasOpenedAtLogin && Y.hide();
-	}), a.handle("app:set-minimize-to-tray-on-close", (e, t) => {
-		be = t, t ? xe() : ye || Se();
-	}), a.handle("app:open-backend-dir", () => {
-		let e = q ? m.join(process.env.APP_ROOT, "..", "..", "backend") : process.resourcesPath;
-		return l.openPath(e);
-	}), a.handle("game:scan-dir", (e, t) => {
+	});
+	ipcMain.handle("safe-storage:is-available", () => safeStorage.isEncryptionAvailable());
+	ipcMain.handle("safe-storage:encrypt", (_event, value) => safeStorage.encryptString(value).toJSON());
+	ipcMain.handle("safe-storage:decrypt", (_event, buf) => safeStorage.decryptString(Buffer.from(buf.data)));
+	ipcMain.handle("app:set-autostart", (_event, value) => {
+		app.setLoginItemSettings({ openAtLogin: value });
+	});
+	ipcMain.handle("app:set-minimize-to-tray-on-start", (_event, enabled) => {
+		minimizeToTrayOnStart = enabled;
+		if (enabled) createTray();
+		else if (!minimizeToTrayOnClose) destroyTray();
+	});
+	ipcMain.handle("app:apply-minimize-to-tray-on-start", () => {
+		if (minimizeToTrayOnStart && win && app.getLoginItemSettings().wasOpenedAtLogin) win.hide();
+	});
+	ipcMain.handle("app:set-minimize-to-tray-on-close", (_event, enabled) => {
+		minimizeToTrayOnClose = enabled;
+		if (enabled) createTray();
+		else if (!minimizeToTrayOnStart) destroyTray();
+	});
+	ipcMain.handle("app:open-backend-dir", () => {
+		const dir = !!VITE_DEV_SERVER_URL ? path.join(process.env.APP_ROOT, "..", "..", "backend") : process.resourcesPath;
+		return shell.openPath(dir);
+	});
+	ipcMain.handle("config:plugin:read", (_event, pluginId) => {
 		try {
-			let e, n = m.join(t, "game_info.xml");
-			if (h.existsSync(n)) {
-				let t = h.readFileSync(n, "utf-8").match(/<version_name>(.*?)<\/version_name>/);
-				t && (e = t[1].trim());
-			}
-			let r = h.existsSync(m.join(t, "coldwar.project"));
+			const p = path.join(getConfigsDir(), `fuse_${pluginId}.json`);
+			if (!fs.existsSync(p)) return {};
+			return JSON.parse(fs.readFileSync(p, "utf-8"));
+		} catch {
+			return {};
+		}
+	});
+	ipcMain.handle("config:plugin:write-key", (_event, pluginId, key, value) => {
+		try {
+			const dir = getConfigsDir();
+			if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+			const p = path.join(dir, `fuse_${pluginId}.json`);
+			const current = fs.existsSync(p) ? JSON.parse(fs.readFileSync(p, "utf-8")) : {};
+			current[key] = value;
+			fs.writeFileSync(p, JSON.stringify(current, null, 2), "utf-8");
+			return { success: true };
+		} catch (e) {
 			return {
-				version: e,
-				hasProject: r
+				success: false,
+				error: e.message
+			};
+		}
+	});
+	ipcMain.handle("hotkey:write-override", (_event, pluginId, action, combo) => {
+		try {
+			const cfg = readHostConfig();
+			cfg.hotkey_overrides ??= {};
+			cfg.hotkey_overrides[pluginId] ??= {};
+			cfg.hotkey_overrides[pluginId][action] = combo;
+			writeHostConfig(cfg);
+			return { success: true };
+		} catch (e) {
+			return {
+				success: false,
+				error: e.message
+			};
+		}
+	});
+	ipcMain.handle("game:scan-dir", (_event, dirPath) => {
+		try {
+			let version;
+			const gameInfoPath = path.join(dirPath, "game_info.xml");
+			if (fs.existsSync(gameInfoPath)) {
+				const m = fs.readFileSync(gameInfoPath, "utf-8").match(/<version_name>(.*?)<\/version_name>/);
+				if (m) version = m[1].trim();
+			}
+			const hasProject = fs.existsSync(path.join(dirPath, "coldwar.project"));
+			return {
+				version,
+				hasProject
 			};
 		} catch (e) {
 			return { error: e.message };
 		}
-	}), a.handle("game:check-debugger", (e, t) => {
+	});
+	ipcMain.handle("game:check-debugger", (_event, dirPath) => {
 		try {
-			let e = m.join(t, "coldwar.project"), n = h.readFileSync(e, "utf-8");
+			const projectPath = path.join(dirPath, "coldwar.project");
+			const content = fs.readFileSync(projectPath, "utf-8");
 			return {
-				success: !0,
-				enabled: /"Enable Debugger"\s*:\s*true/.test(n)
+				success: true,
+				enabled: /"Enable Debugger"\s*:\s*true/.test(content)
 			};
 		} catch (e) {
 			return {
-				success: !1,
+				success: false,
 				error: e.message
 			};
 		}
-	}), a.handle("game:enable-debugger", (e, t) => {
+	});
+	ipcMain.handle("game:enable-debugger", (_event, dirPath) => {
 		try {
-			let e = m.join(t, "coldwar.project"), n = h.readFileSync(e, "utf-8");
-			return n = n.replace(/"Debugger Port"\s*:\s*\d+/g, "\"Debugger Port\": 9222"), n = n.replace(/"Enable Debugger"\s*:\s*false/g, "\"Enable Debugger\": true"), h.writeFileSync(e, n, "utf-8"), { success: !0 };
+			const projectPath = path.join(dirPath, "coldwar.project");
+			let content = fs.readFileSync(projectPath, "utf-8");
+			content = content.replace(/"Debugger Port"\s*:\s*\d+/g, "\"Debugger Port\": 9222");
+			content = content.replace(/"Enable Debugger"\s*:\s*false/g, "\"Enable Debugger\": true");
+			fs.writeFileSync(projectPath, content, "utf-8");
+			return { success: true };
 		} catch (e) {
 			return {
-				success: !1,
+				success: false,
 				error: e.message
 			};
 		}
-	}), a.handle("game:disable-debugger", (e, t) => {
+	});
+	ipcMain.handle("game:disable-debugger", (_event, dirPath) => {
 		try {
-			let e = m.join(t, "coldwar.project"), n = h.readFileSync(e, "utf-8");
-			return n = n.replace(/"Enable Debugger"\s*:\s*true/g, "\"Enable Debugger\": false"), h.writeFileSync(e, n, "utf-8"), { success: !0 };
+			const projectPath = path.join(dirPath, "coldwar.project");
+			let content = fs.readFileSync(projectPath, "utf-8");
+			content = content.replace(/"Enable Debugger"\s*:\s*true/g, "\"Enable Debugger\": false");
+			fs.writeFileSync(projectPath, content, "utf-8");
+			return { success: true };
 		} catch (e) {
 			return {
-				success: !1,
+				success: false,
 				error: e.message
 			};
 		}
 	});
 });
 //#endregion
-export { pe as MAIN_DIST, me as RENDERER_DIST, q as VITE_DEV_SERVER_URL };
+export { MAIN_DIST, RENDERER_DIST, VITE_DEV_SERVER_URL };

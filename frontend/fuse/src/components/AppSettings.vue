@@ -8,8 +8,79 @@ import type { SystemState } from './eButton.vue'
 import type { eSwitchOption } from './eSwitch.vue'
 import { useAppStore } from '../stores/app'
 import { eventBus } from '../events/eventBus'
+import { useI18n } from '../composables/useI18n'
 
 const store = useAppStore()
+const { t } = useI18n()
+
+// ── FUSE keybindings ──────────────────────────────────────────────────────────
+
+interface FuseHotkey {
+    action: string
+    label: string
+    defaultCombo: string
+}
+
+const FUSE_HOTKEYS: FuseHotkey[] = [
+    { action: 'Hot-Reload Plugins',    label: 'Hot-Reload Plugins',    defaultCombo: 'ctrl+r' },
+    { action: 'Open Plugin Manager',   label: 'Open Plugin Manager',   defaultCombo: 'ctrl+m' },
+    { action: 'Quit FUSE',             label: 'Quit FUSE',             defaultCombo: 'ctrl+p' },
+    { action: 'Toggle Calibrate/Lock', label: 'Toggle Calibrate/Lock', defaultCombo: 'ctrl+l' },
+]
+
+const hotkeyOverrides = ref<Record<string, string>>({})
+const capturingAction = ref<string | null>(null)
+let captureListener: ((e: KeyboardEvent) => void) | null = null
+
+function getCombo(action: string): string {
+    return hotkeyOverrides.value[action] ?? FUSE_HOTKEYS.find(h => h.action === action)?.defaultCombo ?? ''
+}
+
+function startCapture(action: string) {
+    if (capturingAction.value) cancelCapture()
+    capturingAction.value = action
+
+    captureListener = (e: KeyboardEvent) => {
+        e.preventDefault()
+        e.stopPropagation()
+
+        if (['Control', 'Alt', 'Shift', 'Meta'].includes(e.key)) return
+        if (e.key === 'Escape') { cancelCapture(); return }
+
+        const mods: string[] = []
+        if (e.ctrlKey)  mods.push('ctrl')
+        if (e.altKey)   mods.push('alt')
+        if (e.shiftKey) mods.push('shift')
+        const combo = [...mods, e.key.toLowerCase()].join('+')
+
+        hotkeyOverrides.value = { ...hotkeyOverrides.value, [action]: combo }
+        capturingAction.value = null
+        document.removeEventListener('keydown', captureListener!, true)
+        captureListener = null
+
+        window.pluginConfigAPI?.writeHotkeyOverride('host', action, combo)
+    }
+
+    document.addEventListener('keydown', captureListener, true)
+}
+
+function cancelCapture() {
+    if (captureListener) {
+        document.removeEventListener('keydown', captureListener, true)
+        captureListener = null
+    }
+    capturingAction.value = null
+}
+
+onMounted(async () => {
+    try {
+        const hostConfig = await window.pluginConfigAPI?.readPlugin('host')
+        const overrides = (hostConfig?.hotkey_overrides as Record<string, Record<string, string>> | undefined)?.host
+        if (overrides) hotkeyOverrides.value = { ...overrides }
+    } catch { /* no host config yet */ }
+})
+
+onUnmounted(() => cancelCapture())
 
 const platformOptions: eSwitchOption[] = [
   { icon: 'steam', value: 'steam' },
@@ -46,8 +117,8 @@ async function handleDebuggerToggle() {
     debuggerEnabled.value = !debuggerEnabled.value
     debuggerBtnState.value = 'success'
     eventBus.emit('notification', {
-      title: 'Game Configuration Changed',
-      message: 'Restart the game for changes to take effect.',
+      title: t('appsettings.notifications.gameConfigChangedTitle'),
+      message: t('appsettings.notifications.gameConfigChangedMessage'),
     })
   } else {
     debuggerBtnState.value = 'error'
@@ -88,16 +159,16 @@ onUnmounted(() => ro?.disconnect())
       <div ref="panelEl" class="settings-panel">
 
         <div class="section">
-          <h2 class="section-header">Game Installation</h2>
+          <h2 class="section-header">{{ t('appsettings.gameInstallation.title') }}</h2>
           <div class="section-body">
 
             <div class="setting-row">
-              <span class="setting-label">Platform</span>
+              <span class="setting-label">{{ t('appsettings.gameInstallation.platform') }}</span>
               <eSwitch :options="platformOptions" v-model="store.gamePlatform" />
             </div>
 
             <div class="setting-row">
-              <span class="setting-label">Path To Game Directory</span>
+              <span class="setting-label">{{ t('appsettings.gameInstallation.gameDirectory') }}</span>
               <div class="dir-wrapper">
                 <eDirSelector v-model="gameDirPath" />
               </div>
@@ -107,12 +178,12 @@ onUnmounted(() => ro?.disconnect())
         </div>
 
         <div class="section">
-          <h2 class="section-header">Master Switch</h2>
+          <h2 class="section-header">{{ t('appsettings.masterSwitch.title') }}</h2>
           <div class="section-body">
             <div class="setting-row">
-              <span class="setting-label">Enable FUSE</span>
+              <span class="setting-label">{{ t('appsettings.masterSwitch.enableFuse') }}</span>
               <eButton
-                :label="debuggerEnabled ? 'Disable' : 'Enable'"
+                :label="debuggerEnabled ? t('appsettings.masterSwitch.disable') : t('appsettings.masterSwitch.enable')"
                 size="half"
                 :systemState="debuggerBtnState"
                 :disabled="debuggerEnabled === null || !gameDirPath"
@@ -123,29 +194,57 @@ onUnmounted(() => ro?.disconnect())
         </div>
 
         <div class="section">
-          <h2 class="section-header">General</h2>
+          <h2 class="section-header">{{ t('appsettings.general.title') }}</h2>
           <div class="section-body">
 
             <div class="setting-row">
-              <span class="setting-label">Launch App At System Startup</span>
+              <span class="setting-label">{{ t('appsettings.general.launchAtStartup') }}</span>
               <eCheckbox v-model="store.autostart" :width="18" :height="18" />
             </div>
 
             <div class="setting-row">
-              <span class="setting-label">Start Minimized To Tray</span>
+              <span class="setting-label">{{ t('appsettings.general.startMinimized') }}</span>
               <eCheckbox v-model="store.minimizeToTray" :width="18" :height="18" />
             </div>
 
             <div class="setting-row">
-              <span class="setting-label">Close Button Minimizes To Tray</span>
+              <span class="setting-label">{{ t('appsettings.general.closeMinimizes') }}</span>
               <eCheckbox v-model="store.minimizeToTrayOnClose" :width="18" :height="18" />
             </div>
 
             <div class="setting-row">
-              <span class="setting-label">Check For Updates On Startup</span>
+              <span class="setting-label">{{ t('appsettings.general.checkUpdates') }}</span>
               <eCheckbox v-model="store.checkUpdatesOnStartup" :width="18" :height="18" />
             </div>
 
+          </div>
+        </div>
+
+        <div class="section">
+          <h2 class="section-header">{{ t('appsettings.keybindings.title') }}</h2>
+          <div class="section-body">
+            <div class="kb-table">
+              <div class="kb-header">
+                <span>{{ t('appsettings.keybindings.columnAction') }}</span>
+                <span>{{ t('appsettings.keybindings.columnBinding') }}</span>
+              </div>
+              <div
+                v-for="hk in FUSE_HOTKEYS"
+                :key="hk.action"
+                class="kb-row"
+              >
+                <span class="kb-label">{{ hk.label }}</span>
+                <span class="kb-combo" :class="{ capturing: capturingAction === hk.action }">
+                  {{ capturingAction === hk.action ? '— press keys —' : getCombo(hk.action) }}
+                </span>
+                <eButton
+                  :label="t('appsettings.keybindings.rebind')"
+                  size="half"
+                  :systemState="capturingAction === hk.action ? 'processing' : 'idle'"
+                  @click="startCapture(hk.action)"
+                />
+              </div>
+            </div>
           </div>
         </div>
 
@@ -261,5 +360,57 @@ onUnmounted(() => ro?.disconnect())
 .dir-wrapper {
   width: 240px;
   flex-shrink: 0;
+}
+
+.kb-table {
+  display: flex;
+  flex-direction: column;
+}
+
+.kb-header {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: var(--space-4);
+  padding: 0 0 var(--space-2);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  font-family: var(--font-microcopy);
+  font-size: var(--secondary-font-size-4);
+  font-weight: var(--font-weight-3);
+  color: var(--light-green);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.kb-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+}
+
+.kb-label {
+  font-family: var(--font-microcopy);
+  font-size: var(--secondary-font-size-4);
+  font-weight: var(--font-weight-3);
+  color: var(--text-main);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.kb-combo {
+  font-family: var(--font-microcopy);
+  font-size: var(--secondary-font-size-4);
+  color: var(--text-muted);
+  min-width: 64px;
+  text-align: right;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.kb-combo.capturing {
+  color: var(--text-muted);
+  font-style: italic;
 }
 </style>

@@ -71,6 +71,15 @@ contextBridge.exposeInMainWorld('configAPI', {
     ipcRenderer.removeAllListeners('config:host:changed'),
 })
 
+contextBridge.exposeInMainWorld('pluginConfigAPI', {
+  readPlugin: (pluginId: string): Promise<Record<string, unknown>> =>
+    ipcRenderer.invoke('config:plugin:read', pluginId),
+  writeKey: (pluginId: string, key: string, value: unknown): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke('config:plugin:write-key', pluginId, key, value),
+  writeHotkeyOverride: (pluginId: string, action: string, combo: string): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke('hotkey:write-override', pluginId, action, combo),
+})
+
 contextBridge.exposeInMainWorld('gameAPI', {
   scanDir: (dirPath: string): Promise<{ version?: string; hasProject: boolean; error?: string }> =>
     ipcRenderer.invoke('game:scan-dir', dirPath),

@@ -5,6 +5,9 @@ import eToggle from './eToggle.vue'
 import eContextMenu, { type MenuOption } from './eContextMenu.vue'
 import Icons from './Icons.vue'
 import type { PluginRecord, PluginStatus } from '../stores/plugins'
+import { useI18n } from '../composables/useI18n'
+
+const { t } = useI18n()
 
 const props = withDefaults(defineProps<{
   plugin: PluginRecord
@@ -46,9 +49,7 @@ const filename = computed(() =>
   `${props.plugin.name}-${props.plugin.version}.fuse`
 )
 
-const statusLabel = computed(() =>
-  props.plugin.status.charAt(0).toUpperCase() + props.plugin.status.slice(1)
-)
+const statusLabel = computed(() => t(`components.plugin.status.${props.plugin.status}`))
 </script>
 
 <template>
@@ -72,7 +73,7 @@ const statusLabel = computed(() =>
     <div class="col-info">
       <div class="title-row">
         <span class="name">{{ plugin.name }}</span>
-        <span class="by">by</span>
+        <span class="by">{{ t('components.plugin.by') }}</span>
         <span class="author">{{ plugin.author ?? '—' }}</span>
       </div>
       <span class="description">{{ plugin.description }}</span>
@@ -98,7 +99,7 @@ const statusLabel = computed(() =>
         :height="24"
         @update:model-value="emit('update:enabled', $event)"
       />
-      <eContextMenu
+<eContextMenu
         :options="menuOptions"
         :keystrokeTarget="rowEl"
         :keystrokeKey="'Control'"

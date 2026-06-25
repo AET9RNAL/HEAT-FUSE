@@ -38,6 +38,7 @@ interface HostConfig {
   disabled_plugins: string[]
   enabled_plugins: string[] | null
   extra_plugin_dirs: string[]
+  hotkey_overrides?: Record<string, Record<string, string>>
 }
 
 function getConfigsDir() {
@@ -477,6 +478,43 @@ app.whenReady().then(() => {
     return shell.openPath(dir)
   })
 
+
+  ipcMain.handle('config:plugin:read', (_event, pluginId: string): Record<string, unknown> => {
+    try {
+      const p = path.join(getConfigsDir(), `fuse_${pluginId}.json`)
+      if (!fs.existsSync(p)) return {}
+      return JSON.parse(fs.readFileSync(p, 'utf-8')) as Record<string, unknown>
+    } catch { return {} }
+  })
+
+  ipcMain.handle('config:plugin:write-key', (_event, pluginId: string, key: string, value: unknown) => {
+    try {
+      const dir = getConfigsDir()
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
+      const p = path.join(dir, `fuse_${pluginId}.json`)
+      const current: Record<string, unknown> = fs.existsSync(p)
+        ? JSON.parse(fs.readFileSync(p, 'utf-8')) as Record<string, unknown>
+        : {}
+      current[key] = value
+      fs.writeFileSync(p, JSON.stringify(current, null, 2), 'utf-8')
+      return { success: true }
+    } catch (e: unknown) {
+      return { success: false, error: (e as Error).message }
+    }
+  })
+
+  ipcMain.handle('hotkey:write-override', (_event, pluginId: string, action: string, combo: string) => {
+    try {
+      const cfg = readHostConfig()
+      cfg.hotkey_overrides ??= {}
+      cfg.hotkey_overrides[pluginId] ??= {}
+      cfg.hotkey_overrides[pluginId][action] = combo
+      writeHostConfig(cfg)
+      return { success: true }
+    } catch (e: unknown) {
+      return { success: false, error: (e as Error).message }
+    }
+  })
 
   ipcMain.handle('game:scan-dir', (_event, dirPath: string) => {
     try {

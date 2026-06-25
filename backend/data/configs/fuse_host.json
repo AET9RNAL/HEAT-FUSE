@@ -4,5 +4,10 @@
     "heat_ailos_torc",
     "game_memory"
   ],
-  "extra_plugin_dirs": []
+  "extra_plugin_dirs": [],
+  "hotkey_overrides": {
+    "host": {
+      "Toggle Calibrate/Lock": "ctrl+s"
+    }
+  }
 }

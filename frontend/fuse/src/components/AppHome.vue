@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import eLaunchPanel from './eLaunchPanel.vue'
 import eSwitch from './eSwitch.vue'
 import type { eSwitchOption } from './eSwitch.vue'
@@ -12,6 +12,9 @@ import Icons from './Icons.vue'
 import { usePluginsStore } from '../stores/plugins'
 import { useAppStore } from '../stores/app'
 import { useNavigationStore } from '../stores/navigation'
+import { useI18n } from '../composables/useI18n'
+
+const { t } = useI18n()
 // import Compositor from './effects/Compositor.vue'
 // import type { FilterStage, CSSLayerConfig } from '../compositing/types'
 // import {
@@ -36,7 +39,11 @@ const tabOptions: eSwitchOption[] = [
 
 const searchQuery = ref('')
 const filterMode = ref('all')
-const filterOptions = ['All', 'Active', 'Disabled']
+const filterOptions = computed(() => [
+  t('apphome.filters.all'),
+  t('apphome.filters.active'),
+  t('apphome.filters.disabled'),
+])
 const filterValues  = ['all', 'active', 'disabled']
 
 async function handleLaunch() {
@@ -95,12 +102,12 @@ onUnmounted(() => {
         <input
           class="search-input"
           v-model="searchQuery"
-          placeholder="Search plugins..."
+          :placeholder="t('apphome.searchPlaceholder')"
           autocomplete="off"
           spellcheck="false"
         />
         <eMaterialButton
-          label="Discover"
+          :label="t('apphome.discover')"
           icon="discover"
           @click="navStore.selectOption('discover')"
         />
@@ -108,12 +115,12 @@ onUnmounted(() => {
       <div class="filter-row">
         <Icons kind="filter" size="small" class="filter-icon" />
         <eListSelector
-          label="Filtering"
+          :label="t('apphome.filtering')"
           :options="filterOptions"
           :values="filterValues"
           v-model="filterMode"
         />
-        <eMaterialButton label="Refresh" icon="reload" @click="store.scan()" />
+        <eMaterialButton :label="t('apphome.refresh')" icon="reload" @click="store.scan()" />
       </div>
     </template>
 

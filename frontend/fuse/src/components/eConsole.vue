@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick } from 'vue'
 import { useFuseLogs } from '../composables/useFuseLogs'
+import { useI18n } from '../composables/useI18n'
+
+const { t } = useI18n()
 
 type FilterLevel = 'all' | 'error' | 'warn' | 'info'
 
@@ -41,7 +44,7 @@ function formatTime(ts: number) {
           <input
             v-model="search"
             class="search-input"
-            placeholder="Search logs..."
+            :placeholder="t('components.console.searchPlaceholder')"
             spellcheck="false"
           />
         </div>
@@ -52,9 +55,9 @@ function formatTime(ts: number) {
             class="pill"
             :class="[`pill-${f}`, { active: activeFilter === f }]"
             @click="activeFilter = f"
-          >{{ f.charAt(0).toUpperCase() + f.slice(1) }}</button>
+          >{{ t(`components.console.filters.${f}`) }}</button>
         </div>
-        <button class="clear-btn" @click="clear">Clear</button>
+        <button class="clear-btn" @click="clear">{{ t('components.console.clear') }}</button>
       </div>
 
       <div ref="logBodyEl" class="log-body">
@@ -68,7 +71,7 @@ function formatTime(ts: number) {
           <span class="log-text">{{ entry.text }}</span>
         </div>
         <div v-if="entries.length === 0" class="log-empty">
-          Start the runtime to receive logs
+          {{ t('components.console.empty') }}
         </div>
       </div>
 

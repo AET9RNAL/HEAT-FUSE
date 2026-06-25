@@ -4,6 +4,10 @@ import ePlugin from './ePlugin.vue'
 import eCheckbox from './eCheckbox.vue'
 import { usePluginsStore } from '../stores/plugins'
 import type { MenuOption } from './eContextMenu.vue'
+import { useI18n } from '../composables/useI18n'
+import { eventBus } from '../events/eventBus'
+
+const { t } = useI18n()
 
 const props = withDefaults(defineProps<{
   search?: string
@@ -49,9 +53,18 @@ async function handleToggle(pluginId: string, enabled: boolean) {
 function menuOptionsFor(pluginId: string): MenuOption[] {
   const plugin = store.plugins.find(p => p.plugin_id === pluginId)
   if (!plugin) return []
-  return [
+  const options: MenuOption[] = []
+  if (plugin.configSchema.length > 0 || plugin.hotkeys.length > 0) {
+    options.push({
+      label: t('components.plugin.menu.settings'),
+      icon: 'settings',
+      iconSize: 'normal',
+      action: () => eventBus.emit('plugin-config:open', { plugin_id: pluginId }),
+    })
+  }
+  options.push(
     {
-      label: 'Show in Explorer',
+      label: t('components.plugin.menu.showInExplorer'),
       icon: 'folder',
       iconSize: 'normal',
       shortcut: true,
@@ -60,7 +73,7 @@ function menuOptionsFor(pluginId: string): MenuOption[] {
       },
     },
     {
-      label: 'Delete',
+      label: t('components.plugin.menu.delete'),
       icon: 'delete',
       iconSize: 'normal',
       shortcut: true,
@@ -70,7 +83,8 @@ function menuOptionsFor(pluginId: string): MenuOption[] {
         if (result.success) store.remove(pluginId)
       },
     },
-  ]
+  )
+  return options
 }
 
 // Dynamic SVG polygon stroke — maps 10px cut to viewBox(0 0 100 100) coords
@@ -114,10 +128,10 @@ onUnmounted(() => ro?.disconnect())
           />
         </div>
         <div class="col-thumb" />
-        <span class="col-label">Plugin</span>
-        <span class="col-label">Version</span>
-        <span class="col-label">Status</span>
-        <span class="col-label">Actions</span>
+        <span class="col-label">{{ t('components.pluginList.columnPlugin') }}</span>
+        <span class="col-label">{{ t('components.pluginList.columnVersion') }}</span>
+        <span class="col-label">{{ t('components.pluginList.columnStatus') }}</span>
+        <span class="col-label">{{ t('components.pluginList.columnActions') }}</span>
       </div>
 
       <div class="list-body">
@@ -133,7 +147,7 @@ onUnmounted(() => ro?.disconnect())
         />
 
         <div v-if="filteredPlugins.length === 0" class="empty">
-          <span class="empty-text">{{ store.plugins.length === 0 ? 'No plugins discovered' : 'No plugins match' }}</span>
+          <span class="empty-text">{{ store.plugins.length === 0 ? t('components.pluginList.emptyNoPlugins') : t('components.pluginList.emptyNoMatch') }}</span>
         </div>
       </div>
 

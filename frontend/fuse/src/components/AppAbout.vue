@@ -1,10 +1,12 @@
 <script setup lang="ts">
+import { useI18n } from '../composables/useI18n'
+const { t } = useI18n()
 </script>
 
 <template>
   <div class="page">
     <div class="wip-container">
-      <span class="wip-text">WORK IN PROGRESS</span>
+      <span class="wip-text">{{ t('appabout.wip') }}</span>
     </div>
   </div>
 </template>

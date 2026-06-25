@@ -27,9 +27,12 @@ const statusState = computed<StatusState>(() => {
   return map[fuseState.value] ?? 'None'
 })
 
-const statusLabel = computed(() =>
-  fuseState.value === 'error' ? (fuseError.value || 'Error') : statusState.value
-)
+const statusLabel = computed(() => {
+  if (fuseState.value === 'error') return fuseError.value || t('components.status.error')
+  return t(`components.status.${statusState.value.toLowerCase()}`)
+})
+
+const pageTitle = computed(() => t(`appnav.${nav.selectedOption}`))
 </script>
 
 <template>
@@ -38,7 +41,7 @@ const statusLabel = computed(() =>
       <div class="logo-holder">
         <img :src="AppLogoFull" class="app-logo" alt="HEAT FUSE" />
       </div>
-      <h2 class="page-title">{{ nav.selectedOption }}</h2>
+      <h2 class="page-title">{{ pageTitle }}</h2>
     </div>
     <div class="right-group">
       <EStatus :state="statusState" :status="statusLabel" />

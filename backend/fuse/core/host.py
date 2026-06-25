@@ -40,7 +40,7 @@ except ImportError:  # pragma: no cover
 
 from fuse.core.config import ConfigManager, PluginConfig
 
-from fuse.core.api import FuseContext, FusePlugin, HotkeyRegistry
+from fuse.core.api import FuseContext, FusePlugin, HotkeyRegistry, HotkeyRegistryView
 from fuse.core.discovery import (
     BUILTIN_PLUGINS_DIR,
     DiscoveredPlugin,
@@ -52,7 +52,7 @@ from fuse.core.events import EventBus
 from fuse.core.services import ServiceRegistry
 from fuse.ui.manager import FuseManager
 
-HOST_VERSION = "2.3.0"
+HOST_VERSION = "2.4.0"
 
 MouseCallback = Callable[[int, int, "pynmouse.Button", bool], None]
 
@@ -100,7 +100,7 @@ class PluginHost:
 
         self.host_config = ConfigManager(filename=self.HOST_CONFIG_FILENAME)
         self.host_state = self.host_config.load(
-            {"enabled_plugins": None, "disabled_plugins": [], "extra_plugin_dirs": []}
+            {"enabled_plugins": None, "disabled_plugins": [], "extra_plugin_dirs": [], "hotkey_overrides": {}}
         )
 
         self.hotkeys = HotkeyRegistry()
@@ -138,6 +138,7 @@ class PluginHost:
         self._dequeue_started: bool = False
 
         self._register_global_hotkeys()
+        self._apply_hotkey_overrides(only_owner="host")
 
     # ------------------------------------------------------------------
     # Plugin lifecycle
@@ -201,7 +202,7 @@ class PluginHost:
         ctx = FuseContext(
             tk_root=self.root,
             config=cfg,
-            hotkeys=self.hotkeys,
+            hotkeys=HotkeyRegistryView(self.hotkeys, owner=spec.plugin_id),
             assets=plugin_assets,
             package_root=spec.package_root,
             host=self,
@@ -298,6 +299,7 @@ class PluginHost:
         if not self._setup_pending:
             _root_logger.info("All plugins initialized.")
             self._auto_lock_queue = False
+            self._apply_hotkey_overrides()
             self.events.emit("host_ready")
             return
 
@@ -345,6 +347,34 @@ class PluginHost:
                 _root_logger.exception(f"{spec.name}: enter_locked failed: {e}")
             self._setup_active = None
             self.root.after(0, self._dequeue_next_plugin)
+
+    def _apply_hotkey_overrides(self, only_owner: str | None = None) -> None:
+        """Apply persisted hotkey_overrides from fuse_host.json.
+
+        Pass *only_owner* to restrict to one owner (e.g. ``"host"`` at init
+        time before plugins have registered any bindings).
+        """
+        overrides: dict = self.host_state.get("hotkey_overrides", {})
+        for plugin_id, bindings in overrides.items():
+            if only_owner is not None and plugin_id != only_owner:
+                continue
+            for action, new_combo in bindings.items():
+                # Find current binding for this action/owner.
+                current = next(
+                    (b for b in self.hotkeys.list_bindings(owner=plugin_id)
+                     if b["label"] == action),
+                    None,
+                )
+                if current is None:
+                    _root_logger.warning(
+                        f"hotkey_overrides: action {action!r} not found for {plugin_id!r} — skipped."
+                    )
+                    continue
+                ok = self.hotkeys.reregister(current["mods"], current["key"], new_combo)
+                if ok:
+                    _root_logger.info(f"Applied hotkey override: {plugin_id}/{action} → {new_combo!r}")
+                else:
+                    _root_logger.warning(f"hotkey_overrides: rebind conflict for {plugin_id}/{action}")
 
     # ------------------------------------------------------------------
     # Public plugin API
@@ -568,10 +598,10 @@ class PluginHost:
     # ------------------------------------------------------------------
 
     def _register_global_hotkeys(self) -> None:
-        self.hotkeys.register("ctrl+l", self.toggle_lock,    label="Toggle Calibrate/Lock")
-        self.hotkeys.register("ctrl+p", self.quit,           label="Quit FUSE")
-        self.hotkeys.register("ctrl+m", self._open_manager,  label="Open Plugin Manager")
-        self.hotkeys.register("ctrl+r", self.reload_plugins, label="Hot-Reload Plugins")
+        self.hotkeys.register("ctrl+l", self.toggle_lock,    label="Toggle Calibrate/Lock", owner="host")
+        self.hotkeys.register("ctrl+p", self.quit,           label="Quit FUSE",             owner="host")
+        self.hotkeys.register("ctrl+m", self._open_manager,  label="Open Plugin Manager",   owner="host")
+        self.hotkeys.register("ctrl+r", self.reload_plugins, label="Hot-Reload Plugins",    owner="host")
 
     def _open_manager(self) -> None:
         _root_logger.debug("host: _open_manager called")

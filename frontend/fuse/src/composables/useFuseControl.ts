@@ -62,6 +62,10 @@ async function startFuse(): Promise<boolean> {
                 pluginsStore.remove(msg['plugin_id'] as string)
             } else if (type === 'plugin:status_changed') {
                 pluginsStore.setStatus(msg['plugin_id'] as string, msg['status'] as Parameters<typeof pluginsStore.setStatus>[1])
+            } else if (type === 'config:value_changed') {
+                pluginsStore.updateConfigValue(msg['plugin_id'] as string, msg['key'] as string, msg['value'])
+            } else if (type === 'hotkey:rebound') {
+                pluginsStore.updateHotkey(msg['plugin_id'] as string, msg['action'] as string, msg['combo'] as string)
             }
         })
 

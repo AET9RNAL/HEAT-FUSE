@@ -2,6 +2,9 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { motion } from 'motion-v'
 import Icons from './Icons.vue'
+import { useI18n } from '../composables/useI18n'
+
+const { t } = useI18n()
 
 interface Props {
     title?: string
@@ -10,9 +13,11 @@ interface Props {
 }
 
 const props = withDefaults(defineProps<Props>(), {
-    title: 'Notification',
+    title: undefined,
     duration: 5000,
 })
+
+const resolvedTitle = computed(() => props.title ?? t('components.notification.defaultTitle'))
 
 const emit = defineEmits<{ close: [] }>()
 
@@ -75,7 +80,7 @@ onUnmounted(() => _ro?.disconnect())
 
             <div class="notification-body">
                 <div class="notification-text">
-                    <span class="notification-title">{{ title }}</span>
+                    <span class="notification-title">{{ resolvedTitle }}</span>
                     <span class="notification-message">{{ message }}</span>
                 </div>
                 <motion.button

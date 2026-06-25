@@ -6,8 +6,10 @@ import eContextMenu from './eContextMenu.vue'
 import type { MenuOption } from './eContextMenu.vue'
 import { useAppStore } from '../stores/app'
 import { useFuseControl } from '../composables/useFuseControl'
+import { useI18n } from '../composables/useI18n'
 
 const appStore = useAppStore()
+const { t } = useI18n()
 const { fuseState } = useFuseControl()
 
 const isRunning = computed(() => fuseState.value === 'running')
@@ -22,15 +24,15 @@ function handleActionClick() {
   }
 }
 
-const menuOptions: MenuOption[] = [
+const menuOptions = computed<MenuOption[]>(() => [
   {
-    label: 'Show In Explorer',
+    label: t('applaunch.showInExplorer'),
     icon: 'folder',
     iconSize: 'normal',
     shortcut: false,
     action: () => window.appAPI.openBackendDir(),
   },
-]
+])
 
 const CUT = 10
 const panelEl = ref<HTMLElement | null>(null)
@@ -68,18 +70,18 @@ onUnmounted(() => ro?.disconnect())
       </div>
       <div class="title-block">
         <div class="title-row">
-          <span class="title-name">FUSE</span>
-          <span class="title-version">{{ appStore.backendVersion || 'm.m.p' }}</span>
+          <span class="title-name">{{ t('common.brandName') }}</span>
+          <span class="title-version">{{ appStore.backendVersion || t('applaunch.versionFallback') }}</span>
         </div>
         <div class="title-row">
-          <span class="title-name">WoT:HEAT</span>
-          <span class="title-version">{{ appStore.gameVersion || 'm.m.p' }}</span>
+          <span class="title-name">{{ t('common.gameName') }}</span>
+          <span class="title-version">{{ appStore.gameVersion || t('applaunch.versionFallback') }}</span>
         </div>
       </div>
     </div>
 
     <div class="actions">
-      <eButton :icon="isRunning ? 'stop' : 'play'" :label="isRunning ? 'Stop' : 'Launch'" size="slim" @click="handleActionClick" />
+      <eButton :icon="isRunning ? 'stop' : 'play'" :label="isRunning ? t('applaunch.stop') : t('applaunch.launch')" size="slim" @click="handleActionClick" />
       <eContextMenu :options="menuOptions" placement="bottom" />
     </div>
 

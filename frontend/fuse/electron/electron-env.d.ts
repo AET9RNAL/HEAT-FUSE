@@ -50,11 +50,17 @@ interface Window {
       author?: string
       status: 'pending'
       configSchema: unknown[]
+      configValues: Record<string, unknown>
       hotkeys: unknown[]
       filePath: string
     }>>
     showFile: (filePath: string) => Promise<void>
     deleteFile: (filePath: string) => Promise<{ success: boolean; error?: string }>
+  }
+  pluginConfigAPI: {
+    readPlugin: (pluginId: string) => Promise<Record<string, unknown>>
+    writeKey: (pluginId: string, key: string, value: unknown) => Promise<{ success: boolean; error?: string }>
+    writeHotkeyOverride: (pluginId: string, action: string, combo: string) => Promise<{ success: boolean; error?: string }>
   }
   dialogAPI: {
     selectDir: () => Promise<string | null>

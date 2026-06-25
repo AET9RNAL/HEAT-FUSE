@@ -17,6 +17,8 @@ import uvicorn
 if TYPE_CHECKING:
     from fuse.core.host import PluginHost, DiscoveredPlugin
 
+from fuse.ui.config_schema import serialize_schema
+
 _ASSETS_DIR = Path(__file__).resolve().parent.parent / "assets"
 
 _FUSE_FONTS = [
@@ -74,11 +76,14 @@ class FuseCore:
             # Send current plugin list so late-connecting clients are hydrated.
             if self._host is not None:
                 for entry in self._host.list_plugins():
+                    pid = entry["plugin_id"]
+                    config_schema, config_values = self._schema_and_values_for(pid)
                     await websocket.send_text(json.dumps({
                         "type": "plugin:registered",
                         **entry,
-                        "configSchema": [],
-                        "hotkeys": self._hotkeys_for(entry["plugin_id"]),
+                        "configSchema": config_schema,
+                        "configValues": config_values,
+                        "hotkeys": self._hotkeys_for(pid),
                     }))
 
             # Main dispatch loop.
@@ -166,7 +171,36 @@ class FuseCore:
         return {"ok": True, "plugin_id": plugin_id, "enabled": enabled}
 
     def _rpc_hotkey_rebind(self, params: dict) -> dict:
-        # TODO: wire into HotkeyRegistry when rebind persistence is implemented
+        if self._host is None:
+            return {"ok": False}
+        plugin_id = params.get("plugin_id", "")
+        action    = params.get("action", "")
+        new_combo = params.get("combo", "")
+        if not (plugin_id and action and new_combo):
+            return {"ok": False, "error": "missing params"}
+
+        # Find the current binding for this action/owner pair.
+        registry = self._host.hotkeys
+        current = next(
+            (b for b in registry.list_bindings(owner=plugin_id) if b["label"] == action or b.get("action") == action),
+            None,
+        )
+        if current is None:
+            return {"ok": False, "error": f"action {action!r} not found for {plugin_id!r}"}
+
+        old_mods, old_key = current["mods"], current["key"]
+        ok = registry.reregister(old_mods, old_key, new_combo)
+        if not ok:
+            return {"ok": False, "error": "rebind conflict or action not found"}
+
+        # Persist override to fuse_host.json.
+        host_cfg = self._host.host_config
+        state = self._host.host_state
+        overrides = state.setdefault("hotkey_overrides", {})
+        overrides.setdefault(plugin_id, {})[action] = new_combo
+        host_cfg.save(state)
+
+        self._push_hotkey_rebound(plugin_id, action, new_combo)
         return {"ok": True}
 
     # ------------------------------------------------------------------
@@ -174,17 +208,33 @@ class FuseCore:
     # ------------------------------------------------------------------
 
     def _hotkeys_for(self, plugin_id: str) -> list:
-        if self._host is None:
-            return []
-        spec = self._host._discovered.get(plugin_id)
+        """Return live registry hotkeys for plugin, falling back to manifest."""
+        if self._host is not None:
+            live = self._host.hotkeys.list_bindings(owner=plugin_id)
+            if live:
+                return [{"action": b["label"], "combo": b["combo"], "label": b["label"]} for b in live]
+        # Fallback: manifest hotkeys (no labels from registry yet).
+        spec = self._host._discovered.get(plugin_id) if self._host else None
         if spec is None:
             return []
         return [
-            {"action": action, "combo": combo}
+            {"action": action, "combo": combo, "label": action}
             for action, combo in spec.manifest.get("hotkeys", {}).items()
         ]
 
+    def _schema_and_values_for(self, plugin_id: str) -> tuple[list, dict]:
+        """Return (serialized configSchema, configValues snapshot) for a plugin."""
+        if self._host is None:
+            return [], {}
+        ctx = self._host._context_map.get(plugin_id)
+        if ctx is None:
+            return [], {}
+        schema = serialize_schema(ctx.config._schema) if ctx.config._schema else []
+        values = ctx.config.snapshot() if hasattr(ctx.config, "snapshot") else {}
+        return schema, values
+
     def notify_plugin_registered(self, spec: "DiscoveredPlugin", status: str) -> None:
+        config_schema, config_values = self._schema_and_values_for(spec.plugin_id)
         payload = json.dumps({
             "type": "plugin:registered",
             "plugin_id": spec.plugin_id,
@@ -193,11 +243,38 @@ class FuseCore:
             "description": spec.description,
             "author": spec.author,
             "status": status,
-            "configSchema": [],
-            "hotkeys": [
-                {"action": a, "combo": c}
-                for a, c in spec.manifest.get("hotkeys", {}).items()
-            ],
+            "configSchema": config_schema,
+            "configValues": config_values,
+            "hotkeys": self._hotkeys_for(spec.plugin_id),
+        })
+        self._schedule_broadcast(payload)
+        self._install_config_watchers(spec.plugin_id)
+
+    def _install_config_watchers(self, plugin_id: str) -> None:
+        """Watch every config key of a plugin and push changes to WS clients."""
+        if self._host is None:
+            return
+        ctx = self._host._context_map.get(plugin_id)
+        if ctx is None or not hasattr(ctx.config, "watch"):
+            return
+        for key in ctx.config.snapshot():
+            ctx.config.watch(key, lambda v, k=key, pid=plugin_id: self._push_config_change(pid, k, v))
+
+    def _push_config_change(self, plugin_id: str, key: str, value: object) -> None:
+        payload = json.dumps({
+            "type": "config:value_changed",
+            "plugin_id": plugin_id,
+            "key": key,
+            "value": value,
+        })
+        self._schedule_broadcast(payload)
+
+    def _push_hotkey_rebound(self, plugin_id: str, action: str, combo: str) -> None:
+        payload = json.dumps({
+            "type": "hotkey:rebound",
+            "plugin_id": plugin_id,
+            "action": action,
+            "combo": combo,
         })
         self._schedule_broadcast(payload)
 

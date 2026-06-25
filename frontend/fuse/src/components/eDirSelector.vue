@@ -1,13 +1,18 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import Icons from './Icons.vue'
+import { useI18n } from '../composables/useI18n'
+
+const { t } = useI18n()
 
 const props = withDefaults(defineProps<{
   modelValue: string
   placeholder?: string
 }>(), {
-  placeholder: 'Select directory...',
+  placeholder: undefined,
 })
+
+const resolvedPlaceholder = computed(() => props.placeholder ?? t('components.dirSelector.placeholder'))
 
 const emit = defineEmits<{ 'update:modelValue': [value: string] }>()
 
@@ -50,7 +55,7 @@ onUnmounted(() => ro?.disconnect())
     :class="{ 'is-empty': !modelValue }"
     @click="pick"
   >
-    <span class="path-text">{{ modelValue || placeholder }}</span>
+    <span class="path-text">{{ modelValue || resolvedPlaceholder }}</span>
     <Icons kind="folder" size="small" class="folder-icon" />
     <svg
       v-if="svgPoints"
