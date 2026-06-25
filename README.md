@@ -1,6 +1,6 @@
-# ![alt text](assets/fuse_banner.png)
+# ![alt text](gh/fuse_banner.png)
 
-# ![alt text](assets/logo.png) FUSE - an external modding runtime for WoT:HEAT
+# ![alt text](gh/logo.png) FUSE - an external modding runtime for WoT:HEAT
 
 **FUSE** is **not** affiliated, endorsed, or approved by World of Tanks: HEAT or Wargaming. It is a third-party modding toolkit built around a lightweight Python plugin framework for real-time Windows overlays.
 
