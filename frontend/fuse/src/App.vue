@@ -10,12 +10,14 @@ import { useSuspension } from './composables/useSuspension'
 import { useFuseControl } from './composables/useFuseControl'
 import { useFuseLogs } from './composables/useFuseLogs'
 import { eventBus } from './events/eventBus'
+import { useI18n } from './composables/useI18n'
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { AnimatePresence, motion } from 'motion-v'
 import packageJson from '../package.json'
 
 const appStore = useAppStore()
 const pluginsStore = usePluginsStore()
+const { t } = useI18n()
 useSuspension()
 useFuseControl()
 const { register: registerLogs } = useFuseLogs()
@@ -36,6 +38,27 @@ function openPluginConfig({ plugin_id }: { plugin_id: string }) {
     activePluginConfigId.value = plugin_id
 }
 
+function handleUpdateFound({ version }: { version: string }) {
+    showNotification({
+        title: t('components.updateProgress.notifFoundTitle'),
+        message: t('components.updateProgress.notifFoundMessage', { version }),
+    })
+}
+
+function handleUpdateDownloading() {
+    showNotification({
+        title: t('components.updateProgress.notifDownloadingTitle'),
+        message: t('components.updateProgress.notifDownloadingMessage'),
+    })
+}
+
+function handleUpdateInstalled() {
+    showNotification({
+        title: t('components.updateProgress.notifReadyTitle'),
+        message: t('components.updateProgress.notifReadyMessage'),
+    })
+}
+
 onMounted(() => {
     registerLogs()
     appStore.appVersion = packageJson.version
@@ -43,11 +66,17 @@ onMounted(() => {
     if (dir) appStore.scanGameDir(dir)
     eventBus.on('notification', showNotification)
     eventBus.on('plugin-config:open', openPluginConfig)
+    eventBus.on('update:found', handleUpdateFound)
+    eventBus.on('update:downloading', handleUpdateDownloading)
+    eventBus.on('update:installed', handleUpdateInstalled)
 })
 
 onUnmounted(() => {
     eventBus.off('notification', showNotification)
     eventBus.off('plugin-config:open', openPluginConfig)
+    eventBus.off('update:found', handleUpdateFound)
+    eventBus.off('update:downloading', handleUpdateDownloading)
+    eventBus.off('update:installed', handleUpdateInstalled)
 })
 </script>
 

@@ -29,6 +29,7 @@ export type IconKind =
   | 'list'
   | 'arrow-left'
   | 'filter'
+  | 'download'
 </script>
 
 <script setup lang="ts">

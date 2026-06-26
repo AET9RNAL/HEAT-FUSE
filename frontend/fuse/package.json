@@ -84,6 +84,11 @@
       "package.json"
     ],
     "asar": true,
+    "publish": {
+      "provider": "github",
+      "owner": "AET3RNAL",
+      "repo": "HEAT-FUSE"
+    },
     "win": {
       "target": [
         {

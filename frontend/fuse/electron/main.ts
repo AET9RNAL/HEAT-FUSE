@@ -1,4 +1,5 @@
 import { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, safeStorage, powerMonitor, shell, dialog } from 'electron'
+import { autoUpdater } from 'electron-updater'
 import { spawn, execFile, type ChildProcess } from 'node:child_process'
 import { promisify } from 'node:util'
 
@@ -515,6 +516,102 @@ app.whenReady().then(() => {
       return { success: false, error: (e as Error).message }
     }
   })
+
+  // ── Auto-updater ─────────────────────────────────────────────────────────
+
+  if (!VITE_DEV_SERVER_URL) {
+    autoUpdater.autoDownload = false
+    autoUpdater.autoInstallOnAppQuit = true
+
+    autoUpdater.on('checking-for-update', () => {
+      win?.webContents.send('update:checking')
+    })
+    autoUpdater.on('update-available', (info) => {
+      win?.webContents.send('update:available', {
+        version: info.version,
+        releaseNotes: info.releaseNotes ?? '',
+        releaseDate: info.releaseDate,
+      })
+    })
+    autoUpdater.on('update-not-available', (info) => {
+      win?.webContents.send('update:not-available', { version: info.version })
+    })
+    autoUpdater.on('download-progress', (progress) => {
+      win?.webContents.send('update:progress', {
+        percent: progress.percent,
+        bytesPerSecond: progress.bytesPerSecond,
+        transferred: progress.transferred,
+        total: progress.total,
+      })
+    })
+    autoUpdater.on('update-downloaded', (info) => {
+      win?.webContents.send('update:downloaded', {
+        version: info.version,
+        releaseDate: info.releaseDate,
+      })
+    })
+    autoUpdater.on('error', (err) => {
+      win?.webContents.send('update:error', { message: err.message || 'Unknown error' })
+    })
+  }
+
+  ipcMain.handle('update:check', async () => {
+    if (VITE_DEV_SERVER_URL) {
+      setTimeout(() => {
+        win?.webContents.send('update:available', {
+          version: '99.0.0',
+          releaseNotes: '• Dev mode mock update',
+          releaseDate: new Date().toISOString(),
+        })
+      }, 800)
+      return { success: true }
+    }
+    try {
+      const result = await autoUpdater.checkForUpdates()
+      return { success: true, updateInfo: result?.updateInfo }
+    } catch (err: unknown) {
+      return { success: false, error: (err as Error).message || 'check_failed' }
+    }
+  })
+
+  ipcMain.handle('update:download', async () => {
+    if (VITE_DEV_SERVER_URL) {
+      let progress = 0
+      const interval = setInterval(() => {
+        progress += 10
+        win?.webContents.send('update:progress', {
+          percent: progress,
+          bytesPerSecond: 1024 * 1024 * 2.5,
+          transferred: progress * 1024 * 100,
+          total: 1024 * 1024 * 10,
+        })
+        if (progress >= 100) {
+          clearInterval(interval)
+          setTimeout(() => {
+            win?.webContents.send('update:downloaded', {
+              version: '99.0.0',
+              releaseDate: new Date().toISOString(),
+            })
+          }, 300)
+        }
+      }, 200)
+      return { success: true }
+    }
+    try {
+      await autoUpdater.downloadUpdate()
+      return { success: true }
+    } catch (err: unknown) {
+      return { success: false, error: (err as Error).message }
+    }
+  })
+
+  ipcMain.handle('update:install', () => {
+    if (VITE_DEV_SERVER_URL) return { success: true }
+    setImmediate(() => autoUpdater.quitAndInstall(false, true))
+    return { success: true }
+  })
+
+  // ─────────────────────────────────────────────────────────────────────────
 
   ipcMain.handle('game:scan-dir', (_event, dirPath: string) => {
     try {

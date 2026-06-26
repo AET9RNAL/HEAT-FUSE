@@ -71,6 +71,18 @@ interface Window {
     onHostChanged: (cb: (cfg: { disabled_plugins: string[] }) => void) => void
     offHostChanged: () => void
   }
+  updateAPI: {
+    check: () => Promise<{ success: boolean; updateInfo?: unknown; error?: string }>
+    download: () => Promise<{ success: boolean; error?: string }>
+    install: () => Promise<{ success: boolean }>
+    onChecking: (cb: () => void) => void
+    onAvailable: (cb: (info: { version: string; releaseNotes: string; releaseDate: string }) => void) => void
+    onNotAvailable: (cb: (info: { version: string }) => void) => void
+    onProgress: (cb: (p: { percent: number; bytesPerSecond: number; transferred: number; total: number }) => void) => void
+    onDownloaded: (cb: (info: { version: string; releaseDate: string }) => void) => void
+    onError: (cb: (err: { message: string }) => void) => void
+    offAll: () => void
+  }
   gameAPI: {
     scanDir: (dirPath: string) => Promise<{ version?: string; hasProject: boolean; error?: string }>
     checkDebugger: (dirPath: string) => Promise<{ success: boolean; enabled?: boolean; error?: string }>

@@ -10,7 +10,8 @@
         "close": "Close",
         "minimize": "Minimize",
         "maximize": "Maximize",
-        "windowControls": "Window controls"
+        "windowControls": "Window controls",
+        "updateAvailable": "Update available - click to download"
     },
     "appnav": {
         "home": "Home",
@@ -116,6 +117,15 @@
                 "showInExplorer": "Show in Explorer",
                 "delete": "Delete"
             }
+        },
+        "updateProgress": {
+            "updating": "Updating",
+            "notifFoundTitle": "Update Found",
+            "notifFoundMessage": "v{version} is ready to download",
+            "notifDownloadingTitle": "Downloading Update",
+            "notifDownloadingMessage": "Praying nothing crashes...",
+            "notifReadyTitle": "Update Ready",
+            "notifReadyMessage": "Restarting to apply..."
         },
         "console": {
             "searchPlaceholder": "Search logs...",

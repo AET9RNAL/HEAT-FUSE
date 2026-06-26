@@ -20,6 +20,11 @@ type Events = {
     // Notifications
     'notification': { title?: string; message: string }
 
+    // Update lifecycle
+    'update:found':       { version: string }
+    'update:downloading': void
+    'update:installed':   void
+
     // Plugin lifecycle
     'fuse:stalled': { stale_seconds: number }
     'plugin:registered': { plugin_id: string; name: string; version: string; description: string; status: string; configSchema: unknown[]; hotkeys: { action: string; combo: string }[] }

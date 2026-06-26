@@ -80,6 +80,31 @@ contextBridge.exposeInMainWorld('pluginConfigAPI', {
     ipcRenderer.invoke('hotkey:write-override', pluginId, action, combo),
 })
 
+contextBridge.exposeInMainWorld('updateAPI', {
+  check: (): Promise<{ success: boolean; updateInfo?: unknown; error?: string }> =>
+    ipcRenderer.invoke('update:check'),
+  download: (): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke('update:download'),
+  install: (): Promise<{ success: boolean }> =>
+    ipcRenderer.invoke('update:install'),
+  onChecking: (cb: () => void) =>
+    ipcRenderer.on('update:checking', () => cb()),
+  onAvailable: (cb: (info: { version: string; releaseNotes: string; releaseDate: string }) => void) =>
+    ipcRenderer.on('update:available', (_e, data) => cb(data)),
+  onNotAvailable: (cb: (info: { version: string }) => void) =>
+    ipcRenderer.on('update:not-available', (_e, data) => cb(data)),
+  onProgress: (cb: (p: { percent: number; bytesPerSecond: number; transferred: number; total: number }) => void) =>
+    ipcRenderer.on('update:progress', (_e, data) => cb(data)),
+  onDownloaded: (cb: (info: { version: string; releaseDate: string }) => void) =>
+    ipcRenderer.on('update:downloaded', (_e, data) => cb(data)),
+  onError: (cb: (err: { message: string }) => void) =>
+    ipcRenderer.on('update:error', (_e, data) => cb(data)),
+  offAll: () =>
+    ['update:checking', 'update:available', 'update:not-available',
+     'update:progress', 'update:downloaded', 'update:error']
+      .forEach(ch => ipcRenderer.removeAllListeners(ch)),
+})
+
 contextBridge.exposeInMainWorld('gameAPI', {
   scanDir: (dirPath: string): Promise<{ version?: string; hasProject: boolean; error?: string }> =>
     ipcRenderer.invoke('game:scan-dir', dirPath),

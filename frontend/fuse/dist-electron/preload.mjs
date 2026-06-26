@@ -52,6 +52,25 @@ electron.contextBridge.exposeInMainWorld("pluginConfigAPI", {
 	writeKey: (pluginId, key, value) => electron.ipcRenderer.invoke("config:plugin:write-key", pluginId, key, value),
 	writeHotkeyOverride: (pluginId, action, combo) => electron.ipcRenderer.invoke("hotkey:write-override", pluginId, action, combo)
 });
+electron.contextBridge.exposeInMainWorld("updateAPI", {
+	check: () => electron.ipcRenderer.invoke("update:check"),
+	download: () => electron.ipcRenderer.invoke("update:download"),
+	install: () => electron.ipcRenderer.invoke("update:install"),
+	onChecking: (cb) => electron.ipcRenderer.on("update:checking", () => cb()),
+	onAvailable: (cb) => electron.ipcRenderer.on("update:available", (_e, data) => cb(data)),
+	onNotAvailable: (cb) => electron.ipcRenderer.on("update:not-available", (_e, data) => cb(data)),
+	onProgress: (cb) => electron.ipcRenderer.on("update:progress", (_e, data) => cb(data)),
+	onDownloaded: (cb) => electron.ipcRenderer.on("update:downloaded", (_e, data) => cb(data)),
+	onError: (cb) => electron.ipcRenderer.on("update:error", (_e, data) => cb(data)),
+	offAll: () => [
+		"update:checking",
+		"update:available",
+		"update:not-available",
+		"update:progress",
+		"update:downloaded",
+		"update:error"
+	].forEach((ch) => electron.ipcRenderer.removeAllListeners(ch))
+});
 electron.contextBridge.exposeInMainWorld("gameAPI", {
 	scanDir: (dirPath) => electron.ipcRenderer.invoke("game:scan-dir", dirPath),
 	checkDebugger: (dirPath) => electron.ipcRenderer.invoke("game:check-debugger", dirPath),
