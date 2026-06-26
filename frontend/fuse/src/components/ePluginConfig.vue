@@ -173,7 +173,7 @@ function getCombo(action: string): string {
             :exit="{ opacity: 0, scale: 0.96, y: -8 }"
             :transition="{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }"
         >
-            <div ref="panelEl" class="plugin-config-panel">
+            <div ref="panelEl" class="plugin-config-panel bb-weak">
                 <!-- ::before provides backdrop-filter, panel-inner sits above it -->
                 <div class="panel-inner">
                     <!-- Header -->

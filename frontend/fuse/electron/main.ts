@@ -35,7 +35,7 @@ const PATHS: Record<string, string> = {
   pluginsUser: IS_DEV ? path.join(REPO_ROOT, 'backend', 'plugins')
                       : path.join(process.resourcesPath, 'plugins'),
   trayIcon:    IS_DEV ? path.join(__dirname, '..', 'build', 'icon.png')
-                      : path.join(process.resourcesPath, 'icon.ico'),
+                      : path.join(process.resourcesPath, 'icon.png'),
   backendExe:  path.join(process.resourcesPath, 'fuse-backend.dist', 'fuse-backend.exe'),
   preload:     path.join(__dirname, 'preload.mjs'),
 }

@@ -51,7 +51,7 @@ from fuse.core.resolver import resolve_load_order
 from fuse.core.events import EventBus
 from fuse.core.services import ServiceRegistry
 
-HOST_VERSION = "2.4.0"
+HOST_VERSION = "2.4.1"
 
 MouseCallback = Callable[[int, int, "pynmouse.Button", bool], None]
 
@@ -216,6 +216,8 @@ class PluginHost:
         except Exception as e:
             plugin_logger.exception(f"setup failed: {e}")
             self._plugin_states[spec.plugin_id] = PluginState.ERROR
+            if self._server is not None:
+                self._server.notify_plugin_status_changed(spec.plugin_id, PluginState.ERROR.value)
             return
 
         if not cfg._loaded:
@@ -414,7 +416,7 @@ class PluginHost:
                 "author":      spec.author,
                 "homepage":    spec.homepage,
                 "tags":        list(spec.tags),
-                "state":       self._plugin_states.get(plugin_id, PluginState.PENDING).value,
+                "status":      self._plugin_states.get(plugin_id, PluginState.PENDING).value,
             })
         return result
 
