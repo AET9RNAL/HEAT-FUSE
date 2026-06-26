@@ -22,6 +22,24 @@ export const RENDERER_DIST = path.join(process.env.APP_ROOT, 'dist')
 
 process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL ? path.join(process.env.APP_ROOT, 'public') : RENDERER_DIST
 
+const IS_DEV   = !!VITE_DEV_SERVER_URL
+const REPO_ROOT = path.join(process.env.APP_ROOT!, '..', '..') // HEAT_SACLOS/ — only meaningful in dev
+
+const PATHS: Record<string, string> = {
+  configs:     IS_DEV ? path.join(REPO_ROOT, 'backend', 'data', 'configs')
+                      : path.join(process.resourcesPath, 'fuse-backend.dist', 'data', 'configs'),
+  fileBrowser: IS_DEV ? path.join(REPO_ROOT, 'backend')
+                      : process.resourcesPath,
+  pluginsCore: IS_DEV ? path.join(REPO_ROOT, 'backend', 'fuse', 'plugins')
+                      : path.join(process.resourcesPath, 'fuse', 'plugins'),
+  pluginsUser: IS_DEV ? path.join(REPO_ROOT, 'backend', 'plugins')
+                      : path.join(process.resourcesPath, 'plugins'),
+  trayIcon:    IS_DEV ? path.join(__dirname, '..', 'build', 'icon.png')
+                      : path.join(process.resourcesPath, 'icon.ico'),
+  backendExe:  path.join(process.resourcesPath, 'fuse-backend.dist', 'fuse-backend.exe'),
+  preload:     path.join(__dirname, 'preload.mjs'),
+}
+
 
 // Plugin scanning
 
@@ -43,19 +61,6 @@ interface HostConfig {
   hotkey_overrides?: Record<string, Record<string, string>>
 }
 
-function getConfigsDir() {
-  const isDev = !!VITE_DEV_SERVER_URL
-  return isDev
-    ? path.join(process.env.APP_ROOT!, '..', '..', 'backend', 'data', 'configs')
-    : path.join(app.getPath('userData'), 'configs')
-}
-
-function getFileBrowserRoot(): string {
-  return VITE_DEV_SERVER_URL
-    ? path.join(process.env.APP_ROOT!, '..', '..', 'backend')
-    : process.resourcesPath
-}
-
 function assertWithinRoot(target: string, root: string) {
   const a = path.resolve(target)
   const r = path.resolve(root)
@@ -63,26 +68,14 @@ function assertWithinRoot(target: string, root: string) {
 }
 
 function readHostConfig(): HostConfig {
-  const p = path.join(getConfigsDir(), 'fuse_host.json')
+  const p = path.join(PATHS.configs, 'fuse_host.json')
   if (!fs.existsSync(p)) return { disabled_plugins: [], enabled_plugins: null, extra_plugin_dirs: [] }
   return JSON.parse(fs.readFileSync(p, 'utf-8')) as HostConfig
 }
 
 function writeHostConfig(cfg: HostConfig) {
-  const dir = getConfigsDir()
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
-  fs.writeFileSync(path.join(dir, 'fuse_host.json'), JSON.stringify(cfg, null, 2), 'utf-8')
-}
-
-function getPluginDirs() {
-  const isDev = !!VITE_DEV_SERVER_URL
-  const root = isDev
-    ? path.join(process.env.APP_ROOT!, '..', '..')  // repo root: HEAT_SACLOS/
-    : process.resourcesPath
-  return {
-    core: path.join(root, isDev ? 'backend' : '', 'fuse', 'plugins'),
-    user: path.join(root, isDev ? 'backend' : '', 'plugins'),
-  }
+  if (!fs.existsSync(PATHS.configs)) fs.mkdirSync(PATHS.configs, { recursive: true })
+  fs.writeFileSync(path.join(PATHS.configs, 'fuse_host.json'), JSON.stringify(cfg, null, 2), 'utf-8')
 }
 
 function scanPluginsDir(dir: string) {
@@ -210,7 +203,7 @@ function applyDiscordActivity(activity: DiscordActivity | null) {
   const normalized: DiscordActivity = {
     startTimestamp: discordStartTime,
     largeImageKey: 'fuse_logo',
-    largeImageText: 'H.E.A.T. FUSE',
+    largeImageText: 'WoT HEAT FUSE',
     instance: false,
     ...activity,
   }
@@ -223,10 +216,7 @@ function applyDiscordActivity(activity: DiscordActivity | null) {
 
 function createTray() {
   if (tray) return
-  const iconPath = VITE_DEV_SERVER_URL
-    ? path.join(__dirname, '..', 'build', 'icon.png')
-    : path.join(process.resourcesPath, 'icon.ico')
-  const icon = nativeImage.createFromPath(iconPath)
+  const icon = nativeImage.createFromPath(PATHS.trayIcon)
   tray = new Tray(icon)
   tray.setToolTip('FUSE')
   tray.setContextMenu(Menu.buildFromTemplate([
@@ -256,7 +246,7 @@ function createWindow() {
       nodeIntegration: false,
       contextIsolation: true,
       devTools: !__RELEASE__,
-      preload: path.join(__dirname, 'preload.mjs'),
+      preload: PATHS.preload,
     },
   })
 
@@ -368,19 +358,17 @@ app.whenReady().then(() => {
   ipcMain.handle('fuse:spawn', async () => {
     if (fuseProcess) return { success: false, error: 'already running' }
 
-    const isDev = !!VITE_DEV_SERVER_URL
     let executable: string
     let args: string[]
     let spawnEnv: NodeJS.ProcessEnv
 
-    if (isDev) {
-      const backendRoot = path.join(process.env.APP_ROOT!, '..', '..', 'backend')
-      const venvPython = path.join(backendRoot, '.venv', 'Scripts', 'python.exe')
-      const requirementsTxt = path.join(backendRoot, 'fuse', 'requirements.txt')
+    if (IS_DEV) {
+      const venvPython      = path.join(PATHS.fileBrowser, '.venv', 'Scripts', 'python.exe')
+      const requirementsTxt = path.join(PATHS.fileBrowser, 'fuse', 'requirements.txt')
 
       try {
         if (!fs.existsSync(venvPython)) {
-          await execFileAsync('python', ['-m', 'venv', path.join(backendRoot, '.venv')])
+          await execFileAsync('python', ['-m', 'venv', path.join(PATHS.fileBrowser, '.venv')])
         }
         await execFileAsync(venvPython, ['-m', 'pip', 'install', '-r', requirementsTxt, '--quiet'])
       } catch (e: unknown) {
@@ -388,17 +376,14 @@ app.whenReady().then(() => {
       }
 
       executable = venvPython
-      args = [path.join(backendRoot, 'fuse', 'run_fuse.py')]
-      spawnEnv = { ...process.env, PYTHONPATH: backendRoot }
+      args       = [path.join(PATHS.fileBrowser, 'fuse', 'run_fuse.py')]
+      spawnEnv   = { ...process.env, PYTHONPATH: PATHS.fileBrowser }
     } else {
-      executable = path.join(process.resourcesPath, 'fuse-backend.dist', 'fuse-backend.exe')
-      args = []
-      spawnEnv = {
+      executable = PATHS.backendExe
+      args       = []
+      spawnEnv   = {
         ...process.env,
-        FUSE_PLUGIN_DIRS: [
-          path.join(process.resourcesPath, 'fuse', 'plugins'),
-          path.join(process.resourcesPath, 'plugins'),
-        ].join(';'),
+        FUSE_PLUGIN_DIRS: [PATHS.pluginsCore, PATHS.pluginsUser].join(';'),
       }
     }
 
@@ -500,8 +485,7 @@ app.whenReady().then(() => {
   }))
 
   ipcMain.handle('plugins:scan', () => {
-    const { core, user } = getPluginDirs()
-    return [...scanPluginsDir(core), ...scanPluginsDir(user)]
+    return [...scanPluginsDir(PATHS.pluginsCore), ...scanPluginsDir(PATHS.pluginsUser)]
   })
 
   ipcMain.handle('plugins:show-file', (_event, filePath: string) => {
@@ -525,10 +509,11 @@ app.whenReady().then(() => {
   ipcMain.handle('config:host:read', () => readHostConfig())
 
   // Watch fuse_host.json and push changes to renderer
-  const hostCfgPath = path.join(getConfigsDir(), 'fuse_host.json')
-  if (fs.existsSync(hostCfgPath)) {
+  {
+    if (!fs.existsSync(PATHS.configs)) fs.mkdirSync(PATHS.configs, { recursive: true })
     let debounce: ReturnType<typeof setTimeout> | null = null
-    fs.watch(hostCfgPath, () => {
+    fs.watch(PATHS.configs, (_event: unknown, filename: unknown) => {
+      if (filename !== 'fuse_host.json') return
       if (debounce) clearTimeout(debounce)
       debounce = setTimeout(() => {
         win?.webContents.send('config:host:changed', readHostConfig())
@@ -608,19 +593,12 @@ app.whenReady().then(() => {
     connected: discordReady,
   }))
 
-  ipcMain.handle('app:open-backend-dir', () => {
-    const isDev = !!VITE_DEV_SERVER_URL
-    const dir = isDev
-      ? path.join(process.env.APP_ROOT!, '..', '..', 'backend')
-      : process.resourcesPath
-    return shell.openPath(dir)
-  })
+  ipcMain.handle('app:open-backend-dir', () => shell.openPath(PATHS.fileBrowser))
 
-  ipcMain.handle('fs:get-root', () => getFileBrowserRoot())
+  ipcMain.handle('fs:get-root', () => PATHS.fileBrowser)
 
   ipcMain.handle('fs:list-dir', async (_event, dirPath: string) => {
-    const root = getFileBrowserRoot()
-    assertWithinRoot(dirPath, root)
+    assertWithinRoot(dirPath, PATHS.fileBrowser)
     const names = await fs.promises.readdir(dirPath)
     const entries = await Promise.all(names.map(async (name) => {
       const full = path.join(dirPath, name)
@@ -633,23 +611,21 @@ app.whenReady().then(() => {
   })
 
   ipcMain.handle('fs:read-file', async (_event, filePath: string) => {
-    const root = getFileBrowserRoot()
-    assertWithinRoot(filePath, root)
+    assertWithinRoot(filePath, PATHS.fileBrowser)
     const stat = await fs.promises.stat(filePath)
     if (stat.size > 1024 * 1024) throw new Error('File too large to preview (>1 MB)')
     return fs.promises.readFile(filePath, 'utf-8')
   })
 
   ipcMain.handle('fs:write-file', async (_event, filePath: string, content: string) => {
-    const root = getFileBrowserRoot()
-    assertWithinRoot(filePath, root)
+    assertWithinRoot(filePath, PATHS.fileBrowser)
     await fs.promises.writeFile(filePath, content, 'utf-8')
   })
 
 
   ipcMain.handle('config:plugin:read', (_event, pluginId: string): Record<string, unknown> => {
     try {
-      const p = path.join(getConfigsDir(), `fuse_${pluginId}.json`)
+      const p = path.join(PATHS.configs, `fuse_${pluginId}.json`)
       if (!fs.existsSync(p)) return {}
       return JSON.parse(fs.readFileSync(p, 'utf-8')) as Record<string, unknown>
     } catch { return {} }
@@ -657,9 +633,8 @@ app.whenReady().then(() => {
 
   ipcMain.handle('config:plugin:write-key', (_event, pluginId: string, key: string, value: unknown) => {
     try {
-      const dir = getConfigsDir()
-      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
-      const p = path.join(dir, `fuse_${pluginId}.json`)
+      if (!fs.existsSync(PATHS.configs)) fs.mkdirSync(PATHS.configs, { recursive: true })
+      const p = path.join(PATHS.configs, `fuse_${pluginId}.json`)
       const current: Record<string, unknown> = fs.existsSync(p)
         ? JSON.parse(fs.readFileSync(p, 'utf-8')) as Record<string, unknown>
         : {}

@@ -7,7 +7,7 @@
   "extra_plugin_dirs": [],
   "hotkey_overrides": {
     "host": {
-      "Toggle Calibrate/Lock": "ctrl+s"
+      "Toggle Calibrate/Lock": "ctrl+l"
     }
   }
 }
