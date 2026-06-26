@@ -227,5 +227,8 @@ class FusePlugin(ABC):
     def teardown(self) -> None:  # pragma: no cover
         """Persist state and release resources."""
 
+    def set_overlay_visible(self, visible: bool) -> None:  # pragma: no cover
+        """Show or hide this plugin's overlays. Called by the host on game-focus change."""
+
 
 __all__ = ["FusePlugin", "FuseContext", "HotkeyRegistry", "PluginAssets"]

@@ -116,6 +116,91 @@ let minimizeToTrayOnClose = false
 let fuseProcess: ChildProcess | null = null
 let fusePort: number | null = null
 
+// Game process watcher 
+
+let gameWatcher: ReturnType<typeof setInterval> | null = null
+let focusWatcher: ReturnType<typeof setInterval> | null = null
+let gameDetected = false
+let gameFocused = false
+
+// Persistent PowerShell session for Win32 foreground-window queries.
+let psRunner: ChildProcess | null = null
+let psBuffer = ''
+const psPending: Array<(result: string) => void> = []
+// Sentinels: PowerShell echoes typed stdin back to stdout, so we can't write
+// the literal markers — we'd find them in the echo instead of the real output.
+// Instead, decode them at runtime via base64; the literal strings then only
+// appear in the actual command output stream, not in the echoed input.
+const PS_START = '__FUSE_START__'
+const PS_END = '__FUSE_END__'
+const PS_START_B64 = Buffer.from(PS_START).toString('base64')
+const PS_END_B64 = Buffer.from(PS_END).toString('base64')
+// Compact inline Add-Type — guard prevents recompilation after first call.
+const PS_FW_DEF = `if(-not('FW'-as[type])){Add-Type 'using System;using System.Runtime.InteropServices;public class FW{[DllImport("user32")]public static extern IntPtr GetForegroundWindow();[DllImport("user32")]public static extern uint GetWindowThreadProcessId(IntPtr h,out uint p);}'}`
+
+function _ensurePsRunner() {
+  if (psRunner && !psRunner.killed) return
+  psBuffer = ''
+  // No -Command flag — stdin processed line-by-line. -NoLogo suppresses banner on stdout.
+  psRunner = spawn('powershell', ['-NoProfile', '-NonInteractive', '-NoLogo'], {
+    stdio: ['pipe', 'pipe', 'ignore'],
+    windowsHide: true,
+  })
+  psRunner.stdout?.on('data', (chunk: Buffer) => {
+    psBuffer += chunk.toString()
+    let endIdx: number
+    while ((endIdx = psBuffer.indexOf(PS_END)) !== -1) {
+      // PowerShell echoes the prompt + typed input back to stdout, so strip
+      // everything before our START sentinel to isolate the real result.
+      const startIdx = psBuffer.indexOf(PS_START)
+      const result = (startIdx !== -1 && startIdx < endIdx)
+        ? psBuffer.slice(startIdx + PS_START.length, endIdx).trim()
+        : psBuffer.slice(0, endIdx).trim()
+      psBuffer = psBuffer.slice(endIdx + PS_END.length).replace(/^\r?\n/, '')
+      psPending.shift()?.(result)
+    }
+  })
+  psRunner.on('exit', () => {
+    psRunner = null
+    psBuffer = ''
+    const drained = psPending.splice(0)
+    for (const cb of drained) cb('')
+  })
+}
+
+function _psRun(cmd: string): Promise<string> {
+  _ensurePsRunner()
+  return new Promise(resolve => {
+    psPending.push(resolve)
+    // try-catch ensures sentinel always arrives even if cmd throws.
+    // [Console]::Out.Flush() forces immediate flush of .NET's buffered stdout
+    // (piped stdout is block-buffered by default, not line-buffered).
+    // Decode sentinels at runtime; literal PS_START / PS_END never appear in
+    // the stdin line and therefore can't be confused with PowerShell's echo.
+    const decode = (b64: string) => `([Text.Encoding]::ASCII.GetString([Convert]::FromBase64String('${b64}')))`
+    psRunner!.stdin!.write(`Write-Output ${decode(PS_START_B64)}; try { ${cmd} } catch {}; Write-Output ${decode(PS_END_B64)}; [Console]::Out.Flush()\r\n`)
+  })
+}
+
+async function _checkGameProcess(): Promise<{ running: boolean; pid?: number }> {
+  return new Promise(resolve => {
+    execFile(
+      'tasklist',
+      ['/FI', 'IMAGENAME eq engine_launcher.exe', '/FO', 'CSV', '/NH'],
+      (_err, stdout) => {
+        if (!stdout.includes('engine_launcher.exe')) { resolve({ running: false }); return }
+        const m = stdout.match(/"engine_launcher\.exe","(\d+)"/)
+        resolve({ running: true, pid: m ? parseInt(m[1]) : undefined })
+      }
+    )
+  })
+}
+
+async function _checkForegroundProcess(): Promise<string> {
+  const cmd = `${PS_FW_DEF};$h=[FW]::GetForegroundWindow();$p=[uint32]0;[FW]::GetWindowThreadProcessId($h,[ref]$p)|Out-Null;(Get-Process -Id $p -EA 0).Name`
+  return (await _psRun(cmd)).toLowerCase()
+}
+
 
 const DISCORD_CLIENT_ID = '1519898189006897383'
 
@@ -313,6 +398,11 @@ let fuseCleanupDone = false
 app.on('before-quit', (event) => {
   isQuitting = true
   disconnectDiscord()
+
+  if (gameWatcher) { clearInterval(gameWatcher); gameWatcher = null }
+  if (focusWatcher) { clearInterval(focusWatcher); focusWatcher = null }
+  if (psRunner) { try { psRunner.kill() } catch { /* ignore */ } psRunner = null }
+
   if (fuseCleanupDone) return
   if (!fuseProcess) { fuseCleanupDone = true; return }
 
@@ -753,11 +843,43 @@ app.whenReady().then(() => {
     return { success: true }
   })
 
-  // ─────────────────────────────────────────────────────────────────────────
+  // Game process / focus watchers
+
+  ipcMain.handle('game:watch:set', (_event, enabled: boolean) => {
+    if (gameWatcher) { clearInterval(gameWatcher); gameWatcher = null }
+    if (!enabled) { gameDetected = false; return }
+
+    const poll = async () => {
+      const prev = gameDetected
+      const { running } = await _checkGameProcess()
+      gameDetected = running
+      if (!prev && running) win?.webContents.send('game:process:detected')
+      else if (prev && !running) win?.webContents.send('game:process:lost')
+    }
+    void poll()
+    gameWatcher = setInterval(() => void poll(), 2_000)
+  })
+
+  ipcMain.handle('game:focus:set', (_event, enabled: boolean) => {
+    if (focusWatcher) { clearInterval(focusWatcher); focusWatcher = null }
+    if (!enabled) { gameFocused = false; return }
+
+    const poll = async () => {
+      const inFocus = (await _checkForegroundProcess()) === 'engine_launcher'
+      if (inFocus !== gameFocused) {
+        gameFocused = inFocus
+        win?.webContents.send('game:focus:changed', inFocus)
+      }
+    }
+    void poll()
+    focusWatcher = setInterval(() => void poll(), 1_000)
+  })
+
+  //
 
   ipcMain.handle('game:scan-dir', (_event, dirPath: string) => {
     try {
-      let version: string | undefined
+      let version: string | undefined 
       const gameInfoPath = path.join(dirPath, 'game_info.xml')
       if (fs.existsSync(gameInfoPath)) {
         const xml = fs.readFileSync(gameInfoPath, 'utf-8')

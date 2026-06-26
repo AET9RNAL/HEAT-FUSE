@@ -111,6 +111,13 @@ interface Window {
     readFile: (filePath: string) => Promise<string>
     writeFile: (filePath: string, content: string) => Promise<void>
   }
+  gameProcessAPI: {
+    setWatchEnabled: (enabled: boolean) => Promise<void>
+    setFocusWatchEnabled: (enabled: boolean) => Promise<void>
+    onProcessDetected: (cb: () => void) => void
+    onProcessLost: (cb: () => void) => void
+    onFocusChanged: (cb: (inFocus: boolean) => void) => void
+  }
   fuseAPI: {
     spawn: () => Promise<{ success: boolean; pid?: number; port?: number; connectionToken?: string; error?: string }>
     kill: () => Promise<{ success: boolean }>

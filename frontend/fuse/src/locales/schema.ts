@@ -56,6 +56,11 @@ export interface TranslationSchema {
             checkUpdates: string
             discordRpc: string
         }
+        qol: {
+            title: string
+            startWithGame: string
+            hideOnFocusLoss: string
+        }
         notifications: {
             gameConfigChangedTitle: string
             gameConfigChangedMessage: string

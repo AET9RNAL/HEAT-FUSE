@@ -223,6 +223,23 @@ onUnmounted(() => ro?.disconnect())
         </div>
 
         <div class="section">
+          <h2 class="section-header">{{ t('appsettings.qol.title') }}</h2>
+          <div class="section-body">
+
+            <div class="setting-row">
+              <span class="setting-label">{{ t('appsettings.qol.startWithGame') }}</span>
+              <eCheckbox v-model="store.startWithGame" :width="18" :height="18" />
+            </div>
+
+            <div class="setting-row">
+              <span class="setting-label">{{ t('appsettings.qol.hideOnFocusLoss') }}</span>
+              <eCheckbox v-model="store.hideOnFocusLoss" :width="18" :height="18" />
+            </div>
+
+          </div>
+        </div>
+
+        <div class="section">
           <h2 class="section-header">{{ t('appsettings.keybindings.title') }}</h2>
           <div class="section-body">
             <div class="kb-table">

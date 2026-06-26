@@ -118,6 +118,8 @@ class FuseCore:
                 result = await self._rpc_set_enabled(params)
             elif method == "hotkey.rebind":
                 result = self._rpc_hotkey_rebind(params)
+            elif method == "overlay.setVisible":
+                result = await self._rpc_overlay_set_visible(params)
             else:
                 await ws.send_text(json.dumps({
                     "jsonrpc": "2.0", "id": rpc_id,
@@ -202,6 +204,24 @@ class FuseCore:
 
         self._push_hotkey_rebound(plugin_id, action, new_combo)
         return {"ok": True}
+
+    async def _rpc_overlay_set_visible(self, params: dict) -> dict:
+        if self._host is None:
+            return {"ok": False}
+        visible: bool = bool(params.get("visible", True))
+        loop = asyncio.get_event_loop()
+        future: asyncio.Future = loop.create_future()
+
+        def _do() -> None:
+            try:
+                self._host.set_overlays_visible(visible)  # type: ignore[union-attr]
+                loop.call_soon_threadsafe(future.set_result, None)
+            except Exception as exc:
+                loop.call_soon_threadsafe(future.set_exception, exc)
+
+        self._host.root.after(0, _do)
+        await asyncio.wait_for(future, timeout=5.0)
+        return {"ok": True, "visible": visible}
 
     # ------------------------------------------------------------------
     # Outgoing notifications (called from Tk thread)

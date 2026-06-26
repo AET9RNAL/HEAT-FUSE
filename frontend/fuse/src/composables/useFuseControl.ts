@@ -138,6 +138,19 @@ export function useFuseControl() {
     if (!_watcherSetUp) {
         _watcherSetUp = true
         const appStore = useAppStore()
+
+        window.gameProcessAPI?.onProcessDetected(() => {
+            if (appStore.startWithGame) appStore.enableFuse = true
+        })
+        window.gameProcessAPI?.onProcessLost(() => {
+            if (appStore.startWithGame) appStore.enableFuse = false
+        })
+        window.gameProcessAPI?.onFocusChanged((inFocus: boolean) => {
+            if (!appStore.hideOnFocusLoss || fuseState.value !== 'running') return
+            const { send } = useFuseConnection()
+            void send('overlay.setVisible', { visible: inFocus }).catch(() => {})
+        })
+
         watch(() => appStore.enableFuse, async (enabled) => {
             if (enabled) {
                 const ok = await startFuse()

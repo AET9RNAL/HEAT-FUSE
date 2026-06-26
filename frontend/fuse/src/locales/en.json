@@ -57,6 +57,11 @@
             "checkUpdates": "Check For Updates On Startup",
             "discordRpc": "Show Activity On Discord"
         },
+        "qol": {
+            "title": "Quality of Life",
+            "startWithGame": "Start FUSE With Game",
+            "hideOnFocusLoss": "Hide Overlays When Game Is Not In Focus"
+        },
         "notifications": {
             "gameConfigChangedTitle": "Game Configuration Changed",
             "gameConfigChangedMessage": "Restart the game for changes to take effect."

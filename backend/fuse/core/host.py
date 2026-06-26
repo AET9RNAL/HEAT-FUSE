@@ -51,7 +51,7 @@ from fuse.core.resolver import resolve_load_order
 from fuse.core.events import EventBus
 from fuse.core.services import ServiceRegistry
 
-HOST_VERSION = "2.4.1"
+HOST_VERSION = "2.5.0"
 
 MouseCallback = Callable[[int, int, "pynmouse.Button", bool], None]
 
@@ -382,6 +382,14 @@ class PluginHost:
     def get_plugin(self, plugin_id: str) -> Optional[FusePlugin]:
         """Return the loaded plugin with *plugin_id*, or ``None``."""
         return self._plugin_map.get(plugin_id)
+
+    def set_overlays_visible(self, visible: bool) -> None:
+        """Show or hide every active plugin's overlays (game-focus change)."""
+        for plugin in self.plugins:
+            try:
+                plugin.set_overlay_visible(visible)
+            except Exception as e:
+                _root_logger.exception(f"{plugin.name}: set_overlay_visible failed: {e}")
 
     def get_service(self, name: str) -> Optional[object]:
         """Return the service registered under *name*, or ``None``."""

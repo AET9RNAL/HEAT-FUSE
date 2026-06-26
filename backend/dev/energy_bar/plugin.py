@@ -219,6 +219,12 @@ class EnergyBarPlugin(FusePlugin):
         self._anim.advance(dt)
         self._panel.update(self._anim.get_image())
 
+    def set_overlay_visible(self, visible: bool) -> None:
+        if self.ctx and self.ctx.state == "calibrate":
+            return
+        if self._panel:
+            self._panel.show() if visible else self._panel.hide()
+
     def teardown(self) -> None:
         if self._panel:
             try:

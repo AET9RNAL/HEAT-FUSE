@@ -148,6 +148,19 @@ contextBridge.exposeInMainWorld('fsAPI', {
     ipcRenderer.invoke('fs:write-file', filePath, content),
 })
 
+contextBridge.exposeInMainWorld('gameProcessAPI', {
+  setWatchEnabled: (enabled: boolean): Promise<void> =>
+    ipcRenderer.invoke('game:watch:set', enabled),
+  setFocusWatchEnabled: (enabled: boolean): Promise<void> =>
+    ipcRenderer.invoke('game:focus:set', enabled),
+  onProcessDetected: (cb: () => void) =>
+    ipcRenderer.on('game:process:detected', () => cb()),
+  onProcessLost: (cb: () => void) =>
+    ipcRenderer.on('game:process:lost', () => cb()),
+  onFocusChanged: (cb: (inFocus: boolean) => void) =>
+    ipcRenderer.on('game:focus:changed', (_e, inFocus: boolean) => cb(inFocus)),
+})
+
 contextBridge.exposeInMainWorld('fuseAPI', {
   spawn: (): Promise<{ success: boolean; pid?: number; port?: number; connectionToken?: string; error?: string }> =>
     ipcRenderer.invoke('fuse:spawn'),
