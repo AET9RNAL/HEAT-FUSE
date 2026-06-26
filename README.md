@@ -17,8 +17,8 @@ Any modifications to FUSE that would allow reading, exposing, or exploiting clie
 ![Logo](https://img.shields.io/badge/-ELECTRON-f3f2f4?style=for-the-badge&logo=electron&logoColor=f3f2f4&labelColor=1D1D1D&color=1D1D1D)
 ![Logo](https://img.shields.io/badge/-VUE-f3f2f4?style=for-the-badge&logo=vue.js&logoColor=f3f2f4&labelColor=1D1D1D&color=1D1D1D)
 
-![Static Badge](https://img.shields.io/badge/RUNTIME_VERSION-2.3.0-1D1D1D?style=for-the-badge&labelColor=1D1D1D&color=434343)
-![Static Badge](https://img.shields.io/badge/LAUNCHER_VERSION-0.2.2-1D1D1D?style=for-the-badge&labelColor=1D1D1D&color=434343)
+![Static Badge](https://img.shields.io/badge/RUNTIME_VERSION-2.4.0-1D1D1D?style=for-the-badge&labelColor=1D1D1D&color=434343)
+![Static Badge](https://img.shields.io/badge/LAUNCHER_VERSION-0.4.0-1D1D1D?style=for-the-badge&labelColor=1D1D1D&color=434343)
 ---
 
 ## For Players
@@ -240,7 +240,7 @@ Each plugin must contain a `manifest.json` at the package root:
 | `author` | no | Display author shown in Plugin Manager. |
 | `description` | no | Short human-readable summary. |
 | `entry` | yes | `"module:ClassName"`. Module resolved relative to the plugin package. |
-| `min_host_version` | no | Minimum FUSE host version (current: `2.1.1`). |
+| `min_host_version` | no | Minimum FUSE host version (current: `2.4.0`). |
 | `dependencies` | no | Required plugin names. Supports versioned dict: `{"name": ">=1.0"}`. |
 | `optional_dependencies` | no | Soft load-order hints; missing plugins do not block loading. |
 | `hotkeys` | no | `{"logical_name": "combo"}` combos exposed via `ctx.hotkey_for()`. |
@@ -291,7 +291,7 @@ FUSE scans plugins from these sources. Earlier sources win on `plugin_id` collis
 After discovery the resolver:
 
 1. **Enable/disable filter** - `fuse_host.json` `disabled_plugins` excludes; non-null `enabled_plugins` is a whitelist.
-2. **Compatibility check** - `min_host_version` is compared against `HOST_VERSION` (`2.1.1`). Incompatible plugins are skipped.
+2. **Compatibility check** - `min_host_version` is compared against `HOST_VERSION` (`2.4.0`). Incompatible plugins are skipped.
 3. **Dependency filter** - missing or version-mismatched required deps drop the dependent plugin.
 4. **Topological sort** - required deps are hard edges; optional deps are soft edges. Providers always load before consumers.
 5. **Cycle detection** - cyclic dependencies are dropped with an error log.
