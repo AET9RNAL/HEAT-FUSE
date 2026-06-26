@@ -13,8 +13,6 @@ import { useI18n } from '../composables/useI18n'
 const store = useAppStore()
 const { t } = useI18n()
 
-// ── FUSE keybindings ──────────────────────────────────────────────────────────
-
 interface FuseHotkey {
     action: string
     label: string
@@ -214,6 +212,11 @@ onUnmounted(() => ro?.disconnect())
             <div class="setting-row">
               <span class="setting-label">{{ t('appsettings.general.checkUpdates') }}</span>
               <eCheckbox v-model="store.checkUpdatesOnStartup" :width="18" :height="18" />
+            </div>
+
+            <div class="setting-row">
+              <span class="setting-label">{{ t('appsettings.general.discordRpc') }}</span>
+              <eCheckbox v-model="store.discordRpc" :width="18" :height="18" />
             </div>
 
           </div>

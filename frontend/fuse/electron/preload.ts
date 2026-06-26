@@ -116,6 +116,38 @@ contextBridge.exposeInMainWorld('gameAPI', {
     ipcRenderer.invoke('game:disable-debugger', dirPath),
 })
 
+contextBridge.exposeInMainWorld('discordAPI', {
+  setEnabled: (enabled: boolean): Promise<{ success: boolean }> =>
+    ipcRenderer.invoke('discord:set-enabled', enabled),
+  setActivity: (activity: {
+    details?: string
+    state?: string
+    startTimestamp?: number
+    endTimestamp?: number
+    largeImageKey?: string
+    largeImageText?: string
+    smallImageKey?: string
+    smallImageText?: string
+    buttons?: { label: string; url: string }[]
+  } | null): Promise<{ success: boolean; connected: boolean }> =>
+    ipcRenderer.invoke('discord:set-activity', activity),
+  clearActivity: (): Promise<{ success: boolean }> =>
+    ipcRenderer.invoke('discord:clear-activity'),
+  status: (): Promise<{ enabled: boolean; connected: boolean }> =>
+    ipcRenderer.invoke('discord:status'),
+})
+
+contextBridge.exposeInMainWorld('fsAPI', {
+  getRoot: (): Promise<string> =>
+    ipcRenderer.invoke('fs:get-root'),
+  listDir: (dirPath: string): Promise<Array<{ name: string; isDir: boolean; size: number; created: number; modified: number }>> =>
+    ipcRenderer.invoke('fs:list-dir', dirPath),
+  readFile: (filePath: string): Promise<string> =>
+    ipcRenderer.invoke('fs:read-file', filePath),
+  writeFile: (filePath: string, content: string): Promise<void> =>
+    ipcRenderer.invoke('fs:write-file', filePath, content),
+})
+
 contextBridge.exposeInMainWorld('fuseAPI', {
   spawn: (): Promise<{ success: boolean; pid?: number; port?: number; connectionToken?: string; error?: string }> =>
     ipcRenderer.invoke('fuse:spawn'),

@@ -23,6 +23,7 @@ export const useAppStore = defineStore('app', () => {
     const minimizeToTray = ref<boolean>(false)
     const minimizeToTrayOnClose = ref<boolean>(false)
     const checkUpdatesOnStartup = ref<boolean>(true)
+    const discordRpc = ref<boolean>(true)
     const gamePlatform = ref<'steam' | 'wgc'>('steam')
     const gameDirPaths = ref<Record<string, string>>({ steam: '', wgc: '' })
     const backendVersion = ref<string>('')
@@ -45,6 +46,7 @@ export const useAppStore = defineStore('app', () => {
         minimizeToTray:         { ref: minimizeToTray,         db: 'minimize_to_tray',           default: false },
         minimizeToTrayOnClose:  { ref: minimizeToTrayOnClose,  db: 'minimize_to_tray_on_close',  default: false },
         checkUpdatesOnStartup:  { ref: checkUpdatesOnStartup,  db: 'check_updates_on_startup',   default: true },
+        discordRpc:             { ref: discordRpc,             db: 'discord_rpc',                default: true },
         gamePlatform:           { ref: gamePlatform,           db: 'game_platform',              default: 'steam' },
         gameDirPaths:           { ref: gameDirPaths,           db: 'game_dir_paths',             default: { steam: '', wgc: '' } },
     }
@@ -89,6 +91,10 @@ export const useAppStore = defineStore('app', () => {
     watch(minimizeToTrayOnClose, (value) => {
         window.appAPI?.setMinimizeToTrayOnClose(value)
     })
+
+    watch(discordRpc, (value) => {
+        window.discordAPI?.setEnabled(value)
+    }, { immediate: true })
 
     // Load / init
 
@@ -135,6 +141,7 @@ export const useAppStore = defineStore('app', () => {
         minimizeToTray,
         minimizeToTrayOnClose,
         checkUpdatesOnStartup,
+        discordRpc,
         gamePlatform,
         gameDirPaths,
         gameVersion,
@@ -154,6 +161,7 @@ export const useAppStore = defineStore('app', () => {
             'minimizeToTray',
             'minimizeToTrayOnClose',
             'checkUpdatesOnStartup',
+            'discordRpc',
             'gamePlatform',
             'gameDirPaths',
             'gameVersion',

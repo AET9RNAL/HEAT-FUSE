@@ -9,6 +9,7 @@ import { usePluginsStore } from './stores/plugins'
 import { useSuspension } from './composables/useSuspension'
 import { useFuseControl } from './composables/useFuseControl'
 import { useFuseLogs } from './composables/useFuseLogs'
+import { useDiscordPresence } from './composables/useDiscordPresence'
 import { eventBus } from './events/eventBus'
 import { useI18n } from './composables/useI18n'
 import { ref, computed, onMounted, onUnmounted } from 'vue'
@@ -20,6 +21,7 @@ const pluginsStore = usePluginsStore()
 const { t } = useI18n()
 useSuspension()
 useFuseControl()
+useDiscordPresence()
 const { register: registerLogs } = useFuseLogs()
 
 const notification = ref<{ title?: string; message: string } | null>(null)
@@ -59,6 +61,13 @@ function handleUpdateInstalled() {
     })
 }
 
+function handleUpdateError({ message }: { message: string }) {
+    showNotification({
+        title: t('components.updateProgress.notifErrorTitle'),
+        message: message,
+    })
+}
+
 onMounted(() => {
     registerLogs()
     appStore.appVersion = packageJson.version
@@ -69,6 +78,7 @@ onMounted(() => {
     eventBus.on('update:found', handleUpdateFound)
     eventBus.on('update:downloading', handleUpdateDownloading)
     eventBus.on('update:installed', handleUpdateInstalled)
+    eventBus.on('update:error', handleUpdateError)
 })
 
 onUnmounted(() => {
@@ -77,6 +87,7 @@ onUnmounted(() => {
     eventBus.off('update:found', handleUpdateFound)
     eventBus.off('update:downloading', handleUpdateDownloading)
     eventBus.off('update:installed', handleUpdateInstalled)
+    eventBus.off('update:error', handleUpdateError)
 })
 </script>
 

@@ -89,6 +89,28 @@ interface Window {
     enableDebugger: (dirPath: string) => Promise<{ success: boolean; error?: string }>
     disableDebugger: (dirPath: string) => Promise<{ success: boolean; error?: string }>
   }
+  discordAPI: {
+    setEnabled: (enabled: boolean) => Promise<{ success: boolean }>
+    setActivity: (activity: {
+      details?: string
+      state?: string
+      startTimestamp?: number
+      endTimestamp?: number
+      largeImageKey?: string
+      largeImageText?: string
+      smallImageKey?: string
+      smallImageText?: string
+      buttons?: { label: string; url: string }[]
+    } | null) => Promise<{ success: boolean; connected: boolean }>
+    clearActivity: () => Promise<{ success: boolean }>
+    status: () => Promise<{ enabled: boolean; connected: boolean }>
+  }
+  fsAPI: {
+    getRoot: () => Promise<string>
+    listDir: (dirPath: string) => Promise<Array<{ name: string; isDir: boolean; size: number; created: number; modified: number }>>
+    readFile: (filePath: string) => Promise<string>
+    writeFile: (filePath: string, content: string) => Promise<void>
+  }
   fuseAPI: {
     spawn: () => Promise<{ success: boolean; pid?: number; port?: number; connectionToken?: string; error?: string }>
     kill: () => Promise<{ success: boolean }>

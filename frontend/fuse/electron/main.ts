@@ -2,6 +2,7 @@ import { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, safeStorage, powe
 import { autoUpdater } from 'electron-updater'
 import { spawn, execFile, type ChildProcess } from 'node:child_process'
 import { promisify } from 'node:util'
+import DiscordRPC from 'discord-rpc'
 
 const execFileAsync = promisify(execFile)
 import { fileURLToPath } from 'node:url'
@@ -47,6 +48,18 @@ function getConfigsDir() {
   return isDev
     ? path.join(process.env.APP_ROOT!, '..', '..', 'backend', 'data', 'configs')
     : path.join(app.getPath('userData'), 'configs')
+}
+
+function getFileBrowserRoot(): string {
+  return VITE_DEV_SERVER_URL
+    ? path.join(process.env.APP_ROOT!, '..', '..', 'backend')
+    : process.resourcesPath
+}
+
+function assertWithinRoot(target: string, root: string) {
+  const a = path.resolve(target)
+  const r = path.resolve(root)
+  if (a !== r && !a.startsWith(r + path.sep)) throw new Error('Access denied')
 }
 
 function readHostConfig(): HostConfig {
@@ -109,6 +122,103 @@ let minimizeToTrayOnClose = false
 
 let fuseProcess: ChildProcess | null = null
 let fusePort: number | null = null
+
+
+const DISCORD_CLIENT_ID = '1519898189006897383'
+
+interface DiscordActivity {
+  details?: string
+  state?: string
+  startTimestamp?: number
+  endTimestamp?: number
+  largeImageKey?: string
+  largeImageText?: string
+  smallImageKey?: string
+  smallImageText?: string
+  instance?: boolean
+  buttons?: { label: string; url: string }[]
+}
+
+let discordClient: DiscordRPC.Client | null = null
+let discordReady = false
+let discordEnabled = false
+let discordReconnectTimer: ReturnType<typeof setTimeout> | null = null
+let pendingActivity: DiscordActivity | null = null
+const discordStartTime = Math.floor(Date.now() / 1000)
+
+function connectDiscord() {
+  if (discordClient || !discordEnabled) return
+  const client = new DiscordRPC.Client({ transport: 'ipc' })
+
+  client.on('ready', () => {
+    discordReady = true
+    if (pendingActivity) {
+      void client.setActivity(pendingActivity as DiscordRPC.Presence)
+    }
+  })
+
+  // The `disconnected` event isn't exported in @types/discord-rpc but is emitted
+  // by the underlying transport. We attach via untyped `on` to be safe.
+  ;(client as unknown as { on: (e: string, cb: () => void) => void }).on('disconnected', () => {
+    discordReady = false
+    discordClient = null
+    scheduleDiscordReconnect()
+  })
+
+  client.login({ clientId: DISCORD_CLIENT_ID }).catch(() => {
+    discordReady = false
+    discordClient = null
+    scheduleDiscordReconnect()
+  })
+
+  discordClient = client
+}
+
+function scheduleDiscordReconnect() {
+  if (!discordEnabled || discordReconnectTimer) return
+  discordReconnectTimer = setTimeout(() => {
+    discordReconnectTimer = null
+    connectDiscord()
+  }, 15_000)
+}
+
+function disconnectDiscord() {
+  if (discordReconnectTimer) {
+    clearTimeout(discordReconnectTimer)
+    discordReconnectTimer = null
+  }
+  if (discordClient) {
+    try {
+      const p = discordClient.destroy() as unknown as Promise<void> | void
+      if (p && typeof (p as Promise<void>).then === 'function') {
+        (p as Promise<void>).catch(() => { /* ignore */ })
+      }
+    } catch { /* ignore */ }
+    discordClient = null
+  }
+  discordReady = false
+}
+
+function applyDiscordActivity(activity: DiscordActivity | null) {
+  if (!activity) {
+    pendingActivity = null
+    if (discordClient && discordReady) {
+      try { void discordClient.clearActivity() } catch { /* ignore */ }
+    }
+    return
+  }
+  const normalized: DiscordActivity = {
+    startTimestamp: discordStartTime,
+    largeImageKey: 'fuse_logo',
+    largeImageText: 'H.E.A.T. FUSE',
+    instance: false,
+    ...activity,
+  }
+  pendingActivity = normalized
+  if (discordClient && discordReady) {
+    try { void discordClient.setActivity(normalized as DiscordRPC.Presence) } catch { /* ignore */ }
+  }
+}
 
 
 function createTray() {
@@ -212,6 +322,7 @@ app.on('window-all-closed', () => {
 let fuseCleanupDone = false
 app.on('before-quit', (event) => {
   isQuitting = true
+  disconnectDiscord()
   if (fuseCleanupDone) return
   if (!fuseProcess) { fuseCleanupDone = true; return }
 
@@ -471,12 +582,68 @@ app.whenReady().then(() => {
     else if (!minimizeToTrayOnStart) destroyTray()
   })
 
+  ipcMain.handle('discord:set-enabled', (_event, enabled: boolean) => {
+    discordEnabled = !!enabled
+    if (discordEnabled) {
+      connectDiscord()
+    } else {
+      disconnectDiscord()
+      pendingActivity = null
+    }
+    return { success: true }
+  })
+
+  ipcMain.handle('discord:set-activity', (_event, activity: DiscordActivity | null) => {
+    applyDiscordActivity(activity)
+    return { success: true, connected: discordReady }
+  })
+
+  ipcMain.handle('discord:clear-activity', () => {
+    applyDiscordActivity(null)
+    return { success: true }
+  })
+
+  ipcMain.handle('discord:status', () => ({
+    enabled: discordEnabled,
+    connected: discordReady,
+  }))
+
   ipcMain.handle('app:open-backend-dir', () => {
     const isDev = !!VITE_DEV_SERVER_URL
     const dir = isDev
       ? path.join(process.env.APP_ROOT!, '..', '..', 'backend')
       : process.resourcesPath
     return shell.openPath(dir)
+  })
+
+  ipcMain.handle('fs:get-root', () => getFileBrowserRoot())
+
+  ipcMain.handle('fs:list-dir', async (_event, dirPath: string) => {
+    const root = getFileBrowserRoot()
+    assertWithinRoot(dirPath, root)
+    const names = await fs.promises.readdir(dirPath)
+    const entries = await Promise.all(names.map(async (name) => {
+      const full = path.join(dirPath, name)
+      try {
+        const stat = await fs.promises.stat(full)
+        return { name, isDir: stat.isDirectory(), size: stat.size, created: stat.birthtimeMs, modified: stat.mtimeMs }
+      } catch { return null }
+    }))
+    return entries.filter(Boolean)
+  })
+
+  ipcMain.handle('fs:read-file', async (_event, filePath: string) => {
+    const root = getFileBrowserRoot()
+    assertWithinRoot(filePath, root)
+    const stat = await fs.promises.stat(filePath)
+    if (stat.size > 1024 * 1024) throw new Error('File too large to preview (>1 MB)')
+    return fs.promises.readFile(filePath, 'utf-8')
+  })
+
+  ipcMain.handle('fs:write-file', async (_event, filePath: string, content: string) => {
+    const root = getFileBrowserRoot()
+    assertWithinRoot(filePath, root)
+    await fs.promises.writeFile(filePath, content, 'utf-8')
   })
 
 

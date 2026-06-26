@@ -24,6 +24,7 @@ type Events = {
     'update:found':       { version: string }
     'update:downloading': void
     'update:installed':   void
+    'update:error':       { message: string }
 
     // Plugin lifecycle
     'fuse:stalled': { stale_seconds: number }

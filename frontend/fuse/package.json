@@ -1,7 +1,7 @@
 {
   "name": "fuse",
   "private": true,
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "FUSE modding runtime for WoT HEAT",
   "author": "AET3RNAL",
   "type": "module",
@@ -10,12 +10,14 @@
     "build": "vue-tsc && npm run compile:py && vite build && electron-builder",
     "preview": "vite preview",
     "compile:py": "node scripts/compile-python.cjs",
-    "compile:py:force": "node scripts/compile-python.cjs --force"
+    "compile:py:force": "node scripts/compile-python.cjs --force",
+    "release": "dotenv -e .env -- cross-env vue-tsc && npm run compile:py && vite build && dotenv -e .env -- electron-builder --publish always"
   },
   "dependencies": {
     "@rive-app/canvas": "^2.38.2",
     "@sentry/electron": "^7.13.0",
     "@supabase/supabase-js": "^2.108.2",
+    "discord-rpc": "^4.0.1",
     "electron-updater": "^6.8.9",
     "fflate": "^0.8.3",
     "lottie-web": "^5.13.0",
@@ -27,6 +29,7 @@
     "vue": "^3.5.38"
   },
   "devDependencies": {
+    "@types/discord-rpc": "^4.0.11",
     "@vitejs/plugin-vue": "^6.0.7",
     "cross-env": "^10.1.0",
     "dotenv-cli": "^11.0.0",
@@ -70,12 +73,16 @@
       {
         "from": "../../backend/fuse/plugins",
         "to": "fuse/plugins",
-        "filter": ["**/*.fuse"]
+        "filter": [
+          "**/*.fuse"
+        ]
       },
       {
         "from": "../../backend/plugins",
         "to": "plugins",
-        "filter": ["**/*.fuse"]
+        "filter": [
+          "**/*.fuse"
+        ]
       }
     ],
     "files": [
@@ -86,8 +93,9 @@
     "asar": true,
     "publish": {
       "provider": "github",
-      "owner": "AET3RNAL",
-      "repo": "HEAT-FUSE"
+      "owner": "AET9RNAL",
+      "repo": "HEAT-FUSE",
+      "releaseType": "draft"
     },
     "win": {
       "target": [

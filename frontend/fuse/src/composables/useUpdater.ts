@@ -55,10 +55,12 @@ export function useUpdater() {
             setTimeout(() => window.updateAPI?.install(), 1500)
         })
 
-        window.updateAPI?.onError(() => {
+        window.updateAPI?.onError((err) => {
+            console.error('[updater]', err.message)
             if (state.value === 'downloading') {
                 state.value = 'available'
                 downloadProgress.value = 0
+                eventBus.emit('update:error', { message: err.message })
             }
         })
 

@@ -17,3 +17,8 @@ BUILD.md
 REVERSE.md
 out/
 frontend/fuse/resources/
+frontend/fuse/dist-electron/
+frontend/fuse/release/
+frontend/fuse/.env
+.env
+.env.local

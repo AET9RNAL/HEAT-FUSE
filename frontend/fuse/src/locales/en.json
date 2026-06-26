@@ -54,7 +54,8 @@
             "launchAtStartup": "Launch App At System Startup",
             "startMinimized": "Start Minimized To Tray",
             "closeMinimizes": "Close Button Minimizes To Tray",
-            "checkUpdates": "Check For Updates On Startup"
+            "checkUpdates": "Check For Updates On Startup",
+            "discordRpc": "Show Activity On Discord"
         },
         "notifications": {
             "gameConfigChangedTitle": "Game Configuration Changed",
@@ -125,7 +126,8 @@
             "notifDownloadingTitle": "Downloading Update",
             "notifDownloadingMessage": "Praying nothing crashes...",
             "notifReadyTitle": "Update Ready",
-            "notifReadyMessage": "Restarting to apply..."
+            "notifReadyMessage": "Restarting to apply...",
+            "notifErrorTitle": "Update Failed"
         },
         "console": {
             "searchPlaceholder": "Search logs...",

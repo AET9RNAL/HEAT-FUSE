@@ -54,6 +54,7 @@ export interface TranslationSchema {
             startMinimized: string
             closeMinimizes: string
             checkUpdates: string
+            discordRpc: string
         }
         notifications: {
             gameConfigChangedTitle: string
