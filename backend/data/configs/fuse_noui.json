@@ -1,5 +1,5 @@
 {
-  "hide_all": true,
+  "hide_all": false,
   "hide_hp": false,
   "hide_energy": false,
   "hide_ability_1": false,
@@ -44,5 +44,15 @@
   "hangar_mode_sel": false,
   "hangar_shortcuts": false,
   "hangar_notifications": false,
-  "hangar_side_menu": false
+  "hangar_side_menu": false,
+  "mod_header": false,
+  "mod_stats": false,
+  "mod_weapons": false,
+  "mod_fire_mode": false,
+  "mod_payload": false,
+  "mod_equipment": false,
+  "mod_modules": false,
+  "mod_bonuses": false,
+  "mod_skills": false,
+  "mod_vehicles": false
 }

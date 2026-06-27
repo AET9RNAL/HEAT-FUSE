@@ -51,7 +51,7 @@ from fuse.core.resolver import resolve_load_order
 from fuse.core.events import EventBus
 from fuse.core.services import ServiceRegistry
 
-HOST_VERSION = "2.6.0"
+HOST_VERSION = "2.6.1"
 
 MouseCallback = Callable[[int, int, "pynmouse.Button", bool], None]
 
@@ -80,7 +80,7 @@ def _check_compat(manifest: dict, name: str) -> bool:
     if _version_tuple(str(min_ver)) > _version_tuple(HOST_VERSION):
         _root_logger.error(
             f"Plugin {name!r} requires host v{min_ver} "
-            f"but FUSE is v{HOST_VERSION} — skipping."
+            f"but FUSE is v{HOST_VERSION} - skipping."
         )
         return False
     return True
@@ -122,10 +122,10 @@ class PluginHost:
         self._mods: set[str] = set()
         self._mouse_subscribers: List[MouseCallback] = []
 
-        # Setup queue — plugins are instantiated one at a time.
+        # Setup queue - plugins are instantiated one at a time.
         self._setup_pending: List[DiscoveredPlugin] = []
         self._setup_active: Optional[DiscoveredPlugin] = None  # currently being calibrated
-        self._auto_lock_queue = False  # True while draining a reload queue — skip calibrate UI
+        self._auto_lock_queue = False  # True while draining a reload queue - skip calibrate UI
 
         # Calibration stage tracking (1-based). Separate counters for setup
         # queue mode vs. normal (runtime) toggle mode.
@@ -144,7 +144,7 @@ class PluginHost:
     def load_plugins(self, extra_plugin_dirs: list | None = None) -> None:
         """Discover, filter, and sort plugins into the setup queue.
 
-        Plugins are not instantiated here — they are set up one at a time
+        Plugins are not instantiated here - they are set up one at a time
         after the mainloop starts via :meth:`_dequeue_next_plugin`.
         """
         enabled = self.host_state.get("enabled_plugins")
@@ -305,13 +305,13 @@ class PluginHost:
         spec = self._setup_pending.pop(0)
 
         # Reset host state to calibrate for this plugin's setup phase, unless
-        # we're draining a reload queue — those skip calibration entirely.
+        # we're draining a reload queue - those skip calibration entirely.
         self._state = "locked" if self._auto_lock_queue else "calibrate"
         self._instantiate(spec)
 
         state = self._plugin_states.get(spec.plugin_id)
         if state != PluginState.ACTIVE:
-            # Error / skip — advance without waiting for user.
+            # Error / skip - advance without waiting for user.
             self.root.after(0, self._dequeue_next_plugin)
             return
 
@@ -338,7 +338,7 @@ class PluginHost:
             _root_logger.exception(f"{spec.name}: enter_calibrate failed: {e}")
 
         if not plugin.requires_calibration:
-            # No UI to calibrate — lock immediately and advance.
+            # No UI to calibrate - lock immediately and advance.
             try:
                 plugin.enter_locked()
                 ctx.state = "locked"
@@ -366,7 +366,7 @@ class PluginHost:
                 )
                 if current is None:
                     _root_logger.warning(
-                        f"hotkey_overrides: action {action!r} not found for {plugin_id!r} — skipped."
+                        f"hotkey_overrides: action {action!r} not found for {plugin_id!r} - skipped."
                     )
                     continue
                 ok = self.hotkeys.reregister(current["mods"], current["key"], new_combo)
@@ -515,7 +515,7 @@ class PluginHost:
             if self._state == "calibrate":
                 stages = getattr(plugin, "calibration_stages", 1)
                 if self._setup_calib_stage < stages:
-                    # More stages remain — advance without locking.
+                    # More stages remain - advance without locking.
                     self._setup_calib_stage += 1
                     _root_logger.info(
                         f"FUSE setup calibration stage -> {self._setup_calib_stage}/{stages}"
@@ -528,7 +528,7 @@ class PluginHost:
                                      calib_stage=self._setup_calib_stage)
                     return
 
-                # All stages done — lock and advance setup queue.
+                # All stages done - lock and advance setup queue.
                 self._state = "locked"
                 self._setup_calib_stage = 1
                 if ctx:
@@ -541,7 +541,7 @@ class PluginHost:
                 self._setup_active = None
                 self.root.after(0, self._dequeue_next_plugin)
             else:
-                # Was locked — re-enter calibrate at stage 1.
+                # Was locked - re-enter calibrate at stage 1.
                 self._state = "calibrate"
                 self._setup_calib_stage = 1
                 if ctx:
@@ -575,11 +575,11 @@ class PluginHost:
                                  calib_stage=self._calib_stage)
                 return
 
-            # All stages done — lock.
+            # All stages done - lock.
             self._state = "locked"
             self._calib_stage = 1
         else:
-            # Was locked — go back to calibrate stage 1.
+            # Was locked - go back to calibrate stage 1.
             self._state = "calibrate"
             self._calib_stage = 1
 
@@ -614,7 +614,7 @@ class PluginHost:
 
     def _start_listeners(self) -> None:
         if not PYNPUT_OK:
-            _root_logger.warning("pynput unavailable — hotkeys disabled")
+            _root_logger.warning("pynput unavailable - hotkeys disabled")
             return
 
         CTRL = {pynkeyboard.Key.ctrl, pynkeyboard.Key.ctrl_l, pynkeyboard.Key.ctrl_r}
@@ -711,7 +711,7 @@ class PluginHost:
 
     def run(self) -> None:
         if not self._setup_pending:
-            _root_logger.warning("No plugins queued — starting with empty host. Use Ctrl+M to enable plugins.")
+            _root_logger.warning("No plugins queued - starting with empty host. Use Ctrl+M to enable plugins.")
         self._start_listeners()
         self.root.after(50, self._tick)
         try:

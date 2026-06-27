@@ -113,10 +113,18 @@ _DefWindowProcW.argtypes = [wt.HWND, ctypes.c_uint, wt.WPARAM, wt.LPARAM]
 _class_counter = 0
 
 
-def _premultiply_bgra(image: Image.Image) -> bytes:
-    """Convert PIL RGBA image to premultiplied BGRA bytes (bottom-up DIB)."""
+def _premultiply_bgra(image: Image.Image, drag_floor: bool = False) -> bytes:
+    """Convert PIL RGBA image to premultiplied BGRA bytes (bottom-up DIB).
+
+    drag_floor=True: raise every alpha=0 pixel to alpha=1.  Transparent pixels
+    are hit-test transparent under UpdateLayeredWindow; the 1-alpha floor makes
+    the whole window bounding box capture mouse events during drag without any
+    visible change (alpha=1 is imperceptible).
+    """
     w, h = image.size
     arr = np.array(image, dtype=np.uint16)
+    if drag_floor:
+        arr[:, :, 3] = np.maximum(arr[:, :, 3], 1)
     alpha = arr[:, :, 3:4]
     arr[:, :, :3] = (arr[:, :, :3] * alpha) // 255
     # RGBA -> BGRA
@@ -150,6 +158,7 @@ class LayeredWindow:
         self._hbm = None
         self._wndproc_ref = None  # prevent GC
         self._class_name = None
+        self._current_image: Image.Image | None = None
 
     @property
     def is_created(self):
@@ -192,6 +201,7 @@ class LayeredWindow:
         # Determine initial size
         if image:
             image = image.convert("RGBA")
+            self._current_image = image
             self.width, self.height = image.size
         else:
             self.width, self.height = 1, 1
@@ -224,6 +234,7 @@ class LayeredWindow:
         if not self.hwnd:
             return
         image = image.convert("RGBA")
+        self._current_image = image
         new_w, new_h = image.size
         if new_w != self.width or new_h != self.height:
             self.width = new_w
@@ -286,8 +297,19 @@ class LayeredWindow:
         user32.SetWindowLongW(self.hwnd, GWL_EXSTYLE, style)
 
     def set_draggable(self, enable: bool):
-        """Toggle draggable mode (affects WM_NCHITTEST response)."""
+        """Toggle draggable mode.
+
+        When enabled, re-renders the current image with an alpha=1 floor so
+        the full window bounding box is hit-testable (transparent pixels would
+        otherwise be click-through under UpdateLayeredWindow).
+        """
+        if self.draggable == enable:
+            return
         self.draggable = enable
+        if self._current_image is not None and self.hwnd:
+            self._free_gdi()
+            self._create_dib(self._current_image)
+            self._push_layered(set_position=False)
 
     def get_position(self):
         """Get current screen position (reads from OS, accounts for drag)."""
@@ -325,7 +347,7 @@ class LayeredWindow:
 
     def _create_dib(self, image: Image.Image):
         """Create a DIB section from a PIL RGBA image."""
-        raw = _premultiply_bgra(image)
+        raw = _premultiply_bgra(image, drag_floor=self.draggable)
 
         bmi = BITMAPINFO()
         bmi.bmiHeader.biSize = ctypes.sizeof(BITMAPINFOHEADER)

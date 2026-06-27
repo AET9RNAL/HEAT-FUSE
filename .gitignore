@@ -22,3 +22,4 @@ frontend/fuse/release/
 frontend/fuse/.env
 .env
 .env.local
+deprecated/

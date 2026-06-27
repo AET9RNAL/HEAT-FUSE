@@ -2,13 +2,42 @@
 
 # ![alt text](gh/logo.png) FUSE - an external modding runtime for WoT:HEAT
 
-**FUSE** is **not** affiliated, endorsed, or approved by World of Tanks: HEAT or Wargaming. It is a third-party modding toolkit built around a lightweight Python plugin framework for real-time Windows overlays.
+---
 
-**FUSE** does not provide any game modifications or hacks. It is a toolkit for building overlays/UI reskins that uses game information accessible to the user during normal gameplay. It does not read, expose, or exploit client information that wouldn't normally be available to the user.
+## Terms & Conditions
 
-**FUSE** does not inject into, modify, or interact with the game's runtime.
+FUSE is licensed under the [GNU General Public License v3](./LICENSE) with the following additional terms and conditions. By using, modifying, or distributing FUSE, you agree to these terms.
 
-Any modifications to FUSE that would allow reading, exposing, or exploiting client information that wouldn't normally be available to the user, or that alters the game's runtime are strictly prohibited.
+### Permitted Use
+
+- **Run** FUSE alongside WoT:HEAT to display real-time HUD overlays using game information accessible to the user during normal gameplay.
+- **Develop, distribute, and share plugins** (`.fuse` archives) that build overlays, UI reskins, or visual enhancements consistent with the above.
+- **Modify the FUSE source code** for personal or community use, provided all modifications remain under GPLv3 and the source is disclosed.
+- **Redistribute** verbatim or modified copies of FUSE under the terms of GPLv3.
+
+### Restrictions
+
+- **No cheating.** You may not use FUSE, or any derivative thereof, or any separate package of the codebase to read, expose, or exploit game client information that would not normally be available to the user during legitimate gameplay in a way that provides an unfair advantage over other players.
+- **No runtime injection or modification.** You may not use FUSE to inject code into, patch, hook, or otherwise alter the game's native runtime memory, processes, or binaries. Interaction with the game's Coherent Gameface frontend via the CDP is permitted for two purposes: (1) reading game values already visible to the user during legitimate gameplay, and (2) injecting CSS stylesheets or style overrides for cosmetic UI reskinning.
+- **No automation or botting.** You may not use FUSE to automate gameplay actions in a manner that replaces human input for competitive advantage, including but not limited to auto-aim, auto-fire, or scripted decision-making.
+- **No circumvention.** You may not use FUSE to bypass, disable, or interfere with any anti-cheat, integrity, or detection mechanism employed by the game or its operators.
+- **No commercial exploitation of prohibited features.** You may not sell, license, or otherwise monetize any modification that violates the restrictions above.
+
+### Prohibitions
+
+The following are strictly prohibited and constitute a material breach of this license:
+
+1. **Reverse-engineering** the game client to extract information not exposed through legitimate gameplay interfaces.
+2. **Distributing** modified versions of FUSE that enable any of the restricted activities described above.
+3. **Bundling** FUSE with, or advertising it alongside, tools whose primary purpose is cheating, hacking, or exploiting the game.
+4. **Misrepresenting** FUSE as affiliated with, endorsed by, or approved by Wargaming or World of Tanks: HEAT.
+5. **Removing or altering** the anti-abuse notices, license headers, or attribution present in the FUSE source code or documentation.
+
+### Enforcement
+
+Violations of these terms automatically terminate your rights under GPLv3 with respect to FUSE, including all patent grants and downstream licensing privileges. The copyright holders reserve the right to pursue legal remedies against violators.
+
+---
 
 ![Static Badge](https://img.shields.io/badge/-BUILT_WITH-1D1D1D?style=for-the-badge&labelColor=1D1D1D&color=1D1D1D)
 ![Logo](https://img.shields.io/badge/-RIVE-f3f2f4?style=for-the-badge&logo=rive&logoColor=f3f2f4&labelColor=1D1D1D&color=1D1D1D)
@@ -47,7 +76,6 @@ Get In Touch
 - [Discovery & Load Order](#discovery--load-order)
 - [Core APIs](#core-apis)
 - [Built-in Utilities](#built-in-utilities)
-- [FUSE Input API](#fuse-input-api)
 - [Host Lifecycle](#host-lifecycle)
 - [Plugin Manager](#plugin-manager)
 - [Built-in Plugins](#built-in-plugins)
@@ -630,30 +658,6 @@ load_font_from_bytes(ctx.assets.read("F.ttf"), key="myfont")      # .fuse-safe
 
 ---
 
-### Trajectory Replay
-
-Replays timestamped mouse-delta trajectories with precise timing.
-
-```python
-from fuse.vision.trajectory_replay import replay_movements, replay_full_scenario
-
-dx, dy, elapsed = replay_movements(trajectory, abort_event=event)
-
-dx, dy, elapsed = replay_full_scenario(
-    trajectory,
-    pre_trajectory=pre_aim,
-    cursor_pos=(origin_x, origin_y),
-    abort_event=event,
-    countdown_s=3,
-    status_callback=lambda msg: ctx.logger.info(msg),
-    fire_click=True,
-)
-```
-
-`replay_movements` sleeps to each point's target time, rounds cumulative deltas to integer, and only injects on rounded-delta change. Supports early abort via `threading.Event`. Uses the [FUSE Input API](#fuse-input-api) under the hood.
-
----
-
 ### Packing (`fuse.packaging.pack`)
 
 ```python
@@ -664,39 +668,6 @@ verify(archive)                    # → bool
 ```
 
 Excludes `__pycache__/`, `.git/`, `*.pyc/.pyo/.pyd`. `verify()` checks ZIP validity, single top-level directory, and that the embedded `manifest.json` has an `entry` field.
-
----
-
-## FUSE Input API
-
-`fuse.input.hardware_inject_router` - abstract mouse output for plugins that drive the cursor (e.g. guidance / trajectory replay). Backend is selected by config key `input_backend`: `"arduino" | "sendinput" | "none"`. Default is `"arduino"`.
-
-```python
-from fuse.input.hardware_inject_router import (
-    init_backend, connect, disconnect, is_connected,
-    inject_mouse_movement, inject_mouse_click, set_cursor_pos,
-    is_admin, enable_hires_timer, disable_hires_timer,
-)
-
-init_backend("arduino")        # or "sendinput" / "none"
-connect()                       # opens serial (Arduino) or no-op (SendInput)
-inject_mouse_movement(dx, dy)
-inject_mouse_click()
-```
-
-The public function names are identical for every backend; switch at runtime by calling `init_backend(name)`.
-
-**Arduino backend** (`fuse/input/hardware_inject_arduino.py`)
-
-Auto-detects COM ports by VID (Arduino / SparkFun / CH340). 5-byte packet protocol `[CMD:1][X:int16][Y:int16]` over serial at 115200 baud. Large deltas are chunked into 127-unit steps (HID mouse reports are signed 8-bit).
-
-**SendInput backend** (`fuse/input/hardware_inject.py`)
-
-Windows `SendInput` with `MOUSEEVENTF_MOVE`. Enables 1 ms timer granularity via `timeBeginPeriod(1)`. Requires Administrator privileges to drive elevated game windows (UIPI).
-
-**Hardware** - Arduino HID firmware lives in `tools/arduino/mouse_hid/`. `tools/arduino/flash_leonardo.py` flashes a Pro Micro / Leonardo with the firmware.
-
----
 
 ## Host Lifecycle
 
@@ -989,15 +960,10 @@ HEAT_SACLOS/
 │   ├── render/                    # Animation and Rive rendering
 │   │   ├── animation.py           # AnimationLoop
 │   │   └── rive_animation.py      # ctypes wrapper around rive_plugin.dll
-│   ├── input/                     # Mouse injection backends
-│   │   ├── hardware_inject.py     # SendInput backend
-│   │   ├── hardware_inject_arduino.py  # Arduino HID backend
-│   │   └── hardware_inject_router.py   # Backend router (FUSE Input API)
 │   ├── vision/                    # Game-state reading and computer vision
 │   │   ├── accessors.py           # Accessors - CDP WebSocket reader (primary)
 │   │   ├── game_memory.py         # GameMemory - ctypes wrapper (deprecated)
 │   │   ├── ocr.py                 # Tesseract OCR helpers
-│   │   ├── trajectory_replay.py   # Mouse trajectory replay
 │   │   └── js/
 │   │       ├── read_all.js        # IIFE executed in battle_hud CDP page
 │   │       └── read_markers.js    # IIFE executed in markers CDP page
@@ -1039,11 +1005,6 @@ HEAT_SACLOS/
 │   ├── configs/                   # fuse_<plugin>.json + fuse_host.json
 │   └── fuse_filetype.ico          # Generated .fuse Explorer icon
 │
-├── tools/
-│   └── arduino/                   # Mouse-HID firmware + flasher
-│       ├── mouse_hid/mouse_hid.ino
-│       └── flash_leonardo.py
-│
 ├── untracked/                     # Dev/debug scripts (not shipped)
 │   
 │
@@ -1053,6 +1014,6 @@ HEAT_SACLOS/
 ├── run_heat_overlay.py            # FUSE overlay entry
 ├── rebuild_dll.ps1                # Rebuild rive_plugin.dll via MSBuild
 ├── BUILD.md                       # rive_plugin.dll build instructions
-├── requirements.txt               # pynput, Pillow, pytesseract, numpy, mss, loguru, pyserial, websocket-client
+├── requirements.txt               # pynput, Pillow, pytesseract, numpy, mss, loguru, websocket-client
 └── README.md                      # This file
 ```

@@ -1,6 +1,0 @@
-SYSTEM: H.E.A.T - Homing Engagement & Auto-correction Technology (or H.E.A.T. Targeting)
-GUIDANCE CLASS: AILOS - Automatic Indirect Line of Sight
-CONTROL LAW: TORC - Tangential Orthogonal Response Control
-
-
-Homing Engagement & Auto-correction Targeting Technology for Automatic Indirect Line of Sight with Dynamic Tangential Orthogonal Response Control System

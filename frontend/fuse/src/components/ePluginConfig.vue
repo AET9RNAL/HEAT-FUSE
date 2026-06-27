@@ -170,13 +170,20 @@ function getCombo(action: string): string {
     <div class="plugin-config-backdrop" @mousedown="onBackdropClick">
         <motion.div
             class="plugin-config-motion"
-            :initial="{ opacity: 0, scale: 0.96, y: -8 }"
-            :animate="{ opacity: 1, scale: 1, y: 0 }"
-            :exit="{ opacity: 0, scale: 0.96, y: -8 }"
+            :initial="{ opacity: 0 }"
+            :animate="{ opacity: 1 }"
+            :exit="{ opacity: 0 }"
             :transition="{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }"
         >
+            <div class="panel-blur"></div>
             <div ref="panelEl" class="plugin-config-panel">
-                <!-- ::before provides backdrop-filter, panel-inner sits above it -->
+                <motion.div
+                    class="panel-scale"
+                    :initial="{ scale: 0.96, y: -8 }"
+                    :animate="{ scale: 1, y: 0 }"
+                    :exit="{ scale: 0.96, y: -8 }"
+                    :transition="{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }"
+                >
                 <div class="panel-inner">
                     <!-- Header -->
                     <div class="panel-header">
@@ -297,6 +304,7 @@ function getCombo(action: string): string {
                         vector-effect="non-scaling-stroke"
                     />
                 </svg>
+                </motion.div>
             </div>
         </motion.div>
     </div>
@@ -313,19 +321,19 @@ function getCombo(action: string): string {
 }
 
 .plugin-config-motion {
+    position: relative;
     width: 420px;
     max-height: 560px;
-    backdrop-filter: blur(35px);
-    -webkit-backdrop-filter: blur(35px);
 }
 
 .plugin-config-panel {
     position: relative;
+    z-index: 1;
     width: 100%;
     height: 100%;
     display: flex;
     flex-direction: column;
-    background: var(--black-1-a);
+    background: hsla(142, 10%, 4%, 0.92); /* crank up transparency cuz for some unbeknownst fucking reason blur refuses to render in prod ffs. */
     clip-path: polygon(
         8px 0%, 100% 0%,
         100% calc(100% - 8px),
@@ -335,12 +343,28 @@ function getCombo(action: string): string {
     box-shadow: 0 8px 32px rgba(0,0,0,0.5);
 }
 
-.plugin-config-panel::before {
-    content: '';
+.panel-blur {
     position: absolute;
     inset: 0;
     z-index: 0;
+    backdrop-filter: blur(35px);
+    -webkit-backdrop-filter: blur(35px);
+    clip-path: polygon(
+        8px 0%, 100% 0%,
+        100% calc(100% - 8px),
+        calc(100% - 8px) 100%,
+        0% 100%, 0% 8px
+    );
     pointer-events: none;
+}
+
+.panel-scale {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
 }
 
 .panel-inner {

@@ -369,7 +369,7 @@ function createWindow() {
     autoHideMenuBar: true,
     fullscreenable: false,
     transparent: true,
-    backgroundColor: 'rgba(0, 0, 0, 0.0)',
+    backgroundColor: 'rgba(0, 0, 0, 0.01)',
     backgroundMaterial: 'acrylic',
     webPreferences: {
       nodeIntegration: false,

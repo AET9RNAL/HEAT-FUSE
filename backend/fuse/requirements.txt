@@ -4,7 +4,6 @@ pytesseract
 numpy
 mss
 loguru
-pyserial
 fastapi
 uvicorn[standard]
 websocket-client
