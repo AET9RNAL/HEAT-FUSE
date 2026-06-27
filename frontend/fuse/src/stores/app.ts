@@ -26,6 +26,7 @@ export const useAppStore = defineStore('app', () => {
     const discordRpc = ref<boolean>(true)
     const startWithGame = ref<boolean>(false)
     const hideOnFocusLoss = ref<boolean>(false)
+    const fileAssoc = ref<boolean>(false)
     const gamePlatform = ref<'steam' | 'wgc'>('steam')
     const gameDirPaths = ref<Record<string, string>>({ steam: '', wgc: '' })
     const backendVersion = ref<string>('')
@@ -51,6 +52,7 @@ export const useAppStore = defineStore('app', () => {
         discordRpc:             { ref: discordRpc,             db: 'discord_rpc',                default: true },
         startWithGame:          { ref: startWithGame,          db: 'start_with_game',            default: false },
         hideOnFocusLoss:        { ref: hideOnFocusLoss,        db: 'hide_on_focus_loss',         default: false },
+        fileAssoc:              { ref: fileAssoc,              db: 'file_assoc',                 default: true },
         gamePlatform:           { ref: gamePlatform,           db: 'game_platform',              default: 'steam' },
         gameDirPaths:           { ref: gameDirPaths,           db: 'game_dir_paths',             default: { steam: '', wgc: '' } },
     }
@@ -108,6 +110,11 @@ export const useAppStore = defineStore('app', () => {
         window.gameProcessAPI?.setFocusWatchEnabled(value)
     }, { immediate: true })
 
+    watch(fileAssoc, (value) => {
+        if (value) window.fileAssocAPI?.register()
+        else       window.fileAssocAPI?.unregister()
+    })
+
     // Load / init
 
     function loadDefaults() {
@@ -156,6 +163,7 @@ export const useAppStore = defineStore('app', () => {
         discordRpc,
         startWithGame,
         hideOnFocusLoss,
+        fileAssoc,
         gamePlatform,
         gameDirPaths,
         gameVersion,
@@ -178,6 +186,7 @@ export const useAppStore = defineStore('app', () => {
             'discordRpc',
             'startWithGame',
             'hideOnFocusLoss',
+            'fileAssoc',
             'gamePlatform',
             'gameDirPaths',
             'gameVersion',

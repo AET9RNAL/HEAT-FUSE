@@ -11,6 +11,12 @@
     "dist",
     "dist-electron"
   ],
+  "extraResources": [
+    {
+      "from": "src/assets/fuse_filetype.ico",
+      "to": "fuse_filetype.ico"
+    }
+  ],
   "mac": {
     "target": [
       "dmg"

@@ -385,10 +385,7 @@ class FuseCore:
         from fuse.core.log import setup as _setup_logging
         from fuse.core.host import PluginHost
         from fuse.ui.fonts import load_font
-        from fuse.packaging.file_assoc import ensure_registered
-
         _setup_logging()
-        ensure_registered(_ASSETS_DIR / "logo.png")
         for name in _FUSE_FONTS:
             load_font(_ASSETS_DIR / name)
 

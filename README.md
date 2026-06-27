@@ -17,8 +17,12 @@ Any modifications to FUSE that would allow reading, exposing, or exploiting clie
 ![Logo](https://img.shields.io/badge/-ELECTRON-f3f2f4?style=for-the-badge&logo=electron&logoColor=f3f2f4&labelColor=1D1D1D&color=1D1D1D)
 ![Logo](https://img.shields.io/badge/-VUE-f3f2f4?style=for-the-badge&logo=vue.js&logoColor=f3f2f4&labelColor=1D1D1D&color=1D1D1D)
 
-![Static Badge](https://img.shields.io/badge/RUNTIME_VERSION-2.5.0-1D1D1D?style=for-the-badge&labelColor=1D1D1D&color=434343)
-![Static Badge](https://img.shields.io/badge/LAUNCHER_VERSION-0.5.0-1D1D1D?style=for-the-badge&labelColor=1D1D1D&color=434343)
+
+![Static Badge](https://img.shields.io/badge/RUNTIME_VERSION-2.6.0-1D1D1D?style=for-the-badge&labelColor=1D1D1D&color=434343)
+![Static Badge](https://img.shields.io/badge/LAUNCHER_VERSION-0.5.1-1D1D1D?style=for-the-badge&labelColor=1D1D1D&color=434343)
+
+Get In Touch
+[![Discord](https://img.shields.io/badge/-DISCORD-f3f2f4?style=for-the-badge&logo=discord&logoColor=f3f2f4&labelColor=1D1D1D&color=1D1D1D)](https://discord.com/users/678198830767931431)
 ---
 
 ## For Players

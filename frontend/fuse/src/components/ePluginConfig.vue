@@ -23,15 +23,17 @@ const isDirty = computed(() =>
     Object.keys(pendingHotkeys.value).length > 0
 )
 
-watch(isDirty, (dirty) => {
-    if (dirty) {
-        eventBus.emit('plugin-config:dirty', {
-            plugin_id: props.plugin.plugin_id,
-            pendingConfig: { ...pendingConfig.value },
-            pendingHotkeys: { ...pendingHotkeys.value },
-        })
-    }
-})
+function emitDirty() {
+    if (!isDirty.value) return
+    eventBus.emit('plugin-config:dirty', {
+        plugin_id: props.plugin.plugin_id,
+        pendingConfig:  { ...pendingConfig.value },
+        pendingHotkeys: { ...pendingHotkeys.value },
+    })
+}
+
+watch(pendingConfig,  emitDirty)
+watch(pendingHotkeys, emitDirty)
 
 function resetPending() {
     pendingConfig.value = {}
@@ -173,7 +175,7 @@ function getCombo(action: string): string {
             :exit="{ opacity: 0, scale: 0.96, y: -8 }"
             :transition="{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }"
         >
-            <div ref="panelEl" class="plugin-config-panel bb-weak">
+            <div ref="panelEl" class="plugin-config-panel">
                 <!-- ::before provides backdrop-filter, panel-inner sits above it -->
                 <div class="panel-inner">
                     <!-- Header -->
@@ -313,6 +315,8 @@ function getCombo(action: string): string {
 .plugin-config-motion {
     width: 420px;
     max-height: 560px;
+    backdrop-filter: blur(35px);
+    -webkit-backdrop-filter: blur(35px);
 }
 
 .plugin-config-panel {
@@ -335,8 +339,6 @@ function getCombo(action: string): string {
     content: '';
     position: absolute;
     inset: 0;
-    backdrop-filter: blur(35px);
-    -webkit-backdrop-filter: blur(35px);
     z-index: 0;
     pointer-events: none;
 }

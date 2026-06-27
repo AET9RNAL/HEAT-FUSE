@@ -1,7 +1,7 @@
 {
   "plugin_id": "accessors",
   "name": "Accessors",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "author": "AETERNAL",
   "description": "FUSE Core Service Provider. In-game values provider.",
   "entry": "plugin:AccessorsPlugin",

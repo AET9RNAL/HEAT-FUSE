@@ -78,7 +78,10 @@ class AccessorsPlugin(FusePlugin):
     # ──────────────────────────────────────────────────── tick
 
     def tick(self, dt: float) -> None:
-        if not self._accessors.connected:
+        connected        = self._accessors.connected
+        connected_hangar = self._accessors.connected_hangar
+
+        if not (connected or connected_hangar):
             if not self._connecting:
                 self._reconnect_timer += dt
                 if self._reconnect_timer >= self._reconnect_interval:
@@ -86,13 +89,14 @@ class AccessorsPlugin(FusePlugin):
                     self._start_connect()
             return
 
-        self._poll_timer += dt
-        if self._poll_timer >= self._poll_interval:
-            self._poll_timer = 0.0
-            if not self._accessors.refresh():
-                logger.warning("accessors: CDP connection lost, will retry")
-                if self._ctx.events:
-                    self._ctx.events.emit("accessors.disconnected")
+        if connected:
+            self._poll_timer += dt
+            if self._poll_timer >= self._poll_interval:
+                self._poll_timer = 0.0
+                if not self._accessors.refresh():
+                    logger.warning("accessors: CDP connection lost, will retry")
+                    if self._ctx.events:
+                        self._ctx.events.emit("accessors.disconnected")
 
     def teardown(self) -> None:
         self._accessors.close()

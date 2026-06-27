@@ -161,6 +161,15 @@ contextBridge.exposeInMainWorld('gameProcessAPI', {
     ipcRenderer.on('game:focus:changed', (_e, inFocus: boolean) => cb(inFocus)),
 })
 
+contextBridge.exposeInMainWorld('fileAssocAPI', {
+  isRegistered: (): Promise<boolean> =>
+    ipcRenderer.invoke('fileassoc:is-registered'),
+  register: (): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke('fileassoc:register'),
+  unregister: (): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke('fileassoc:unregister'),
+})
+
 contextBridge.exposeInMainWorld('fuseAPI', {
   spawn: (): Promise<{ success: boolean; pid?: number; port?: number; connectionToken?: string; error?: string }> =>
     ipcRenderer.invoke('fuse:spawn'),

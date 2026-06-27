@@ -217,7 +217,7 @@ class HudUiMixin:
             rotated = padded.rotate(angle, resample=Image.Resampling.BICUBIC, expand=False)
             self.hud_logo_frames.append(rotated)
 
-    # ── Compositing helpers ──────────────────────────────────────────
+    # Compositing helpers
 
     @staticmethod
     def _paste_alpha(dst, src, xy):
@@ -308,7 +308,7 @@ class HudUiMixin:
         draw.text((2, 2 - bbox[1]), text, fill=color_rgba, font=font)
         return img
 
-    # ── Window creation ──────────────────────────────────────────────
+    # Window creation
 
     def _create_hud_windows(self):
         """Create all HUD window instances and wire up animation loops."""
@@ -359,7 +359,7 @@ class HudUiMixin:
         self._designator_anim = AnimationLoop(self.root, self._animate_designator, fps=20)
         self._blink_anim = AnimationLoop(self.root, self._animate_predict_blink, fps=2)
 
-    # ── _make_draggable kept for QL HUD tkinter windows ──────────────
+    # _make_draggable kept for QL HUD tkinter windows
 
     def _make_draggable(self, widget_or_window):
         """Make a tkinter widget or window draggable for HUD setup."""
@@ -394,7 +394,7 @@ class HudUiMixin:
             widget.bind("<ButtonPress-1>", on_press)
             widget.bind("<B1-Motion>", on_drag)
 
-    # ── Logo animation ───────────────────────────────────────────────
+    # Logo animation
 
     def _start_logo_animation(self):
         if self.hud_logo_frames and self._logo_anim:
@@ -412,7 +412,7 @@ class HudUiMixin:
         name_img = self._compose_name_image(self.hud_logo_frame_index)
         self.hud_name_win.update_image(name_img)
 
-    # ── Status image update ──────────────────────────────────────────
+    # Status image update
 
     def _update_status_image(self):
         """Recomposite and push the status window image."""
@@ -421,7 +421,7 @@ class HudUiMixin:
         status_img = self._compose_status_image()
         self.hud_status_win.update_image(status_img)
 
-    # ── Show / hide ──────────────────────────────────────────────────
+    # Show / hide
 
     def _show_hud_setup(self):
         """Show HUD windows in draggable setup mode."""
@@ -473,7 +473,7 @@ class HudUiMixin:
                 y = max(0, min(int(pos[1]), sh - h))
                 win.move(x, y)
 
-    # ── Range text ───────────────────────────────────────────────────
+    # Range text
 
     def _update_hud_range_text(self, range_m=None):
         """Recomposite and push the range window image with new text."""
@@ -482,7 +482,7 @@ class HudUiMixin:
         range_img = self._compose_range_image(range_m)
         self.hud_range_win.update_image(range_img)
 
-    # ── Status updates ───────────────────────────────────────────────
+    # Status updates
 
     def _update_hud_status(self, status):
         """
@@ -515,7 +515,7 @@ class HudUiMixin:
         elif status == "intercept":
             self._show_intercept_designator()
 
-    # ── Designators ──────────────────────────────────────────────────
+    # Designators
 
     def _hide_designators(self):
         """Hide both designator windows."""
@@ -572,7 +572,7 @@ class HudUiMixin:
             iw, ih = self.hud_designator_intercept_win.get_size()
             self.hud_designator_intercept_win.move(int(overlay_cx - iw / 2), int(overlay_cy - ih / 2))
 
-    # ── Designator animation ─────────────────────────────────────────
+    # Designator animation
 
     def _start_designator_animation(self):
         if self._designator_anim:
@@ -599,7 +599,7 @@ class HudUiMixin:
         if self.hud_designator_predict_win:
             self.hud_designator_predict_win.set_alpha(255)
 
-    # ── Predict blink ────────────────────────────────────────────────
+    # Predict blink
 
     def _start_predict_blink(self):
         if self._blink_anim:
@@ -645,7 +645,7 @@ class HudUiMixin:
                 self.hud_status_win.set_alpha(30)
         self.hud_predict_blink_visible = not self.hud_predict_blink_visible
 
-    # ── Click-through (kept for QL HUD tkinter windows) ──────────────
+    # Click-through (kept for QL HUD tkinter windows)
 
     def _set_hud_clickthrough(self, win, enable):
         """Set click-through for a HUD window (LayeredWindow or tkinter)."""
@@ -662,7 +662,7 @@ class HudUiMixin:
             except Exception:
                 pass
 
-    # ── Position capture / config ────────────────────────────────────
+    # Position capture / config
 
     def _capture_hud_positions(self):
         """Capture current HUD window positions from OS."""

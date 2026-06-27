@@ -219,6 +219,11 @@ onUnmounted(() => ro?.disconnect())
               <eCheckbox v-model="store.discordRpc" :width="18" :height="18" />
             </div>
 
+            <div class="setting-row">
+              <span class="setting-label">{{ t('appsettings.general.fileAssoc') }}</span>
+              <eCheckbox v-model="store.fileAssoc" :width="18" :height="18" />
+            </div>
+
           </div>
         </div>
 

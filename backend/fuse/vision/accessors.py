@@ -35,6 +35,9 @@ except ImportError:
     _ws_mod = None  # type: ignore[assignment]
     _WS_AVAILABLE = False
 
+from fuse.vision.hud_selectors import HUD as HUD        # re-exported for plugin authors
+from fuse.vision.hud_selectors import HANGAR as HANGAR  # re-exported for plugin authors
+
 _JS_READ_ALL:        str = (Path(__file__).parent / "js" / "read_all.js").read_text(encoding="utf-8")
 _JS_READ_MARKERS:    str = (Path(__file__).parent / "js" / "read_markers.js").read_text(encoding="utf-8")
 _JS_READ_BATTLE_APP: str = (Path(__file__).parent / "js" / "read_battle_app.js").read_text(encoding="utf-8")
@@ -103,18 +106,26 @@ class Accessors:
         self._ws: object | None              = None
         self._ws_markers: object | None      = None
         self._ws_battle_app: object | None   = None
+        self._ws_hangar: object | None       = None
         self._msg_id    = 0
         self._msg_id_m  = 0
         self._msg_id_a  = 0
-        self._connected = False
+        self._msg_id_h  = 0
+        self._connected         = False
+        self._connected_hangar  = False
         self._cache: dict[str, Optional[Union[int, float, list]]] = {}
 
-    # ──────────────────────────────────────────────────── connection
+    # Connection
 
     @property
     def connected(self) -> bool:
         with self._lock:
             return self._connected
+
+    @property
+    def connected_hangar(self) -> bool:
+        with self._lock:
+            return self._connected_hangar
 
     def open(self) -> bool:
         """Discover battle_hud and markers CDP targets and open WebSocket connections.
@@ -145,10 +156,12 @@ class Accessors:
             logger.debug("Accessors: CDP /json returned non-list response")
             return False
 
-        # 2. Find battle_hud (required), markers and battle_app (optional)
+        # 2. Find battle_hud (required), markers and battle_app (optional),
+        #    and hangar meta page (optional — present outside of battle)
         ws_url: str | None             = None
         ws_url_markers: str | None     = None
         ws_url_battle_app: str | None  = None
+        ws_url_hangar: str | None      = None
         for t in targets:
             url = t.get("url", "")
             if t.get("type") == "page":
@@ -158,8 +171,10 @@ class Accessors:
                     ws_url_markers = t.get("webSocketDebuggerUrl")
                 elif "battle_app" in url:
                     ws_url_battle_app = t.get("webSocketDebuggerUrl")
+                elif "meta/index.html" in url:
+                    ws_url_hangar = t.get("webSocketDebuggerUrl")
 
-        if ws_url is None:
+        if ws_url is None and ws_url_hangar is None:
             logger.debug("Accessors: battle_hud target not in CDP target list (not in battle?)")
             return False
 
@@ -175,25 +190,31 @@ class Accessors:
                 logger.debug(f"Accessors: WebSocket connect to {url} failed: {exc}")
                 return None
 
-        ws            = _connect(ws_url)
+        ws            = _connect(ws_url)            if ws_url            else None
         ws_markers    = _connect(ws_url_markers)    if ws_url_markers    else None
         ws_battle_app = _connect(ws_url_battle_app) if ws_url_battle_app else None
+        ws_hangar     = _connect(ws_url_hangar)     if ws_url_hangar     else None
 
-        if ws is None:
+        if ws is None and ws_hangar is None:
             return False
 
         with self._lock:
-            self._ws             = ws
-            self._ws_markers     = ws_markers
-            self._ws_battle_app  = ws_battle_app
-            self._connected      = True
-            self._msg_id         = 0
-            self._msg_id_m       = 0
-            self._msg_id_a       = 0
+            self._ws                = ws
+            self._ws_markers        = ws_markers
+            self._ws_battle_app     = ws_battle_app
+            self._ws_hangar         = ws_hangar
+            self._connected         = ws is not None
+            self._connected_hangar  = ws_hangar is not None
+            self._msg_id            = 0
+            self._msg_id_m          = 0
+            self._msg_id_a          = 0
+            self._msg_id_h          = 0
         logger.info(
-            f"Accessors: connected to CDP battle_hud at {ws_url}"
+            "Accessors: connected to CDP"
+            + (f" battle_hud at {ws_url}" if ws else "")
             + (f" + markers at {ws_url_markers}" if ws_markers else "")
             + (f" + battle_app at {ws_url_battle_app}" if ws_battle_app else "")
+            + (f" + hangar at {ws_url_hangar}" if ws_hangar else "")
         )
         return True
 
@@ -202,9 +223,11 @@ class Accessors:
             ws,  self._ws             = self._ws,             None
             wsm, self._ws_markers     = self._ws_markers,     None
             wsa, self._ws_battle_app  = self._ws_battle_app,  None
-            self._connected = False
+            wsh, self._ws_hangar      = self._ws_hangar,      None
+            self._connected         = False
+            self._connected_hangar  = False
             self._cache.clear()
-        for sock in (ws, wsm, wsa):
+        for sock in (ws, wsm, wsa, wsh):
             if sock is not None:
                 try:
                     sock.close()  # type: ignore[union-attr]
@@ -218,7 +241,7 @@ class Accessors:
     def __exit__(self, *_) -> None:
         self.close()
 
-    # ──────────────────────────────────────────────────── polling
+    # Polling
 
     def refresh(self) -> bool:
         """Send Runtime.evaluate to battle_hud, markers, and battle_app. Returns True on success."""
@@ -285,7 +308,7 @@ class Accessors:
             if val is not None:
                 self._cache[key] = val
 
-    # ──────────────────────────────────────────────────── read API
+    # Read API
 
     def read(self, name: str) -> Optional[Union[int, float]]:
         """Return the last-cached value for *name*, or None if unavailable.
@@ -295,5 +318,404 @@ class Accessors:
         """
         return self._cache.get(name)  # type: ignore[return-value]
 
+    # Setter helpers
 
-__all__ = ["Accessors"]
+    def _exec(self, expr: str) -> None:
+        """Fire-and-forget Runtime.evaluate on battle_hud. No return value read."""
+        with self._lock:
+            if not self._connected or self._ws is None:
+                logger.warning("Accessors._exec: not connected — style change skipped")
+                return
+            ws = self._ws
+            self._msg_id += 1
+            mid = self._msg_id
+        try:
+            ws.send(json.dumps({  # type: ignore[union-attr]
+                "id": mid,
+                "method": "Runtime.evaluate",
+                "params": {"expression": expr, "returnByValue": False},
+            }))
+            ws.recv()  # type: ignore[union-attr]
+        except Exception as exc:
+            logger.warning(f"Accessors._exec: send failed — {exc}")
+            with self._lock:
+                self._connected = False
+
+    def _exec_markers(self, expr: str) -> None:
+        """Fire-and-forget Runtime.evaluate on the markers page."""
+        with self._lock:
+            if not self._connected or self._ws_markers is None:
+                return
+            ws = self._ws_markers
+            self._msg_id_m += 1
+            mid = self._msg_id_m
+        try:
+            ws.send(json.dumps({  # type: ignore[union-attr]
+                "id": mid,
+                "method": "Runtime.evaluate",
+                "params": {"expression": expr, "returnByValue": False},
+            }))
+            ws.recv()  # type: ignore[union-attr]
+        except Exception as exc:
+            logger.warning(f"Accessors._exec_markers: send failed — {exc}")
+            with self._lock:
+                self._connected = False
+
+    def inject_stylesheet(self, css: Optional[str], style_id: str = "__fuse__") -> None:
+        """Inject, update, or remove a <style id=style_id> element in battle_hud <head>.
+
+        !important rules inside a stylesheet node beat non-important *inline*
+        styles the game sets via JS (el.style.prop = value) because stylesheet
+        !important outranks normal inline in the CSS cascade.  Inline setProperty
+        with 'important' does NOT — two inline declarations race, last write wins.
+
+        css=None  → remove the <style> element from the DOM entirely (full revert).
+        css=''    → clear all rules without removing the element.
+        """
+        sid = style_id.replace("'", "\\'")
+        if css is None:
+            expr = (
+                f"(function(){{var el=document.getElementById('{sid}');if(el)el.remove();}})();null"
+            )
+        else:
+            safe = css.replace("\\", "\\\\").replace("`", "\\`").replace("${", "\\${")
+            expr = (
+                "(function(){"
+                f"var el=document.getElementById('{sid}');"
+                f"if(!el){{el=document.createElement('style');el.id='{sid}';document.head.appendChild(el);}}"
+                f"el.textContent=`{safe}`;"
+                "})();null"
+            )
+        self._exec(expr)
+
+    def inject_stylesheet_markers(self, css: Optional[str], style_id: str = "__fuse__") -> None:
+        """Same as inject_stylesheet but targets the markers WebSocket page."""
+        sid = style_id.replace("'", "\\'")
+        if css is None:
+            expr = f"(function(){{var el=document.getElementById('{sid}');if(el)el.remove();}})();null"
+        else:
+            safe = css.replace("\\", "\\\\").replace("`", "\\`").replace("${", "\\${")
+            expr = (
+                "(function(){"
+                f"var el=document.getElementById('{sid}');"
+                f"if(!el){{el=document.createElement('style');el.id='{sid}';document.head.appendChild(el);}}"
+                f"el.textContent=`{safe}`;"
+                "})();null"
+            )
+        self._exec_markers(expr)
+
+    def _exec_hangar(self, expr: str) -> None:
+        """Fire-and-forget Runtime.evaluate on the hangar (meta/index.html) page."""
+        with self._lock:
+            if not self._connected_hangar or self._ws_hangar is None:
+                return
+            ws = self._ws_hangar
+            self._msg_id_h += 1
+            mid = self._msg_id_h
+        try:
+            ws.send(json.dumps({  # type: ignore[union-attr]
+                "id": mid,
+                "method": "Runtime.evaluate",
+                "params": {"expression": expr, "returnByValue": False},
+            }))
+            ws.recv()  # type: ignore[union-attr]
+        except Exception as exc:
+            logger.warning(f"Accessors._exec_hangar: send failed — {exc}")
+            with self._lock:
+                self._connected_hangar = False
+
+    def inject_stylesheet_hangar(self, css: Optional[str], style_id: str = "__fuse__") -> None:
+        """Inject, update, or remove a <style> element in the hangar page <head>."""
+        sid = style_id.replace("'", "\\'")
+        if css is None:
+            expr = f"(function(){{var el=document.getElementById('{sid}');if(el)el.remove();}})();null"
+        else:
+            safe = css.replace("\\", "\\\\").replace("`", "\\`").replace("${", "\\${")
+            expr = (
+                "(function(){"
+                f"var el=document.getElementById('{sid}');"
+                f"if(!el){{el=document.createElement('style');el.id='{sid}';document.head.appendChild(el);}}"
+                f"el.textContent=`{safe}`;"
+                "})();null"
+            )
+        self._exec_hangar(expr)
+
+    def poll_open_url(self) -> Optional[str]:
+        """Read and clear window.__fuse_open_url__ from the hangar page.
+
+        Returns the URL string if one was set (e.g. by an injected button),
+        or None if nothing is pending. Thread-safe — uses _exec_hangar lock.
+        """
+        with self._lock:
+            if not self._connected_hangar or self._ws_hangar is None:
+                return None
+            ws = self._ws_hangar
+            self._msg_id_h += 1
+            mid = self._msg_id_h
+        expr = (
+            "(function(){"
+            "var u=window.__fuse_open_url__;"
+            "if(u){delete window.__fuse_open_url__;return u;}"
+            "return null;"
+            "})()"
+        )
+        try:
+            ws.send(json.dumps({  # type: ignore[union-attr]
+                "id": mid,
+                "method": "Runtime.evaluate",
+                "params": {"expression": expr, "returnByValue": True},
+            }))
+            resp = json.loads(ws.recv())  # type: ignore[union-attr]
+            val  = resp.get("result", {}).get("result", {}).get("value")
+            return str(val) if val else None
+        except Exception as exc:
+            logger.warning(f"Accessors.poll_open_url: failed — {exc}")
+            with self._lock:
+                self._connected_hangar = False
+            return None
+
+    # Core setters
+
+    def set_style(
+        self,
+        selector: str,
+        prop: str,
+        value: str,
+        *,
+        all_matching: bool = False,
+        important: bool = False,
+    ) -> None:
+        """Set a single CSS property on the element(s) matching *selector*.
+
+        Uses setProperty with 'important' priority by default so Cohtml's
+        data-binding tick updates cannot overwrite the override.
+        """
+        prio = "'important'" if important else "''"
+        sel  = json.dumps(selector)
+        p    = json.dumps(prop)
+        v    = json.dumps(value)
+        if all_matching:
+            expr = f"Array.from(document.querySelectorAll({sel})).forEach(function(el){{el.style.setProperty({p},{v},{prio})}});null"
+        else:
+            expr = f"var el=document.querySelector({sel});if(el)el.style.setProperty({p},{v},{prio});null"
+        self._exec(expr)
+
+    def set_styles(
+        self,
+        selector: str,
+        styles: dict[str, str],
+        *,
+        all_matching: bool = False,
+        important: bool = False,
+    ) -> None:
+        """Set multiple CSS properties in a single CDP round-trip."""
+        prio        = "'important'" if important else "''"
+        sel         = json.dumps(selector)
+        assignments = ";".join(
+            f"el.style.setProperty({json.dumps(k)},{json.dumps(v)},{prio})"
+            for k, v in styles.items()
+        )
+        if all_matching:
+            expr = f"Array.from(document.querySelectorAll({sel})).forEach(function(el){{{assignments}}});null"
+        else:
+            expr = f"var el=document.querySelector({sel});if(el){{{assignments}}};null"
+        self._exec(expr)
+
+    def reset_style(
+        self,
+        selector: str,
+        prop: Optional[str] = None,
+        *,
+        all_matching: bool = False,
+    ) -> None:
+        """Remove an inline style override, letting the cascade resume.
+
+        prop=None clears *all* inline styles set by us (cssText='').
+        """
+        sel = json.dumps(selector)
+        if prop is not None:
+            p = json.dumps(prop)
+            if all_matching:
+                expr = f"Array.from(document.querySelectorAll({sel})).forEach(function(el){{el.style.removeProperty({p})}});null"
+            else:
+                expr = f"var el=document.querySelector({sel});if(el)el.style.removeProperty({p});null"
+        else:
+            if all_matching:
+                expr = f"Array.from(document.querySelectorAll({sel})).forEach(function(el){{el.style.cssText=''}});null"
+            else:
+                expr = f"var el=document.querySelector({sel});if(el)el.style.cssText='';null"
+        self._exec(expr)
+
+    # Convenience wrappers
+
+    def hide(self, selector: str, *, all_matching: bool = False) -> None:
+        """Hide element(s) with visibility:hidden !important.
+
+        !important ensures Cohtml's per-tick style updates cannot re-show it.
+        Pair with show() to restore.
+        """
+        self.set_style(selector, "visibility", "hidden", all_matching=all_matching, important=True)
+
+    def show(self, selector: str, *, all_matching: bool = False) -> None:
+        """Remove the visibility override applied by hide(), restoring cascade."""
+        self.reset_style(selector, "visibility", all_matching=all_matching)
+
+    def set_opacity(
+        self,
+        selector: str,
+        opacity: float,
+        *,
+        all_matching: bool = False,
+        important: bool = False,
+    ) -> None:
+        self.set_style(selector, "opacity", str(max(0.0, min(1.0, opacity))),
+                       all_matching=all_matching, important=important)
+
+    def set_color(
+        self,
+        selector: str,
+        color: str,
+        *,
+        all_matching: bool = False,
+        important: bool = False,
+    ) -> None:
+        self.set_style(selector, "color", color, all_matching=all_matching, important=important)
+
+    def set_bg_color(
+        self,
+        selector: str,
+        color: str,
+        *,
+        all_matching: bool = False,
+        important: bool = False,
+    ) -> None:
+        self.set_style(selector, "background-color", color,
+                       all_matching=all_matching, important=important)
+
+    # Named per-element helpers
+
+    def hide_hp(self)   -> None: self.hide(HUD.HP_BASE)
+    def show_hp(self)   -> None: self.show(HUD.HP_BASE)
+    def set_hp_color(self, color: str) -> None:
+        self.set_color(HUD.HP_VALUE,    color)
+        self.set_color(HUD.HP_THOUSANDS, color)
+
+    def hide_mana(self)  -> None: self.hide(HUD.MANA_BASE)
+    def show_mana(self)  -> None: self.show(HUD.MANA_BASE)
+    def set_mana_color(self, color: str) -> None:
+        self.set_color(HUD.MANA_VALUE, color)
+
+    def hide_sprint(self) -> None: self.hide(HUD.SPRINT)
+    def show_sprint(self) -> None: self.show(HUD.SPRINT)
+    def hide_boost(self)  -> None: self.hide(HUD.BOOST)
+    def show_boost(self)  -> None: self.show(HUD.BOOST)
+
+    def hide_zoom(self)  -> None: self.hide(HUD.ZOOM_BASE)
+    def show_zoom(self)  -> None: self.show(HUD.ZOOM_BASE)
+
+    # Hangar setters
+
+    def set_style_hangar(
+        self,
+        selector: str,
+        prop: str,
+        value: str,
+        *,
+        all_matching: bool = False,
+        important: bool = False,
+    ) -> None:
+        """Set a single CSS property on hangar DOM element(s)."""
+        prio = "'important'" if important else "''"
+        sel  = json.dumps(selector)
+        p    = json.dumps(prop)
+        v    = json.dumps(value)
+        if all_matching:
+            expr = f"Array.from(document.querySelectorAll({sel})).forEach(function(el){{el.style.setProperty({p},{v},{prio})}});null"
+        else:
+            expr = f"var el=document.querySelector({sel});if(el)el.style.setProperty({p},{v},{prio});null"
+        self._exec_hangar(expr)
+
+    def set_styles_hangar(
+        self,
+        selector: str,
+        styles: dict[str, str],
+        *,
+        all_matching: bool = False,
+        important: bool = False,
+    ) -> None:
+        """Set multiple CSS properties on hangar DOM element(s) in one round-trip."""
+        prio        = "'important'" if important else "''"
+        sel         = json.dumps(selector)
+        assignments = ";".join(
+            f"el.style.setProperty({json.dumps(k)},{json.dumps(v)},{prio})"
+            for k, v in styles.items()
+        )
+        if all_matching:
+            expr = f"Array.from(document.querySelectorAll({sel})).forEach(function(el){{{assignments}}});null"
+        else:
+            expr = f"var el=document.querySelector({sel});if(el){{{assignments}}};null"
+        self._exec_hangar(expr)
+
+    def reset_style_hangar(
+        self,
+        selector: str,
+        prop: Optional[str] = None,
+        *,
+        all_matching: bool = False,
+    ) -> None:
+        """Remove an inline style override on a hangar element, restoring the cascade."""
+        sel = json.dumps(selector)
+        if prop is not None:
+            p = json.dumps(prop)
+            if all_matching:
+                expr = f"Array.from(document.querySelectorAll({sel})).forEach(function(el){{el.style.removeProperty({p})}});null"
+            else:
+                expr = f"var el=document.querySelector({sel});if(el)el.style.removeProperty({p});null"
+        else:
+            if all_matching:
+                expr = f"Array.from(document.querySelectorAll({sel})).forEach(function(el){{el.style.cssText=''}});null"
+            else:
+                expr = f"var el=document.querySelector({sel});if(el)el.style.cssText='';null"
+        self._exec_hangar(expr)
+
+    def hide_hangar(self, selector: str, *, all_matching: bool = False) -> None:
+        self.set_style_hangar(selector, "visibility", "hidden", all_matching=all_matching, important=True)
+
+    def show_hangar(self, selector: str, *, all_matching: bool = False) -> None:
+        self.reset_style_hangar(selector, "visibility", all_matching=all_matching)
+
+    def set_opacity_hangar(
+        self,
+        selector: str,
+        opacity: float,
+        *,
+        all_matching: bool = False,
+        important: bool = False,
+    ) -> None:
+        self.set_style_hangar(selector, "opacity", str(opacity),
+                              all_matching=all_matching, important=important)
+
+    def set_color_hangar(
+        self,
+        selector: str,
+        color: str,
+        *,
+        all_matching: bool = False,
+        important: bool = False,
+    ) -> None:
+        self.set_style_hangar(selector, "color", color,
+                              all_matching=all_matching, important=important)
+
+    def set_bg_color_hangar(
+        self,
+        selector: str,
+        color: str,
+        *,
+        all_matching: bool = False,
+        important: bool = False,
+    ) -> None:
+        self.set_style_hangar(selector, "background-color", color,
+                              all_matching=all_matching, important=important)
+
+
+__all__ = ["Accessors", "HUD", "HANGAR"]

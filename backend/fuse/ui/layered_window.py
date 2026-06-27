@@ -20,7 +20,7 @@ import numpy as np
 from PIL import Image
 from loguru import logger
 
-# ── Win32 constants ──────────────────────────────────────────────────
+# Win32 constants
 WS_EX_LAYERED     = 0x00080000
 WS_EX_TRANSPARENT  = 0x00000020
 WS_EX_TOPMOST     = 0x00000008
@@ -53,7 +53,7 @@ SWP_ASYNCWINDOWPOS = 0x4000
 
 HWND_TOPMOST = -1
 
-# ── Structures ───────────────────────────────────────────────────────
+# Structures
 class BLENDFUNCTION(ctypes.Structure):
     _fields_ = [
         ("BlendOp",     ctypes.c_byte),
@@ -96,7 +96,7 @@ class WNDCLASSEXW(ctypes.Structure):
         ("hIconSm",       wt.HICON),
     ]
 
-# ── Win32 function setup ─────────────────────────────────────────────
+# Win32 function setup
 user32  = ctypes.windll.user32
 gdi32   = ctypes.windll.gdi32
 kernel32 = ctypes.windll.kernel32
@@ -321,7 +321,7 @@ class LayeredWindow:
             self.hwnd = None
         self.visible = False
 
-    # ── Internal ─────────────────────────────────────────────────────
+    # Internal
 
     def _create_dib(self, image: Image.Image):
         """Create a DIB section from a PIL RGBA image."""

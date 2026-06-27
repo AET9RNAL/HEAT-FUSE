@@ -118,6 +118,11 @@ interface Window {
     onProcessLost: (cb: () => void) => void
     onFocusChanged: (cb: (inFocus: boolean) => void) => void
   }
+  fileAssocAPI: {
+    isRegistered: () => Promise<boolean>
+    register: () => Promise<{ success: boolean; error?: string }>
+    unregister: () => Promise<{ success: boolean; error?: string }>
+  }
   fuseAPI: {
     spawn: () => Promise<{ success: boolean; pid?: number; port?: number; connectionToken?: string; error?: string }>
     kill: () => Promise<{ success: boolean }>

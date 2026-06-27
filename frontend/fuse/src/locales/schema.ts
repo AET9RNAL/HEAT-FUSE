@@ -55,6 +55,7 @@ export interface TranslationSchema {
             closeMinimizes: string
             checkUpdates: string
             discordRpc: string
+            fileAssoc: string
         }
         qol: {
             title: string

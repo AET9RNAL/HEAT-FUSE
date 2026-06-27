@@ -55,7 +55,8 @@
             "startMinimized": "Start Minimized To Tray",
             "closeMinimizes": "Close Button Minimizes To Tray",
             "checkUpdates": "Check For Updates On Startup",
-            "discordRpc": "Show Activity On Discord"
+            "discordRpc": "Show Activity On Discord",
+            "fileAssoc": "Register .fuse File Type"
         },
         "qol": {
             "title": "Quality of Life",
@@ -113,7 +114,7 @@
             "status": {
                 "active": "Active",
                 "error": "Error",
-                "pending": "Pending",
+                "pending": "Enqueued",
                 "loading": "Loading",
                 "skipped": "Skipped",
                 "disabled": "Disabled"

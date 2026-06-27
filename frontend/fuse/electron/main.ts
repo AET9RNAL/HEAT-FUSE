@@ -36,6 +36,8 @@ const PATHS: Record<string, string> = {
                       : path.join(process.resourcesPath, 'plugins'),
   trayIcon:    IS_DEV ? path.join(__dirname, '..', 'build', 'icon.png')
                       : path.join(process.resourcesPath, 'icon.png'),
+  fileTypeIco: IS_DEV ? path.join(__dirname, '..', 'src', 'assets', 'fuse_filetype.ico')
+                      : path.join(process.resourcesPath, 'fuse_filetype.ico'),
   backendExe:  path.join(process.resourcesPath, 'fuse-backend.dist', 'fuse-backend.exe'),
   preload:     path.join(__dirname, 'preload.mjs'),
 }
@@ -201,6 +203,48 @@ async function _checkForegroundProcess(): Promise<string> {
   return (await _psRun(cmd)).toLowerCase()
 }
 
+
+// File association helpers (.fuse → FusePlugin, HKCU — no elevation required)
+
+const FUSE_EXT     = '.fuse'
+const FUSE_PROG_ID = 'FusePlugin'
+
+function _isFileAssocRegistered(): Promise<boolean> {
+  return new Promise(resolve =>
+    execFile('reg', ['query', `HKCU\\Software\\Classes\\${FUSE_EXT}`], err => resolve(!err))
+  )
+}
+
+function _notifyShellAssocChanged(): Promise<void> {
+  return new Promise<void>(resolve =>
+    execFile('powershell', [
+      '-NoProfile', '-NonInteractive', '-Command',
+      `Add-Type -TypeDefinition 'using System.Runtime.InteropServices;public class FuseShellAssoc{[DllImport("shell32")]public static extern void SHChangeNotify(int e,uint f,System.IntPtr a,System.IntPtr b);}' -EA SilentlyContinue;[FuseShellAssoc]::SHChangeNotify(0x08000000,0,[System.IntPtr]::Zero,[System.IntPtr]::Zero)`,
+    ], () => resolve())
+  )
+}
+
+async function _setFileAssoc(register: boolean): Promise<{ success: boolean; error?: string }> {
+  try {
+    if (register) {
+      const iconVal = `"${PATHS.fileTypeIco}",0`
+      const adds: [string, string[]][] = [
+        ['reg', ['add', `HKCU\\Software\\Classes\\${FUSE_EXT}`,                    '/ve', '/d', FUSE_PROG_ID,            '/f']],
+        ['reg', ['add', `HKCU\\Software\\Classes\\${FUSE_PROG_ID}`,                '/ve', '/d', 'FUSE Plugin Archive',   '/f']],
+        ['reg', ['add', `HKCU\\Software\\Classes\\${FUSE_PROG_ID}\\DefaultIcon`,   '/ve', '/d', iconVal,                 '/f']],
+      ]
+      for (const [cmd, args] of adds)
+        await new Promise<void>((res, rej) => execFile(cmd, args, err => err ? rej(err) : res()))
+    } else {
+      for (const key of [`HKCU\\Software\\Classes\\${FUSE_PROG_ID}`, `HKCU\\Software\\Classes\\${FUSE_EXT}`])
+        await new Promise<void>(res => execFile('reg', ['delete', key, '/f'], () => res()))
+    }
+    await _notifyShellAssocChanged()
+    return { success: true }
+  } catch (e: unknown) {
+    return { success: false, error: (e as Error).message }
+  }
+}
 
 const DISCORD_CLIENT_ID = '1519898189006897383'
 
@@ -928,4 +972,8 @@ app.whenReady().then(() => {
       return { success: false, error: (e as Error).message }
     }
   })
+
+  ipcMain.handle('fileassoc:is-registered', () => _isFileAssocRegistered())
+  ipcMain.handle('fileassoc:register',      () => _setFileAssoc(true))
+  ipcMain.handle('fileassoc:unregister',    () => _setFileAssoc(false))
 })

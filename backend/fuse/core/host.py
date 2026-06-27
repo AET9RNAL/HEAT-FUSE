@@ -51,7 +51,7 @@ from fuse.core.resolver import resolve_load_order
 from fuse.core.events import EventBus
 from fuse.core.services import ServiceRegistry
 
-HOST_VERSION = "2.5.0"
+HOST_VERSION = "2.6.0"
 
 MouseCallback = Callable[[int, int, "pynmouse.Button", bool], None]
 
