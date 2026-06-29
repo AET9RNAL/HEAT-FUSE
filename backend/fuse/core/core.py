@@ -379,7 +379,7 @@ class FuseCore:
     # Full bootstrap
     # ------------------------------------------------------------------
 
-    def run(self, extra_plugin_dirs: list | None = None) -> None:
+    def run(self) -> None:
         """Boot FUSE: start WebSocket server, then enter the Tk mainloop."""
         import tkinter as tk
         from fuse.core.log import setup as _setup_logging
@@ -405,14 +405,14 @@ class FuseCore:
         root = tk.Tk()
         host = PluginHost(root, server=self)
         self._host = host
-        host.load_plugins(extra_plugin_dirs=extra_plugin_dirs)
+        host.load_plugins()
         host.run()
 
 
-def run(argv: list | None = None, extra_plugin_dirs: list | None = None) -> None:
+def run(argv: list | None = None) -> None:
     """Module-level entry point (backward-compatible with runner.py)."""
     del argv
-    FuseCore().run(extra_plugin_dirs=extra_plugin_dirs)
+    FuseCore().run()
 
 
 def main() -> None:  # pragma: no cover

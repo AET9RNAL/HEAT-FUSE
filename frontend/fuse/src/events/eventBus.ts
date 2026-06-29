@@ -1,6 +1,10 @@
 import mitt from 'mitt'
 
 type Events = {
+    'auth:success': void
+    'auth:error': void
+    'auth:logout': void
+
     'app:ready': void
     'settings:loaded': void
 
@@ -36,9 +40,21 @@ type Events = {
     'config:value_changed': { plugin_id: string; key: string; value: unknown }
     'hotkey:rebound': { plugin_id: string; action: string; combo: string }
     'plugin-config:open': { plugin_id: string }
-    'plugin-config:dirty': { plugin_id: string; pendingConfig: Record<string, unknown>; pendingHotkeys: Record<string, string> }
     'plugin-config:saved': { plugin_id: string }
     'plugin-config:reset': { plugin_id: string }
+
+    // Navigation
+    'navigate:discover': { projectId?: string }
+
+    // Universal floating action bar
+    'modal:pending': {
+        label: string
+        saveLabel?: string
+        cancelLabel?: string
+        onConfirm: () => Promise<void> | void
+        onCancel?: () => void
+    }
+    'modal:dismiss': void
 }
 
 export const eventBus = mitt<Events>()

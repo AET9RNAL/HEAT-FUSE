@@ -14,12 +14,14 @@ from pathlib import Path
 
 # fuse/utils/paths.py  →  parent = fuse/utils/, parent.parent = fuse/, parent.parent.parent = repo root
 REPO_ROOT: Path = Path(__file__).resolve().parent.parent.parent
-DATA_DIR: Path = REPO_ROOT / "data"
+
+_env_data_dir = os.environ.get("FUSE_DATA_DIR")
+DATA_DIR: Path = Path(_env_data_dir) if _env_data_dir else REPO_ROOT / "data"
 CONFIGS_DIR: Path = DATA_DIR / "configs"
 ML_DIR: Path = DATA_DIR / "ml"
 ML_PROFILES_DIR: Path = ML_DIR / "profiles"
 ML_PROFILES_REGISTRY: Path = ML_DIR / "ml_profiles.json"
-LOGS_DIR: Path = REPO_ROOT / "logs"
+LOGS_DIR: Path = DATA_DIR / "logs"
 
 # NOTE: there is no global ASSETS_DIR. Each vertical / plugin owns its own
 # `assets/` subdirectory next to its package, so the universal core never

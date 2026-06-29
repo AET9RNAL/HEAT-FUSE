@@ -5,6 +5,7 @@
   "author": "AETERNAL",
   "description": "FUSE Core Service Provider. In-game values provider.",
   "entry": "plugin:AccessorsPlugin",
+  "core": true,
   "default_config": {
     "cdp_port": 9222,
     "connect_timeout_s": 8.0,

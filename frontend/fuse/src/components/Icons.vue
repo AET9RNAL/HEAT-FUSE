@@ -30,6 +30,14 @@ export type IconKind =
   | 'arrow-left'
   | 'filter'
   | 'download'
+  | 'checkmark'
+  | 'user'
+  | 'sign-in'
+  | 'sign-out'
+  | 'cloud'
+  | 'unlock'
+  | 'password'
+  | 'views'
 </script>
 
 <script setup lang="ts">
@@ -72,7 +80,7 @@ const svgContent = computed(() => {
   if (!svg) return ''
   const safeColor = sanitizeColor(props.color)
   svg = svg.replace(/stroke="(?!none)[^"]*"/g, `stroke="${safeColor}"`)
-  svg = svg.replace(/fill="(?!none|white)[^"]*"/g, `fill="${safeColor}"`)
+  svg = svg.replace(/fill="(?!none)[^"]*"/g, `fill="${safeColor}"`)
   svg = svg.replace(/width="[^"]*"/, `width="${iconSize.value}"`)
   svg = svg.replace(/height="[^"]*"/, `height="${iconSize.value}"`)
   return svg

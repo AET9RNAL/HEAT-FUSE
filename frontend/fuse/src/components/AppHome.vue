@@ -47,6 +47,7 @@ const filterOptions = computed(() => [
 const filterValues  = ['all', 'active', 'disabled']
 
 async function handleLaunch() {
+  if (!appStore.licenseAccepted) return
   appStore.enableFuse = true
 }
 

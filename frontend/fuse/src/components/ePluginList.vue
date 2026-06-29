@@ -3,6 +3,8 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import ePlugin from './ePlugin.vue'
 import eCheckbox from './eCheckbox.vue'
 import { usePluginsStore } from '../stores/plugins'
+import { useMarketplaceStore } from '../stores/marketplace'
+import { useNavigationStore } from '../stores/navigation'
 import type { MenuOption } from './eContextMenu.vue'
 import { useI18n } from '../composables/useI18n'
 import { eventBus } from '../events/eventBus'
@@ -18,6 +20,25 @@ const props = withDefaults(defineProps<{
 })
 
 const store = usePluginsStore()
+const marketplaceStore = useMarketplaceStore()
+const navStore = useNavigationStore()
+
+function fileBasename(filePath: string) {
+    return filePath.replace(/\\/g, '/').split('/').pop() ?? filePath
+}
+
+function marketplaceMatchFor(filePath: string) {
+    if (!filePath) return null
+    return marketplaceStore.fileToProject.get(fileBasename(filePath)) ?? null
+}
+
+function handleMarketplaceClick(projectId: string) {
+    const project = marketplaceStore.projects.find(p => p.id === projectId)
+    if (project) marketplaceStore.selectProject(project)
+    navStore.selectOption('discover')
+    // AppDiscover listens to this to open the project once it mounts
+    eventBus.emit('navigate:discover', { projectId })
+}
 
 const selected = ref<Record<string, boolean>>({})
 
@@ -80,7 +101,11 @@ function menuOptionsFor(pluginId: string): MenuOption[] {
       action: async () => {
         if (!plugin.filePath) return
         const result = await window.pluginsAPI.deleteFile(plugin.filePath)
-        if (result.success) store.remove(pluginId)
+        if (result.success) {
+          store.remove(pluginId)
+          const remaining = await window.pluginsAPI.scan()
+          marketplaceStore.reconcileInstallStates(remaining)
+        }
       },
     },
   )
@@ -103,7 +128,13 @@ const svgPoints = computed(() => {
 })
 
 let ro: ResizeObserver | null = null
-onMounted(() => {
+onMounted(async () => {
+  const [plugins] = await Promise.all([
+    window.pluginsAPI.scan(),
+    marketplaceStore.projects.length === 0 ? marketplaceStore.fetchProjects() : Promise.resolve(),
+  ])
+  marketplaceStore.reconcileInstallStates(plugins)
+
   if (!listEl.value) return
   ro = new ResizeObserver(([entry]) => {
     const box = entry.borderBoxSize?.[0]
@@ -142,8 +173,10 @@ onUnmounted(() => ro?.disconnect())
           :selected="selected[plugin.plugin_id] ?? false"
           :enabled="isEnabled(plugin.status)"
           :menu-options="menuOptionsFor(plugin.plugin_id)"
+          :marketplace-project="plugin.filePath ? marketplaceMatchFor(plugin.filePath) : null"
           @update:selected="selected[plugin.plugin_id] = $event"
           @update:enabled="handleToggle(plugin.plugin_id, $event)"
+          @marketplace-click="handleMarketplaceClick"
         />
 
         <div v-if="filteredPlugins.length === 0" class="empty">

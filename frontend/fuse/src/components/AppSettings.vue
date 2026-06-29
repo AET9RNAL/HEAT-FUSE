@@ -272,6 +272,25 @@ onUnmounted(() => ro?.disconnect())
           </div>
         </div>
 
+        <div class="section">
+          <h2 class="section-header">{{ t('appsettings.privacy.title') }}</h2>
+          <div class="section-body">
+
+            <div class="setting-row">
+              <span class="setting-label">
+                {{ t('appsettings.privacy.analyticsConsent').split('FUSE')[0] }}<span class="brand-highlight">FUSE</span>{{ t('appsettings.privacy.analyticsConsent').split('FUSE')[1] }}
+              </span>
+              <eCheckbox v-model="store.analyticsConsent" :width="18" :height="18" />
+            </div>
+
+            <div class="setting-row">
+              <span class="setting-label">{{ t('appsettings.privacy.diagnosticsConsent') }}</span>
+              <eCheckbox v-model="store.diagnosticsConsent" :width="18" :height="18" />
+            </div>
+
+          </div>
+        </div>
+
         <svg
           v-if="svgPoints"
           class="panel-stroke"
@@ -379,6 +398,11 @@ onUnmounted(() => ro?.disconnect())
   flex-shrink: 0;
   user-select: none;
   -webkit-user-select: none;
+}
+
+.brand-highlight {
+  color: var(--accent-200);
+  font-weight: var(--font-weight-1);
 }
 
 .dir-wrapper {

@@ -40,6 +40,7 @@ interface Window {
     closeWindow: () => Promise<void>
     minimizeWindow: () => Promise<void>
     maximizeWindow: () => Promise<void>
+    onDeepLink: (cb: (route: string, params: Record<string, string>) => void) => void
   }
   pluginsAPI: {
     scan: () => Promise<Array<{
@@ -53,9 +54,12 @@ interface Window {
       configValues: Record<string, unknown>
       hotkeys: unknown[]
       filePath: string
+      checksum: string
     }>>
     showFile: (filePath: string) => Promise<void>
     deleteFile: (filePath: string) => Promise<{ success: boolean; error?: string }>
+    downloadPlugin: (url: string, filename: string) => Promise<{ success: boolean; filePath?: string; checksum?: string; error?: string }>
+    uploadToR2: (presignedUrl: string, fileBuffer: ArrayBuffer, contentType: string) => Promise<{ success: boolean; error?: string }>
   }
   pluginConfigAPI: {
     readPlugin: (pluginId: string) => Promise<Record<string, unknown>>
@@ -66,7 +70,7 @@ interface Window {
     selectDir: () => Promise<string | null>
   }
   configAPI: {
-    readHost: () => Promise<{ disabled_plugins: string[]; enabled_plugins: string[] | null; extra_plugin_dirs: string[] }>
+    readHost: () => Promise<{ disabled_plugins: string[]; enabled_plugins: string[] | null }>
     setPluginEnabled: (pluginId: string, enabled: boolean) => Promise<{ success: boolean; error?: string }>
     onHostChanged: (cb: (cfg: { disabled_plugins: string[] }) => void) => void
     offHostChanged: () => void
@@ -122,6 +126,12 @@ interface Window {
     isRegistered: () => Promise<boolean>
     register: () => Promise<{ success: boolean; error?: string }>
     unregister: () => Promise<{ success: boolean; error?: string }>
+  }
+  deviceAPI: {
+    getFingerprint: () => Promise<string>
+    getName: () => Promise<string>
+    getOS: () => Promise<string>
+    getIP: () => Promise<string | null>
   }
   fuseAPI: {
     spawn: () => Promise<{ success: boolean; pid?: number; port?: number; connectionToken?: string; error?: string }>

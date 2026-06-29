@@ -31,6 +31,8 @@ contextBridge.exposeInMainWorld('safeStorageAPI', {
 contextBridge.exposeInMainWorld('appAPI', {
   onSuspended: (cb: () => void) => ipcRenderer.on('app:suspended', cb),
   onResumed: (cb: () => void) => ipcRenderer.on('app:resumed', cb),
+  onDeepLink: (cb: (route: string, params: Record<string, string>) => void) =>
+    ipcRenderer.on('app:deep-link', (_event, route, params) => cb(route, params)),
   setAutostart: (value: boolean): Promise<void> =>
     ipcRenderer.invoke('app:set-autostart', value),
   setMinimizeToTrayOnStart: (value: boolean): Promise<void> =>
@@ -54,6 +56,10 @@ contextBridge.exposeInMainWorld('pluginsAPI', {
   showFile: (filePath: string) => ipcRenderer.invoke('plugins:show-file', filePath),
   deleteFile: (filePath: string): Promise<{ success: boolean; error?: string }> =>
     ipcRenderer.invoke('plugins:delete', filePath),
+  downloadPlugin: (url: string, filename: string): Promise<{ success: boolean; filePath?: string; checksum?: string; error?: string }> =>
+    ipcRenderer.invoke('plugins:download-plugin', url, filename),
+  uploadToR2: (presignedUrl: string, fileBuffer: ArrayBuffer, contentType: string): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke('plugins:upload-to-r2', presignedUrl, fileBuffer, contentType),
 })
 
 contextBridge.exposeInMainWorld('dialogAPI', {
@@ -61,7 +67,7 @@ contextBridge.exposeInMainWorld('dialogAPI', {
 })
 
 contextBridge.exposeInMainWorld('configAPI', {
-  readHost: (): Promise<{ disabled_plugins: string[]; enabled_plugins: string[] | null; extra_plugin_dirs: string[] }> =>
+  readHost: (): Promise<{ disabled_plugins: string[]; enabled_plugins: string[] | null }> =>
     ipcRenderer.invoke('config:host:read'),
   setPluginEnabled: (pluginId: string, enabled: boolean): Promise<{ success: boolean; error?: string }> =>
     ipcRenderer.invoke('config:plugin:set-enabled', pluginId, enabled),
@@ -168,6 +174,17 @@ contextBridge.exposeInMainWorld('fileAssocAPI', {
     ipcRenderer.invoke('fileassoc:register'),
   unregister: (): Promise<{ success: boolean; error?: string }> =>
     ipcRenderer.invoke('fileassoc:unregister'),
+})
+
+contextBridge.exposeInMainWorld('deviceAPI', {
+  getFingerprint: (): Promise<string> =>
+    ipcRenderer.invoke('device:fingerprint'),
+  getName: (): Promise<string> =>
+    ipcRenderer.invoke('device:name'),
+  getOS: (): Promise<string> =>
+    ipcRenderer.invoke('device:os'),
+  getIP: (): Promise<string | null> =>
+    ipcRenderer.invoke('device:ip'),
 })
 
 contextBridge.exposeInMainWorld('fuseAPI', {

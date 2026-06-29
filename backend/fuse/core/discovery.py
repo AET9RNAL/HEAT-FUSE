@@ -5,15 +5,11 @@ archives.  Drop a ``<plugin_id>-<version>.fuse`` file into any of the scanned
 directories and FUSE will import it directly via Python's built-in zipimport
 machinery — no extraction needed.
 
-Scanned roots (in order):
+Scanned root:
 
-1. ``fuse/plugins/``          — core built-in plugins shipped with FUSE
-2. ``<repo>/plugins/``        — user drop-in directory (zero config)
-3. ``FUSE_PLUGIN_DIRS`` env   — colon/semicolon-separated extra paths
-4. ``extra_plugin_dirs`` arg  — caller-supplied (from fuse_host.json / launcher)
-
-Use ``fuse.packaging.pack.pack_core()`` to build ``.fuse`` archives from the
-core plugin source directories.
+1. ``USER_PLUGINS_DIR``  — single directory for all plugins (core + user)
+   Set via ``FUSE_USER_PLUGINS_DIR`` env var in production (userData/plugins).
+   Falls back to ``<repo>/plugins`` in dev.
 
 Every plugin must have a ``manifest.json`` inside its archive:
 
@@ -52,7 +48,9 @@ from fuse.core.api import FusePlugin
 from fuse.utils.paths import REPO_ROOT
 
 BUILTIN_PLUGINS_DIR: Path = Path(__file__).resolve().parent.parent / "plugins"
-USER_PLUGINS_DIR: Path = REPO_ROOT / "plugins"
+
+_env_user_plugins = os.environ.get("FUSE_USER_PLUGINS_DIR")
+USER_PLUGINS_DIR: Path = Path(_env_user_plugins) if _env_user_plugins else REPO_ROOT / "plugins"
 
 
 @dataclass(frozen=True)
@@ -69,6 +67,7 @@ class DiscoveredPlugin:
     author: str = ""
     homepage: str = ""
     tags: list = field(default_factory=list)
+    is_core: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -172,6 +171,7 @@ def _scan_fuse_archives(directory: Path) -> List[DiscoveredPlugin]:
                 author=manifest.get("author", ""),
                 homepage=manifest.get("homepage", ""),
                 tags=manifest.get("tags", []),
+                is_core=manifest.get("core", False),
             )
         )
         logger.info(
@@ -185,34 +185,14 @@ def _scan_fuse_archives(directory: Path) -> List[DiscoveredPlugin]:
 # Public API
 # ---------------------------------------------------------------------------
 
-def discover(extra_dirs: Optional[List[Path]] = None) -> List[DiscoveredPlugin]:
-    """Scan all plugin sources and return every valid plugin found.
+def discover() -> List[DiscoveredPlugin]:
+    """Scan the single plugins directory and return every valid plugin found.
 
-    Scan order (earlier sources take precedence on plugin_id collision):
-
-    1. ``fuse/plugins/``    — core built-in plugins (``.fuse`` archives)
-    2. ``<repo>/plugins/``  — user drop-in directory (``.fuse`` archives)
-    3. ``FUSE_PLUGIN_DIRS`` — env var, ``.fuse`` archives
-    4. *extra_dirs*          — caller-supplied, ``.fuse`` archives
+    All plugins (core and user) live in ``USER_PLUGINS_DIR``. Core plugins
+    are distinguished by ``"core": true`` in their manifest and loaded
+    first by the resolver.
     """
-    found: List[DiscoveredPlugin] = []
-
-    # 1. Core built-in plugins — .fuse archives in fuse/plugins/.
-    found.extend(_scan_fuse_archives(BUILTIN_PLUGINS_DIR))
-
-    # 2. Standard user drop-in directory — .fuse archives.
-    found.extend(_scan_fuse_archives(USER_PLUGINS_DIR))
-
-    # 3. FUSE_PLUGIN_DIRS environment variable.
-    env_dirs = os.environ.get("FUSE_PLUGIN_DIRS", "")
-    for raw in (p.strip() for p in env_dirs.replace(";", ":").split(":") if p.strip()):
-        found.extend(_scan_fuse_archives(Path(raw)))
-
-    # 4. Caller-supplied extra directories.
-    for ext_dir in (extra_dirs or []):
-        found.extend(_scan_fuse_archives(Path(ext_dir)))
-
-    return found
+    return _scan_fuse_archives(USER_PLUGINS_DIR)
 
 
 __all__ = ["DiscoveredPlugin", "discover", "BUILTIN_PLUGINS_DIR", "USER_PLUGINS_DIR"]

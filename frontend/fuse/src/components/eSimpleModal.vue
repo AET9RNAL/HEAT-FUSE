@@ -2,50 +2,50 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { AnimatePresence, motion } from 'motion-v'
 import eMaterialButton from './eMaterialButton.vue'
-import Icons from './Icons.vue'
-import { usePluginsStore } from '../stores/plugins'
 import { eventBus } from '../events/eventBus'
 
-interface DirtyState {
-    plugin_id: string
-    pendingConfig: Record<string, unknown>
-    pendingHotkeys: Record<string, string>
+interface Pending {
+    label: string
+    saveLabel: string
+    cancelLabel: string
+    onConfirm: () => Promise<void> | void
+    onCancel?: () => void
 }
 
-const store = usePluginsStore()
-const dirty = ref<DirtyState | null>(null)
+const pending = ref<Pending | null>(null)
+const saving  = ref(false)
 
-function onDirty(payload: DirtyState) { dirty.value = { ...payload } }
-function onSaved() { dirty.value = null }
-function onReset() { dirty.value = null }
+function onShow(payload: { label: string; saveLabel?: string; cancelLabel?: string; onConfirm: () => Promise<void> | void; onCancel?: () => void }) {
+    pending.value = {
+        label:       payload.label,
+        saveLabel:   payload.saveLabel  ?? 'Save',
+        cancelLabel: payload.cancelLabel ?? 'Cancel',
+        onConfirm:   payload.onConfirm,
+        onCancel:    payload.onCancel,
+    }
+}
+function onDismiss() { pending.value = null }
 
 onMounted(() => {
-    eventBus.on('plugin-config:dirty', onDirty)
-    eventBus.on('plugin-config:saved', onSaved)
-    eventBus.on('plugin-config:reset', onReset)
+    eventBus.on('modal:pending', onShow)
+    eventBus.on('modal:dismiss', onDismiss)
 })
 onUnmounted(() => {
-    eventBus.off('plugin-config:dirty', onDirty)
-    eventBus.off('plugin-config:saved', onSaved)
-    eventBus.off('plugin-config:reset', onReset)
+    eventBus.off('modal:pending', onShow)
+    eventBus.off('modal:dismiss', onDismiss)
 })
 
-async function save() {
-    if (!dirty.value) return
-    const { plugin_id, pendingConfig, pendingHotkeys } = dirty.value
-    const ops = [
-        ...Object.entries(pendingConfig).map(([key, value]) => store.setPluginConfig(plugin_id, key, value)),
-        ...Object.entries(pendingHotkeys).map(([action, combo]) => store.rebindHotkey(plugin_id, action, combo)),
-    ]
-    await Promise.all(ops)
-    dirty.value = null
-    eventBus.emit('plugin-config:saved', { plugin_id })
+async function confirm() {
+    if (!pending.value || saving.value) return
+    saving.value = true
+    try { await pending.value.onConfirm() }
+    finally { saving.value = false }
+    pending.value = null
 }
 
-function reset() {
-    const pid = dirty.value?.plugin_id
-    dirty.value = null
-    if (pid) eventBus.emit('plugin-config:reset', { plugin_id: pid })
+function cancel() {
+    pending.value?.onCancel?.()
+    pending.value = null
 }
 
 // SVG polygon stroke — traces the 6-point clip-path
@@ -54,8 +54,7 @@ const modalEl = ref<HTMLElement | null>(null)
 const elW = ref(0)
 const elH = ref(0)
 const svgPoints = computed(() => {
-    const w = elW.value
-    const h = elH.value
+    const w = elW.value, h = elH.value
     if (!w || !h) return ''
     const cx = (CUT / w) * 100
     const cy = (CUT / h) * 100
@@ -77,7 +76,7 @@ onUnmounted(() => _ro?.disconnect())
 <template>
     <AnimatePresence>
         <motion.div
-            v-if="dirty"
+            v-if="pending"
             class="modal-anchor"
             :initial="{ opacity: 0, y: 32 }"
             :animate="{ opacity: 1, y: 0 }"
@@ -86,15 +85,15 @@ onUnmounted(() => _ro?.disconnect())
         >
             <div ref="modalEl" class="simple-modal">
                 <div class="modal-body">
-                    <Icons kind="settings" size="normal" class="modal-icon" />
-                    <span class="modal-label">You have unsaved changes</span>
+                    <span class="modal-label">{{ pending.label }}</span>
                     <div class="modal-actions">
-                        <eMaterialButton label="Reset" variant="tertiary" @click="reset" />
+                        <eMaterialButton :label="pending.cancelLabel" variant="tertiary" @click="cancel" />
                         <eMaterialButton
-                            label="Save Changes"
+                            :label="saving ? '...' : pending.saveLabel"
                             :fill="'var(--light-green)'"
                             :color="'var(--black-1)'"
-                            @click="save"
+                            :disabled="saving"
+                            @click="confirm"
                         />
                     </div>
                 </div>
@@ -160,11 +159,6 @@ onUnmounted(() => _ro?.disconnect())
     gap: var(--space-3);
     padding: var(--space-2) var(--space-4);
     min-width: 360px;
-}
-
-.modal-icon {
-    color: var(--text-muted);
-    flex-shrink: 0;
 }
 
 .modal-label {

@@ -1,27 +1,48 @@
 <script setup lang="ts">
 import Titlebar from './components/Titlebar.vue'
 import AppMain from './components/AppMain.vue'
+import AppAuth from './components/AppAuth.vue'
+import AppResetPassword from './components/AppResetPassword.vue'
 import eNotification from './components/eNotification.vue'
 import ePluginConfig from './components/ePluginConfig.vue'
 import eSimpleModal from './components/eSimpleModal.vue'
+import eLicense from './components/eLicense.vue'
 import { useAppStore } from './stores/app'
+import { useAuthStore } from './stores/auth'
 import { usePluginsStore } from './stores/plugins'
+import { useNavigationStore } from './stores/navigation'
 import { useSuspension } from './composables/useSuspension'
 import { useFuseControl } from './composables/useFuseControl'
 import { useFuseLogs } from './composables/useFuseLogs'
 import { useDiscordPresence } from './composables/useDiscordPresence'
+import { usePostHog } from './composables/usePostHog'
 import { eventBus } from './events/eventBus'
 import { useI18n } from './composables/useI18n'
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onUnmounted } from 'vue'
 import { AnimatePresence, motion } from 'motion-v'
 import packageJson from '../package.json'
 
 const appStore = useAppStore()
+const authStore = useAuthStore()
 const pluginsStore = usePluginsStore()
+const navStore = useNavigationStore()
 const { t } = useI18n()
-useSuspension()
-useFuseControl()
+
+// Register deep-link listener early (before any component mounts)
+// Handles second-instance deep links while app is running
+window.appAPI?.onDeepLink?.((route: string, params: Record<string, string>) => {
+    if (route === 'reset-password') {
+        authStore.handlePasswordRecoveryDeepLink(params)
+    }
+})
+
+watch(() => authStore.isSignedIn(), (signedIn) => {
+    if (!signedIn && navStore.selectedOption === 'account') {
+        navStore.selectOption('home')
+    }
+})
 useDiscordPresence()
+usePostHog()
 const { register: registerLogs } = useFuseLogs()
 
 const notification = ref<{ title?: string; message: string } | null>(null)
@@ -31,6 +52,9 @@ const activePlugin = computed(() =>
         ? pluginsStore.plugins.find(p => p.plugin_id === activePluginConfigId.value) ?? null
         : null
 )
+
+const showAuth = computed(() => ['welcome', 'auth', 'otp', 'forgot-password'].includes(authStore.screen))
+const showResetPassword = computed(() => authStore.screen === 'reset-password')
 
 function showNotification(payload: { title?: string; message: string }) {
     notification.value = payload
@@ -68,18 +92,29 @@ function handleUpdateError({ message }: { message: string }) {
     })
 }
 
-onMounted(() => {
+let appInitialized = false
+
+watch(() => appStore.licenseAccepted, async (accepted) => {
+    if (!accepted || appInitialized) return
+    appInitialized = true
+
+    useSuspension()
+    useFuseControl()
     registerLogs()
+
     appStore.appVersion = packageJson.version
     const dir = appStore.gameDirPaths[appStore.gamePlatform]
     if (dir) appStore.scanGameDir(dir)
+
     eventBus.on('notification', showNotification)
     eventBus.on('plugin-config:open', openPluginConfig)
     eventBus.on('update:found', handleUpdateFound)
     eventBus.on('update:downloading', handleUpdateDownloading)
     eventBus.on('update:installed', handleUpdateInstalled)
     eventBus.on('update:error', handleUpdateError)
-})
+
+    await authStore.initializeAuth()
+}, { immediate: true })
 
 onUnmounted(() => {
     eventBus.off('notification', showNotification)
@@ -93,7 +128,19 @@ onUnmounted(() => {
 
 <template>
   <Titlebar v-once />
-  <AppMain />
+  <AppMain v-if="appStore.licenseAccepted" />
+
+  <AnimatePresence>
+    <eLicense v-if="!appStore.licenseAccepted" @close="() => {}" />
+  </AnimatePresence>
+
+  <!-- Auth overlay (sit above AppMain) -->
+  <AnimatePresence>
+    <AppAuth v-if="appStore.licenseAccepted && showAuth" key="auth" />
+  </AnimatePresence>
+  <AnimatePresence>
+    <AppResetPassword v-if="appStore.licenseAccepted && showResetPassword" key="reset" />
+  </AnimatePresence>
 
   <!-- Notification toast -->
   <AnimatePresence>

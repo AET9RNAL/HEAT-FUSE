@@ -313,20 +313,16 @@ verify("out/MyPlugin-1.0.fuse")   # bool - checks ZIP structure + manifest
 
 ## Discovery & Load Order
 
-FUSE scans plugins from these sources. Earlier sources win on `plugin_id` collision:
-
-1. `fuse/plugins/` - built-in core plugins (folder-based, shipped with the framework).
-2. `<repo>/plugins/*.fuse` - user drop-in directory (**only `.fuse` archives**; loose folders are ignored).
-3. `FUSE_PLUGIN_DIRS` env var (`:`/`;` separated paths; each scanned for `*.fuse`).
-4. `extra_plugin_dirs` argument to `run()` / `PluginHost.load_plugins()`.
+FUSE scans plugins from a single directory (`USER_PLUGINS_DIR`, set via `FUSE_USER_PLUGINS_DIR` env var in production, `<repo>/plugins` in dev). All plugins — core and user — live here as `.fuse` archives. Core plugins are distinguished by `"core": true` in their manifest.
 
 After discovery the resolver:
 
 1. **Enable/disable filter** - `fuse_host.json` `disabled_plugins` excludes; non-null `enabled_plugins` is a whitelist.
 2. **Compatibility check** - `min_host_version` is compared against `HOST_VERSION` (`2.4.0`). Incompatible plugins are skipped.
 3. **Dependency filter** - missing or version-mismatched required deps drop the dependent plugin.
-4. **Topological sort** - required deps are hard edges; optional deps are soft edges. Providers always load before consumers.
-5. **Cycle detection** - cyclic dependencies are dropped with an error log.
+4. **Core-first ordering** - core plugins (`"core": true`) always load before user plugins. Within each group, topological sort applies.
+5. **Topological sort** - required deps are hard edges; optional deps are soft edges. Providers always load before consumers.
+6. **Cycle detection** - cyclic dependencies are dropped with an error log.
 
 ---
 

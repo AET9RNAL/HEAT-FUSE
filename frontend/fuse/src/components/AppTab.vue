@@ -7,6 +7,7 @@ import AppHome from './AppHome.vue'
 import AppSettings from './AppSettings.vue'
 import AppDiscover from './AppDiscover.vue'
 import AppAbout from './AppAbout.vue'
+import AppAccount from './AppAccount.vue'
 
 const store = useNavigationStore()
 const containerRef = ref<HTMLElement>()
@@ -16,6 +17,7 @@ const tabComponents = {
   discover: AppDiscover,
   settings: AppSettings,
   about:    AppAbout,
+  account:  AppAccount,
 } as const
 
 const currentComponent = computed(() => tabComponents[store.selectedOption])
@@ -51,10 +53,11 @@ watch(() => store.selectedOption, () => {
 <style scoped>
 .container {
   flex: 1;
-  height: 100%;
-  width: 100%;
   min-width: 0;
-  padding: var(--space-4);
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-4) var(--space-4) var(--space-3);
   position: relative;
 }
 
@@ -68,14 +71,14 @@ watch(() => store.selectedOption, () => {
 }
 
 .tab-wrapper {
+  flex: 1;
+  min-height: 0;
   width: 100%;
-  height: 100%;
   overflow-y: auto;
   overflow-x: hidden;
   overflow-anchor: none;
   padding-right: var(--space-2);
   contain: layout style paint;
-  
 }
 
 .tab-wrapper::-webkit-scrollbar { width: 6px; }

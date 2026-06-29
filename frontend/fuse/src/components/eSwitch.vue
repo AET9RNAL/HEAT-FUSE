@@ -5,7 +5,8 @@ import Icons, { type IconKind } from './Icons.vue'
 import { Dynamics } from '../composables/useMotion'
 
 export interface eSwitchOption {
-  icon: IconKind
+  icon?: IconKind
+  label?: string
   value: string
 }
 
@@ -86,7 +87,8 @@ onUnmounted(() => ro?.disconnect())
       </motion.div>
 
       <div class="option-content">
-        <Icons :kind="opt.icon" size="large" />
+        <span v-if="opt.label" class="option-label">{{ opt.label }}</span>
+        <Icons v-else-if="opt.icon" :kind="opt.icon" size="large" />
       </div>
     </div>
 
@@ -192,5 +194,13 @@ onUnmounted(() => ro?.disconnect())
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.option-label {
+  font-family: var(--font-primary);
+  font-size: var(--main-font-size-4);
+  color: var(--text-main);
+  white-space: nowrap;
+  user-select: none;
 }
 </style>

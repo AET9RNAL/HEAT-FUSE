@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, toRef, watch, onUnmounted, type MaybeRef } from 'vue'
+import { ref, computed, toRef, watch, onUnmounted, nextTick, type MaybeRef } from 'vue'
 import Icons from './Icons.vue'
 import type { IconKind, IconSize } from './Icons.vue'
 import { useKeystroke } from '../composables/useKeystroke'
@@ -41,6 +41,8 @@ const props = withDefaults(defineProps<Props>(), {
 })
 
 const show = ref(false)
+const triggerRef = ref<HTMLElement | null>(null)
+const menuPos = ref({ top: 0, left: undefined as number | undefined, right: undefined as number | undefined })
 
 const shortcutOptions = computed(() => props.options.filter(o => o.shortcut))
 
@@ -78,7 +80,91 @@ watch(menuEl, (el) => {
     })
     ro.observe(el)
 })
-onUnmounted(() => ro?.disconnect())
+function updateMenuPos() {
+    if (!show.value || !triggerRef.value) return
+    const rect = triggerRef.value.getBoundingClientRect()
+    const scrollX = window.scrollX || document.documentElement.scrollLeft || 0
+    const scrollY = window.scrollY || document.documentElement.scrollTop || 0
+
+    if (props.placement === 'bottom') {
+        const w = menuEl.value?.offsetWidth ?? 0
+        menuPos.value = {
+            top: rect.bottom + scrollY,
+            left: rect.right - w + scrollX,
+            right: undefined,
+        }
+    } else {
+        const h = menuEl.value?.offsetHeight ?? 0
+        menuPos.value = {
+            top: rect.top + rect.height / 2 - h / 2 + scrollY,
+            left: rect.right + scrollX,
+            right: undefined,
+        }
+    }
+}
+
+watch(show, async (val) => {
+    if (val) {
+        await nextTick()
+        requestAnimationFrame(updateMenuPos)
+    }
+})
+
+watch([menuW, menuH], () => {
+    if (show.value) updateMenuPos()
+})
+
+function onLayoutChange() {
+    if (show.value) updateMenuPos()
+}
+window.addEventListener('scroll', onLayoutChange, true)
+window.addEventListener('resize', onLayoutChange)
+
+function onDocumentClick(e: MouseEvent) {
+    const target = e.target as Node
+    if (triggerRef.value?.contains(target)) return
+    if (menuEl.value?.contains(target)) return
+    show.value = false
+}
+
+function onKeyDown(e: KeyboardEvent) {
+    if (e.key === 'Escape') show.value = false
+}
+
+let leaveTimer: ReturnType<typeof setTimeout> | null = null
+
+function onMenuEnter() {
+    if (leaveTimer) {
+        clearTimeout(leaveTimer)
+        leaveTimer = null
+    }
+}
+
+function onMenuLeave() {
+    leaveTimer = setTimeout(() => {
+        show.value = false
+        leaveTimer = null
+    }, 50)
+}
+
+watch(show, (val) => {
+    if (val) {
+        document.addEventListener('mousedown', onDocumentClick)
+        document.addEventListener('keydown', onKeyDown)
+    } else {
+        document.removeEventListener('mousedown', onDocumentClick)
+        document.removeEventListener('keydown', onKeyDown)
+    }
+})
+
+onUnmounted(() => {
+    ro?.disconnect()
+    document.removeEventListener('mousedown', onDocumentClick)
+    document.removeEventListener('keydown', onKeyDown)
+    window.removeEventListener('scroll', onLayoutChange, true)
+    window.removeEventListener('resize', onLayoutChange)
+    if (leaveTimer) clearTimeout(leaveTimer)
+})
 
 const menuSvgPoints = computed(() => {
     const w = menuW.value
@@ -102,7 +188,7 @@ defineExpose({ close, isHovering, isPressed })
 </script>
 
 <template>
-    <div ref="targetRef" class="more-menu-container" @click.stop @mouseleave="show = false">
+    <div ref="targetRef" class="more-menu-container" @click.stop @mouseenter="onMenuEnter" @mouseleave="onMenuLeave">
         <!-- Shortcut mode: show shortcut icons when key held + hovering -->
         <template v-if="keystrokeEnabled && isPressed && isHovering && shortcutOptions.length">
             <span
@@ -120,37 +206,39 @@ defineExpose({ close, isHovering, isPressed })
         </template>
         <!-- Normal more menu -->
         <template v-else>
-            <span class="more-btn" @click.stop="show = !show">
+            <span class="more-btn" ref="triggerRef" @click.stop="show = !show">
                 <Icons :kind="triggerIcon" :size="triggerIconSize"/>
             </span>
-            <div v-if="show" ref="menuEl" class="more-menu" :class="'placement-' + placement" @click.stop>
-                <span
-                    v-for="(option, i) in options"
-                    :key="i"
-                    class="menu-item"
-                    @click="executeOption(option)"
-                >
-                    <Icons :kind="option.icon" :size="option.iconSize ?? 'small'" :color="option.iconColor ?? ''"/>
-                    <span class="menu-item-label">{{ option.label }}</span>
-                </span>
-                <svg
-                    v-if="menuSvgPoints"
-                    class="menu-polygon-stroke"
-                    viewBox="0 0 100 100"
-                    preserveAspectRatio="none"
-                    xmlns="http://www.w3.org/2000/svg"
-                >
-                    <polygon
-                        :points="menuSvgPoints"
-                        fill="none"
-                        stroke="#525252"
-                        stroke-width="0.4"
-                        vector-effect="non-scaling-stroke"
-                    />
-                </svg>
-            </div>
         </template>
     </div>
+    <Teleport to="body">
+        <div v-if="show" ref="menuEl" class="more-menu" :class="'placement-' + placement" :style="{ top: menuPos.top + 'px', left: menuPos.left !== undefined ? menuPos.left + 'px' : 'auto', right: menuPos.right !== undefined ? menuPos.right + 'px' : 'auto' }" @click.stop @mouseenter="onMenuEnter" @mouseleave="onMenuLeave">
+            <span
+                v-for="(option, i) in options"
+                :key="i"
+                class="menu-item"
+                @click="executeOption(option)"
+            >
+                <Icons :kind="option.icon" :size="option.iconSize ?? 'small'" :color="option.iconColor ?? ''"/>
+                <span class="menu-item-label">{{ option.label }}</span>
+            </span>
+            <svg
+                v-if="menuSvgPoints"
+                class="menu-polygon-stroke"
+                viewBox="0 0 100 100"
+                preserveAspectRatio="none"
+                xmlns="http://www.w3.org/2000/svg"
+            >
+                <polygon
+                    :points="menuSvgPoints"
+                    fill="none"
+                    stroke="#525252"
+                    stroke-width="0.4"
+                    vector-effect="non-scaling-stroke"
+                />
+            </svg>
+        </div>
+    </Teleport>
 </template>
 
 <style scoped>
@@ -167,6 +255,8 @@ defineExpose({ close, isHovering, isPressed })
     align-items: center;
     opacity: 0.6;
     transition: opacity 0.15s;
+    padding: 8px;
+    margin: -8px;
 }
 
 .more-btn:hover {
@@ -187,7 +277,7 @@ defineExpose({ close, isHovering, isPressed })
 
 .more-menu {
     position: absolute;
-    z-index: 10;
+    z-index: 1000;
     min-width: 80px;
     padding: var(--space-1);
     background-color: var(--black-1-a);
@@ -212,10 +302,6 @@ defineExpose({ close, isHovering, isPressed })
 }
 
 /* Placement: bottom (default) */
-.placement-bottom {
-    top: 100%;
-    right: 0;
-}
 .placement-bottom::before {
     content: '';
     position: absolute;
@@ -226,11 +312,6 @@ defineExpose({ close, isHovering, isPressed })
 }
 
 /* Placement: right */
-.placement-right {
-    left: 200%;
-    top: 50%;
-    transform: translateY(-50%);
-}
 .placement-right::before {
     content: '';
     position: absolute;

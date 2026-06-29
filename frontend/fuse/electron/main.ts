@@ -1,7 +1,13 @@
-import { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, safeStorage, powerMonitor, shell, dialog } from 'electron'
+import { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, safeStorage, powerMonitor, shell, dialog, protocol, net } from 'electron'
+import * as Sentry from '@sentry/electron/main'
+if (import.meta.env.VITE_SENTRY_DSN) {
+  Sentry.init({ dsn: import.meta.env.VITE_SENTRY_DSN as string })
+}
 import { autoUpdater } from 'electron-updater'
 import { spawn, execFile, type ChildProcess } from 'node:child_process'
 import { promisify } from 'node:util'
+import os from 'node:os'
+import crypto from 'node:crypto'
 import DiscordRPC from 'discord-rpc'
 
 const execFileAsync = promisify(execFile)
@@ -24,16 +30,17 @@ process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL ? path.join(process.env.APP_ROOT, 
 
 const IS_DEV   = !!VITE_DEV_SERVER_URL
 const REPO_ROOT = path.join(process.env.APP_ROOT!, '..', '..') // HEAT_SACLOS/ — only meaningful in dev
+const USER_DATA_DIR = IS_DEV ? path.join(REPO_ROOT, 'backend', 'data') : app.getPath('userData')
 
 const PATHS: Record<string, string> = {
   configs:     IS_DEV ? path.join(REPO_ROOT, 'backend', 'data', 'configs')
-                      : path.join(process.resourcesPath, 'fuse-backend.dist', 'data', 'configs'),
+                      : path.join(USER_DATA_DIR, 'configs'),
   fileBrowser: IS_DEV ? path.join(REPO_ROOT, 'backend')
                       : process.resourcesPath,
   pluginsCore: IS_DEV ? path.join(REPO_ROOT, 'backend', 'fuse', 'plugins')
-                      : path.join(process.resourcesPath, 'fuse', 'plugins'),
+                      : path.join(USER_DATA_DIR, 'plugins'),
   pluginsUser: IS_DEV ? path.join(REPO_ROOT, 'backend', 'plugins')
-                      : path.join(process.resourcesPath, 'plugins'),
+                      : path.join(USER_DATA_DIR, 'plugins'),
   trayIcon:    IS_DEV ? path.join(__dirname, '..', 'build', 'icon.png')
                       : path.join(process.resourcesPath, 'icon.png'),
   fileTypeIco: IS_DEV ? path.join(__dirname, '..', 'src', 'assets', 'fuse_filetype.ico')
@@ -54,12 +61,12 @@ interface PluginManifest {
   author?: string
   config_schema?: unknown[]
   hotkeys?: unknown[]
+  core?: boolean
 }
 
 interface HostConfig {
   disabled_plugins: string[]
   enabled_plugins: string[] | null
-  extra_plugin_dirs: string[]
   hotkey_overrides?: Record<string, Record<string, string>>
 }
 
@@ -71,7 +78,7 @@ function assertWithinRoot(target: string, root: string) {
 
 function readHostConfig(): HostConfig {
   const p = path.join(PATHS.configs, 'fuse_host.json')
-  if (!fs.existsSync(p)) return { disabled_plugins: [], enabled_plugins: null, extra_plugin_dirs: [] }
+  if (!fs.existsSync(p)) return { disabled_plugins: [], enabled_plugins: null }
   return JSON.parse(fs.readFileSync(p, 'utf-8')) as HostConfig
 }
 
@@ -87,6 +94,7 @@ function scanPluginsDir(dir: string) {
     .flatMap(file => {
       try {
         const buf = fs.readFileSync(path.join(dir, file))
+        const checksum = crypto.createHash('sha256').update(buf).digest('hex')
         const entries = unzipSync(new Uint8Array(buf), { filter: f => f.name.endsWith('/manifest.json') })
         const manifestKey = Object.keys(entries).find(k => k.endsWith('/manifest.json'))
         if (!manifestKey) return []
@@ -100,7 +108,9 @@ function scanPluginsDir(dir: string) {
           status:       'pending' as const,
           configSchema: m.config_schema ?? [],
           hotkeys:      m.hotkeys      ?? [],
+          core:         m.core         ?? false,
           filePath:     path.join(dir, file),
+          checksum,
         }]
       } catch { return [] }
     })
@@ -244,6 +254,28 @@ async function _setFileAssoc(register: boolean): Promise<{ success: boolean; err
   } catch (e: unknown) {
     return { success: false, error: (e as Error).message }
   }
+}
+
+// --- Device info helpers ---
+
+function getDeviceFingerprint(): string {
+    const cpuModel = os.cpus()[0]?.model ?? 'unknown'
+    const hostname = os.hostname()
+    const platform = os.platform()
+    return crypto.createHash('sha256')
+        .update(`${cpuModel}|${hostname}|${platform}`)
+        .digest('hex')
+        .slice(0, 32)
+}
+
+function getLocalIP(): string | null {
+    const ifaces = os.networkInterfaces()
+    for (const iface of Object.values(ifaces)) {
+        for (const addr of (iface ?? [])) {
+            if (!addr.internal && addr.family === 'IPv4') return addr.address
+        }
+    }
+    return null
 }
 
 const DISCORD_CLIENT_ID = '1519898189006897383'
@@ -413,6 +445,7 @@ function createWindow() {
           " https://*.supabase.co wss://*.supabase.co" +
           " https://*.betterstackdata.com" +
           " https://us.i.posthog.com https://us-assets.i.posthog.com" +
+          " sentry-ipc:" +
           " https://unpkg.com;" +
           ` frame-src ${VITE_DEV_SERVER_URL ? 'http://localhost:*' : "'none'"};` +
           " object-src 'none';" +
@@ -464,8 +497,52 @@ app.on('activate', () => {
 })
 
 
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'sentry-ipc', privileges: { standard: true, secure: true, corsEnabled: true, supportFetchAPI: true } },
+])
+
+if (process.defaultApp) {
+  if (process.argv.length >= 2) {
+    app.setAsDefaultProtocolClient('fuse', process.execPath, [path.resolve(process.argv[1])])
+  }
+} else {
+  app.setAsDefaultProtocolClient('fuse')
+}
+
+const ALLOWED_DEEP_LINK_ROUTES = new Set(['reset-password'])
+
+function handleDeepLink(url: string) {
+  const route = url.replace('fuse://', '').split(/[?#]/)[0].replace(/\/$/, '')
+  if (!ALLOWED_DEEP_LINK_ROUTES.has(route)) return
+  const fakeUrl = new URL(url.replace('fuse://', 'https://placeholder/'))
+  const queryParams = Object.fromEntries(fakeUrl.searchParams)
+  const hashParams = Object.fromEntries(new URLSearchParams(fakeUrl.hash.slice(1)))
+  const params = { ...queryParams, ...hashParams }
+  win?.webContents.send('app:deep-link', route, params)
+}
+
+if (!app.requestSingleInstanceLock()) {
+  app.quit()
+} else {
+  app.on('second-instance', (_event, argv) => {
+    // In dev argv is ['electron', 'script', 'fuse://...']; in prod ['app.exe', 'fuse://...']
+    const url = argv.find(a => a.startsWith('fuse://'))
+    if (url) handleDeepLink(url)
+    if (win) {
+      if (win.isMinimized()) win.restore()
+      win.focus()
+    }
+  })
+}
+
 app.whenReady().then(() => {
   createWindow()
+
+  // Cold-start deep link (app launched by OS protocol handler)
+  const deepLinkArg = process.argv.find(a => a.startsWith('fuse://'))
+  if (deepLinkArg) {
+    win?.webContents.once('did-finish-load', () => handleDeepLink(deepLinkArg))
+  }
 
   // System suspend/resume
   powerMonitor.on('suspend', () => { win?.webContents.send('app:suspended') })
@@ -517,7 +594,8 @@ app.whenReady().then(() => {
       args       = []
       spawnEnv   = {
         ...process.env,
-        FUSE_PLUGIN_DIRS: [PATHS.pluginsCore, PATHS.pluginsUser].join(';'),
+        FUSE_DATA_DIR: USER_DATA_DIR,
+        FUSE_USER_PLUGINS_DIR: PATHS.pluginsUser,
       }
     }
 
@@ -619,16 +697,77 @@ app.whenReady().then(() => {
   }))
 
   ipcMain.handle('plugins:scan', () => {
-    return [...scanPluginsDir(PATHS.pluginsCore), ...scanPluginsDir(PATHS.pluginsUser)]
+    return scanPluginsDir(PATHS.pluginsUser)
   })
 
+  // Restrict file operations to plugins directory only
+  function assertInPluginsDir(filePath: string): void {
+    const resolved = path.resolve(filePath)
+    const pluginsDir = path.resolve(PATHS.pluginsUser)
+    if (!resolved.startsWith(pluginsDir + path.sep)) {
+      throw new Error('Path is outside plugins directory')
+    }
+  }
+
+  // Only allow HTTPS requests to Cloudflare R2 hostnames
+  function assertR2Url(url: string): void {
+    let parsed: URL
+    try { parsed = new URL(url) } catch { throw new Error('Invalid URL') }
+    if (parsed.protocol !== 'https:') throw new Error('Only HTTPS URLs are allowed')
+    const { hostname } = parsed
+    if (!hostname.endsWith('.r2.cloudflarestorage.com') && !hostname.endsWith('.r2.dev')) {
+      throw new Error('URL must point to Cloudflare R2 storage')
+    }
+  }
+
   ipcMain.handle('plugins:show-file', (_event, filePath: string) => {
-    shell.showItemInFolder(filePath)
+    try {
+      assertInPluginsDir(filePath)
+      shell.showItemInFolder(path.resolve(filePath))
+    } catch { /* ignore — don't reveal why the path was rejected */ }
   })
 
   ipcMain.handle('plugins:delete', (_event, filePath: string) => {
     try {
-      fs.unlinkSync(filePath)
+      assertInPluginsDir(filePath)
+      fs.unlinkSync(path.resolve(filePath))
+      return { success: true }
+    } catch (e: unknown) {
+      return { success: false, error: (e as Error).message }
+    }
+  })
+
+  ipcMain.handle('plugins:download-plugin', async (_event, url: string, filename: string) => {
+    try {
+      assertR2Url(url)
+      const safeFilename = path.basename(filename).replace(/[^a-zA-Z0-9._\-]/g, '_')
+      if (!safeFilename.endsWith('.fuse')) throw new Error('Only .fuse files can be installed')
+      const dest = path.join(PATHS.pluginsUser, safeFilename)
+      if (!fs.existsSync(PATHS.pluginsUser)) fs.mkdirSync(PATHS.pluginsUser, { recursive: true })
+      const response = await net.fetch(url)
+      if (!response.ok) throw new Error(`Download failed: HTTP ${response.status}`)
+      const buffer = await response.arrayBuffer()
+      const fileBuf = Buffer.from(buffer)
+      fs.writeFileSync(dest, fileBuf)
+      const checksum = crypto.createHash('sha256').update(fileBuf).digest('hex')
+      return { success: true, filePath: dest, checksum }
+    } catch (e: unknown) {
+      return { success: false, error: (e as Error).message }
+    }
+  })
+
+  ipcMain.handle('plugins:upload-to-r2', async (_event, presignedUrl: string, fileBuffer: ArrayBuffer, contentType: string) => {
+    try {
+      assertR2Url(presignedUrl)
+      const response = await net.fetch(presignedUrl, {
+        method: 'PUT',
+        body: Buffer.from(fileBuffer),
+        headers: { 'Content-Type': contentType },
+      })
+      if (!response.ok) {
+        const body = await response.text().catch(() => '')
+        throw new Error(`Upload failed: HTTP ${response.status} ${body}`)
+      }
       return { success: true }
     } catch (e: unknown) {
       return { success: false, error: (e as Error).message }
@@ -976,4 +1115,10 @@ app.whenReady().then(() => {
   ipcMain.handle('fileassoc:is-registered', () => _isFileAssocRegistered())
   ipcMain.handle('fileassoc:register',      () => _setFileAssoc(true))
   ipcMain.handle('fileassoc:unregister',    () => _setFileAssoc(false))
+
+  // Device info
+  ipcMain.handle('device:fingerprint', () => getDeviceFingerprint())
+  ipcMain.handle('device:name',        () => os.hostname())
+  ipcMain.handle('device:os',          () => `${os.platform()} ${os.release()}`)
+  ipcMain.handle('device:ip',          () => getLocalIP())
 })

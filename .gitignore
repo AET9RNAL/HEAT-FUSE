@@ -23,3 +23,4 @@ frontend/fuse/.env
 .env
 .env.local
 deprecated/
+fuseadmin/

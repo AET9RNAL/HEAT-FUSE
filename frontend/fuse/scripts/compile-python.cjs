@@ -113,9 +113,6 @@ function compile(force = false) {
     fs.existsSync(path.join(FUSE_DIR, 'vision', 'js'))
       ? `--include-data-dir="${path.join(FUSE_DIR, 'vision', 'js')}"=fuse/vision/js`
       : '',
-    fs.existsSync(path.join(BACKEND_DIR, 'data'))
-      ? `--include-data-dir="${path.join(BACKEND_DIR, 'data')}"=data`
-      : '',
     `--output-dir="${OUTPUT_DIR}"`,
     '--output-filename=fuse-backend.exe',
     `"${path.join(FUSE_DIR, 'run_fuse.py')}"`,

@@ -1,6 +1,8 @@
 import { defineStore } from 'pinia'
 import { ref, watch, type Ref } from 'vue'
-import { logger } from '../utils/logger'
+import { logger, setDiagnosticsConsent } from '../utils/logger'
+import { supabase } from '../composables/supabase-client'
+import { eventBus } from '../events/eventBus'
 
 function debounce<T extends (...args: any[]) => any>(fn: T, ms: number) {
     let timeout: ReturnType<typeof setTimeout>
@@ -31,6 +33,10 @@ export const useAppStore = defineStore('app', () => {
     const gameDirPaths = ref<Record<string, string>>({ steam: '', wgc: '' })
     const backendVersion = ref<string>('')
     const gameVersion = ref<string>('')
+    const licenseAccepted = ref<boolean>(false)
+    const analyticsConsent = ref<boolean>(false)
+    const diagnosticsConsent = ref<boolean>(false)
+    const username = ref<string | null>(null)
 
     // Setting registry
     // Each entry maps a ref to a DB column key and a load default.
@@ -55,6 +61,8 @@ export const useAppStore = defineStore('app', () => {
         fileAssoc:              { ref: fileAssoc,              db: 'file_assoc',                 default: true },
         gamePlatform:           { ref: gamePlatform,           db: 'game_platform',              default: 'steam' },
         gameDirPaths:           { ref: gameDirPaths,           db: 'game_dir_paths',             default: { steam: '', wgc: '' } },
+        analyticsConsent:       { ref: analyticsConsent,       db: 'analytics_consent',          default: false },
+        diagnosticsConsent:     { ref: diagnosticsConsent,     db: 'diagnostics_consent',        default: false },
     }
 
     // Batched save system (wire DB when auth is ready)
@@ -65,11 +73,23 @@ export const useAppStore = defineStore('app', () => {
     const debouncedSaveAll = debounce(async () => {
         if (Object.keys(pendingChanges.value).length === 0) return
         const toSave = { ...pendingChanges.value }
-        logger.info('Settings pending save:', toSave)
-        // TODO: persist toSave to DB (wire when Supabase auth is ready)
-        for (const key of Object.keys(toSave)) {
-            if (pendingChanges.value[key] === toSave[key]) {
-                delete pendingChanges.value[key]
+
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) return
+
+        const { error } = await supabase
+            .from('user_profiles')
+            .update(toSave)
+            .eq('user_id', user.id)
+
+        if (error) {
+            logger.error('Failed to save settings:', { error })
+        } else {
+            logger.info('Saved settings:', toSave)
+            for (const key of Object.keys(toSave)) {
+                if (pendingChanges.value[key] === toSave[key]) {
+                    delete pendingChanges.value[key]
+                }
             }
         }
     }, 500)
@@ -115,6 +135,10 @@ export const useAppStore = defineStore('app', () => {
         else       window.fileAssocAPI?.unregister()
     })
 
+    watch(diagnosticsConsent, (value) => {
+        setDiagnosticsConsent(value)
+    }, { immediate: true })
+
     // Load / init
 
     function loadDefaults() {
@@ -129,6 +153,67 @@ export const useAppStore = defineStore('app', () => {
         }
     }
 
+    async function loadSettings() {
+        isLoading = true
+        try {
+            const { data: { user } } = await supabase.auth.getUser()
+            if (!user) return
+            const { data, error } = await supabase.from('user_profiles').select('*').eq('user_id', user.id)
+            if (error) throw error
+            const profile = data?.[0]
+            if (!profile) return
+
+            for (const entry of Object.values(registry)) {
+                const dbValue = profile[entry.db]
+                entry.ref.value = dbValue ?? entry.default
+            }
+            username.value = profile['username'] ?? null
+            logger.info('Loaded settings from DB')
+        } catch (err: any) {
+            logger.error('Failed to load settings:', { error: err })
+        } finally {
+            pendingChanges.value = {}
+            isLoading = false
+        }
+    }
+
+    async function initUserProfile() {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) return
+
+        const { error: upsertError } = await supabase
+            .from('user_profiles')
+            .upsert(
+                { user_id: user.id },
+                { onConflict: 'user_id', ignoreDuplicates: true }
+            )
+
+        if (upsertError) {
+            logger.error('Failed to init profile:', { error: upsertError })
+            return
+        }
+
+        await loadSettings()
+    }
+
+    eventBus.on('auth:success', async () => {
+        // Capture consent the user may have toggled on the sign-in screen
+        // before they had an account — loadSettings() will overwrite these with
+        // DB defaults (false) unless we re-apply them afterward.
+        const preAuthAnalytics    = analyticsConsent.value
+        const preAuthDiagnostics  = diagnosticsConsent.value
+
+        await initUserProfile()
+
+        // isLoading is now false; watchers will queue saves normally.
+        if (preAuthAnalytics)   analyticsConsent.value   = true
+        if (preAuthDiagnostics) diagnosticsConsent.value = true
+    })
+
+    eventBus.on('auth:logout', () => {
+        loadDefaults()
+    })
+
     function setGameDirPath(platform: string, path: string) {
         gameDirPaths.value = { ...gameDirPaths.value, [platform]: path }
     }
@@ -137,6 +222,30 @@ export const useAppStore = defineStore('app', () => {
         if (!dirPath) { gameVersion.value = ''; return }
         const result = await window.gameAPI.scanDir(dirPath)
         gameVersion.value = result.version ?? ''
+    }
+
+    async function saveUsername(value: string): Promise<{ success: boolean; error?: string }> {
+        const trimmed = value.trim()
+        if (!trimmed) return { success: false, error: 'Username cannot be empty' }
+        if (!/^[a-zA-Z0-9_]{3,24}$/.test(trimmed))
+            return { success: false, error: 'Username must be 3–24 characters: letters, numbers, underscores only' }
+
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) return { success: false, error: 'Not signed in' }
+
+        const { error } = await supabase
+            .from('user_profiles')
+            .update({ username: trimmed })
+            .eq('user_id', user.id)
+
+        if (error) {
+            const msg = error.code === '23505'
+                ? 'Username already taken'
+                : error.message
+            return { success: false, error: msg }
+        }
+        username.value = trimmed
+        return { success: true }
     }
 
     async function checkDebugger(dirPath: string) {
@@ -167,12 +276,19 @@ export const useAppStore = defineStore('app', () => {
         gamePlatform,
         gameDirPaths,
         gameVersion,
+        licenseAccepted,
+        analyticsConsent,
+        diagnosticsConsent,
+        username,
+        saveUsername,
         setGameDirPath,
         scanGameDir,
         checkDebugger,
         enableDebugger,
         disableDebugger,
         loadDefaults,
+        loadSettings,
+        initUserProfile,
     }
 }, {
     persist: {
@@ -191,6 +307,10 @@ export const useAppStore = defineStore('app', () => {
             'gameDirPaths',
             'gameVersion',
             'backendVersion',
+            'licenseAccepted',
+            'analyticsConsent',
+            'diagnosticsConsent',
+            'username',
         ],
     },
 })

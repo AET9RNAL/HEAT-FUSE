@@ -51,7 +51,7 @@ from fuse.core.resolver import resolve_load_order
 from fuse.core.events import EventBus
 from fuse.core.services import ServiceRegistry
 
-HOST_VERSION = "2.6.1"
+HOST_VERSION = "2.7.0"
 
 MouseCallback = Callable[[int, int, "pynmouse.Button", bool], None]
 
@@ -99,7 +99,7 @@ class PluginHost:
 
         self.host_config = ConfigManager(filename=self.HOST_CONFIG_FILENAME)
         self.host_state = self.host_config.load(
-            {"enabled_plugins": None, "disabled_plugins": [], "extra_plugin_dirs": [], "hotkey_overrides": {}}
+            {"enabled_plugins": None, "disabled_plugins": [], "hotkey_overrides": {}}
         )
 
         self.hotkeys = HotkeyRegistry()
@@ -141,7 +141,7 @@ class PluginHost:
     # Plugin lifecycle
     # ------------------------------------------------------------------
 
-    def load_plugins(self, extra_plugin_dirs: list | None = None) -> None:
+    def load_plugins(self) -> None:
         """Discover, filter, and sort plugins into the setup queue.
 
         Plugins are not instantiated here - they are set up one at a time
@@ -149,13 +149,8 @@ class PluginHost:
         """
         enabled = self.host_state.get("enabled_plugins")
         disabled_set = set(self.host_state.get("disabled_plugins", []))
-        extra_dirs = [
-            Path(p) for p in self.host_state.get("extra_plugin_dirs", [])
-        ]
-        if extra_plugin_dirs:
-            extra_dirs += [Path(p) for p in extra_plugin_dirs]
 
-        raw_specs = discover(extra_dirs=extra_dirs)
+        raw_specs = discover()
 
         for spec in raw_specs:
             self._discovered[spec.plugin_id] = spec
@@ -267,7 +262,6 @@ class PluginHost:
     def _purge_plugin_modules(self) -> None:
         """Drop cached imports for plugin source files so reload re-reads them."""
         roots = [BUILTIN_PLUGINS_DIR, USER_PLUGINS_DIR]
-        roots += [Path(p) for p in self.host_state.get("extra_plugin_dirs", [])]
         roots = [r.resolve() for r in roots if r.exists()]
 
         for mod_name, mod in list(sys.modules.items()):
@@ -424,6 +418,7 @@ class PluginHost:
                 "author":      spec.author,
                 "homepage":    spec.homepage,
                 "tags":        list(spec.tags),
+                "is_core":     spec.is_core,
                 "status":      self._plugin_states.get(plugin_id, PluginState.PENDING).value,
             })
         return result

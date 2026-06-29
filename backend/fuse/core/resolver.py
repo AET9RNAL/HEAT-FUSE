@@ -69,6 +69,10 @@ def _parse_deps(manifest: dict) -> tuple[dict[str, str], list[str]]:
 def resolve_load_order(specs: List[DiscoveredPlugin]) -> List[DiscoveredPlugin]:
     """Return *specs* sorted so every plugin loads after its dependencies.
 
+    Core plugins (``is_core=True``) always load before user plugins, similar
+    to how Minecraft Forge loads core mods before user mods. Within each group
+    (core, user), plugins are topologically sorted by dependencies.
+
     Required dependencies that are absent or whose version is not satisfied
     cause the dependent plugin to be excluded.  Optional dependencies are
     treated as soft edges: the loader tries to load them first if available,
@@ -76,7 +80,27 @@ def resolve_load_order(specs: List[DiscoveredPlugin]) -> List[DiscoveredPlugin]:
 
     Plugins forming dependency cycles are dropped from the result.
     """
-    by_id: Dict[str, DiscoveredPlugin] = {s.plugin_id: s for s in specs}
+    all_by_id: Dict[str, DiscoveredPlugin] = {s.plugin_id: s for s in specs}
+
+    core_specs = [s for s in specs if s.is_core]
+    user_specs = [s for s in specs if not s.is_core]
+
+    core_ordered = _topo_sort(core_specs, all_by_id)
+    user_ordered = _topo_sort(user_specs, all_by_id)
+
+    ordered = core_ordered + user_ordered
+
+    logger.debug(f"Plugin load order: {[s.plugin_id for s in ordered]}")
+    return ordered
+
+
+def _topo_sort(specs: List[DiscoveredPlugin], all_by_id: Dict[str, DiscoveredPlugin]) -> List[DiscoveredPlugin]:
+    """Topologically sort *specs* by dependencies, dropping unsatisfied/cyclic ones.
+
+    *all_by_id* contains every discovered plugin (core + user) so that
+    cross-group dependencies are validated correctly.
+    """
+    by_id = all_by_id
 
     # Phase 1 — filter plugins with unsatisfied required deps.
     valid: Dict[str, DiscoveredPlugin] = {}
@@ -144,7 +168,6 @@ def resolve_load_order(specs: List[DiscoveredPlugin]) -> List[DiscoveredPlugin]:
         logger.error(f"Dropping plugins involved in dependency cycles: {cycle_members}")
         ordered = [s for s in ordered if s.plugin_id not in cycle_members]
 
-    logger.debug(f"Plugin load order: {[s.plugin_id for s in ordered]}")
     return ordered
 
 

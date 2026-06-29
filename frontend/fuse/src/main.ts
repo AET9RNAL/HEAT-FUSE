@@ -7,9 +7,9 @@ import './style.css'
 import App from './App.vue'
 import vTruncateTitle from './directives/vTruncateTitle'
 
-Sentry.init({
-    dsn: import.meta.env.VITE_SENTRY_DSN as string,
-})
+if (import.meta.env.VITE_SENTRY_DSN) {
+    Sentry.init({ dsn: import.meta.env.VITE_SENTRY_DSN as string })
+}
 
 if (import.meta.env.VITE_POSTHOG_KEY) {
     posthog.init(import.meta.env.VITE_POSTHOG_KEY as string, {

@@ -4,7 +4,10 @@ import { motion } from 'motion-v'
 import Icons from './Icons.vue'
 import eToggle from './eToggle.vue'
 import type { PluginRecord, ConfigEntry } from '../stores/plugins'
+import { usePluginsStore } from '../stores/plugins'
 import { eventBus } from '../events/eventBus'
+
+const store = usePluginsStore()
 
 const props = defineProps<{ plugin: PluginRecord }>()
 const emit = defineEmits<{ close: [] }>()
@@ -23,33 +26,39 @@ const isDirty = computed(() =>
     Object.keys(pendingHotkeys.value).length > 0
 )
 
-function emitDirty() {
-    if (!isDirty.value) return
-    eventBus.emit('plugin-config:dirty', {
-        plugin_id: props.plugin.plugin_id,
-        pendingConfig:  { ...pendingConfig.value },
-        pendingHotkeys: { ...pendingHotkeys.value },
-    })
-}
-
-watch(pendingConfig,  emitDirty)
-watch(pendingHotkeys, emitDirty)
-
 function resetPending() {
-    pendingConfig.value = {}
+    pendingConfig.value  = {}
     pendingHotkeys.value = {}
 }
 
-function onConfigReset({ plugin_id }: { plugin_id: string }) {
-    if (plugin_id === props.plugin.plugin_id) resetPending()
-}
-function onConfigSaved({ plugin_id }: { plugin_id: string }) {
-    if (plugin_id === props.plugin.plugin_id) resetPending()
-}
+watch(isDirty, (dirty) => {
+    if (dirty) {
+        const plugin_id = props.plugin.plugin_id
+        eventBus.emit('modal:pending', {
+            label:       'You have unsaved changes',
+            saveLabel:   'Save Changes',
+            cancelLabel: 'Reset',
+            onConfirm: async () => {
+                const pc = { ...pendingConfig.value }
+                const ph = { ...pendingHotkeys.value }
+                await Promise.all([
+                    ...Object.entries(pc).map(([key, value]) => store.setPluginConfig(plugin_id, key, value)),
+                    ...Object.entries(ph).map(([action, combo]) => store.rebindHotkey(plugin_id, action, combo)),
+                ])
+                resetPending()
+                eventBus.emit('plugin-config:saved', { plugin_id })
+            },
+            onCancel: () => {
+                resetPending()
+                eventBus.emit('plugin-config:reset', { plugin_id })
+            },
+        })
+    } else {
+        eventBus.emit('modal:dismiss')
+    }
+})
 
 onMounted(() => {
-    eventBus.on('plugin-config:reset', onConfigReset)
-    eventBus.on('plugin-config:saved', onConfigSaved)
     document.addEventListener('keydown', onKeyDown)
     if (panelEl.value) {
         _ro = new ResizeObserver(([entry]) => {
@@ -62,8 +71,7 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
-    eventBus.off('plugin-config:reset', onConfigReset)
-    eventBus.off('plugin-config:saved', onConfigSaved)
+    if (isDirty.value) eventBus.emit('modal:dismiss')
     document.removeEventListener('keydown', onKeyDown)
     if (capturingAction.value) cancelCapture()
     _ro?.disconnect()
@@ -313,16 +321,22 @@ function getCombo(action: string): string {
 <style scoped>
 .plugin-config-backdrop {
     position: fixed;
-    inset: 0;
+    top: 48px;
+    left: 0;
+    right: 0;
+    bottom: 0;
     z-index: 1000;
     display: flex;
     align-items: center;
     justify-content: center;
+    padding: var(--space-5);
 }
 
 .plugin-config-motion {
     position: relative;
-    width: 420px;
+    width: 100%;
+    max-width: 420px;
+    height: 100%;
     max-height: 560px;
 }
 
@@ -374,7 +388,6 @@ function getCombo(action: string): string {
     flex-direction: column;
     flex: 1;
     min-height: 0;
-    max-height: 560px;
 }
 
 .panel-stroke {

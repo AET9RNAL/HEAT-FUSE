@@ -5,7 +5,11 @@ import eToggle from './eToggle.vue'
 import eContextMenu, { type MenuOption } from './eContextMenu.vue'
 import Icons from './Icons.vue'
 import type { PluginRecord, PluginStatus } from '../stores/plugins'
+import type { MarketplaceProject } from '../stores/marketplace'
+import { useMarketplaceStore } from '../stores/marketplace'
 import { useI18n } from '../composables/useI18n'
+
+const marketplaceStore = useMarketplaceStore()
 
 const { t } = useI18n()
 
@@ -15,15 +19,24 @@ const props = withDefaults(defineProps<{
   enabled: boolean
   thumbnail?: string
   menuOptions?: MenuOption[]
+  marketplaceProject?: MarketplaceProject | null
 }>(), {
   selected: false,
   menuOptions: () => [],
+  marketplaceProject: null,
 })
 
 const emit = defineEmits<{
   'update:selected': [value: boolean]
   'update:enabled': [value: boolean]
+  'marketplace-click': [projectId: string]
 }>()
+
+const mpIconUrl = computed(() =>
+  props.marketplaceProject?.icon_key
+    ? marketplaceStore.buildPublicUrl(props.marketplaceProject.icon_key)
+    : null
+)
 
 const rowEl = ref<HTMLElement | null>(null)
 
@@ -65,18 +78,23 @@ const statusLabel = computed(() => t(`components.plugin.status.${props.plugin.st
 
     <div class="col-thumb">
       <div class="icon-thumb">
-        <img v-if="thumbnail" :src="thumbnail" class="thumb-img" alt="" />
+        <img v-if="mpIconUrl" :src="mpIconUrl" class="thumb-img" alt="" />
+        <img v-else-if="thumbnail" :src="thumbnail" class="thumb-img" alt="" />
         <Icons v-else kind="missingImage" size="large" />
       </div>
     </div>
 
     <div class="col-info">
       <div class="title-row">
-        <span class="name">{{ plugin.name }}</span>
+        <span
+          class="name"
+          :class="{ 'name--linked': marketplaceProject }"
+          @click="marketplaceProject && emit('marketplace-click', marketplaceProject.id)"
+        >{{ marketplaceProject?.name ?? plugin.name }}</span>
         <span class="by">{{ t('components.plugin.by') }}</span>
-        <span class="author">{{ plugin.author ?? '—' }}</span>
+        <span class="author">{{ marketplaceProject?.creator_username ?? plugin.author ?? '—' }}</span>
       </div>
-      <span class="description">{{ plugin.description }}</span>
+      <span class="description">{{ marketplaceProject?.summary ?? plugin.description }}</span>
     </div>
 
     <div class="col-version">
@@ -179,6 +197,12 @@ const statusLabel = computed(() => t(`components.plugin.status.${props.plugin.st
   user-select: none;
   -webkit-user-select: none;
 }
+
+.name--linked {
+  cursor: pointer;
+  color: var(--accent-200);
+}
+.name--linked:hover { opacity: 0.75; }
 
 .by {
   font-family: var(--font-microcopy);

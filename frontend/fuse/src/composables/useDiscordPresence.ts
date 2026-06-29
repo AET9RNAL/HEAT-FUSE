@@ -30,14 +30,14 @@ export function useDiscordPresence() {
     const state = enableFuse.value
       ? `FUSE Active · ${enabledCount}/${totalCount} mods`
       : gameVersion.value
-        ? `WoT HEAT ${gameVersion.value}`
+        ? `WoT:HEAT ${gameVersion.value}`
         : 'Idle'
 
     window.discordAPI.setActivity({
       details,
       state,
       largeImageKey: 'fuse_logo',
-      largeImageText: 'H.E.A.T. FUSE',
+      largeImageText: 'WoT:HEAT - FUSE',
       smallImageKey: enableFuse.value ? 'fuse_on' : 'fuse_off',
       smallImageText: enableFuse.value ? 'Runtime Active' : 'Runtime Idle',
       buttons: [
