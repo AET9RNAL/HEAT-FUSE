@@ -67,6 +67,7 @@ _HANGAR_ELEMENTS: list[tuple[str, str, list[str]]] = [
     ("hangar_boosters",      "Boosters Widget",             [HANGAR.BOOSTERS_WIDGET]),
     ("hangar_floating",      "Floating Buttons (Results / Content Hub)", [HANGAR.FLOATING_BUTTONS]),
     ("hangar_mode_sel",      "Game Mode Selector",          [HANGAR.MODE_SELECTOR]),
+    ("hangar_play_button",   "Play Button",                 [HANGAR.PLAY_BUTTON]),
     ("hangar_shortcuts",     "Shortcut Legend",             [HANGAR.SHORTCUT_LEGEND]),
     ("hangar_notifications", "Notification Center",         [HANGAR.NOTIFICATION_CENTER]),
     ("hangar_side_menu",     "Side Menu",                   [HANGAR.SIDE_MENU]),
@@ -87,6 +88,7 @@ _MODIFY_ELEMENTS: list[tuple[str, str, list[str]]] = [
     ("mod_bonuses",   "Agent: Ultimate / Trait",                   [HANGAR.AGENT_BONUSES]),
     ("mod_skills",    "Agent: Skills Panel (Perks + Points)",       [HANGAR.AGENT_SKILLS_BTN]),
     ("mod_vehicles",  "Agent: Vehicle Selection Cards",             [HANGAR.AGENT_VEHICLES]),
+    ("mod_agent_list", "Agent: Hero Selection List (by Role)",      [HANGAR.AGENT_LIST]),
 ]
 
 _STYLE_ID         = "__fuse_noui__"
@@ -196,6 +198,7 @@ class NoUiPlugin(FusePlugin):
                 ConfigEntry("hangar_boosters",      "Boosters Widget",                        type="bool"),
                 ConfigEntry("hangar_floating",      "Floating Buttons (Results / Content Hub)", type="bool"),
                 ConfigEntry("hangar_mode_sel",      "Game Mode Selector",                     type="bool"),
+                ConfigEntry("hangar_play_button",   "Play Button",                            type="bool"),
                 ConfigEntry("hangar_shortcuts",     "Shortcut Legend",                        type="bool"),
                 ConfigEntry("hangar_notifications", "Notification Center",                    type="bool"),
                 ConfigEntry("hangar_side_menu",     "Side Menu",                              type="bool"),
@@ -211,6 +214,7 @@ class NoUiPlugin(FusePlugin):
                 ConfigEntry("mod_bonuses",   "Agent: Ultimate / Trait",                 type="bool"),
                 ConfigEntry("mod_skills",    "Agent: Skills Panel (Perks + Points)",    type="bool"),
                 ConfigEntry("mod_vehicles",  "Agent: Vehicle Selection Cards",          type="bool"),
+                ConfigEntry("mod_agent_list", "Agent: Hero Selection List (by Role)",   type="bool"),
             ]),
         ])
 

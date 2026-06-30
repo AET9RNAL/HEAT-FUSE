@@ -1,13 +1,13 @@
 {
   "accessors": {
-    "hash": "95a2b96ab076f7e8defdfdc08098d5f1fc41c127da89d19d493d071e9c5eeab7",
-    "outName": "Accessors-2.0.0.fuse",
-    "packed": "2026-06-29T21:28:38.674Z"
+    "hash": "05c4d972278e8a19216dc931292ad2d53d759d28319956108710865243851043",
+    "outName": "Accessors-2.1.0.fuse",
+    "packed": "2026-06-30T17:22:40.636Z"
   },
   "energy_bar": {
     "hash": "20e081c2d0fd8c231520f13c35240e4949603d0eced4f08821f830345f14907f",
     "outName": "EnergyBar-2.1.0.fuse",
-    "packed": "2026-06-29T21:28:38.809Z"
+    "packed": "2026-06-30T17:22:40.764Z"
   },
   "game_memory": {
     "hash": "01fc895830fd4ee694512158f2c067c1a47a29a9c6920bc72894ecd05cdb720a",
@@ -20,13 +20,13 @@
     "packed": "2026-06-27T05:06:40.302Z"
   },
   "noui": {
-    "hash": "756e00afa4604e8630625c8fbb8fd129441bf878b72385b72da4ec8445c5b96f",
-    "outName": "NoUI-2.0.0.fuse",
-    "packed": "2026-06-29T21:28:38.915Z"
+    "hash": "ecd8de997d25f5824a3f1b67bac0b7e079d4179e90d1c3bf4cffa8eb9d8a4134",
+    "outName": "NoUI-2.1.0.fuse",
+    "packed": "2026-06-30T17:22:40.875Z"
   },
   "rive_animation": {
     "hash": "19a5d1231dfffef072c2fc7a04929090204a2ebb14115db101cd0dae03cb8bf4",
     "outName": "RiveAnimation-1.1.1.fuse",
-    "packed": "2026-06-29T21:28:39.024Z"
+    "packed": "2026-06-30T17:22:40.981Z"
   }
 }

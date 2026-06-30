@@ -2,7 +2,8 @@
   "enabled_plugins": null,
   "disabled_plugins": [
     "game_memory",
-    "heat_ailos_torc"
+    "heat_ailos_torc",
+    "energy_bar"
   ],
   "hotkey_overrides": {
     "host": {

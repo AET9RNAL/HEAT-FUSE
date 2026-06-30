@@ -64,65 +64,72 @@ class AccessorsPlugin(FusePlugin):
             port=int(ctx.config.get("cdp_port")),
             connect_timeout=float(ctx.config.get("connect_timeout_s")),
         )
-        self._reconnect_interval = float(ctx.config.get("reconnect_interval_s"))
-        self._poll_interval      = float(ctx.config.get("poll_interval_s"))
-        self._reconnect_timer    = 0.0
-        self._poll_timer         = 0.0
-        self._ctx                = ctx
-        self._connecting         = False  # True while background connect thread is alive
+        # reconnect_interval doubles as the cadence at which we re-discover CDP
+        # pages and reconcile sockets, so the service follows the game across
+        # hangar↔battle transitions (pages appear/disappear) without a restart.
+        self._sync_interval = float(ctx.config.get("reconnect_interval_s"))
+        self._poll_interval = float(ctx.config.get("poll_interval_s"))
+        self._sync_timer    = 0.0
+        self._poll_timer    = 0.0
+        self._ctx           = ctx
+        self._syncing       = False  # True while a background sync thread is alive
+        self._was_connected = False  # last-seen battle_hud connection state
 
         ctx.services.register("accessors", self._accessors, owner=self.name)
 
-        self._start_connect()
+        self._start_sync()
 
     # ──────────────────────────────────────────────────── tick
 
     def tick(self, dt: float) -> None:
-        connected        = self._accessors.connected
-        connected_hangar = self._accessors.connected_hangar
+        # Periodically reconcile connections with the game's current page set.
+        # This runs regardless of state so hangar→battle (and back) transitions
+        # are detected even while a different page is already connected.
+        if not self._syncing:
+            self._sync_timer += dt
+            if self._sync_timer >= self._sync_interval:
+                self._sync_timer = 0.0
+                self._start_sync()
 
-        if not (connected or connected_hangar):
-            if not self._connecting:
-                self._reconnect_timer += dt
-                if self._reconnect_timer >= self._reconnect_interval:
-                    self._reconnect_timer = 0.0
-                    self._start_connect()
-            return
-
-        if connected:
+        # Poll battle pages while battle_hud is connected.
+        if self._accessors.connected:
             self._poll_timer += dt
             if self._poll_timer >= self._poll_interval:
                 self._poll_timer = 0.0
                 if not self._accessors.refresh():
-                    logger.warning("accessors: CDP connection lost, will retry")
-                    if self._ctx.events:
-                        self._ctx.events.emit("accessors.disconnected")
+                    logger.warning("accessors: battle_hud poll failed — re-syncing")
+                    # Force an immediate reconcile to drop/reopen sockets.
+                    self._sync_timer = self._sync_interval
 
     def teardown(self) -> None:
         self._accessors.close()
 
-    # ──────────────────────────────────────────────────── connect (threaded)
+    # ──────────────────────────────────────────────────── sync (threaded)
 
-    def _start_connect(self) -> None:
-        """Spawn a background thread to call open() so the main loop stays live."""
-        self._connecting = True
-        threading.Thread(target=self._connect_worker, daemon=True, name="accessors-connect").start()
+    def _start_sync(self) -> None:
+        """Spawn a background thread to reconcile sockets so the main loop stays live."""
+        self._syncing = True
+        threading.Thread(target=self._sync_worker, daemon=True, name="accessors-sync").start()
 
-    def _connect_worker(self) -> None:
-        """Runs on background thread. Schedules the result callback on the main thread."""
-        ok = self._accessors.open()
-        self._connecting = False
-        # Post result back to main thread via Tkinter's after(0, …)
-        self._ctx.tk_root.after(0, self._on_connect_result, ok)
+    def _sync_worker(self) -> None:
+        """Runs on background thread; posts the result back to the main thread."""
+        try:
+            self._accessors.sync()
+        finally:
+            self._syncing = False
+        self._ctx.tk_root.after(0, self._on_sync_result, self._accessors.connected)
 
-    def _on_connect_result(self, ok: bool) -> None:
-        """Runs on main thread after the background connect attempt completes."""
-        if ok:
-            logger.info("accessors: CDP connected")
+    def _on_sync_result(self, connected: bool) -> None:
+        """Runs on main thread; emits connect/disconnect events on battle_hud edges."""
+        if connected and not self._was_connected:
+            logger.info("accessors: battle_hud connected")
             if self._ctx.events:
                 self._ctx.events.emit("accessors.connected")
-        else:
-            logger.debug("accessors: CDP not available yet, will retry")
+        elif self._was_connected and not connected:
+            logger.info("accessors: battle_hud disconnected")
+            if self._ctx.events:
+                self._ctx.events.emit("accessors.disconnected")
+        self._was_connected = connected
 
 
 __all__ = ["AccessorsPlugin"]

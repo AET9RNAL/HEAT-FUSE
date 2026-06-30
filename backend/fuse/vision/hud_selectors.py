@@ -457,6 +457,9 @@ class HANGAR:
     AGENT_SKILLS_BTN   = _c("FrontmanPerksButton_base")      # AGENT SKILLS panel (points + perk icons)
     AGENT_PERK_SLOTS   = _c("PerkSlots_base")                # perk icon slots
     AGENT_VEHICLES     = _c("VehiclesByFrontman_base")       # vehicle selection cards
+    AGENT_LIST         = _c("SelectHero_heroesWrapper")      # role-grouped hero strip (ASSAULT / DEFENDER / MARKSMAN)
+    AGENT_LIST_CARD    = _c("FrontmanCard_base")             # individual agent portrait card
+    AGENT_LIST_GROUP   = _c("GroupCaption_base")             # role group header (ASSAULT / DEFENDER / ...)
 
     # Vehicle sub-page
     VEHICLE_FEATURES   = _c("VehicleFeatures_base")         # firing mode + weapon slots container
