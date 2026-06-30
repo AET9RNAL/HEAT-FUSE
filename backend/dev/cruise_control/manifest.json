@@ -1,0 +1,17 @@
+{
+  "plugin_id": "cruise_control",
+  "name": "Cruise Control",
+  "version": "1.0.0",
+  "author": "AETERNAL",
+  "description": "Simple cruise control functionality",
+  "entry": "plugin:CruiseControlPlugin",
+  "dependencies": ["rive_animation"],
+  "hotkeys": {
+    "toggle": "c"
+  },
+  "default_config": {
+    "overlay_pos": null,
+    "anim_width": 300,
+    "anim_height": 300
+  }
+}

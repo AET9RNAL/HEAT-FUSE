@@ -2,7 +2,7 @@
 <Project>
   <ProjectOutputs>
     <ProjectOutput>
-      <FullPath>C:\Users\maksg\Documents\GitHub\HEAT_SACLOS\native\bin\rive_plugin.dll</FullPath>
+      <FullPath>C:\Users\maksg\Documents\GitHub\HEAT_SACLOS\backend\native\bin\rive_plugin.dll</FullPath>
     </ProjectOutput>
   </ProjectOutputs>
   <ContentFiles />

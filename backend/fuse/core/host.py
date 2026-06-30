@@ -41,6 +41,7 @@ except ImportError:  # pragma: no cover
 from fuse.core.config import ConfigManager, PluginConfig
 
 from fuse.core.api import FuseContext, FusePlugin, HotkeyRegistry, HotkeyRegistryView
+from fuse.input.keyboard import KeyboardInput
 from fuse.core.discovery import (
     BUILTIN_PLUGINS_DIR,
     DiscoveredPlugin,
@@ -51,7 +52,7 @@ from fuse.core.resolver import resolve_load_order
 from fuse.core.events import EventBus
 from fuse.core.services import ServiceRegistry
 
-HOST_VERSION = "2.7.1"
+HOST_VERSION = "2.8.0"
 
 MouseCallback = Callable[[int, int, "pynmouse.Button", bool], None]
 
@@ -105,6 +106,12 @@ class PluginHost:
         self.hotkeys = HotkeyRegistry()
         self.events = EventBus(root)
         self.services = ServiceRegistry()
+
+        if PYNPUT_OK:
+            self._keyboard = KeyboardInput()
+            self.services.register("keyboard", self._keyboard, owner="host")
+        else:
+            self._keyboard = None
 
         self.plugins: List[FusePlugin] = []
         self.contexts: List[FuseContext] = []
@@ -723,6 +730,8 @@ class PluginHost:
 
     def _teardown(self) -> None:
         self._stop_listeners()
+        if self._keyboard is not None:
+            self._keyboard.release_all()
         for plugin in self.plugins:
             try:
                 plugin.teardown()

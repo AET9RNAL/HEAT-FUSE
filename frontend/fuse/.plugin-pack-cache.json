@@ -28,5 +28,10 @@
     "hash": "19a5d1231dfffef072c2fc7a04929090204a2ebb14115db101cd0dae03cb8bf4",
     "outName": "RiveAnimation-1.1.1.fuse",
     "packed": "2026-06-30T17:22:40.981Z"
+  },
+  "cruise_control": {
+    "hash": "2e937c527c4acc412d610f17349ee2b8055910f93f3fd9d3637d0c9406dbb9e2",
+    "outName": "CruiseControl-1.0.0.fuse",
+    "packed": "2026-06-30T22:45:41.964Z"
   }
 }

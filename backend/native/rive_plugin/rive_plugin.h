@@ -49,6 +49,10 @@ RIVE_API int rive_load_bytes(RiveHandle h, const uint8_t* data, size_t len);
 
 /* State machine (legacy input API) ---------------------------------------- */
 
+/* Select a named artboard. Must be called after rive_load_*.
+   If name is NULL or not found, falls back to the default artboard. */
+RIVE_API void rive_set_artboard(RiveHandle h, const char* name);
+
 /* Activate a named state machine. Must be called after rive_load_*. */
 RIVE_API void rive_set_state_machine(RiveHandle h, const char* name);
 

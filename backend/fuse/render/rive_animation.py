@@ -53,6 +53,10 @@ try:
     _lib.rive_load_bytes.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_size_t]
     _lib.rive_load_bytes.restype  = ctypes.c_int
 
+    # Artboard selection
+    _lib.rive_set_artboard.argtypes = [ctypes.c_void_p, ctypes.c_char_p]
+    _lib.rive_set_artboard.restype  = None
+
     # State machine
     _lib.rive_set_state_machine.argtypes = [ctypes.c_void_p, ctypes.c_char_p]
     _lib.rive_set_state_machine.restype  = None
@@ -140,6 +144,10 @@ class RiveAnimation:
     def load_bytes(self, data: bytes) -> bool:
         """Load a .riv from a bytes object. Returns True on success."""
         return bool(_lib.rive_load_bytes(self._handle, data, len(data)))
+
+    def set_artboard(self, name: str) -> None:
+        """Select a named artboard. Call after load_bytes/load."""
+        _lib.rive_set_artboard(self._handle, name.encode())
 
     # ------------------------------------------------------------------
     # State machine (legacy input API)

@@ -210,6 +210,23 @@ int rive_load_bytes(RiveHandle h, const uint8_t* data, size_t len) {
 }
 
 /* ============================================================ */
+/*  Artboard selection                                           */
+/* ============================================================ */
+
+void rive_set_artboard(RiveHandle h, const char* name) {
+    auto* c = ctx_of(h);
+    if (!c->file || !name) return;
+
+    auto ab = c->file->artboardNamed(name);
+    if (!ab) return;
+
+    c->sm.reset();
+    c->vmInst = nullptr;
+    c->artboard = std::move(ab);
+    c->artboard->advance(0);
+}
+
+/* ============================================================ */
 /*  State machine                                                */
 /* ============================================================ */
 
