@@ -19,6 +19,7 @@ class CruiseControlPlugin(FusePlugin):
         self._anim = None
         self._panel: Optional[FusePanel] = None
         self._active = False  # True while cruise is holding W
+        self._in_focus = True  # False when game not in focus
         self._toggle_combo = "c"
 
     def setup(self, ctx: FuseContext) -> None:
@@ -95,7 +96,7 @@ class CruiseControlPlugin(FusePlugin):
     def _on_toggle(self) -> None:
         if self.ctx is None or self.ctx.state != "locked":
             return
-        if self._kbd is None:
+        if self._kbd is None or not self._in_focus:
             return
         if self._active:
             self._release_all()
@@ -107,7 +108,7 @@ class CruiseControlPlugin(FusePlugin):
     def _on_s(self) -> None:
         if self.ctx is None or self.ctx.state != "locked":
             return
-        if self._kbd is None:
+        if self._kbd is None or not self._in_focus:
             return
         if self._active:
             self._release_all()
@@ -134,7 +135,7 @@ class CruiseControlPlugin(FusePlugin):
             self.ctx.config.check_reload()
         # Re-press W each tick while active — the user's physical key-up
         # cancels our synthetic key-down, so we must re-assert it.
-        if self._kbd is not None and self._active and self.ctx and self.ctx.state == "locked":
+        if self._kbd is not None and self._active and self._in_focus and self.ctx and self.ctx.state == "locked":
             self._kbd.press("w")
         if not (self._anim and self._panel):
             return
@@ -142,6 +143,7 @@ class CruiseControlPlugin(FusePlugin):
         self._panel.update(self._anim.get_image())
 
     def set_overlay_visible(self, visible: bool) -> None:
+        self._in_focus = visible
         if self.ctx and self.ctx.state == "calibrate":
             return
         if not visible:

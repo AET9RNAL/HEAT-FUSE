@@ -1,7 +1,7 @@
 {
   "plugin_id": "cruise_control",
   "name": "Cruise Control",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "author": "AETERNAL",
   "description": "Simple cruise control functionality",
   "entry": "plugin:CruiseControlPlugin",

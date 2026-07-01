@@ -52,7 +52,7 @@ from fuse.core.resolver import resolve_load_order
 from fuse.core.events import EventBus
 from fuse.core.services import ServiceRegistry
 
-HOST_VERSION = "2.8.0"
+HOST_VERSION = "2.8.1"
 
 MouseCallback = Callable[[int, int, "pynmouse.Button", bool], None]
 
@@ -644,6 +644,9 @@ class PluginHost:
                     else:
                         resolved = char.lower()
                 if not resolved:
+                    return
+
+                if self._keyboard is not None and self._keyboard.is_held(resolved):
                     return
 
                 mods = frozenset(self._mods)
