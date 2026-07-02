@@ -55,9 +55,9 @@ _FIELD_MAP: dict[str, tuple[str, type]] = {
 
 # Extra keys stored in cache under their native names (not in game_memory).
 _EXTRA_KEYS = (
-    "health_regen", "health_pct",
-    "energy_regen",
-    "boost_active",
+    "health", "health_regen", "health_pct",
+    "energy", "energy_regen",
+    "boost", "boost_active",
     "zoom_val", "zoom_idx", "num_zooms", "zooms",
     "speed",
     "ab1_state", "ab1_cd", "ab1_charges",

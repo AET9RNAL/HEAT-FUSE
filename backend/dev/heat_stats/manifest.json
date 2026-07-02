@@ -1,0 +1,12 @@
+{
+  "plugin_id": "heat_stats",
+  "name": "HEAT Stats",
+  "version": "1.0.0",
+  "author": "AETERNAL",
+  "description": "Records per-match performance data.",
+  "entry": "plugin:HeatStatsPlugin",
+  "dependencies": ["accessors"],
+  "default_config": {
+    "sample_interval_s": 5
+  }
+}

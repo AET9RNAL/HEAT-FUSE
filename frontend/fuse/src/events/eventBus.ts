@@ -43,6 +43,36 @@ type Events = {
     'plugin-config:saved': { plugin_id: string }
     'plugin-config:reset': { plugin_id: string }
 
+    // Heat Stats
+    'heat_stats.session_complete': {
+        type: string
+        session_id: string
+        started_at: number
+        ended_at: number
+        duration_s: number
+        outcome: string
+        map_slug: string | null
+        map_name: string | null
+        game_mode: string | null
+        player_name: string | null
+        player_vehicle: string | null
+        player_role: string | null
+        player_agent_id: number | null
+        final_kills: number
+        final_deaths: number
+        final_assists: number | null
+        final_damage: number
+        final_ally_score: number
+        final_enemy_score: number
+        peak_ping: number
+        avg_ping: number
+        avg_fps: number
+        sample_count: number
+        hmac_hex: string
+        samples: Record<string, unknown>[]
+        client_version: string
+    }
+
     // Navigation
     'navigate:discover': { projectId?: string }
 

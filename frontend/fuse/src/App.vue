@@ -11,6 +11,7 @@ import { useAppStore } from './stores/app'
 import { useAuthStore } from './stores/auth'
 import { usePluginsStore } from './stores/plugins'
 import { useNavigationStore } from './stores/navigation'
+import { useHeatStatsStore } from './stores/heatStats'
 import { useSuspension } from './composables/useSuspension'
 import { useFuseControl } from './composables/useFuseControl'
 import { useFuseLogs } from './composables/useFuseLogs'
@@ -26,6 +27,7 @@ const appStore = useAppStore()
 const authStore = useAuthStore()
 const pluginsStore = usePluginsStore()
 const navStore = useNavigationStore()
+useHeatStatsStore()
 const { t } = useI18n()
 
 // Register deep-link listener early (before any component mounts)

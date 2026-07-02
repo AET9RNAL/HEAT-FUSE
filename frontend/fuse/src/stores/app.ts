@@ -37,6 +37,7 @@ export const useAppStore = defineStore('app', () => {
     const analyticsConsent = ref<boolean>(false)
     const diagnosticsConsent = ref<boolean>(false)
     const username = ref<string | null>(null)
+    const allowApiAccess = ref<boolean>(false)
 
     // Setting registry
     // Each entry maps a ref to a DB column key and a load default.
@@ -63,6 +64,7 @@ export const useAppStore = defineStore('app', () => {
         gameDirPaths:           { ref: gameDirPaths,           db: 'game_dir_paths',             default: { steam: '', wgc: '' } },
         analyticsConsent:       { ref: analyticsConsent,       db: 'analytics_consent',          default: false },
         diagnosticsConsent:     { ref: diagnosticsConsent,     db: 'diagnostics_consent',        default: false },
+        allowApiAccess:         { ref: allowApiAccess,         db: 'allow_api_access',            default: false },
     }
 
     // Batched save system (wire DB when auth is ready)
@@ -280,6 +282,7 @@ export const useAppStore = defineStore('app', () => {
         analyticsConsent,
         diagnosticsConsent,
         username,
+        allowApiAccess,
         saveUsername,
         setGameDirPath,
         scanGameDir,
@@ -311,6 +314,7 @@ export const useAppStore = defineStore('app', () => {
             'analyticsConsent',
             'diagnosticsConsent',
             'username',
+            'allowApiAccess',
         ],
     },
 })

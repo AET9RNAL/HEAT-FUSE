@@ -33,5 +33,10 @@
     "hash": "ae6a0bd41125244782fabe5e52b6a2548c025e5e73e06812bb5221bb21052e0a",
     "outName": "CruiseControl-1.0.1.fuse",
     "packed": "2026-07-01T00:59:57.206Z"
+  },
+  "heat_stats": {
+    "hash": "8b3f03f9d739bd0f98abc1c66ba93f7d7319685192e49d5c4a16917db006d5cc",
+    "outName": "HEATStats-1.0.0.fuse",
+    "packed": "2026-07-02T18:47:50.794Z"
   }
 }

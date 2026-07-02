@@ -76,7 +76,8 @@
         "privacy": {
             "title": "Privacy & Telemetry",
             "analyticsConsent": "Help improve FUSE for everyone",
-            "diagnosticsConsent": "Send anonymous diagnostic reports"
+            "diagnosticsConsent": "Send anonymous diagnostic reports",
+            "allowApiAccess": "Allow 3rd-party API access to my match data"
         }
     },
     "appabout": {
@@ -217,7 +218,17 @@
         "deleteAccountConfirmTitle": "This cannot be undone.",
         "deleteAccountConfirmDesc": "Your account, devices, and all data will be permanently deleted.",
         "deleteAccountConfirm": "Delete My Account",
-        "deleteAccountCancel": "Cancel"
+        "deleteAccountCancel": "Cancel",
+        "apiAccess": "API Access",
+        "apiAccessDesc": "Manage 3rd-party API access to your match data.",
+        "apiAccessOptIn": "Allow API Access",
+        "apiAccessOptInDesc": "When enabled, external applications can query your match sessions and samples via API.",
+        "apiKeyLabel": "Key Name",
+        "apiKeyLabelPlaceholder": "e.g. My Discord Bot",
+        "apiKeyMint": "Create Key",
+        "apiKeyCreated": "API Key Created",
+        "apiKeyCreatedDesc": "Copy this key now. It cannot be retrieved again.",
+        "apiKeyRevoke": "Revoke"
     },
     "components": {
         "loading": "Loading...",

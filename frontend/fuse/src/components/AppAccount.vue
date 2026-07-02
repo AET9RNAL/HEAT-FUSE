@@ -4,9 +4,11 @@ import { useAuthStore } from '../stores/auth'
 import { useExtendedAuthStore } from '../stores/extendedauth'
 import { useAppStore } from '../stores/app'
 import { useI18n } from '../composables/useI18n'
+import { supabase } from '../composables/supabase-client'
 import eDevice from './eDevice.vue'
 import eButton from './eButton.vue'
 import eInputField from './eInputField.vue'
+import eCheckbox from './eCheckbox.vue'
 import { eventBus } from '../events/eventBus'
 
 const auth = useAuthStore()
@@ -60,6 +62,7 @@ onMounted(async () => {
             day: 'numeric',
         }).format(new Date(exStore.userCreatedAt))
     }
+    fetchApiKeys()
 })
 
 async function handleRevoke(fingerprint: string) {
@@ -108,6 +111,96 @@ function copyEmail() {
         setTimeout(() => { copiedEmail.value = false }, 2000)
     })
 }
+
+// API key management
+
+interface ApiKey {
+    id: string
+    key_prefix: string
+    label: string
+    created_at: string
+    last_used_at: string | null
+    is_active: boolean
+}
+
+const apiKeys = ref<ApiKey[]>([])
+const loadingKeys = ref(false)
+const mintingKey = ref(false)
+const newKeyLabel = ref('')
+const newlyMintedKey = ref<string | null>(null)
+const copiedKey = ref(false)
+
+async function fetchApiKeys() {
+    loadingKeys.value = true
+    try {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) return
+        const { data, error } = await supabase
+            .from('api_keys')
+            .select('id, key_prefix, label, created_at, last_used_at, is_active')
+            .eq('requested_by', user.id)
+            .order('created_at', { ascending: false })
+        if (error) throw error
+        apiKeys.value = (data ?? []) as ApiKey[]
+    } catch {
+        // RLS may block if not admin/founder — silently ignore
+        apiKeys.value = []
+    } finally {
+        loadingKeys.value = false
+    }
+}
+
+async function handleMintKey() {
+    const label = newKeyLabel.value.trim()
+    if (!label) return
+    mintingKey.value = true
+    try {
+        const { data, error } = await supabase.functions.invoke('api-v1-mint', {
+            method: 'POST',
+            body: { label },
+        })
+        if (error) {
+            eventBus.emit('notification', {
+                title: 'Error',
+                message: (error as Error).message ?? 'Failed to create API key',
+            })
+            return
+        }
+        newlyMintedKey.value = (data as { api_key: string }).api_key
+        newKeyLabel.value = ''
+        await fetchApiKeys()
+    } finally {
+        mintingKey.value = false
+    }
+}
+
+async function handleRevokeKey(id: string) {
+    const { error } = await supabase
+        .from('api_keys')
+        .delete()
+        .eq('id', id)
+    if (error) {
+        eventBus.emit('notification', {
+            title: 'Error',
+            message: 'Failed to revoke key',
+        })
+        return
+    }
+    apiKeys.value = apiKeys.value.filter(k => k.id !== id)
+}
+
+function copyNewKey() {
+    if (!newlyMintedKey.value) return
+    navigator.clipboard.writeText(newlyMintedKey.value).then(() => {
+        copiedKey.value = true
+        setTimeout(() => { copiedKey.value = false }, 2000)
+    })
+}
+
+function dismissNewKey() {
+    newlyMintedKey.value = null
+    copiedKey.value = false
+}
 </script>
 
 <template>
@@ -141,6 +234,79 @@ function copyEmail() {
                     v-model="usernameInput"
                     size="half"
                 />
+            </div>
+        </section>
+
+        <!-- API access card -->
+        <section class="settings-card">
+            <div class="card-header">
+                <span class="card-title">{{ t('appaccount.apiAccess') }}</span>
+                <span class="card-desc">{{ t('appaccount.apiAccessDesc') }}</span>
+            </div>
+
+            <!-- Opt-in toggle -->
+            <div class="card-row">
+                <div class="action-text">
+                    <span class="action-label">{{ t('appaccount.apiAccessOptIn') }}</span>
+                    <span class="action-desc">{{ t('appaccount.apiAccessOptInDesc') }}</span>
+                </div>
+                <eCheckbox v-model="appStore.allowApiAccess" :width="18" :height="18" />
+            </div>
+
+            <!-- Newly minted key reveal -->
+            <div v-if="newlyMintedKey" class="key-reveal">
+                <span class="key-reveal-title">{{ t('appaccount.apiKeyCreated') }}</span>
+                <span class="key-reveal-desc">{{ t('appaccount.apiKeyCreatedDesc') }}</span>
+                <div class="key-reveal-value">
+                    <code>{{ newlyMintedKey }}</code>
+                    <button class="copy-btn" @click="copyNewKey">
+                        {{ copiedKey ? t('appaccount.copied') : t('appaccount.copy') }}
+                    </button>
+                </div>
+                <eButton
+                    size="half"
+                    :label="t('common.ok')"
+                    @click="dismissNewKey"
+                />
+            </div>
+
+            <!-- Mint new key -->
+            <div class="card-row" v-if="!newlyMintedKey">
+                <span class="row-label">{{ t('appaccount.apiKeyLabel') }}</span>
+                <div class="key-mint-row">
+                    <eInputField
+                        :label="t('appaccount.apiKeyLabelPlaceholder')"
+                        v-model="newKeyLabel"
+                        size="half"
+                    />
+                    <eButton
+                        size="half"
+                        :label="t('appaccount.apiKeyMint')"
+                        :systemState="mintingKey ? 'processing' : 'idle'"
+                        :disabled="!newKeyLabel.trim() || mintingKey"
+                        @click="handleMintKey"
+                    />
+                </div>
+            </div>
+
+            <!-- Existing keys list -->
+            <div v-if="loadingKeys" class="devices-empty">
+                <span>{{ t('components.loading') }}</span>
+            </div>
+            <div v-else-if="apiKeys.length > 0" class="keys-list">
+                <div v-for="key in apiKeys" :key="key.id" class="key-row">
+                    <div class="key-info">
+                        <span class="key-prefix">{{ key.key_prefix }}…</span>
+                        <span class="key-label">{{ key.label }}</span>
+                    </div>
+                    <span class="key-date">{{ new Date(key.created_at).toLocaleDateString() }}</span>
+                    <eButton
+                        size="slim"
+                        icon="delete"
+                        :disabled="mintingKey"
+                        @click="handleRevokeKey(key.id)"
+                    />
+                </div>
             </div>
         </section>
 
@@ -429,5 +595,95 @@ function copyEmail() {
 .confirm-actions {
     display: flex;
     gap: var(--space-2);
+}
+
+.key-reveal {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding: var(--space-3) var(--space-4);
+    background: rgba(132, 255, 177, 0.06);
+    border-top: 1px solid rgba(132, 255, 177, 0.15);
+}
+
+.key-reveal-title {
+    font-family: var(--font-primary);
+    font-size: var(--main-font-size-4);
+    font-weight: var(--font-weight-2);
+    color: var(--accent-200);
+}
+
+.key-reveal-desc {
+    font-family: var(--font-primary);
+    font-size: var(--main-font-size-4);
+    color: var(--text-muted);
+}
+
+.key-reveal-value {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+.key-reveal-value code {
+    font-family: var(--font-microcopy);
+    font-size: var(--main-font-size-4);
+    color: var(--text-main);
+    background: rgba(255, 255, 255, 0.06);
+    padding: var(--space-1) var(--space-2);
+    border-radius: 2px;
+    word-break: break-all;
+    flex: 1;
+}
+
+.key-mint-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+.keys-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    padding: var(--space-2);
+}
+
+.key-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    padding: var(--space-2) var(--space-3);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+}
+
+.key-row:last-child {
+    border-bottom: none;
+}
+
+.key-info {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-0);
+}
+
+.key-prefix {
+    font-family: var(--font-microcopy);
+    font-size: var(--main-font-size-4);
+    color: var(--text-main);
+}
+
+.key-label {
+    font-family: var(--font-primary);
+    font-size: var(--main-font-size-4);
+    color: var(--text-muted);
+}
+
+.key-date {
+    font-family: var(--font-microcopy);
+    font-size: var(--main-font-size-4);
+    color: var(--text-muted);
+    flex-shrink: 0;
 }
 </style>

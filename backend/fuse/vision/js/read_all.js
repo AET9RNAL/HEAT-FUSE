@@ -168,6 +168,7 @@
         r.battle_state     = battleInfoModel.state || 0;
         r.battle_countdown = battleInfoModel.countdownTimer != null
                              ? Math.round(battleInfoModel.countdownTimer) : null;
+        r._dbg_bc = (typeof battleInfoModel.countdownTimer) + ':' + JSON.stringify(battleInfoModel.countdownTimer);
       }
     } catch(e) {}
 
@@ -187,7 +188,8 @@
     try {
       if (typeof gameModeInfo !== 'undefined' && gameModeInfo) {
         r.game_mode   = gameModeInfo.gameModeName  || null;
-        r.match_state = gameModeInfo.gameModeState || null;
+        r.match_state = gameModeInfo.gameModeState != null ? gameModeInfo.gameModeState : null;
+        r._dbg_ms = (typeof gameModeInfo.gameModeState) + ':' + JSON.stringify(gameModeInfo.gameModeState);
       }
     } catch(e) {}
     try {
@@ -211,6 +213,7 @@
     try {
       if (typeof playerInfoModel !== 'undefined' && playerInfoModel) {
         r.player_kills    = playerInfoModel.kill             != null ? playerInfoModel.kill             : null;
+        r.player_assists  = playerInfoModel.assist           != null ? playerInfoModel.assist           : null;
         r.player_damage   = playerInfoModel.damage           != null ? playerInfoModel.damage           : null;
         r.player_role_pts = playerInfoModel.currentRolePoints != null ? playerInfoModel.currentRolePoints : null;
         r.player_is_dead  = playerInfoModel.isDead ? 1 : 0;
