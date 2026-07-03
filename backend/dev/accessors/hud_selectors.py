@@ -7,7 +7,7 @@ Discovered by live CDP DOM dump.  Sections mirror the visual layers of the HUD.
 
 Usage from any plugin:
 
-    from fuse.vision.accessors import HUD
+    from accessors import HUD
     acc.hide(HUD.HP_BASE)
     acc.set_color(HUD.MANA_VALUE, "rgba(255,80,0,1)")
     acc.hide(HUD.SPRINT)
@@ -228,7 +228,7 @@ class HUD:
     TARGETING_HINTS    = _c("TargetingHints_base")
     ABILITY_HINTS      = _c("AbilityHints_base")
 
-    # Markers page  (separate WebSocket — coui://ui/build/markers/index.html)
+    # Markers page  (separate WebSocket - coui://ui/build/markers/index.html)
     # Use Accessors.inject_stylesheet_markers() / _exec_markers() for these.
 
     # Vehicle markers (enemy HP bars, names, class icons)
@@ -444,7 +444,7 @@ class HANGAR:
     COMMON_CARD_IMAGE = _c("CommonCard_image")
     COMMON_CARD_CONTENT = _c("CommonCard_content")
 
-    # Modify Vehicle / Agent — Loadout page (LoadoutMain route)
+    # Modify Vehicle / Agent - Loadout page (LoadoutMain route)
     LOADOUT_MAIN          = _c("LoadoutMain_base")          # whole loadout page
     LOADOUT_VIEW_SWITCHER = _c("LoadOutViewSwitcher_base")  # Agent / Vehicle tab row
     HERO_SIGN_VEHICLE     = _c("HeroSign_base")             # vehicle/agent header (name, level, ASSIGNED)

@@ -20,10 +20,10 @@ See docs/COHTML_CDP_DEBUGGER.md for setup instructions.
 """
 from __future__ import annotations
 
+import importlib.resources as _pkg_res
 import json
 import threading
 import urllib.request
-from pathlib import Path
 from typing import Optional, Union
 
 from loguru import logger
@@ -35,12 +35,12 @@ except ImportError:
     _ws_mod = None  # type: ignore[assignment]
     _WS_AVAILABLE = False
 
-from fuse.vision.hud_selectors import HUD as HUD        # re-exported for plugin authors
-from fuse.vision.hud_selectors import HANGAR as HANGAR  # re-exported for plugin authors
+from .hud_selectors import HUD as HUD        # re-exported for plugin authors
+from .hud_selectors import HANGAR as HANGAR  # re-exported for plugin authors
 
-_JS_READ_ALL:        str = (Path(__file__).parent / "js" / "read_all.js").read_text(encoding="utf-8")
-_JS_READ_MARKERS:    str = (Path(__file__).parent / "js" / "read_markers.js").read_text(encoding="utf-8")
-_JS_READ_BATTLE_APP: str = (Path(__file__).parent / "js" / "read_battle_app.js").read_text(encoding="utf-8")
+_JS_READ_ALL:        str = (_pkg_res.files(__package__) / "js" / "read_all.js").read_text(encoding="utf-8")
+_JS_READ_MARKERS:    str = (_pkg_res.files(__package__) / "js" / "read_markers.js").read_text(encoding="utf-8")
+_JS_READ_BATTLE_APP: str = (_pkg_res.files(__package__) / "js" / "read_battle_app.js").read_text(encoding="utf-8")
 
 # game_memory-compatible field names → (JS result key, Python type).
 # Consumers using game_memory can call accessors.read("multiplayer_vehicle_health")

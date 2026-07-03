@@ -23,7 +23,7 @@
       }
     } catch(e) {}
 
-    // Scoreboard rows — always scraped; DOM is rendered even when the scoreboard is
+    // Scoreboard rows - always scraped; DOM is rendered even when the scoreboard is
     // visually closed, so the rows are always present.
     var _parseRow = function(rowEl) {
       var _nameEl   = rowEl.querySelector('[class*="CellWrapper_base__player"] [class*="SimpleText_base__colored"]');
@@ -53,7 +53,7 @@
     r.sb_ally_rows  = _allyRows;
     r.sb_enemy_rows = _enemyRows;
 
-    // Local player's scoreboard stats — identified by AgentInfo_base__disabled
+    // Local player's scoreboard stats - identified by AgentInfo_base__disabled
     // (the game marks the local player's own agent icon as non-interactive since
     // you can't inspect yourself). Present only when the scoreboard tab is open.
     // Deaths use hp=0 tracking in the plugin; this block captures KC confirms/denies.

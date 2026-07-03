@@ -6,7 +6,7 @@ from loguru import logger
 
 from fuse.core.api import FuseContext, FusePlugin
 from fuse.ui.config_schema import ConfigCategory, ConfigEntry
-from fuse.vision.accessors import HUD, HANGAR
+from accessors import HUD, HANGAR
 
 # Per-slot selectors for ability panel - nth-child inside AbilityPanel_base.
 # DOM order: 1=ability1, 2=ability2, 3=passive(fixedPosition), 4=ultimate.

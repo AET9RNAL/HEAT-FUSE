@@ -2,7 +2,7 @@
   var r = {};
   try {
 
-    // HP — playerHealthModel is written atomically by the C++ engine; no DOM race condition.
+    // HP - playerHealthModel is written atomically by the C++ engine; no DOM race condition.
     try {
       var _phmt = typeof playerHealthModel;
       r._dbg_phm = _phmt + '/' + (_phmt !== 'undefined' && playerHealthModel ? (playerHealthModel.health !== undefined ? String(playerHealthModel.health) : 'h_undef') : 'absent');
@@ -13,7 +13,7 @@
       }
     } catch(e) { r._dbg_phm = 'ERR:' + e.message; }
 
-    // Energy (mana) — manaAbilityModel
+    // Energy (mana) - manaAbilityModel
     try {
       var _mamt = typeof manaAbilityModel;
       r._dbg_mam = _mamt + '/' + (_mamt !== 'undefined' && manaAbilityModel ? (manaAbilityModel.data ? String(manaAbilityModel.data.currentMana) : 'no_data') : 'absent');
@@ -24,7 +24,7 @@
       }
     } catch(e) { r._dbg_mam = 'ERR:' + e.message; }
 
-    // Sprint / Boost — manaSprintModel.data.leftManaPrc is 0-100 percentage remaining
+    // Sprint / Boost - manaSprintModel.data.leftManaPrc is 0-100 percentage remaining
     try {
       if (typeof manaSprintModel !== 'undefined' && manaSprintModel && manaSprintModel.data) {
         var _sd = manaSprintModel.data;
@@ -101,7 +101,7 @@
       }
     } catch(e) {}
 
-    // Rangefinder — distance to crosshair target (battle_hud DOM).
+    // Rangefinder - distance to crosshair target (battle_hud DOM).
     // Visible only when reticle is on a target; retains stale text when hidden.
     var _rfBase = document.querySelector('[class*="TargetDistance_base"]');
     var _rfEl   = document.querySelector('[class*="TargetDistance_distance"]');
@@ -173,7 +173,7 @@
     } catch(e) {}
 
     // Ping / FPS
-    // Cohtml rejects :not() with attribute selectors — filter Wrapper elements in JS.
+    // Cohtml rejects :not() with attribute selectors - filter Wrapper elements in JS.
     try {
       var _allPerf = document.querySelectorAll('[class*="PerfInfo_statValue"]');
       var _perfVals = [];

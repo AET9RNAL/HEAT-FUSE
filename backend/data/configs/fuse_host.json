@@ -2,9 +2,7 @@
   "enabled_plugins": null,
   "disabled_plugins": [
     "game_memory",
-    "heat_ailos_torc",
-    "cruise_control",
-    "noui"
+    "heat_ailos_torc"
   ],
   "hotkey_overrides": {
     "host": {

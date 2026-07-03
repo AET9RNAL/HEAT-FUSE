@@ -25,7 +25,7 @@
       r.on_fire      = _dTags.indexOf('burning') !== -1 ? 1 : 0;
     }
 
-    // Guided missile marker — distance from player to missile in flight.
+    // Guided missile marker - distance from player to missile in flight.
     // GuidedMissileMarker_distanceValue element present + visible only while missile is airborne.
     var _gmEl = document.querySelector('[class*="GuidedMissileMarker_distanceValue"]');
     if (_gmEl && window.getComputedStyle(_gmEl).visibility !== 'hidden') {
