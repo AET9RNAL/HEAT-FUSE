@@ -17,6 +17,8 @@ PLUGIN_VERSION = "1.0.0"
 
 _MS_FINISH = "ActiveFinish"
 
+_SKIP_GAME_MODES = {"FiringRange"}
+
 
 @dataclass
 class MatchSample:
@@ -183,6 +185,9 @@ class HeatStatsPlugin(FusePlugin):
         self._snap_es: int = 0
         self._snap_co: Optional[int] = None
         self._snap_dn: Optional[int] = None
+        # hp=0 death counter — increments each time hp transitions from >0 to 0.
+        self._hp_death_count: int           = 0
+        self._last_hp:        Optional[int] = None
         # Timers and running aggregates
         self._sample_timer: float = 0.0
         self._elapsed:      float = 0.0
@@ -269,6 +274,8 @@ class HeatStatsPlugin(FusePlugin):
         # Kill Confirm: ms="Intro"/bs=8 for the entire battle.
         # Guard against ActiveFinish phase which may still have bs=8.
         if bs == 8 and ms != _MS_FINISH:
+            if self._acc.read("game_mode") in _SKIP_GAME_MODES:
+                return
             self._begin_session()
 
     def _check_match_end(self) -> None:
@@ -292,8 +299,10 @@ class HeatStatsPlugin(FusePlugin):
             player_role     = acc.read("player_role"),
             player_agent_id = acc.read("player_agent_id"),
         )
+        self._hp_death_count = 0
+        self._last_hp        = acc.read("health")
         self._prev_ki = acc.read("player_kills")      or 0
-        self._prev_de = acc.read("sb_player_deaths")  or 0
+        self._prev_de = 0
         self._prev_as = acc.read("player_assists")
         self._prev_da = acc.read("player_damage")     or 0
         self._prev_al = acc.read("ally_score")        or 0
@@ -301,7 +310,7 @@ class HeatStatsPlugin(FusePlugin):
         self._prev_co = acc.read("sb_player_confirms")
         self._prev_dn = acc.read("sb_player_denies")
         self._snap_ki = self._prev_ki
-        self._snap_de = self._prev_de
+        self._snap_de = 0
         self._snap_as = self._prev_as
         self._snap_da = self._prev_da
         self._snap_al = self._prev_al
@@ -327,8 +336,16 @@ class HeatStatsPlugin(FusePlugin):
         if not self._session:
             return
         acc = self._acc
+
+        # Count deaths via hp hitting exactly 0 (explicit numeric condition).
+        hp_now = acc.read("health")
+        if hp_now is not None and hp_now == 0 and self._last_hp not in (None, 0):
+            self._hp_death_count += 1
+        if hp_now is not None:
+            self._last_hp = hp_now
+
         ki  = acc.read("player_kills")       or 0
-        de  = acc.read("sb_player_deaths")   or 0
+        de  = self._hp_death_count
         as_ = acc.read("player_assists")
         da  = acc.read("player_damage")      or 0
         al  = acc.read("ally_score")         or 0
@@ -357,7 +374,7 @@ class HeatStatsPlugin(FusePlugin):
 
         self._session.samples.append(MatchSample(
             t   = int(round(self._elapsed)),
-            hp  = acc.read("health"),
+            hp  = hp_now,
             en  = acc.read("energy"),
             bo  = acc.read("boost"),
             pi  = pi,
@@ -393,7 +410,7 @@ class HeatStatsPlugin(FusePlugin):
 
         if acc.read("match_state") is not None:
             self._snap_ki = ki
-            self._snap_de = de
+            self._snap_de = de   # hp_death_count — always valid
             self._snap_as = as_
             self._snap_da = da
             self._snap_al = al

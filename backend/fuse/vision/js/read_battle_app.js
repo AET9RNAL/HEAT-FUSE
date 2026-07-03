@@ -53,9 +53,10 @@
     r.sb_ally_rows  = _allyRows;
     r.sb_enemy_rows = _enemyRows;
 
-    // Local player's scoreboard deaths — read from the row whose agent icon is
-    // rendered non-interactive (AgentInfo_base__disabled). The game marks only the
-    // local player's own agent cell as disabled since you can't inspect yourself.
+    // Local player's scoreboard stats — identified by AgentInfo_base__disabled
+    // (the game marks the local player's own agent icon as non-interactive since
+    // you can't inspect yourself). Present only when the scoreboard tab is open.
+    // Deaths use hp=0 tracking in the plugin; this block captures KC confirms/denies.
     try {
       var _localAgentCell = document.querySelector('[class*="AgentInfo_base__disabled"]');
       if (_localAgentCell) {
