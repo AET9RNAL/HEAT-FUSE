@@ -9,6 +9,7 @@ import eSimpleModal from './components/eSimpleModal.vue'
 import eLicense from './components/eLicense.vue'
 import { useAppStore } from './stores/app'
 import { useAuthStore } from './stores/auth'
+import { useExtendedAuthStore } from './stores/extendedauth'
 import { usePluginsStore } from './stores/plugins'
 import { useNavigationStore } from './stores/navigation'
 import { useHeatStatsStore } from './stores/heatStats'
@@ -25,6 +26,7 @@ import packageJson from '../package.json'
 
 const appStore = useAppStore()
 const authStore = useAuthStore()
+useExtendedAuthStore()
 const pluginsStore = usePluginsStore()
 const navStore = useNavigationStore()
 useHeatStatsStore()
