@@ -227,11 +227,6 @@
         }
       }
     } catch(e) {}
-    try {
-      if (typeof deathInfoModel !== 'undefined' && deathInfoModel) {
-        r.player_deaths = deathInfoModel.deadCount != null ? deathInfoModel.deadCount : null;
-      }
-    } catch(e) {}
 
   } catch(e) {
     r._err = e.message;

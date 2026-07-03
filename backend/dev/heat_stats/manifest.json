@@ -1,7 +1,7 @@
 {
   "plugin_id": "heat_stats",
   "name": "HEAT Stats",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "AETERNAL",
   "description": "Records per-match performance data.",
   "entry": "plugin:HeatStatsPlugin",

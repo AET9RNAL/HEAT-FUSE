@@ -76,7 +76,7 @@ _EXTRA_KEYS = (
     # team scores / zones
     "ally_score", "enemy_score", "allied_zones", "enemy_zones",
     # player match stats
-    "player_kills", "player_deaths", "player_damage", "player_role_pts",
+    "player_kills", "player_damage", "player_role_pts",
     "player_is_dead", "player_role", "player_vehicle", "player_agent_id", "player_name",
     # from markers page
     "on_fire", "debuff_count", "debuff_tags", "buff_count", "buff_tags",
@@ -85,6 +85,7 @@ _EXTRA_KEYS = (
     # from battle_app page (scoreboard)
     "sb_open", "sb_map_name", "sb_game_mode_name",
     "sb_ally_rows", "sb_enemy_rows",
+    "sb_player_deaths", "sb_player_confirms", "sb_player_denies",
     # debug
     "_dbg_phm", "_dbg_mam",
 )

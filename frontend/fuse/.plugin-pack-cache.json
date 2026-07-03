@@ -1,8 +1,8 @@
 {
   "accessors": {
-    "hash": "05c4d972278e8a19216dc931292ad2d53d759d28319956108710865243851043",
-    "outName": "Accessors-2.1.0.fuse",
-    "packed": "2026-07-01T00:59:57.083Z"
+    "hash": "e2ed8a4c918e8434ae1c7c6320624013b95d7900ec4e781961d989d8b74cacbf",
+    "outName": "Accessors-2.1.1.fuse",
+    "packed": "2026-07-03T06:54:53.901Z"
   },
   "energy_bar": {
     "hash": "20e081c2d0fd8c231520f13c35240e4949603d0eced4f08821f830345f14907f",
@@ -35,8 +35,8 @@
     "packed": "2026-07-01T00:59:57.206Z"
   },
   "heat_stats": {
-    "hash": "7dc67a1125b0dc94bfd589002ef3b1c80603d862fba6bc0cb71f69e4146f92f8",
-    "outName": "HEATStats-1.0.0.fuse",
-    "packed": "2026-07-03T02:33:09.366Z"
+    "hash": "66f5f7b459e94801011bcb9a3cb6293afee3ba07ce20f299b579f79d28422dd3",
+    "outName": "HEATStats-1.1.0.fuse",
+    "packed": "2026-07-03T07:09:22.061Z"
   }
 }

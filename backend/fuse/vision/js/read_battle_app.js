@@ -23,34 +23,63 @@
       }
     } catch(e) {}
 
-    // Scoreboard rows — only scrape when visible (expensive DOM walk)
-    if (r.sb_open) {
-      var _parseRow = function(rowEl) {
-        var _nameEl = rowEl.querySelector('[class*="CellWrapper_base__player"] [class*="SimpleText_base__colored"]');
-        var _scoreEl  = rowEl.querySelector('[class*="CellWrapper_base__score"]');
-        var _dmgEl    = rowEl.querySelector('[class*="CellWrapper_base__damage"]');
-        var _kcdEl    = rowEl.querySelector('[class*="CellWrapper_base__killConfirm"]');
-        return {
-          name:   _nameEl   ? (_nameEl.textContent   || '').trim() : '',
-          score:  _scoreEl  ? (parseInt((_scoreEl.textContent  || '').replace(/,/g, '')) || 0) : 0,
-          damage: _dmgEl    ? (parseInt((_dmgEl.textContent    || '').replace(/,/g, '')) || 0) : 0,
-          kcd:    _kcdEl    ? (_kcdEl.textContent || '').trim() : '',
-        };
+    // Scoreboard rows — always scraped; DOM is rendered even when the scoreboard is
+    // visually closed, so the rows are always present.
+    var _parseRow = function(rowEl) {
+      var _nameEl   = rowEl.querySelector('[class*="CellWrapper_base__player"] [class*="SimpleText_base__colored"]');
+      var _scoreEl  = rowEl.querySelector('[class*="CellWrapper_base__score"]');
+      var _dmgEl    = rowEl.querySelector('[class*="CellWrapper_base__damage"]');
+      var _deathEl  = rowEl.querySelector('[class*="CellWrapper_base__deaths"]');
+      var _kcdEl    = rowEl.querySelector('[class*="CellWrapper_base__killConfirm"]');
+      return {
+        name:   _nameEl   ? (_nameEl.textContent   || '').trim() : '',
+        score:  _scoreEl  ? (parseInt((_scoreEl.textContent  || '').replace(/,/g, '')) || 0) : 0,
+        damage: _dmgEl    ? (parseInt((_dmgEl.textContent    || '').replace(/,/g, '')) || 0) : 0,
+        deaths: _deathEl  ? (parseInt((_deathEl.textContent  || '').trim()) || 0) : 0,
+        kcd:    _kcdEl    ? (_kcdEl.textContent || '').trim() : '',
       };
-      var _allySect  = document.querySelector('[class*="ScoreTable_allies"]');
-      var _enemySect = document.querySelector('[class*="ScoreTable_enemies"]');
-      var _allyRows  = []; var _enemyRows = [];
-      if (_allySect) {
-        var _ar = _allySect.querySelectorAll('[class*="PlayerRow_base"]');
-        for (var _i = 0; _i < _ar.length; _i++) _allyRows.push(_parseRow(_ar[_i]));
-      }
-      if (_enemySect) {
-        var _er = _enemySect.querySelectorAll('[class*="PlayerRow_base"]');
-        for (var _j = 0; _j < _er.length; _j++) _enemyRows.push(_parseRow(_er[_j]));
-      }
-      r.sb_ally_rows  = _allyRows;
-      r.sb_enemy_rows = _enemyRows;
+    };
+    var _allySect  = document.querySelector('[class*="ScoreTable_allies"]');
+    var _enemySect = document.querySelector('[class*="ScoreTable_enemies"]');
+    var _allyRows  = []; var _enemyRows = [];
+    if (_allySect) {
+      var _ar = _allySect.querySelectorAll('[class*="PlayerRow_base"]');
+      for (var _i = 0; _i < _ar.length; _i++) _allyRows.push(_parseRow(_ar[_i]));
     }
+    if (_enemySect) {
+      var _er = _enemySect.querySelectorAll('[class*="PlayerRow_base"]');
+      for (var _j = 0; _j < _er.length; _j++) _enemyRows.push(_parseRow(_er[_j]));
+    }
+    r.sb_ally_rows  = _allyRows;
+    r.sb_enemy_rows = _enemyRows;
+
+    // Local player's scoreboard deaths — read from the row whose agent icon is
+    // rendered non-interactive (AgentInfo_base__disabled). The game marks only the
+    // local player's own agent cell as disabled since you can't inspect yourself.
+    try {
+      var _localAgentCell = document.querySelector('[class*="AgentInfo_base__disabled"]');
+      if (_localAgentCell) {
+        var _localRow = _localAgentCell.parentElement;
+        while (_localRow && _localRow.className.indexOf('PlayerRow_base') === -1) {
+          _localRow = _localRow.parentElement;
+        }
+        if (_localRow) {
+          var _localDeathEl = _localRow.querySelector('[class*="CellWrapper_base__deaths"]');
+          r.sb_player_deaths = _localDeathEl
+            ? (parseInt((_localDeathEl.textContent || '').trim()) || 0)
+            : null;
+          // Kill Confirm mode: kcd cell = "DESTROYED / CONFIRMS / DENIES"
+          var _kcdEl = _localRow.querySelector('[class*="CellWrapper_base__killConfirm"]');
+          if (_kcdEl) {
+            var _kcdParts = (_kcdEl.textContent || '').trim().split(' / ');
+            if (_kcdParts.length >= 3) {
+              r.sb_player_confirms = parseInt(_kcdParts[1]) || 0;
+              r.sb_player_denies   = parseInt(_kcdParts[2]) || 0;
+            }
+          }
+        }
+      }
+    } catch(e) {}
 
   } catch(e) {
     r._err = e.message;

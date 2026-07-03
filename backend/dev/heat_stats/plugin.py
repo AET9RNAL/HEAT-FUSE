@@ -30,8 +30,10 @@ class MatchSample:
     es:  Optional[int]   # enemy score
     ki:  Optional[int]   # kills (cumulative)
     de:  Optional[int]   # deaths (cumulative)
-    as_: Optional[int]   # assists (cumulative;)
+    as_: Optional[int]   # assists (cumulative)
     da:  Optional[int]   # damage (cumulative)
+    co:  Optional[int]   # confirms (cumulative; KC mode only)
+    dn:  Optional[int]   # denies (cumulative; KC mode only)
     ms:  Optional[str]   # gameModeState string ("Active", "Intro", "ActiveFinish", ...)
     # Deltas vs previous sample
     dki: int = 0
@@ -40,6 +42,8 @@ class MatchSample:
     dda: int = 0
     dal: int = 0         # ally score delta
     des: int = 0         # enemy score delta
+    dco: int = 0         # confirms delta
+    ddn: int = 0         # denies delta
 
     def to_dict(self) -> dict:
         return {
@@ -55,6 +59,8 @@ class MatchSample:
             "de":  self.de,
             "as":  self.as_,
             "da":  self.da,
+            "co":  self.co,
+            "dn":  self.dn,
             "ms":  self.ms,
             "dki": self.dki,
             "dde": self.dde,
@@ -62,6 +68,8 @@ class MatchSample:
             "dda": self.dda,
             "dal": self.dal,
             "des": self.des,
+            "dco": self.dco,
+            "ddn": self.ddn,
         }
 
 
@@ -83,6 +91,8 @@ class MatchSession:
     final_deaths:      int           = 0
     final_assists:     Optional[int] = None
     final_damage:      int           = 0
+    final_confirms:    Optional[int] = None
+    final_denies:      Optional[int] = None
     final_ally_score:  int           = 0
     final_enemy_score: int           = 0
     peak_ping:         int           = 0
@@ -109,6 +119,8 @@ class MatchSession:
             "final_deaths":      self.final_deaths,
             "final_assists":     self.final_assists,
             "final_damage":      self.final_damage,
+            "final_confirms":    self.final_confirms,
+            "final_denies":      self.final_denies,
             "final_ally_score":  self.final_ally_score,
             "final_enemy_score": self.final_enemy_score,
             "peak_ping":         self.peak_ping,
@@ -159,6 +171,8 @@ class HeatStatsPlugin(FusePlugin):
         self._prev_da: int = 0
         self._prev_al: int = 0
         self._prev_es: int = 0
+        self._prev_co: Optional[int] = None
+        self._prev_dn: Optional[int] = None
         # Last-known cumulative values while models were live.
         # Used for final summary to survive model-wipe on match end.
         self._snap_ki: int = 0
@@ -167,6 +181,8 @@ class HeatStatsPlugin(FusePlugin):
         self._snap_da: int = 0
         self._snap_al: int = 0
         self._snap_es: int = 0
+        self._snap_co: Optional[int] = None
+        self._snap_dn: Optional[int] = None
         # Timers and running aggregates
         self._sample_timer: float = 0.0
         self._elapsed:      float = 0.0
@@ -276,18 +292,22 @@ class HeatStatsPlugin(FusePlugin):
             player_role     = acc.read("player_role"),
             player_agent_id = acc.read("player_agent_id"),
         )
-        self._prev_ki = acc.read("player_kills")   or 0
-        self._prev_de = acc.read("player_deaths")  or 0
+        self._prev_ki = acc.read("player_kills")      or 0
+        self._prev_de = acc.read("sb_player_deaths")  or 0
         self._prev_as = acc.read("player_assists")
-        self._prev_da = acc.read("player_damage")  or 0
-        self._prev_al = acc.read("ally_score")     or 0
-        self._prev_es = acc.read("enemy_score")    or 0
+        self._prev_da = acc.read("player_damage")     or 0
+        self._prev_al = acc.read("ally_score")        or 0
+        self._prev_es = acc.read("enemy_score")       or 0
+        self._prev_co = acc.read("sb_player_confirms")
+        self._prev_dn = acc.read("sb_player_denies")
         self._snap_ki = self._prev_ki
         self._snap_de = self._prev_de
         self._snap_as = self._prev_as
         self._snap_da = self._prev_da
         self._snap_al = self._prev_al
         self._snap_es = self._prev_es
+        self._snap_co = self._prev_co
+        self._snap_dn = self._prev_dn
         self._elapsed      = 0.0
         self._sample_timer = 0.0
         self._ping_sum     = 0.0
@@ -307,12 +327,14 @@ class HeatStatsPlugin(FusePlugin):
         if not self._session:
             return
         acc = self._acc
-        ki  = acc.read("player_kills")   or 0
-        de  = acc.read("player_deaths")  or 0
+        ki  = acc.read("player_kills")       or 0
+        de  = acc.read("sb_player_deaths")   or 0
         as_ = acc.read("player_assists")
-        da  = acc.read("player_damage")  or 0
-        al  = acc.read("ally_score")     or 0
-        es  = acc.read("enemy_score")    or 0
+        da  = acc.read("player_damage")      or 0
+        al  = acc.read("ally_score")         or 0
+        es  = acc.read("enemy_score")        or 0
+        co  = acc.read("sb_player_confirms")
+        dn  = acc.read("sb_player_denies")
         pi  = acc.read("ping")
         fp  = acc.read("fps")
 
@@ -330,6 +352,8 @@ class HeatStatsPlugin(FusePlugin):
         dda  = max(0, da - self._prev_da)
         dal  = al - self._prev_al
         des_ = es - self._prev_es
+        dco  = max(0, (co or 0) - (self._prev_co or 0)) if co is not None else 0
+        ddn  = max(0, (dn or 0) - (self._prev_dn or 0)) if dn is not None else 0
 
         self._session.samples.append(MatchSample(
             t   = int(round(self._elapsed)),
@@ -344,6 +368,8 @@ class HeatStatsPlugin(FusePlugin):
             de  = de,
             as_ = as_,
             da  = da,
+            co  = co,
+            dn  = dn,
             ms  = acc.read("match_state"),
             dki = dki,
             dde = dde,
@@ -351,6 +377,8 @@ class HeatStatsPlugin(FusePlugin):
             dda = dda,
             dal = dal,
             des = des_,
+            dco = dco,
+            ddn = ddn,
         ))
         self._session.sample_count += 1
 
@@ -360,6 +388,8 @@ class HeatStatsPlugin(FusePlugin):
         self._prev_da = da
         self._prev_al = al
         self._prev_es = es
+        self._prev_co = co
+        self._prev_dn = dn
 
         if acc.read("match_state") is not None:
             self._snap_ki = ki
@@ -390,6 +420,8 @@ class HeatStatsPlugin(FusePlugin):
         sess.final_damage      = self._snap_da
         sess.final_ally_score  = self._snap_al
         sess.final_enemy_score = self._snap_es
+        sess.final_confirms    = self._snap_co
+        sess.final_denies      = self._snap_dn
 
         if self._perf_count > 0:
             sess.avg_ping = round(self._ping_sum / self._perf_count, 1)
