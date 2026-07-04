@@ -1,5 +1,5 @@
 {
-  "hide_all": true,
+  "hide_all": false,
   "hide_hp": false,
   "hide_energy": false,
   "hide_ability_1": false,
@@ -20,7 +20,7 @@
   "hide_kill_log": false,
   "hide_hit_marks": false,
   "hide_perf": false,
-  "hide_perk_notif": false,
+  "hide_perk_notif": true,
   "hide_perk_bars": false,
   "hide_xp_score": false,
   "hide_reticle": false,
@@ -54,5 +54,7 @@
   "mod_modules": false,
   "mod_bonuses": false,
   "mod_skills": false,
-  "mod_vehicles": false
+  "mod_vehicles": false,
+  "hangar_play_button": false,
+  "mod_agent_list": false
 }

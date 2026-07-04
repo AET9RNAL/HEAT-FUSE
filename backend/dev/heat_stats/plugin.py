@@ -13,7 +13,7 @@ from fuse.core.api import FusePlugin, FuseContext
 _HMAC_KEY = b"heat_fuse_stats_v1"
 _HMAC_EXCLUDE = ("hmac_hex", "type")
 
-PLUGIN_VERSION = "1.0.0"
+PLUGIN_VERSION = "1.3.1"
 
 _MS_FINISH = "ActiveFinish"
 
@@ -36,6 +36,7 @@ class MatchSample:
     da:  Optional[int]   # damage (cumulative)
     co:  Optional[int]   # confirms (cumulative; KC mode only)
     dn:  Optional[int]   # denies (cumulative; KC mode only)
+    sc:  Optional[int]   # player role score (cumulative)
     ms:  Optional[str]   # gameModeState string ("Active", "Intro", "ActiveFinish", ...)
     # Deltas vs previous sample
     dki: int = 0
@@ -46,6 +47,7 @@ class MatchSample:
     des: int = 0         # enemy score delta
     dco: int = 0         # confirms delta
     ddn: int = 0         # denies delta
+    dsc: int = 0         # score delta
 
     def to_dict(self) -> dict:
         return {
@@ -63,6 +65,7 @@ class MatchSample:
             "da":  self.da,
             "co":  self.co,
             "dn":  self.dn,
+            "sc":  self.sc,
             "ms":  self.ms,
             "dki": self.dki,
             "dde": self.dde,
@@ -72,6 +75,7 @@ class MatchSample:
             "des": self.des,
             "dco": self.dco,
             "ddn": self.ddn,
+            "dsc": self.dsc,
         }
 
 
@@ -95,6 +99,7 @@ class MatchSession:
     final_damage:      int           = 0
     final_confirms:    Optional[int] = None
     final_denies:      Optional[int] = None
+    final_score:       int           = 0
     final_ally_score:  int           = 0
     final_enemy_score: int           = 0
     peak_ping:         int           = 0
@@ -123,6 +128,7 @@ class MatchSession:
             "final_damage":      self.final_damage,
             "final_confirms":    self.final_confirms,
             "final_denies":      self.final_denies,
+            "final_score":       self.final_score,
             "final_ally_score":  self.final_ally_score,
             "final_enemy_score": self.final_enemy_score,
             "peak_ping":         self.peak_ping,
@@ -175,6 +181,7 @@ class HeatStatsPlugin(FusePlugin):
         self._prev_es: int = 0
         self._prev_co: Optional[int] = None
         self._prev_dn: Optional[int] = None
+        self._prev_sc: int           = 0
         # Last-known cumulative values while models were live.
         # Used for final summary to survive model-wipe on match end.
         self._snap_ki: int = 0
@@ -185,6 +192,7 @@ class HeatStatsPlugin(FusePlugin):
         self._snap_es: int = 0
         self._snap_co: Optional[int] = None
         self._snap_dn: Optional[int] = None
+        self._snap_sc: int           = 0
         # hp=0 death counter — increments each time hp transitions from >0 to 0.
         self._hp_death_count: int           = 0
         self._last_hp:        Optional[int] = None
@@ -309,6 +317,7 @@ class HeatStatsPlugin(FusePlugin):
         self._prev_es = acc.read("enemy_score")       or 0
         self._prev_co = acc.read("sb_player_confirms")
         self._prev_dn = acc.read("sb_player_denies")
+        self._prev_sc = acc.read("player_role_pts")    or 0
         self._snap_ki = self._prev_ki
         self._snap_de = 0
         self._snap_as = self._prev_as
@@ -317,6 +326,7 @@ class HeatStatsPlugin(FusePlugin):
         self._snap_es = self._prev_es
         self._snap_co = self._prev_co
         self._snap_dn = self._prev_dn
+        self._snap_sc = self._prev_sc
         self._elapsed      = 0.0
         self._sample_timer = 0.0
         self._ping_sum     = 0.0
@@ -352,6 +362,7 @@ class HeatStatsPlugin(FusePlugin):
         es  = acc.read("enemy_score")        or 0
         co  = acc.read("sb_player_confirms")
         dn  = acc.read("sb_player_denies")
+        sc  = acc.read("player_role_pts")      or 0
         pi  = acc.read("ping")
         fp  = acc.read("fps")
 
@@ -371,6 +382,7 @@ class HeatStatsPlugin(FusePlugin):
         des_ = es - self._prev_es
         dco  = max(0, (co or 0) - (self._prev_co or 0)) if co is not None else 0
         ddn  = max(0, (dn or 0) - (self._prev_dn or 0)) if dn is not None else 0
+        dsc  = max(0, sc - self._prev_sc)
 
         self._session.samples.append(MatchSample(
             t   = int(round(self._elapsed)),
@@ -387,6 +399,7 @@ class HeatStatsPlugin(FusePlugin):
             da  = da,
             co  = co,
             dn  = dn,
+            sc  = sc,
             ms  = acc.read("match_state"),
             dki = dki,
             dde = dde,
@@ -396,6 +409,7 @@ class HeatStatsPlugin(FusePlugin):
             des = des_,
             dco = dco,
             ddn = ddn,
+            dsc = dsc,
         ))
         self._session.sample_count += 1
 
@@ -407,6 +421,7 @@ class HeatStatsPlugin(FusePlugin):
         self._prev_es = es
         self._prev_co = co
         self._prev_dn = dn
+        self._prev_sc = sc
 
         if acc.read("match_state") is not None:
             self._snap_ki = ki
@@ -415,6 +430,9 @@ class HeatStatsPlugin(FusePlugin):
             self._snap_da = da
             self._snap_al = al
             self._snap_es = es
+            self._snap_co = co
+            self._snap_dn = dn
+            self._snap_sc = sc
 
     # Session finalization
 
@@ -439,6 +457,7 @@ class HeatStatsPlugin(FusePlugin):
         sess.final_enemy_score = self._snap_es
         sess.final_confirms    = self._snap_co
         sess.final_denies      = self._snap_dn
+        sess.final_score       = self._snap_sc
 
         if self._perf_count > 0:
             sess.avg_ping = round(self._ping_sum / self._perf_count, 1)

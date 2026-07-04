@@ -1,0 +1,1307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HEAT Stats Visualizer</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  /* Spacing scale */
+  --space-0: 2px;  --space-1: 4px;  --space-2: 8px;
+  --space-3: 12px; --space-4: 16px; --space-5: 20px;
+  --space-6: 42px; --space-7: 48px;
+
+  /* Brand colors */
+  --tea-green: hsl(142, 100%, 89%);
+  --light-green: hsl(142, 100%, 78%);
+
+  /* Blacks */
+  --black-1: hsl(142, 1%, 4%);
+  --black-2: hsl(142, 1%, 10%);
+  --black-3: hsl(142, 1%, 20%);
+  --black-1-a: hsla(142, 10%, 4%, 0.6);
+  --black-2-a: hsla(142, 10%, 10%, 0.6);
+  --black-3-a: hsla(142, 10%, 20%, 0.6);
+
+  /* Base colors */
+  --base-50: rgba(242, 242, 242, 1);
+  --base-200: rgba(179, 179, 179, 1);
+  --base-600: rgba(82, 82, 82, 1);
+
+  /* Accent colors */
+  --accent-150: hsl(219, 100%, 85%);
+
+  /* State colors */
+  --success-color: rgba(113, 206, 113, 1);
+  --warning-color: rgba(255, 219, 140, 1);
+  --error-base: rgba(200, 69, 84, 1);
+  --error-highlight: rgba(255, 106, 98, 1);
+
+  /* Typography */
+  --font-primary: 'Normalidad', system-ui, sans-serif;
+  --font-microcopy: 'Geist Mono', 'Courier New', monospace;
+  --fs-1: 24px; --fs-2: 20px; --fs-3: 16px; --fs-4: 12px; --fs-5: 8px;
+  --fw-bold: 700; --fw-medium: 500; --fw-regular: 400; --fw-light: 300;
+
+  /* Text colors */
+  --text-main: var(--base-50);
+  --text-muted: var(--base-200);
+
+  /* Semantic — visualizer */
+  --ally: var(--light-green);
+  --enemy: hsl(14, 80%, 56%);
+  --kill: var(--tea-green);
+  --dmg: var(--error-highlight);
+  --ping: var(--warning-color);
+  --fps: var(--success-color);
+  --win: var(--success-color);
+  --loss: var(--error-base);
+
+  /* Chamfer clip-paths */
+  --ch4: polygon(4px 0%, 100% 0%, 100% calc(100% - 4px), calc(100% - 4px) 100%, 0% 100%, 0% 4px);
+  --ch6: polygon(6px 0%, 100% 0%, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0% 100%, 0% 6px);
+  --ch8: polygon(8px 0%, 100% 0%, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0% 100%, 0% 8px);
+}
+
+body {
+  background: var(--black-1);
+  background-image: radial-gradient(ellipse at 50% 0%, hsla(142, 100%, 78%, 0.03), transparent 60%);
+  color: var(--text-main);
+  font-family: var(--font-primary);
+  font-size: var(--fs-3);
+  font-weight: var(--fw-regular);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  min-height: 100vh;
+}
+
+/* ── Connect bar ── */
+.connect-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  background: hsla(142, 10%, 4%, 0.92);
+  clip-path: var(--ch8);
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-5);
+}
+.connect-bar .brand {
+  font-family: var(--font-primary);
+  font-size: var(--fs-2);
+  font-weight: var(--fw-medium);
+  color: var(--text-main);
+  margin-right: var(--space-2);
+}
+.connect-bar .field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1 1 140px;
+  min-width: 140px;
+  margin-bottom: 0;
+}
+.connect-bar .field label {
+  font-family: var(--font-microcopy);
+  font-size: var(--fs-5);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.connect-bar .field input {
+  width: 100%;
+  background: var(--black-1-a);
+  border: none;
+  clip-path: var(--ch6);
+  padding: var(--space-2) var(--space-3);
+  color: var(--text-main);
+  font-size: var(--fs-3);
+  font-family: var(--font-microcopy);
+  outline: none;
+  transition: background .15s;
+}
+.connect-bar .field input.normal { font-family: var(--font-primary); }
+.connect-bar .field input:focus { background: rgba(255, 255, 255, 0.06); }
+
+.btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--black-1-a);
+  color: var(--text-main);
+  border: none;
+  clip-path: var(--ch6);
+  padding: var(--space-2) var(--space-4);
+  font-family: var(--font-primary);
+  font-size: var(--fs-3);
+  font-weight: var(--fw-regular);
+  cursor: pointer;
+  transition: background .15s;
+  margin-top: 14px;
+}
+.btn:hover { background: rgba(30, 30, 28, 0.75); }
+.btn:active { background: rgba(8, 8, 8, 0.8); }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.error-msg {
+  font-family: var(--font-microcopy);
+  color: var(--error-highlight);
+  font-size: var(--fs-4);
+  width: 100%;
+  display: none;
+}
+
+/* ── Sessions ── */
+#sessions-view { padding: var(--space-5); max-width: 1100px; margin: 0 auto; }
+
+.top-bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-5); }
+.top-bar h1 {
+  font-family: var(--font-primary);
+  font-size: var(--fs-2);
+  font-weight: var(--fw-medium);
+  color: var(--text-main);
+}
+
+.btn-sm {
+  background: var(--black-1-a);
+  border: none;
+  color: var(--text-muted);
+  clip-path: var(--ch6);
+  padding: var(--space-2) var(--space-3);
+  font-family: var(--font-primary);
+  font-size: var(--fs-4);
+  font-weight: var(--fw-regular);
+  cursor: pointer;
+  transition: background .15s, color .15s;
+}
+.btn-sm:hover { background: rgba(30, 30, 28, 0.75); color: var(--text-main); }
+
+.sessions-table {
+  width: 100%; border-collapse: separate; border-spacing: 0;
+  background: hsla(142, 10%, 4%, 0.92);
+  clip-path: var(--ch8);
+  overflow: hidden;
+}
+.sessions-table th {
+  font-family: var(--font-microcopy);
+  font-size: var(--fs-4); color: var(--text-muted);
+  padding: var(--space-3) var(--space-4); text-align: left;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: var(--black-2-a);
+  font-weight: var(--fw-regular);
+}
+.sessions-table td {
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--fs-3);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  color: var(--text-main); white-space: nowrap;
+}
+.sessions-table tr:last-child td { border-bottom: none; }
+.sessions-table tbody tr { cursor: pointer; transition: background .1s; }
+.sessions-table tbody tr:hover { background: rgba(255, 255, 255, 0.04); }
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  clip-path: var(--ch4);
+  background: color-mix(in srgb, var(--badge-c, rgba(255,255,255,0.18)) 35%, transparent);
+  padding: 1px;
+  font-family: var(--font-microcopy);
+  font-size: var(--fs-4);
+  font-weight: var(--fw-regular);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.badge > span {
+  display: inline-flex;
+  align-items: center;
+  clip-path: polygon(3px 0%, 100% 0%, 100% calc(100% - 3px), calc(100% - 3px) 100%, 0% 100%, 0% 3px);
+  background: color-mix(in srgb, var(--badge-c, transparent) 8%, rgba(12,12,12,0.85));
+  color: var(--badge-c, var(--text-muted));
+  padding: 1px 8px 1px 6px;
+}
+.badge.win       { --badge-c: var(--win); }
+.badge.loss      { --badge-c: var(--loss); }
+.badge.draw      { --badge-c: var(--base-200); }
+.badge.abandoned { --badge-c: var(--ping); }
+
+/* ── Detail ── */
+#detail-view { padding: var(--space-5); max-width: 1200px; margin: 0 auto; display: none; }
+
+.header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); margin-bottom: var(--space-5); flex-wrap: wrap; }
+.header-left h1 {
+  font-family: var(--font-primary);
+  font-size: var(--fs-1);
+  font-weight: var(--fw-medium);
+  color: var(--text-main);
+}
+.header-left .meta {
+  font-family: var(--font-microcopy);
+  color: var(--text-muted);
+  font-size: var(--fs-4);
+  margin-top: var(--space-1);
+  display: flex;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+.header-right { display: flex; gap: var(--space-2); align-items: center; }
+
+.outcome-badge {
+  display: inline-flex;
+  align-items: center;
+  clip-path: var(--ch4);
+  background: color-mix(in srgb, var(--badge-c, rgba(255,255,255,0.18)) 35%, transparent);
+  padding: 1px;
+  font-family: var(--font-microcopy);
+  font-size: var(--fs-4);
+  font-weight: var(--fw-regular);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.outcome-badge > span {
+  display: inline-flex;
+  align-items: center;
+  clip-path: polygon(3px 0%, 100% 0%, 100% calc(100% - 3px), calc(100% - 3px) 100%, 0% 100%, 0% 3px);
+  background: color-mix(in srgb, var(--badge-c, transparent) 8%, rgba(12,12,12,0.85));
+  color: var(--badge-c, var(--text-muted));
+  padding: 3px 10px 3px 8px;
+}
+.outcome-badge.win       { --badge-c: var(--win); }
+.outcome-badge.loss      { --badge-c: var(--loss); }
+.outcome-badge.draw      { --badge-c: var(--base-200); }
+.outcome-badge.abandoned { --badge-c: var(--ping); }
+
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: var(--space-2); margin-bottom: var(--space-5); }
+.card {
+  background: hsla(142, 10%, 4%, 0.92);
+  clip-path: var(--ch8);
+  padding: var(--space-3) var(--space-4);
+}
+.card .label {
+  font-family: var(--font-microcopy);
+  font-size: var(--fs-4);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  margin-bottom: var(--space-1);
+}
+.card .value {
+  font-family: var(--font-primary);
+  font-size: var(--fs-1);
+  font-weight: var(--fw-medium);
+  color: var(--text-main);
+  line-height: 1;
+}
+.card .value.accent-ally   { color: var(--ally); }
+.card .value.accent-enemy  { color: var(--enemy); }
+.card .value.accent-kill   { color: var(--kill); }
+.card .value.accent-dmg    { color: var(--dmg); }
+.card .value.accent-ping   { color: var(--ping); }
+.card .value.accent-fps    { color: var(--fps); }
+.card .sub {
+  font-family: var(--font-microcopy);
+  font-size: var(--fs-4);
+  color: var(--text-muted);
+  margin-top: var(--space-1);
+}
+
+.score-bar-wrap {
+  background: hsla(142, 10%, 4%, 0.92);
+  clip-path: var(--ch8);
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-5);
+}
+.score-bar-wrap .labels {
+  display: flex; justify-content: space-between;
+  font-family: var(--font-microcopy);
+  font-size: var(--fs-4);
+  margin-bottom: var(--space-1);
+  color: var(--text-muted);
+}
+.score-bar-wrap .labels .ally-lbl  { color: var(--ally);  font-weight: var(--fw-medium); }
+.score-bar-wrap .labels .enemy-lbl { color: var(--enemy); font-weight: var(--fw-medium); }
+.score-bar { height: 8px; background: var(--black-3-a); clip-path: var(--ch4); overflow: hidden; }
+.score-bar .fill-ally { height: 100%; background: var(--ally); transition: width .4s; }
+
+.charts { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); }
+@media (max-width: 820px) { .charts { grid-template-columns: 1fr; } }
+
+.chart-card {
+  background: hsla(142, 10%, 4%, 0.92);
+  clip-path: var(--ch8);
+  padding: var(--space-4);
+}
+.chart-card.full { grid-column: 1 / -1; }
+.chart-card h2 {
+  font-family: var(--font-microcopy);
+  font-size: var(--fs-4);
+  font-weight: var(--fw-regular);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  margin-bottom: var(--space-3);
+}
+.chart-wrap { position: relative; height: 220px; }
+.chart-wrap.tall { height: 260px; }
+
+.loading {
+  display: flex; align-items: center; justify-content: center;
+  min-height: 200px; color: var(--text-muted);
+  font-family: var(--font-microcopy);
+  font-size: var(--fs-3); gap: var(--space-2);
+}
+.spinner {
+  width: 18px; height: 18px; border: 2px solid var(--black-3-a);
+  border-top-color: var(--light-green); border-radius: 50%; animation: spin .7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Profile ── */
+.profile-section { margin-bottom: var(--space-5); }
+.profile-card {
+  background: hsla(142, 10%, 4%, 0.92);
+  clip-path: var(--ch8);
+  padding: var(--space-4) var(--space-5);
+  margin-bottom: var(--space-3);
+}
+.profile-card h2 {
+  font-family: var(--font-primary);
+  font-size: var(--fs-2);
+  font-weight: var(--fw-medium);
+  color: var(--text-main);
+  margin-bottom: var(--space-4);
+}
+.profile-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+.profile-stat-card {
+  background: var(--black-1-a);
+  clip-path: var(--ch8);
+  padding: var(--space-3) var(--space-4);
+  text-align: center;
+}
+.profile-stat-card .label {
+  font-family: var(--font-microcopy);
+  font-size: var(--fs-4);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  margin-bottom: var(--space-1);
+}
+.profile-stat-card .value {
+  font-family: var(--font-primary);
+  font-size: var(--fs-1);
+  font-weight: var(--fw-medium);
+  color: var(--text-main);
+  line-height: 1;
+}
+.profile-stat-card .value.accent-kd   { color: var(--kill); }
+.profile-stat-card .value.accent-dmg { color: var(--dmg); }
+.profile-stat-card .value.accent-win { color: var(--win); }
+
+/* ── Streak ── */
+.streak-wrap {
+  background: hsla(142, 10%, 4%, 0.92);
+  clip-path: var(--ch8);
+  padding: var(--space-4) var(--space-5);
+  margin-bottom: var(--space-3);
+}
+.streak-wrap h3 {
+  font-family: var(--font-primary);
+  font-size: var(--fs-3);
+  font-weight: var(--fw-medium);
+  color: var(--text-main);
+  margin-bottom: 2px;
+}
+.streak-wrap .streak-sub {
+  font-family: var(--font-microcopy);
+  font-size: var(--fs-4);
+  color: var(--text-muted);
+  margin-bottom: var(--space-3);
+}
+.streak-bar {
+  display: flex;
+  gap: var(--space-1);
+  flex-wrap: wrap;
+}
+.streak-dot {
+  width: 14px;
+  height: 14px;
+  clip-path: var(--ch4);
+  background: rgba(255,255,255,0.10);
+  padding: 1px;
+  flex-shrink: 0;
+}
+.streak-dot > span {
+  display: block;
+  width: 100%;
+  height: 100%;
+  clip-path: polygon(3px 0%, 100% 0%, 100% calc(100% - 3px), calc(100% - 3px) 100%, 0% 100%, 0% 3px);
+}
+.streak-dot > span.win  { background: var(--win); }
+.streak-dot > span.loss { background: var(--loss); }
+.streak-dot > span.draw { background: var(--base-200); }
+.streak-legend {
+  display: flex;
+  gap: var(--space-4);
+  margin-top: var(--space-3);
+  font-family: var(--font-microcopy);
+  font-size: var(--fs-4);
+  color: var(--text-muted);
+}
+.streak-legend span { display: flex; align-items: center; gap: var(--space-1); }
+.streak-legend .dot {
+  width: 10px; height: 10px;
+  clip-path: var(--ch4);
+  display: inline-block;
+}
+.streak-legend .dot.win  { background: var(--win); }
+.streak-legend .dot.loss { background: var(--loss); }
+
+/* ── Game Mode Chart ── */
+.mode-chart-wrap {
+  display: flex;
+  gap: var(--space-5);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-4);
+}
+.mode-chart-box {
+  flex: 1 1 300px;
+  min-width: 260px;
+  background: var(--black-1-a);
+  clip-path: var(--ch8);
+  padding: var(--space-4);
+}
+.mode-chart-box h3 {
+  font-family: var(--font-primary);
+  font-size: var(--fs-3);
+  font-weight: var(--fw-medium);
+  color: var(--text-main);
+  margin-bottom: var(--space-3);
+}
+.mode-chart-box canvas {
+  max-height: 200px;
+}
+
+/* ── Winrate chart ── */
+.winrate-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 140px;
+  position: relative;
+}
+.winrate-center {
+  position: absolute;
+  text-align: center;
+}
+.winrate-center .pct {
+  font-family: var(--font-primary);
+  font-size: var(--fs-1);
+  font-weight: var(--fw-medium);
+  color: var(--text-main);
+}
+.winrate-center .lbl {
+  font-family: var(--font-microcopy);
+  font-size: var(--fs-5);
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+/* ── Vehicles ── */
+.vehicle-table {
+  width: 100%; border-collapse: separate; border-spacing: 0;
+  background: hsla(142, 10%, 4%, 0.92);
+  clip-path: var(--ch8);
+  overflow: hidden;
+}
+.vehicle-table th {
+  font-family: var(--font-microcopy);
+  font-size: var(--fs-4); color: var(--text-muted);
+  padding: var(--space-3) var(--space-4); text-align: left;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: var(--black-2-a);
+  font-weight: var(--fw-regular);
+}
+.vehicle-table td {
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--fs-3);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  color: var(--text-main); white-space: nowrap;
+}
+.vehicle-table tr:last-child td { border-bottom: none; }
+.vehicle-table td:first-child {
+  font-family: var(--font-primary);
+  font-weight: var(--fw-medium);
+}
+.winrate-bar-bg {
+  width: 60px; height: 6px;
+  background: var(--black-3-a);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.winrate-bar-fill {
+  height: 100%;
+  background: var(--win);
+  border-radius: 3px;
+}
+
+/* ── Background ── */
+#bgCanvas {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  width: 100%;
+  height: 100%;
+  display: block;
+  pointer-events: none;
+}
+</style>
+</head>
+<body>
+<canvas id="bgCanvas"></canvas>
+
+<!-- ── Sessions ── -->
+<div id="sessions-view">
+  <div class="connect-bar" id="connect-bar">
+    <div class="brand">HEAT Stats</div>
+    <div class="field">
+      <label>API Key</label>
+      <input type="password" id="inp-key" placeholder="fuse_...">
+    </div>
+    <div class="field">
+      <label>Player Name</label>
+      <input type="text" id="inp-player" class="normal" placeholder="AET3RNAL" autocomplete="off">
+    </div>
+    <button class="btn" id="btn-connect">Connect</button>
+    <div class="error-msg" id="connect-error"></div>
+  </div>
+
+  <div id="main-content" style="display:none">
+    <div class="top-bar">
+      <h1 id="sessions-title">Sessions</h1>
+      <div style="display:flex;gap:var(--space-2)">
+        <button class="btn-sm" id="btn-refresh">Refresh</button>
+        <button class="btn-sm" id="btn-disconnect">Disconnect</button>
+      </div>
+    </div>
+    <div id="profile-content"></div>
+    <div id="sessions-content"></div>
+  </div>
+</div>
+
+<!-- ── Detail ── -->
+<div id="detail-view">
+  <div id="detail-content"></div>
+</div>
+
+<script>
+const BASE = 'https://jypsytkbliqrwjipolhx.supabase.co/functions/v1/api-v1';
+
+let apiKey    = '';
+let playerName = '';
+let activeCharts = [];
+
+// ── Views ──────────────────────────────────────────────────────────────────
+
+function show(id) {
+  document.getElementById('sessions-view').style.display = id === 'sessions-view' || id === 'connect-view' ? 'block' : 'none';
+  document.getElementById('detail-view').style.display   = id === 'detail-view'   ? 'block' : 'none';
+}
+
+function setConnected(isConnected) {
+  document.getElementById('main-content').style.display = isConnected ? 'block' : 'none';
+}
+
+// ── API ────────────────────────────────────────────────────────────────────
+
+async function apiFetch(path) {
+  const res = await fetch(`${BASE}/${path}`, {
+    headers: { 'x-api-key': apiKey },
+  });
+  const body = await res.json();
+  if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`);
+  return body;
+}
+
+// ── Connect ────────────────────────────────────────────────────────────────
+
+document.getElementById('btn-connect').addEventListener('click', async () => {
+  const key    = document.getElementById('inp-key').value.trim();
+  const player = document.getElementById('inp-player').value.trim();
+  const errEl  = document.getElementById('connect-error');
+  const btn    = document.getElementById('btn-connect');
+
+  if (!key)    { errEl.textContent = 'API key required'; errEl.style.display = 'block'; return; }
+  if (!player) { errEl.textContent = 'Player name required'; errEl.style.display = 'block'; return; }
+
+  errEl.style.display = 'none';
+  btn.disabled = true;
+  btn.textContent = 'Connecting…';
+
+  try {
+    apiKey     = key;
+    playerName = player;
+    setConnected(true);
+    await loadSessions();
+    btn.disabled = false;
+    btn.textContent = 'Connect';
+  } catch (e) {
+    apiKey = '';
+    playerName = '';
+    setConnected(false);
+    errEl.textContent = e.message;
+    errEl.style.display = 'block';
+    btn.disabled = false;
+    btn.textContent = 'Connect';
+  }
+});
+
+document.getElementById('inp-player').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('btn-connect').click();
+});
+
+document.getElementById('btn-disconnect').addEventListener('click', () => {
+  apiKey = '';
+  playerName = '';
+  document.getElementById('inp-key').value = '';
+  document.getElementById('inp-player').value = '';
+  document.getElementById('profile-content').innerHTML = '';
+  document.getElementById('sessions-content').innerHTML = '';
+  setConnected(false);
+  document.getElementById('btn-connect').disabled = false;
+  document.getElementById('btn-connect').textContent = 'Connect';
+});
+
+document.getElementById('btn-refresh').addEventListener('click', async () => {
+  if (!apiKey || !playerName) return;
+  await loadSessions();
+});
+
+// ── Sessions ───────────────────────────────────────────────────────────────
+
+async function loadSessions() {
+  show('sessions-view');
+  activeCharts.forEach(c => c.destroy());
+  activeCharts = [];
+  document.getElementById('sessions-title').textContent = `Sessions — ${playerName}`;
+  document.getElementById('profile-content').innerHTML = '';
+  document.getElementById('sessions-content').innerHTML =
+    '<div class="loading"><div class="spinner"></div>Loading sessions…</div>';
+
+  try {
+    const { sessions, total } = await apiFetch(`sessions?player_name=${encodeURIComponent(playerName)}&limit=50`);
+    renderProfile(sessions);
+    renderSessionsTable(sessions, total);
+  } catch (e) {
+    document.getElementById('sessions-content').innerHTML =
+      `<div class="loading" style="color:var(--error-highlight)">${e.message}</div>`;
+  }
+}
+
+function renderProfile(sessions) {
+  const wins = sessions.filter(s => s.outcome === 'win').length;
+  const losses = sessions.filter(s => s.outcome === 'loss').length;
+  const draws = sessions.filter(s => s.outcome === 'draw').length;
+  const totalBattles = sessions.length;
+
+  const totalKills = sessions.reduce((sum, s) => sum + (s.final_kills || 0), 0);
+  const totalDeaths = sessions.reduce((sum, s) => sum + (s.final_deaths || 0), 0);
+  const kd = totalDeaths > 0 ? (totalKills / totalDeaths).toFixed(2) : totalKills.toFixed(2);
+
+  const maxDmg = totalBattles > 0 ? Math.max(...sessions.map(s => s.final_damage || 0)) : 0;
+  const avgDmg = totalBattles > 0 ? (sessions.reduce((sum, s) => sum + (s.final_damage || 0), 0) / totalBattles).toFixed(0) : '0';
+  const winRate = totalBattles > 0 ? ((wins / totalBattles) * 100).toFixed(1) : '0.0';
+
+  const streakDots = sessions.slice(0, 50).map(s =>
+    `<div class="streak-dot" title="${new Date(s.started_at).toLocaleDateString()} — ${s.map_name || s.map_slug || '?'} — ${s.outcome.toUpperCase()}"><span class="${s.outcome}"></span></div>`
+  ).join('');
+
+  // Compute per-game-mode stats from sessions
+  const byMode = {};
+  for (const s of sessions) {
+    const m = s.game_mode || 'Unknown';
+    if (!byMode[m]) byMode[m] = { sessions: 0, wins: 0 };
+    byMode[m].sessions += 1;
+    if (s.outcome === 'win') byMode[m].wins += 1;
+  }
+  const modeLabels = Object.keys(byMode).sort((a, b) => byMode[b].sessions - byMode[a].sessions);
+  const modeCounts = modeLabels.map(m => byMode[m].sessions);
+  const modeWinRates = modeLabels.map(m => byMode[m].sessions > 0 ? (byMode[m].wins / byMode[m].sessions * 100).toFixed(1) : 0);
+
+  // Compute per-vehicle stats from sessions
+  const byVehicle = {};
+  for (const s of sessions) {
+    const v = s.player_vehicle || 'Unknown';
+    if (!byVehicle[v]) byVehicle[v] = { sessions: 0, kills: 0, deaths: 0, damage: 0, wins: 0 };
+    byVehicle[v].sessions += 1;
+    byVehicle[v].kills += s.final_kills || 0;
+    byVehicle[v].deaths += s.final_deaths || 0;
+    byVehicle[v].damage += s.final_damage || 0;
+    if (s.outcome === 'win') byVehicle[v].wins += 1;
+  }
+
+  const vehicleRows = Object.entries(byVehicle)
+    .sort((a, b) => b[1].sessions - a[1].sessions)
+    .map(([name, v]) => {
+      const winPct = v.sessions > 0 ? (v.wins / v.sessions * 100) : 0;
+      const vKd = v.deaths > 0 ? (v.kills / v.deaths).toFixed(2) : v.kills.toFixed(2);
+      const vAvgDmg = v.sessions > 0 ? (v.damage / v.sessions).toFixed(0) : '0';
+      return `<tr>
+        <td>${name.replace(/_/g, ' ')}</td>
+        <td style="color:var(--text-muted)">${v.sessions}</td>
+        <td style="color:var(--kill)">${vKd}</td>
+        <td style="color:var(--dmg)">${Number(vAvgDmg).toLocaleString()}</td>
+        <td>
+          <div style="display:flex;align-items:center;gap:8px">
+            <div class="winrate-bar-bg"><div class="winrate-bar-fill" style="width:${winPct}%"></div></div>
+            <span style="font-family:var(--font-microcopy);font-size:var(--fs-4)">${winPct.toFixed(1)}%</span>
+          </div>
+        </td>
+      </tr>`;
+    }).join('');
+
+  document.getElementById('profile-content').innerHTML = `
+    <div class="profile-section">
+      <div class="profile-card">
+        <h2>${playerName}</h2>
+        <div class="profile-stats">
+          <div class="profile-stat-card">
+            <div class="label">K/D Ratio</div>
+            <div class="value accent-kd">${kd}</div>
+          </div>
+          <div class="profile-stat-card">
+            <div class="label">Avg Damage</div>
+            <div class="value accent-dmg">${Number(avgDmg).toLocaleString()}</div>
+          </div>
+          <div class="profile-stat-card">
+            <div class="label">Max Damage</div>
+            <div class="value accent-dmg">${maxDmg.toLocaleString()}</div>
+          </div>
+          <div class="profile-stat-card">
+            <div class="label">Winrate</div>
+            <div class="winrate-wrap">
+              <canvas id="cWinrate"></canvas>
+              <div class="winrate-center">
+                <div class="pct">${winRate}%</div>
+                <div class="lbl">winrate</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="mode-chart-wrap">
+        <div class="mode-chart-box">
+          <h3>Winrate by Game Mode</h3>
+          <canvas id="cModeWinrate"></canvas>
+        </div>
+        <div class="mode-chart-box">
+          <h3>Session Distribution</h3>
+          <canvas id="cModeDist"></canvas>
+        </div>
+      </div>
+
+      <div class="streak-wrap">
+        <h3>Recent battles</h3>
+        <div class="streak-sub">Last ${Math.min(totalBattles, 50)} battles</div>
+        <div class="streak-bar">${streakDots}</div>
+        <div class="streak-legend">
+          <span><span class="dot win"></span> Win</span>
+          <span><span class="dot loss"></span> Loss</span>
+        </div>
+      </div>
+
+      ${vehicleRows ? `
+      <div class="profile-card">
+        <h2>Vehicle Performance</h2>
+        <table class="vehicle-table">
+          <thead><tr>
+            <th>Vehicle</th><th>Sessions</th><th>K/D</th><th>Avg Dmg</th><th>Winrate</th>
+          </tr></thead>
+          <tbody>${vehicleRows}</tbody>
+        </table>
+      </div>` : ''}
+    </div>`;
+
+  if (totalBattles > 0) {
+    const c = new Chart(document.getElementById('cWinrate'), {
+      type: 'doughnut',
+      data: {
+        labels: ['Wins', 'Losses', 'Draws'],
+        datasets: [{
+          data: [wins, losses, draws],
+          backgroundColor: ['rgba(113,206,113,0.35)', 'rgba(200,69,84,0.35)', 'rgba(179,179,179,0.35)'],
+          borderColor: ['rgba(113,206,113,1)', 'rgba(200,69,84,1)', 'rgba(179,179,179,1)'],
+          borderWidth: 2,
+          borderAlign: 'inner',
+          hoverBackgroundColor: ['rgba(113,206,113,0.55)', 'rgba(200,69,84,0.55)', 'rgba(179,179,179,0.55)'],
+          hoverOffset: 4
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        cutout: '70%',
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: 'hsla(142, 10%, 4%, 0.95)',
+            borderColor: 'rgba(255,255,255,0.06)',
+            borderWidth: 1,
+            titleColor: 'rgba(242,242,242,1)',
+            bodyColor: 'rgba(179,179,179,1)',
+            bodyFont: { family: "'Geist Mono', monospace" },
+            callbacks: {
+              label: ctx => ` ${ctx.label}: ${ctx.raw} (${((ctx.raw / totalBattles) * 100).toFixed(1)}%)`
+            }
+          }
+        }
+      }
+    });
+    activeCharts.push(c);
+
+    // Winrate by Game Mode bar chart
+    if (modeLabels.length > 0) {
+      const cMode = new Chart(document.getElementById('cModeWinrate'), {
+        type: 'bar',
+        data: {
+          labels: modeLabels,
+          datasets: [{
+            label: 'Winrate %',
+            data: modeWinRates,
+            backgroundColor: 'rgba(113,206,113,0.35)',
+            borderColor: 'rgba(113,206,113,1)',
+            borderWidth: 1,
+            borderRadius: 2,
+            barThickness: 24,
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            x: { grid: { display: false }, ticks: { color: 'rgba(179,179,179,1)', font: { family: "'Geist Mono', monospace", size: 10 } } },
+            y: { beginAtZero: true, max: 100, grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: 'rgba(179,179,179,1)', font: { family: "'Geist Mono', monospace", size: 10 }, callback: v => v + '%' } }
+          },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              backgroundColor: 'hsla(142, 10%, 4%, 0.95)',
+              borderColor: 'rgba(255,255,255,0.06)',
+              borderWidth: 1,
+              titleColor: 'rgba(242,242,242,1)',
+              bodyColor: 'rgba(179,179,179,1)',
+              bodyFont: { family: "'Geist Mono', monospace" },
+              callbacks: { label: ctx => ` Winrate: ${ctx.raw}%` }
+            }
+          }
+        }
+      });
+      activeCharts.push(cMode);
+    }
+
+    // Session Distribution bar chart
+    if (modeLabels.length > 0) {
+      const cDist = new Chart(document.getElementById('cModeDist'), {
+        type: 'bar',
+        data: {
+          labels: modeLabels,
+          datasets: [{
+            label: 'Sessions',
+            data: modeCounts,
+            backgroundColor: 'rgba(207,255,220,0.35)',
+            borderColor: 'rgba(207,255,220,1)',
+            borderWidth: 1,
+            borderRadius: 2,
+            barThickness: 24,
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            x: { grid: { display: false }, ticks: { color: 'rgba(179,179,179,1)', font: { family: "'Geist Mono', monospace", size: 10 } } },
+            y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: 'rgba(179,179,179,1)', font: { family: "'Geist Mono', monospace", size: 10 } } }
+          },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              backgroundColor: 'hsla(142, 10%, 4%, 0.95)',
+              borderColor: 'rgba(255,255,255,0.06)',
+              borderWidth: 1,
+              titleColor: 'rgba(242,242,242,1)',
+              bodyColor: 'rgba(179,179,179,1)',
+              bodyFont: { family: "'Geist Mono', monospace" },
+              callbacks: { label: ctx => ` Sessions: ${ctx.raw}` }
+            }
+          }
+        }
+      });
+      activeCharts.push(cDist);
+    }
+  }
+}
+
+function renderSessionsTable(sessions, total) {
+  if (!sessions.length) {
+    document.getElementById('sessions-content').innerHTML =
+      '<div class="loading">No sessions found.</div>';
+    return;
+  }
+
+  const rows = sessions.map(s => {
+    const d   = new Date(s.started_at);
+    const kd  = s.final_deaths > 0 ? (s.final_kills / s.final_deaths).toFixed(2) : `${s.final_kills}.00`;
+    const dmg = s.final_damage >= 1000 ? (s.final_damage / 1000).toFixed(1) + 'k' : s.final_damage;
+    const dur = fmtTime(Math.round(s.duration_s));
+    return `<tr data-id="${s.id}">
+      <td style="color:var(--text-muted);font-family:var(--font-microcopy);font-size:var(--fs-4)">${d.toLocaleDateString()} ${d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</td>
+      <td><b>${s.map_name || s.map_slug || '?'}</b><br><span style="color:var(--text-muted);font-family:var(--font-microcopy);font-size:var(--fs-4)">${s.game_mode || '?'}</span></td>
+      <td><span class="badge ${s.outcome}"><span>${s.outcome.toUpperCase()}</span></span></td>
+      <td style="color:var(--text-main)">${s.final_score}</td>
+      <td style="color:var(--kill)">${s.final_kills} <span style="color:var(--text-muted)">/ ${s.final_deaths}</span></td>
+      <td>${kd}</td>
+      <td style="color:var(--dmg)">${dmg}</td>
+      <td style="color:var(--ally)">${s.final_ally_score}</td>
+      <td style="color:var(--enemy)">${s.final_enemy_score}</td>
+      <td style="color:var(--text-muted)">${dur}</td>
+      <td style="color:var(--text-muted);font-family:var(--font-microcopy);font-size:var(--fs-4)">${s.avg_ping}ms / ${s.avg_fps}fps</td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('sessions-content').innerHTML = `
+    <table class="sessions-table">
+      <thead><tr>
+        <th>Date</th><th>Map / Mode</th><th>Result</th><th>Score</th>
+        <th>Kills</th><th>KD</th><th>Damage</th>
+        <th>Ally</th><th>Enemy</th><th>Duration</th><th>Ping / FPS</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+
+  document.querySelectorAll('.sessions-table tbody tr').forEach(tr => {
+    tr.addEventListener('click', () => loadDetail(tr.dataset.id));
+  });
+}
+
+// ── Detail ─────────────────────────────────────────────────────────────────
+
+async function loadDetail(sessionId) {
+  show('detail-view');
+  document.getElementById('detail-content').innerHTML =
+    '<div class="loading" style="min-height:80vh"><div class="spinner"></div>Loading session…</div>';
+
+  try {
+    const [{ session }, { samples }] = await Promise.all([
+      apiFetch(`sessions/${sessionId}`),
+      apiFetch(`sessions/${sessionId}/samples`),
+    ]);
+    activeCharts.forEach(c => c.destroy());
+    activeCharts = [];
+    renderDetail(session, samples);
+  } catch (e) {
+    document.getElementById('detail-content').innerHTML =
+      `<div class="loading" style="min-height:80vh;flex-direction:column;gap:12px">
+        <span style="color:var(--error-highlight);font-family:var(--font-microcopy);font-size:var(--fs-3)">${e.message}</span>
+        <button class="btn-sm" onclick="loadSessions()">← Back</button>
+      </div>`;
+  }
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+
+function fmtTime(s) {
+  const m = Math.floor(s / 60), sec = s % 60;
+  return `${m}m ${sec.toString().padStart(2, '0')}s`;
+}
+
+function fmtNum(n, k = false) {
+  if (n == null) return '—';
+  if (k && n >= 1000) return (n / 1000).toFixed(1) + 'k';
+  return n.toLocaleString();
+}
+
+function timeLbl(t) {
+  return `${Math.floor(t / 60)}:${(t % 60).toString().padStart(2, '0')}`;
+}
+
+// ── Render ─────────────────────────────────────────────────────────────────
+
+function renderDetail(S, samples) {
+  const total   = S.final_ally_score + S.final_enemy_score;
+  const allyPct = total > 0 ? (S.final_ally_score / total * 100).toFixed(1) : '50.0';
+  const ts      = samples.map(s => timeLbl(s.t));
+  const hasHp   = samples.some(s => s.hp != null);
+  const hasEn   = samples.some(s => s.en != null);
+  const hasBo   = samples.some(s => s.bo != null);
+
+  document.getElementById('detail-content').innerHTML = `
+    <div class="header">
+      <div class="header-left">
+        <h1>${S.game_mode || '?'} — ${S.map_name || S.map_slug || '?'}</h1>
+        <div class="meta">
+          <span>🕹 ${S.player_name || '?'}</span>
+          <span>🚗 ${(S.player_vehicle || '?').replace(/_/g, ' ')}</span>
+          <span>🎯 ${S.player_role || '?'}</span>
+          <span>⏱ ${fmtTime(Math.round(S.duration_s))}</span>
+          <span>📅 ${new Date(S.started_at).toLocaleDateString()}</span>
+          <span>${samples.length} samples</span>
+        </div>
+      </div>
+      <div class="header-right">
+        <button class="btn-sm" id="btn-back">← Sessions</button>
+        <span class="outcome-badge ${S.outcome}"><span>${S.outcome.toUpperCase()}</span></span>
+      </div>
+    </div>
+
+    <div class="cards">
+      <div class="card">
+        <div class="label">Kills</div>
+        <div class="value accent-kill">${S.final_kills}</div>
+        <div class="sub">Deaths: ${S.final_deaths}</div>
+      </div>
+      <div class="card">
+        <div class="label">K/D</div>
+        <div class="value">${S.final_deaths > 0 ? (S.final_kills / S.final_deaths).toFixed(2) : '∞'}</div>
+        <div class="sub">ratio</div>
+      </div>
+      <div class="card">
+        <div class="label">Damage</div>
+        <div class="value accent-dmg">${fmtNum(S.final_damage, true)}</div>
+        <div class="sub">${Math.round(S.final_damage / (S.duration_s / 60)).toLocaleString()}/min</div>
+      </div>
+      <div class="card">
+        <div class="label">Ally Score</div>
+        <div class="value accent-ally">${S.final_ally_score}</div>
+        <div class="sub">+${(S.final_ally_score / (S.duration_s / 60)).toFixed(1)}/min</div>
+      </div>
+      <div class="card">
+        <div class="label">Enemy Score</div>
+        <div class="value accent-enemy">${S.final_enemy_score}</div>
+        <div class="sub">diff: ${S.final_ally_score - S.final_enemy_score > 0 ? '+' : ''}${S.final_ally_score - S.final_enemy_score}</div>
+      </div>
+      <div class="card">
+        <div class="label">Avg Ping</div>
+        <div class="value accent-ping">${S.avg_ping}</div>
+        <div class="sub">peak: ${S.peak_ping} ms</div>
+      </div>
+      <div class="card">
+        <div class="label">Avg FPS</div>
+        <div class="value accent-fps">${S.avg_fps}</div>
+        <div class="sub">${S.sample_count} samples @ 5s</div>
+      </div>
+    </div>
+
+    <div class="score-bar-wrap">
+      <div class="labels">
+        <span class="ally-lbl">ALLY  ${S.final_ally_score}</span>
+        <span>${allyPct}% — ${(100 - parseFloat(allyPct)).toFixed(1)}%</span>
+        <span class="enemy-lbl">${S.final_enemy_score}  ENEMY</span>
+      </div>
+      <div class="score-bar"><div class="fill-ally" style="width:${allyPct}%"></div></div>
+    </div>
+
+    <div class="charts">
+      <div class="chart-card full">
+        <h2>Score Progression</h2>
+        <div class="chart-wrap tall"><canvas id="cScore"></canvas></div>
+      </div>
+      <div class="chart-card full">
+        <h2>Kills &amp; Damage</h2>
+        <div class="chart-wrap"><canvas id="cKillsDmg"></canvas></div>
+      </div>
+      ${hasHp ? `<div class="chart-card"><h2>Health (HP)</h2><div class="chart-wrap"><canvas id="cHp"></canvas></div></div>` : ''}
+      ${hasEn ? `<div class="chart-card"><h2>Energy</h2><div class="chart-wrap"><canvas id="cEnergy"></canvas></div></div>` : ''}
+      ${hasBo ? `<div class="chart-card full"><h2>Boost</h2><div class="chart-wrap"><canvas id="cBoost"></canvas></div></div>` : ''}
+      <div class="chart-card full">
+        <h2>Ping &amp; FPS</h2>
+        <div class="chart-wrap"><canvas id="cPerf"></canvas></div>
+      </div>
+    </div>`;
+
+  document.getElementById('btn-back').addEventListener('click', loadSessions);
+
+  const GRID  = { color: 'rgba(255,255,255,0.04)' };
+  const TICKS = { color: 'rgba(179,179,179,1)', font: { size: 10, family: "'Geist Mono', monospace" } };
+  const TIP   = { backgroundColor: 'hsla(142, 10%, 4%, 0.95)', borderColor: 'rgba(255,255,255,0.06)', borderWidth: 1, titleColor: 'rgba(242,242,242,1)', bodyColor: 'rgba(179,179,179,1)', padding: 10, titleFont: { family: "'Normalidad', sans-serif" }, bodyFont: { family: "'Geist Mono', monospace" } };
+  const LEG   = { labels: { color: 'rgba(179,179,179,1)', font: { size: 11, family: "'Geist Mono', monospace" }, boxWidth: 12, padding: 12 } };
+  const base  = {
+    responsive: true, maintainAspectRatio: false, animation: { duration: 400 },
+    plugins: { legend: LEG, tooltip: TIP },
+    scales: { x: { grid: GRID, ticks: { ...TICKS, maxTicksLimit: 12 } }, y: { grid: GRID, ticks: TICKS, beginAtZero: true } }
+  };
+
+  function mk(id, cfg) {
+    const c = new Chart(document.getElementById(id), cfg);
+    activeCharts.push(c);
+  }
+
+  mk('cScore', {
+    type: 'line',
+    data: { labels: ts, datasets: [
+      { label: 'Ally',  data: samples.map(s => s.al), borderColor: 'hsl(142, 100%, 78%)', backgroundColor: 'hsla(142, 100%, 78%, 0.08)', fill: true, tension: 0.3, pointRadius: 2, borderWidth: 2 },
+      { label: 'Enemy', data: samples.map(s => s.es), borderColor: 'hsl(14, 80%, 56%)', backgroundColor: 'hsla(14, 80%, 56%, 0.08)',  fill: true, tension: 0.3, pointRadius: 2, borderWidth: 2 },
+    ]},
+    options: { ...base, plugins: { ...base.plugins, tooltip: { ...TIP, callbacks: {
+      afterBody: ctx => {
+        const i = ctx[0].dataIndex, s = samples[i], out = [];
+        if (s.dal) out.push(`  Δ ally: +${s.dal}`);
+        if (s.des) out.push(`  Δ enemy: +${s.des}`);
+        return out;
+      }
+    }}}}
+  });
+
+  mk('cKillsDmg', {
+    type: 'line',
+    data: { labels: ts, datasets: [
+      {
+        label: 'Kills', data: samples.map(s => s.ki),
+        borderColor: 'hsl(142, 100%, 89%)', backgroundColor: 'hsla(142, 100%, 89%, 0.08)',
+        fill: false, stepped: 'before', yAxisID: 'yK',
+        pointRadius: samples.map(s => s.dki > 0 ? 6 : 2),
+        pointBackgroundColor: samples.map(s => s.dki > 0 ? 'hsl(142, 100%, 89%)' : 'hsla(142, 100%, 89%, 0.3)'),
+        pointBorderColor: 'transparent', borderWidth: 2,
+      },
+      {
+        label: 'Damage', data: samples.map(s => s.da),
+        borderColor: 'rgba(255, 106, 98, 1)', backgroundColor: 'rgba(255, 106, 98, 0.07)',
+        fill: true, tension: 0.35, yAxisID: 'yD', pointRadius: 1.5, borderWidth: 1.5,
+      },
+    ]},
+    options: {
+      ...base,
+      plugins: { ...base.plugins, tooltip: { ...TIP, callbacks: {
+        afterBody: ctx => {
+          const s = samples[ctx[0].dataIndex];
+          return s.dki > 0 ? [`  ★ +${s.dki} kill — +${s.dda} dmg`] : s.dda > 0 ? [`  +${s.dda} dmg`] : [];
+        }
+      }}},
+      scales: {
+        x: base.scales.x,
+        yK: { type: 'linear', position: 'left',  grid: GRID, ticks: { ...TICKS, stepSize: 1, color: 'hsl(142, 100%, 89%)' }, title: { display: true, text: 'Kills',  color: 'hsl(142, 100%, 89%)', font: { size: 10, family: "'Geist Mono', monospace" } }, beginAtZero: true },
+        yD: { type: 'linear', position: 'right', grid: { drawOnChartArea: false }, ticks: { ...TICKS, color: 'rgba(255, 106, 98, 1)', callback: v => v >= 1000 ? (v/1000).toFixed(0)+'k' : v }, title: { display: true, text: 'Damage', color: 'rgba(255, 106, 98, 1)', font: { size: 10, family: "'Geist Mono', monospace" } }, beginAtZero: true },
+      }
+    }
+  });
+
+  if (hasHp) {
+    const hpVals = samples.map(s => s.hp);
+    const hpMax  = Math.max(...hpVals.filter(v => v != null));
+    mk('cHp', {
+      type: 'line',
+      data: { labels: ts, datasets: [{ label: 'HP', data: hpVals, borderColor: 'rgba(200, 69, 84, 1)', backgroundColor: 'rgba(200, 69, 84, 0.1)', fill: true, tension: 0.3, pointRadius: 1.5, borderWidth: 2, spanGaps: false }] },
+      options: { ...base, plugins: { ...base.plugins, legend: { display: false } }, scales: { ...base.scales, y: { ...base.scales.y, min: 0, suggestedMax: hpMax, ticks: { ...TICKS, color: 'rgba(200, 69, 84, 1)' }, title: { display: true, text: 'HP', color: 'rgba(200, 69, 84, 1)', font: { size: 10, family: "'Geist Mono', monospace" } } } } }
+    });
+  }
+
+  if (hasEn) {
+    mk('cEnergy', {
+      type: 'line',
+      data: { labels: ts, datasets: [{ label: 'Energy', data: samples.map(s => s.en), borderColor: 'hsl(219, 100%, 85%)', backgroundColor: 'hsla(219, 100%, 85%, 0.1)', fill: true, tension: 0.3, pointRadius: 1.5, borderWidth: 2, spanGaps: false }] },
+      options: { ...base, plugins: { ...base.plugins, legend: { display: false } }, scales: { ...base.scales, y: { ...base.scales.y, min: 0, max: 100, ticks: { ...TICKS, color: 'hsl(219, 100%, 85%)' }, title: { display: true, text: '%', color: 'hsl(219, 100%, 85%)', font: { size: 10, family: "'Geist Mono', monospace" } } } } }
+    });
+  }
+
+  if (hasBo) {
+    mk('cBoost', {
+      type: 'line',
+      data: { labels: ts, datasets: [{ label: 'Boost', data: samples.map(s => s.bo), borderColor: 'hsl(142, 100%, 78%)', backgroundColor: 'hsla(142, 100%, 78%, 0.08)', fill: true, tension: 0.4, pointRadius: 1, borderWidth: 1.5, spanGaps: false }] },
+      options: { ...base, plugins: { ...base.plugins, legend: { display: false } }, scales: { ...base.scales, y: { ...base.scales.y, min: 0, max: 100, ticks: { ...TICKS, color: 'hsl(142, 100%, 78%)' }, title: { display: true, text: '%', color: 'hsl(142, 100%, 78%)', font: { size: 10, family: "'Geist Mono', monospace" } } } } }
+    });
+  }
+
+  mk('cPerf', {
+    type: 'line',
+    data: { labels: ts, datasets: [
+      { label: 'Ping (ms)', data: samples.map(s => s.pi), borderColor: 'rgba(255, 219, 140, 1)', backgroundColor: 'transparent', yAxisID: 'yP', tension: 0.3, pointRadius: 1.5, borderWidth: 1.5 },
+      { label: 'FPS',       data: samples.map(s => s.fp), borderColor: 'rgba(113, 206, 113, 1)', backgroundColor: 'rgba(113, 206, 113, 0.06)', fill: true, yAxisID: 'yF', tension: 0.3, pointRadius: 1, borderWidth: 1.5 },
+    ]},
+    options: {
+      ...base,
+      scales: {
+        x: base.scales.x,
+        yP: { type: 'linear', position: 'left',  grid: GRID, ticks: { ...TICKS, color: 'rgba(255, 219, 140, 1)' }, title: { display: true, text: 'Ping ms', color: 'rgba(255, 219, 140, 1)', font: { size: 10, family: "'Geist Mono', monospace" } }, beginAtZero: true },
+        yF: { type: 'linear', position: 'right', grid: { drawOnChartArea: false }, ticks: { ...TICKS, color: 'rgba(113, 206, 113, 1)' }, title: { display: true, text: 'FPS', color: 'rgba(113, 206, 113, 1)', font: { size: 10, family: "'Geist Mono', monospace" } } },
+      }
+    }
+  });
+}
+
+setConnected(false);
+
+// ── Deep glow background ──
+(function() {
+  const canvas = document.getElementById('bgCanvas');
+  const ctx = canvas.getContext('2d');
+  let w, h, dpr;
+
+  function resize() {
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const vw = window.innerWidth || 1;
+    const vh = window.innerHeight || 1;
+    w = canvas.width = vw * dpr;
+    h = canvas.height = vh * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  const SPEED = 0.0003;
+
+  function glowLayer(cx, cy, rInner, rOuter, hue, light, alphaCore, alphaMid, alphaEdge) {
+    const g = ctx.createRadialGradient(cx, cy, rInner, cx, cy, rOuter);
+    g.addColorStop(0, `hsla(${hue}, 100%, ${light}%, ${alphaCore})`);
+    g.addColorStop(0.15, `hsla(${hue}, 100%, ${light}%, ${alphaMid})`);
+    g.addColorStop(0.45, `hsla(${hue}, 80%,  ${light + 8}%, ${alphaEdge})`);
+    g.addColorStop(1, 'transparent');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, w, h);
+  }
+
+  function draw() {
+    const t = performance.now() * SPEED;
+    const breathe = 1 + Math.sin(t) * 0.04;
+
+    // base
+    ctx.fillStyle = 'hsl(142, 1%, 4%)';
+    ctx.fillRect(0, 0, w, h);
+
+    const cx = w / 2;
+    const cy = h / 2;
+    const dim = Math.min(w, h);
+
+    // ── additive light layers (screen composite) ──
+    ctx.globalCompositeOperation = 'screen';
+
+    // core: very tight, bright
+    glowLayer(cx, cy, 0, dim * 0.14 * breathe, 142, 84, 0.55, 0.28, 0.04);
+    // mid: medium spread
+    glowLayer(cx, cy, dim * 0.08, dim * 0.38 * breathe, 142, 88, 0.30, 0.14, 0.02);
+    // deep tail: large, faint
+    glowLayer(cx, cy, dim * 0.18, dim * 0.70 * breathe, 138, 75, 0.14, 0.06, 0.01);
+
+    // ── vignette (source-over to darken edges) ──
+    ctx.globalCompositeOperation = 'source-over';
+    const vig = ctx.createRadialGradient(cx, cy, dim * 0.25, cx, cy, Math.max(w, h) * 0.75);
+    vig.addColorStop(0, 'transparent');
+    vig.addColorStop(1, 'hsla(142, 10%, 4%, 0.55)');
+    ctx.fillStyle = vig;
+    ctx.fillRect(0, 0, w, h);
+
+    requestAnimationFrame(draw);
+  }
+
+  requestAnimationFrame(draw);
+})();
+</script>
+</body>
+</html>
