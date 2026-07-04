@@ -37,7 +37,6 @@ _ELEMENTS: list[tuple[str, str, list[str]]] = [
     ("hide_hit_marks",    "Critical Hit Marks",  [HUD.HIT_INDICATOR]),
     ("hide_hints",        "Key Hints",           [HUD.KEY_HINTS]),
     ("hide_perf",         "Ping / FPS",          [HUD.PERF_INFO]),
-    ("hide_perk_notif",   "Skill Activation Banner", [HUD.TEXT_NOTIFICATION]),
     ("hide_perk_bars",    "Skill XP Bars",       [HUD.PERKS]),
     ("hide_xp_score",     "Battle Score Number", [HUD.NUMBER_BIG]),
     ("hide_reticle",      "Aim Circle",          [HUD.AIM_SWITCHER, HUD.FRONT_SIGHT]),
@@ -47,7 +46,10 @@ _ELEMENTS: list[tuple[str, str, list[str]]] = [
 ]
 
 # Elements on the markers page (separate WebSocket) - same structure.
+# The skill-activation banner (TextNotification) moved here from battle_hud in a
+# game update, so it must be hidden via the markers stylesheet.
 _MARKERS_ELEMENTS: list[tuple[str, str, list[str]]] = [
+    ("hide_perk_notif",      "Skill Activation Banner",           [HUD.TEXT_NOTIFICATION]),
     ("hide_enemy_markers",   "Enemy Markers (HP / Name / Class)", [HUD.MARKER_VEHICLE]),
     ("hide_damage_log",      "Damage Dealt Label",                [HUD.MARKER_DEALT_DAMAGE]),
     ("hide_major_effects",   "Major Status Effects",              [HUD.MARKER_MAJOR_EFFECT]),

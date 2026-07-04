@@ -195,7 +195,10 @@ class HUD:
     COMM_WHEEL         = _c("CommWheel_base")
     COMM_WHEEL_SECTOR  = _c("CommWheel_sector")
 
-    # Text / Perk Notification (center-screen popup)
+    # Text / Perk Notification (center-screen "skill activation" banner popup).
+    # NOTE: as of the game update, this widget renders on the MARKERS page, not
+    # battle_hud - so hide it via inject_stylesheet_markers() (_MARKERS_ELEMENTS),
+    # not inject_stylesheet().
     TEXT_NOTIFICATION  = _c("TextNotification_base")
     TEXT_NOTIF_CAPTION = _c("TextNotification_captionText")
     TEXT_NOTIF_ICON    = _c("TextNotification_icon")
