@@ -518,6 +518,23 @@ body {
   text-transform: uppercase;
 }
 
+/* ── Role Radar ── */
+.radar-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 220px;
+  position: relative;
+}
+.radar-wrap canvas { max-height: 220px; }
+
+/* ── Trend ── */
+.trend-wrap {
+  height: 160px;
+  position: relative;
+}
+.trend-wrap canvas { max-height: 160px; }
+
 /* ── Vehicles ── */
 .vehicle-table {
   width: 100%; border-collapse: separate; border-spacing: 0;
@@ -722,6 +739,99 @@ function renderProfile(sessions) {
   const totalDamage = sessions.reduce((sum, s) => sum + (s.final_damage || 0), 0);
   const maxDmg = totalBattles > 0 ? Math.max(...sessions.map(s => s.final_damage || 0)) : 0;
   const avgDmg = totalBattles > 0 ? (totalDamage / totalBattles).toFixed(0) : '0';
+
+  // Compute per-role skill scores
+  const byRole = {};
+  for (const s of sessions) {
+    const r = (s.player_role || 'Unknown').toLowerCase();
+    if (!byRole[r]) byRole[r] = { sessions: 0, kills: 0, deaths: 0, wins: 0 };
+    byRole[r].sessions += 1;
+    byRole[r].kills += s.final_kills || 0;
+    byRole[r].deaths += s.final_deaths || 0;
+    if (s.outcome === 'win') byRole[r].wins += 1;
+  }
+  console.log('Roles found:', Object.keys(byRole));
+  const roleOrder = ['marksman', 'assault', 'defender'];
+  const roleLabels = ['Marksman', 'Assault', 'Defender'];
+  const roleData = roleOrder.map(role => {
+    const d = byRole[role];
+    if (!d || d.sessions === 0) return { sessions: 0, kd: 0, winPct: 0 };
+    const kd = d.deaths > 0 ? d.kills / d.deaths : d.kills;
+    const winPct = d.wins / d.sessions * 100;
+    return { sessions: d.sessions, kd, winPct };
+  });
+  const maxRoleKd = Math.max(...roleData.map(r => r.kd), 0.01);
+  const roleSkillScores = roleData.map(r => {
+    if (r.sessions === 0) return 0;
+    const kdScore = Math.min(r.kd / maxRoleKd * 100, 100);
+    return Math.round((kdScore + r.winPct) / 2);
+  });
+
+  // ── Section 1: Trends ──
+  const trendSessions = sessions.slice().reverse().slice(-20);
+  const trendLabels = trendSessions.map((s, i) => `S${i+1}`);
+  const trendKd = trendSessions.map(s => s.final_deaths > 0 ? (s.final_kills / s.final_deaths) : s.final_kills);
+  const trendDmg = trendSessions.map(s => s.final_damage || 0);
+  const rollingAvg = (arr, window) => arr.map((_, i, a) => {
+    const start = Math.max(0, i - window + 1);
+    const slice = a.slice(start, i + 1);
+    return slice.reduce((a, b) => a + b, 0) / slice.length;
+  });
+  const rollingKd = rollingAvg(trendKd, 5);
+  const rollingDmg = rollingAvg(trendDmg, 5);
+
+  // ── Section 2: Map stats ──
+  const byMap = {};
+  for (const s of sessions) {
+    const m = s.map_name || s.map_slug || 'Unknown';
+    if (!byMap[m]) byMap[m] = { sessions: 0, kills: 0, deaths: 0, damage: 0, wins: 0 };
+    byMap[m].sessions += 1;
+    byMap[m].kills += s.final_kills || 0;
+    byMap[m].deaths += s.final_deaths || 0;
+    byMap[m].damage += s.final_damage || 0;
+    if (s.outcome === 'win') byMap[m].wins += 1;
+  }
+  const mapRows = Object.entries(byMap)
+    .sort((a, b) => b[1].sessions - a[1].sessions)
+    .map(([name, m]) => {
+      const winPct = m.sessions > 0 ? (m.wins / m.sessions * 100) : 0;
+      const mKd = m.deaths > 0 ? (m.kills / m.deaths).toFixed(2) : m.kills.toFixed(2);
+      const mAvgDmg = m.sessions > 0 ? (m.damage / m.sessions).toFixed(0) : '0';
+      return `<tr><td>${name.replace(/_/g, ' ')}</td><td style="color:var(--text-muted)">${m.sessions}</td><td style="color:var(--kill)">${mKd}</td><td style="color:var(--dmg)">${Number(mAvgDmg).toLocaleString()}</td><td><div style="display:flex;align-items:center;gap:8px"><div class="winrate-bar-bg"><div class="winrate-bar-fill" style="width:${winPct}%"></div></div><span style="font-family:var(--font-microcopy);font-size:var(--fs-4)">${winPct.toFixed(1)}%</span></div></td></tr>`;
+    }).join('');
+
+  // ── Section 3: Efficiency ──
+  const totalDurationMin = sessions.reduce((sum, s) => sum + (s.duration_s || 0), 0) / 60;
+  const dmgPerKill = totalKills > 0 ? (totalDamage / totalKills).toFixed(0) : '0';
+  const killsPerMin = totalDurationMin > 0 ? (totalKills / totalDurationMin).toFixed(2) : '0.00';
+  const totalScore = sessions.reduce((sum, s) => sum + (s.final_score || 0), 0);
+  const scorePerMin = totalDurationMin > 0 ? (totalScore / totalDurationMin).toFixed(1) : '0.0';
+
+  // ── Section 4: Role × Mode ──
+  const roleMode = {};
+  for (const s of sessions) {
+    const role = (s.player_role || 'Unknown').toLowerCase();
+    const mode = s.game_mode || 'Unknown';
+    const key = `${role}|${mode}`;
+    if (!roleMode[key]) roleMode[key] = { sessions: 0, wins: 0 };
+    roleMode[key].sessions += 1;
+    if (s.outcome === 'win') roleMode[key].wins += 1;
+  }
+  const roles = [...new Set(sessions.map(s => (s.player_role || 'Unknown').toLowerCase()))].sort();
+  const modes = [...new Set(sessions.map(s => s.game_mode || 'Unknown'))].sort();
+  const roleModeRows = roles.map(role => {
+    const cells = modes.map(mode => {
+      const key = `${role}|${mode}`;
+      const d = roleMode[key];
+      if (!d || d.sessions === 0) return `<td style="color:var(--text-muted)">—</td>`;
+      const winPct = (d.wins / d.sessions * 100).toFixed(1);
+      return `<td style="color:var(--win)">${winPct}% <span style="color:var(--text-muted);font-size:var(--fs-4)">(${d.sessions})</span></td>`;
+    }).join('');
+    const roleDisplay = role.charAt(0).toUpperCase() + role.slice(1);
+    return `<tr><td style="font-weight:var(--fw-medium)">${roleDisplay}</td>${cells}</tr>`;
+  }).join('');
+  const roleModeHeaders = modes.map(m => `<th>${m}</th>`).join('');
+
   const avgKills = totalBattles > 0 ? (totalKills / totalBattles).toFixed(2) : '0.00';
   const lethality = totalDeaths > 0 ? ((totalKills / totalDeaths) * 100).toFixed(1) : (totalKills > 0 ? '100.0' : '0.0');
   const winRate = totalBattles > 0 ? ((wins / totalBattles) * 100).toFixed(1) : '0.0';
@@ -815,6 +925,31 @@ function renderProfile(sessions) {
       </div>
 
       <div class="profile-card">
+        <h2>Trend</h2>
+        <div class="trend-wrap">
+          <canvas id="cTrend"></canvas>
+        </div>
+      </div>
+
+      <div class="profile-card">
+        <h2>Efficiency</h2>
+        <div class="profile-stats" style="grid-template-columns: repeat(3, 1fr);">
+          <div class="profile-stat-card">
+            <div class="label">Damage / Kill</div>
+            <div class="value accent-dmg">${Number(dmgPerKill).toLocaleString()}</div>
+          </div>
+          <div class="profile-stat-card">
+            <div class="label">Kills / Min</div>
+            <div class="value accent-kd">${killsPerMin}</div>
+          </div>
+          <div class="profile-stat-card">
+            <div class="label">Score / Min</div>
+            <div class="value accent-win">${scorePerMin}</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="profile-card">
         <h2>Winrate</h2>
         <div class="winrate-wrap">
           <canvas id="cWinrate"></canvas>
@@ -822,6 +957,13 @@ function renderProfile(sessions) {
             <div class="pct">${winRate}%</div>
             <div class="lbl">${totalBattles} battles</div>
           </div>
+        </div>
+      </div>
+
+      <div class="profile-card">
+        <h2>Class Skill</h2>
+        <div class="radar-wrap">
+          <canvas id="cRoleRadar"></canvas>
         </div>
       </div>
 
@@ -854,6 +996,24 @@ function renderProfile(sessions) {
             <th>Vehicle</th><th>Sessions</th><th>K/D</th><th>Avg Dmg</th><th>Winrate</th>
           </tr></thead>
           <tbody>${vehicleRows}</tbody>
+        </table>
+      </div>` : ''}
+      ${mapRows ? `
+      <div class="profile-card">
+        <h2>Map Performance</h2>
+        <table class="vehicle-table">
+          <thead><tr>
+            <th>Map</th><th>Sessions</th><th>K/D</th><th>Avg Dmg</th><th>Winrate</th>
+          </tr></thead>
+          <tbody>${mapRows}</tbody>
+        </table>
+      </div>` : ''}
+      ${roleModeRows ? `
+      <div class="profile-card">
+        <h2>Class × Mode</h2>
+        <table class="vehicle-table">
+          <thead><tr><th>Role</th>${roleModeHeaders}</tr></thead>
+          <tbody>${roleModeRows}</tbody>
         </table>
       </div>` : ''}
     </div>`;
@@ -973,6 +1133,127 @@ function renderProfile(sessions) {
         }
       });
       activeCharts.push(cDist);
+    }
+
+    // Role skill radar chart
+    const cRadar = new Chart(document.getElementById('cRoleRadar'), {
+      type: 'radar',
+      data: {
+        labels: roleLabels,
+        datasets: [{
+          label: 'Skill Score',
+          data: roleSkillScores,
+          backgroundColor: 'rgba(113,206,113,0.25)',
+          borderColor: 'rgba(113,206,113,1)',
+          borderWidth: 2,
+          pointBackgroundColor: 'rgba(113,206,113,1)',
+          pointBorderColor: 'rgba(113,206,113,1)',
+          pointRadius: 4,
+          pointHoverRadius: 6,
+        }]
+      },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            r: {
+              beginAtZero: true,
+              max: 100,
+              ticks: { display: false },
+              grid: { color: 'rgba(255,255,255,0.08)' },
+              angleLines: { color: 'rgba(255,255,255,0.08)' },
+              pointLabels: {
+                color: 'rgba(179,179,179,1)',
+                font: { family: "'Geist Mono', monospace", size: 11 }
+              }
+            }
+          },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              backgroundColor: 'hsla(142, 10%, 4%, 0.95)',
+              borderColor: 'rgba(255,255,255,0.06)',
+              borderWidth: 1,
+              titleColor: 'rgba(242,242,242,1)',
+              bodyColor: 'rgba(179,179,179,1)',
+              bodyFont: { family: "'Geist Mono', monospace" },
+              callbacks: { label: ctx => ` ${ctx.label}: ${ctx.raw}` }
+            }
+          }
+        }
+      });
+      activeCharts.push(cRadar);
+
+    // Trend line chart
+    if (trendSessions.length > 1) {
+      const cTrend = new Chart(document.getElementById('cTrend'), {
+        type: 'line',
+        data: {
+          labels: trendLabels,
+          datasets: [
+            {
+              label: 'Rolling K/D',
+              data: rollingKd,
+              borderColor: 'rgba(113,206,113,1)',
+              backgroundColor: 'rgba(113,206,113,0.1)',
+              borderWidth: 2,
+              tension: 0.4,
+              pointRadius: 0,
+              pointHoverRadius: 4,
+              fill: true,
+              yAxisID: 'y'
+            },
+            {
+              label: 'Rolling Dmg',
+              data: rollingDmg,
+              borderColor: 'rgba(200,69,84,1)',
+              backgroundColor: 'rgba(200,69,84,0.05)',
+              borderWidth: 2,
+              tension: 0.4,
+              pointRadius: 0,
+              pointHoverRadius: 4,
+              fill: true,
+              yAxisID: 'y1'
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          scales: {
+            x: { grid: { display: false }, ticks: { color: 'rgba(179,179,179,1)', font: { family: "'Geist Mono', monospace", size: 10 } } },
+            y: {
+              type: 'linear',
+              display: true,
+              position: 'left',
+              grid: { color: 'rgba(255,255,255,0.04)' },
+              ticks: { color: 'rgba(113,206,113,1)', font: { family: "'Geist Mono', monospace", size: 10 } }
+            },
+            y1: {
+              type: 'linear',
+              display: true,
+              position: 'right',
+              grid: { display: false },
+              ticks: { color: 'rgba(200,69,84,1)', font: { family: "'Geist Mono', monospace", size: 10 } }
+            }
+          },
+          plugins: {
+            legend: {
+              labels: { color: 'rgba(179,179,179,1)', font: { family: "'Geist Mono', monospace", size: 11 } }
+            },
+            tooltip: {
+              backgroundColor: 'hsla(142, 10%, 4%, 0.95)',
+              borderColor: 'rgba(255,255,255,0.06)',
+              borderWidth: 1,
+              titleColor: 'rgba(242,242,242,1)',
+              bodyColor: 'rgba(179,179,179,1)',
+              bodyFont: { family: "'Geist Mono', monospace" }
+            }
+          }
+        }
+      });
+      activeCharts.push(cTrend);
     }
   }
 }
