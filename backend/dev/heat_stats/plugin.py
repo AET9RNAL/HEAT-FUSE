@@ -8,16 +8,47 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Optional
 
+from loguru import logger
+
 from fuse.core.api import FusePlugin, FuseContext
+from fuse.ui.panel import FusePanel
+from fuse.ui.config_schema import ConfigCategory, ConfigEntry
 
 _HMAC_KEY = b"heat_fuse_stats_v1"
 _HMAC_EXCLUDE = ("hmac_hex", "type")
 
-PLUGIN_VERSION = "1.3.3"
+PLUGIN_VERSION = "2.0.0"
 
 _MS_FINISH = "ActiveFinish"
 
 _SKIP_GAME_MODES = {"FiringRange"}
+
+# Local player deep post-match stats: MatchSession attr → postbattle stats key.
+# Missing keys (mode-dependent) stay None.
+_PM_STAT_MAP = {
+    "p_shell_hits_damage":    "shellHitsDamage",
+    "p_crit_ammo_damage":     "critAmmoDamage",
+    "p_crit_fuel_damage":     "critFuelDamage",
+    "p_crit_engine_damage":   "critEngineDamage",
+    "p_ability_damage_done":  "abilityDamageDone",
+    "p_ability_damage_taken": "abilityDamageTaken",
+    "p_blocked_damage":       "blockedDamage",
+    "p_ramming_damage":       "rammingDamage",
+    "p_heal":                 "heal",
+    "p_damage_taken":         "damageTaken",
+    "p_captured_base":        "capturedBase",
+    "p_uncaptured_base":      "uncapturedBase",
+    "p_capture_points":       "capturePoints",
+    "p_hits_done":            "hitsDone",
+    "p_hits_taken":           "hitsTaken",
+    "p_shoot_done":           "shootDone",
+    "p_crit_hits_done":       "criticalHitsDone",
+    "p_crit_hits_taken":      "criticalHitsTaken",
+    "p_noncrit_hits_done":    "nonCriticalHitsDone",
+    "p_noncrit_hits_taken":   "nonCriticalHitsTaken",
+    "p_noncrit_shoot_done":   "nonCriticalShootDone",
+    "p_rp_crit_fuel_damage":  "rolePointsCritFuelDamage",
+}
 
 
 @dataclass
@@ -106,6 +137,44 @@ class MatchSession:
     avg_ping:          float         = 0.0
     avg_fps:           float         = 0.0
     sample_count:      int           = 0
+    # Local player deep post-match stats (results screen; None if not captured).
+    p_shell_hits_damage:   Optional[int] = None
+    p_crit_ammo_damage:    Optional[int] = None
+    p_crit_fuel_damage:    Optional[int] = None
+    p_crit_engine_damage:  Optional[int] = None
+    p_ability_damage_done: Optional[int] = None
+    p_ability_damage_taken:Optional[int] = None
+    p_blocked_damage:      Optional[int] = None
+    p_ramming_damage:      Optional[int] = None
+    p_heal:                Optional[int] = None
+    p_damage_taken:        Optional[int] = None
+    p_captured_base:       Optional[int] = None
+    p_uncaptured_base:     Optional[int] = None
+    p_capture_points:      Optional[int] = None
+    p_hits_done:           Optional[int] = None
+    p_hits_taken:          Optional[int] = None
+    p_shoot_done:          Optional[int] = None
+    p_crit_hits_done:      Optional[int] = None
+    p_crit_hits_taken:     Optional[int] = None
+    p_noncrit_hits_done:   Optional[int] = None
+    p_noncrit_hits_taken:  Optional[int] = None
+    p_noncrit_shoot_done:  Optional[int] = None
+    p_rp_crit_fuel_damage: Optional[int] = None
+    # Per-team summaries (results screen; None if not captured).
+    ally_kills:     Optional[int] = None
+    ally_deaths:    Optional[int] = None
+    ally_assists:   Optional[int] = None
+    ally_damage:    Optional[int] = None
+    ally_captures:  Optional[int] = None
+    ally_confirms:  Optional[int] = None
+    ally_denies:    Optional[int] = None
+    enemy_kills:    Optional[int] = None
+    enemy_deaths:   Optional[int] = None
+    enemy_assists:  Optional[int] = None
+    enemy_damage:   Optional[int] = None
+    enemy_captures: Optional[int] = None
+    enemy_confirms: Optional[int] = None
+    enemy_denies:   Optional[int] = None
     samples:           list          = field(default_factory=list)
 
     def to_dict(self) -> dict:
@@ -136,6 +205,44 @@ class MatchSession:
             "avg_fps":           round(self.avg_fps, 1),
             "sample_count":      self.sample_count,
             "client_version":    PLUGIN_VERSION,
+            # local player deep post-match stats
+            "p_shell_hits_damage":    self.p_shell_hits_damage,
+            "p_crit_ammo_damage":     self.p_crit_ammo_damage,
+            "p_crit_fuel_damage":     self.p_crit_fuel_damage,
+            "p_crit_engine_damage":   self.p_crit_engine_damage,
+            "p_ability_damage_done":  self.p_ability_damage_done,
+            "p_ability_damage_taken": self.p_ability_damage_taken,
+            "p_blocked_damage":       self.p_blocked_damage,
+            "p_ramming_damage":       self.p_ramming_damage,
+            "p_heal":                 self.p_heal,
+            "p_damage_taken":         self.p_damage_taken,
+            "p_captured_base":        self.p_captured_base,
+            "p_uncaptured_base":      self.p_uncaptured_base,
+            "p_capture_points":       self.p_capture_points,
+            "p_hits_done":            self.p_hits_done,
+            "p_hits_taken":           self.p_hits_taken,
+            "p_shoot_done":           self.p_shoot_done,
+            "p_crit_hits_done":       self.p_crit_hits_done,
+            "p_crit_hits_taken":      self.p_crit_hits_taken,
+            "p_noncrit_hits_done":    self.p_noncrit_hits_done,
+            "p_noncrit_hits_taken":   self.p_noncrit_hits_taken,
+            "p_noncrit_shoot_done":   self.p_noncrit_shoot_done,
+            "p_rp_crit_fuel_damage":  self.p_rp_crit_fuel_damage,
+            # per-team summaries
+            "ally_kills":     self.ally_kills,
+            "ally_deaths":    self.ally_deaths,
+            "ally_assists":   self.ally_assists,
+            "ally_damage":    self.ally_damage,
+            "ally_captures":  self.ally_captures,
+            "ally_confirms":  self.ally_confirms,
+            "ally_denies":    self.ally_denies,
+            "enemy_kills":    self.enemy_kills,
+            "enemy_deaths":   self.enemy_deaths,
+            "enemy_assists":  self.enemy_assists,
+            "enemy_damage":   self.enemy_damage,
+            "enemy_captures": self.enemy_captures,
+            "enemy_confirms": self.enemy_confirms,
+            "enemy_denies":   self.enemy_denies,
             "samples":           [s.to_dict() for s in self.samples],
         }
 
@@ -167,11 +274,22 @@ def _sign(payload: dict) -> str:
 
 class HeatStatsPlugin(FusePlugin):
 
+    requires_calibration = True
+    calibration_stages = 1
+
     def __init__(self) -> None:
         self._ctx: Optional[FuseContext] = None
         self._acc = None
-        self._state: str = "IDLE"           # IDLE | WAITING | RECORDING
+        self._state: str = "IDLE"           # IDLE | WAITING | RECORDING | SUMMARIZING
         self._session: Optional[MatchSession] = None
+        # Rive overlay
+        self._anim  = None
+        self._panel: Optional[FusePanel] = None
+        self._in_focus: bool = True
+        # Overlay phase drives the VMStats booleans:
+        #   idle | waiting | recording | summarizing | finalizing
+        self._phase: str = "idle"
+        self._summarize_timer: float = 0.0
         # Previous-sample cumulative values for delta computation
         self._prev_ki: int = 0
         self._prev_de: int = 0
@@ -199,6 +317,9 @@ class HeatStatsPlugin(FusePlugin):
         # on respawn and misses the final death when the match ends while dead.
         self._hp_death_count: int           = 0
         self._last_hp:        Optional[int] = None
+        # Post-match capture (results screen)
+        self._pm_captured: bool          = False
+        self._roster:      Optional[list] = None
         # Timers and running aggregates
         self._sample_timer: float = 0.0
         self._elapsed:      float = 0.0
@@ -214,12 +335,120 @@ class HeatStatsPlugin(FusePlugin):
     def setup(self, ctx: FuseContext) -> None:
         self._ctx = ctx
         self._acc = ctx.services.get("accessors")
-        ctx.config.defaults(sample_interval_s=5).load()
+        ctx.config.defaults(
+            sample_interval_s=5,
+            summarize_hold_s=5.0,
+            overlay_pos=None,
+            anim_width=300,
+            anim_height=300,
+        ).load()
+
+        ctx.config.schema([
+            ConfigCategory("Recording", [
+                ConfigEntry("sample_interval_s", "Sample Interval (s)", type="int",   min=1,   max=30),
+                ConfigEntry("summarize_hold_s",  "Summary Hold (s)",    type="float", min=0.0, max=20.0,
+                            description="How long the summary overlay shows before uploading"),
+            ]),
+            ConfigCategory("Animation", [
+                ConfigEntry("anim_width",  "Render Width",  type="int", min=10, max=3000),
+                ConfigEntry("anim_height", "Render Height", type="int", min=10, max=3000),
+            ]),
+            ConfigCategory("Position", [
+                ConfigEntry("overlay_pos", "Overlay Position", type="position"),
+            ]),
+        ])
+
         if ctx.events:
             ctx.events.subscribe("accessors.connected",    self._on_connected,    owner=self.name)
             ctx.events.subscribe("accessors.disconnected", self._on_disconnected, owner=self.name)
 
+        self._setup_overlay(ctx)
+
+    def _setup_overlay(self, ctx: FuseContext) -> None:
+        w = int(ctx.config.get("anim_width")  or 300)
+        h = int(ctx.config.get("anim_height") or 300)
+
+        svc = ctx.services.get("rive_animation")
+        if svc is not None:
+            try:
+                self._anim = svc.create(w, h)
+                if not self._anim.load_bytes(ctx.assets.read("stats.riv")):
+                    logger.error("heat_stats: failed to load stats.riv")
+                    self._anim = None
+                else:
+                    self._anim.set_artboard("STATSBOARD")
+                    self._anim.set_state_machine("cruiseEngine")
+                    self._anim.vm_bind("VMStats")
+                    self._anim.vm_set_bool("isSetupComplete", False)
+                    self._push_overlay()
+                    self._anim.advance(0)
+            except Exception as e:
+                logger.error(f"heat_stats: could not load Rive asset: {e}")
+                self._anim = None
+        else:
+            logger.warning("heat_stats: 'rive_animation' service not available - no overlay")
+
+        sw = ctx.tk_root.winfo_screenwidth()
+        sh = ctx.tk_root.winfo_screenheight()
+        default_x = (sw - w) // 2
+        default_y = int(sh * 0.3) - h // 2
+
+        self._panel = FusePanel(
+            "HEAT Stats", "overlay_pos", ctx.config,
+            default_x=default_x, default_y=default_y,
+        )
+        if self._anim is not None:
+            self._panel.create(self._anim.get_image())
+        else:
+            from PIL import Image
+            self._panel.create(Image.new("RGBA", (w, h), (0, 0, 0, 0)))
+        self._panel.show()
+
+    def _push_overlay(self) -> None:
+        """Drive the VMStats booleans from the current overlay phase."""
+        if not self._anim:
+            return
+        self._anim.vm_set_bool("isWaiting",     self._phase == "waiting")
+        self._anim.vm_set_bool("isRecording",   self._phase == "recording")
+        self._anim.vm_set_bool("isSummarizing", self._phase == "summarizing")
+        self._anim.vm_set_bool("isFinalizing",  self._phase == "finalizing")
+
+    def _render_overlay(self, dt: float) -> None:
+        """Advance the Rive animation and blit — runs in every host state."""
+        if not (self._anim and self._panel):
+            return
+        self._push_overlay()
+        self._anim.advance(dt)
+        self._panel.update(self._anim.get_image())
+
+    # Calibration / focus lifecycle
+
+    def enter_calibrate(self, stage: int = 1) -> None:
+        if self._panel:
+            self._panel.enter_calibrate(stage)
+        if self._anim:
+            self._anim.vm_set_bool("isSetupComplete", False)
+
+    def enter_locked(self) -> None:
+        if self._panel:
+            self._panel.enter_locked()
+        if self._anim:
+            self._anim.vm_set_bool("isSetupComplete", True)
+
+    def set_overlay_visible(self, visible: bool) -> None:
+        self._in_focus = visible
+        if self._ctx and self._ctx.state == "calibrate":
+            return
+        if self._panel:
+            self._panel.show() if visible else self._panel.hide()
+
     def tick(self, dt: float) -> None:
+        if self._ctx:
+            self._ctx.config.check_reload()
+
+        # Overlay renders in every host state (calibrate + locked).
+        self._render_overlay(dt)
+
         if not self._ctx or self._ctx.state != "locked" or self._acc is None:
             return
 
@@ -238,6 +467,15 @@ class HeatStatsPlugin(FusePlugin):
             self._check_match_start()
         elif self._state == "RECORDING":
             self._elapsed += dt
+            # Results screen appeared — capture authoritative post-match summary
+            # (deep stats + team totals), then show the summary before uploading.
+            if not self._pm_captured and self._acc.read("pm_available") == 1:
+                if self._capture_postmatch():
+                    self._pm_captured = True
+                    self._state = "SUMMARIZING"
+                    self._phase = "summarizing"
+                    self._summarize_timer = 0.0
+                    return
             # Poll deaths every tick — the accessors cache refreshes hp every
             # ~0.1s, so a death window (seconds) is always observed, even between
             # the 5s stat samples where a fast respawn could otherwise hide it.
@@ -248,6 +486,12 @@ class HeatStatsPlugin(FusePlugin):
                 self._sample_timer -= interval
                 self._take_sample()
             self._check_match_end()
+        elif self._state == "SUMMARIZING":
+            # Data already captured; hold the summary overlay, then upload.
+            self._summarize_timer += dt
+            if self._summarize_timer >= float(self._ctx.config.get("summarize_hold_s")):
+                self._phase = "finalizing"
+                self._finalize("end")
 
     def _poll_deaths(self) -> None:
         """Increment the death counter on each hp>0 → hp==0 transition."""
@@ -259,26 +503,43 @@ class HeatStatsPlugin(FusePlugin):
         self._last_hp = hp
 
     def teardown(self) -> None:
-        if self._state == "RECORDING" and self._session:
-            self._finalize("end" if self._saw_finish else "abandoned")
+        if self._session and self._state in ("RECORDING", "SUMMARIZING"):
+            # SUMMARIZING already has authoritative data captured → finalize it.
+            self._finalize("end" if (self._saw_finish or self._pm_captured) else "abandoned")
+        if self._panel:
+            try:
+                self._panel.persist_position()
+            except Exception:
+                pass
+            try:
+                self._panel.destroy()
+            except Exception:
+                pass
+        if self._anim:
+            try:
+                self._anim.close()
+            except Exception:
+                pass
 
     # Accessors event handlers
 
     def _on_connected(self) -> None:
         if self._state == "IDLE":
             self._state      = "WAITING"
+            self._phase      = "waiting"
             self._saw_finish = False
             self._debug_ms   = None
             if self._ctx:
                 self._ctx.logger.info("heat_stats: CDP connected — waiting for active match")
 
     def _on_disconnected(self) -> None:
-        if self._state == "RECORDING" and self._session:
-            # If we already saw ActiveFinish the match ended normally — page just
-            # reloaded to the result screen, so finalize as a normal end.
-            self._finalize("end" if self._saw_finish else "abandoned")
+        if self._session and self._state in ("RECORDING", "SUMMARIZING"):
+            # If we already saw ActiveFinish (or captured the results screen) the
+            # match ended normally — the page just reloaded to results/hangar.
+            self._finalize("end" if (self._saw_finish or self._pm_captured) else "abandoned")
         elif self._state == "WAITING":
             self._state = "IDLE"
+            self._phase = "idle"
             if self._ctx:
                 self._ctx.logger.info("heat_stats: CDP disconnected before match started")
 
@@ -325,6 +586,8 @@ class HeatStatsPlugin(FusePlugin):
         )
         self._hp_death_count = 0
         self._last_hp        = acc.read("health")
+        self._pm_captured    = False
+        self._roster         = None
         self._prev_ki = acc.read("player_kills")      or 0
         self._prev_de = 0
         self._prev_as = acc.read("player_assists")
@@ -349,6 +612,7 @@ class HeatStatsPlugin(FusePlugin):
         self._fps_sum      = 0.0
         self._perf_count   = 0
         self._state = "RECORDING"
+        self._phase = "recording"
         self._ctx.logger.info(
             "heat_stats: match started — {} on {}",
             self._session.game_mode or "?",
@@ -445,6 +709,81 @@ class HeatStatsPlugin(FusePlugin):
             self._snap_dn = dn
             self._snap_sc = sc
 
+    # Post-match capture (results screen)
+
+    def _capture_postmatch(self) -> bool:
+        """Capture the local player's deep stats + per-team summaries from the
+        results screen (postbattleScene). Returns True on success."""
+        acc     = self._acc
+        players = acc.read("pm_players")
+        if not players:
+            return False
+        sess   = self._session
+        my_id  = acc.read("pm_my_player_id")
+        my_team = acc.read("pm_my_team")
+        me = next((p for p in players if p.get("playerId") == my_id), None)
+        if my_team is None and me is not None:
+            my_team = me.get("team")
+
+        if me is not None:
+            for col, key in _PM_STAT_MAP.items():
+                setattr(sess, col, me.get(key))
+            # Authoritative finals straight from the results screen.
+            if me.get("kills")         is not None: sess.final_kills    = me["kills"]
+            if me.get("deaths")        is not None: sess.final_deaths   = me["deaths"]
+            if me.get("assists")       is not None: sess.final_assists  = me["assists"]
+            if me.get("damage")        is not None: sess.final_damage   = me["damage"]
+            if me.get("killConfirmed") is not None: sess.final_confirms = me["killConfirmed"]
+            if me.get("killDenied")    is not None: sess.final_denies   = me["killDenied"]
+            if me.get("rolePoints")    is not None: sess.final_score    = me["rolePoints"]
+
+        def _sum(rows, key):
+            return sum((p.get(key) or 0) for p in rows)
+
+        ally  = [p for p in players if p.get("team") == my_team]
+        enemy = [p for p in players if p.get("team") != my_team]
+        sess.ally_kills     = _sum(ally, "kills")
+        sess.ally_deaths    = _sum(ally, "deaths")
+        sess.ally_assists   = _sum(ally, "assists")
+        sess.ally_damage    = _sum(ally, "damage")
+        sess.ally_captures  = _sum(ally, "capturedBase")
+        sess.ally_confirms  = _sum(ally, "killConfirmed")
+        sess.ally_denies    = _sum(ally, "killDenied")
+        sess.enemy_kills    = _sum(enemy, "kills")
+        sess.enemy_deaths   = _sum(enemy, "deaths")
+        sess.enemy_assists  = _sum(enemy, "assists")
+        sess.enemy_damage   = _sum(enemy, "damage")
+        sess.enemy_captures = _sum(enemy, "capturedBase")
+        sess.enemy_confirms = _sum(enemy, "killConfirmed")
+        sess.enemy_denies   = _sum(enemy, "killDenied")
+
+        # Team objective scores (authoritative) from postbattleScene.
+        scores = acc.read("pm_team_scores") or {}
+        if my_team is not None and scores:
+            def _score_for(team):
+                return scores.get(team, scores.get(str(team)))
+            a = _score_for(my_team)
+            if a is not None:
+                sess.final_ally_score = a
+            others = [v for k, v in scores.items() if str(k) != str(my_team)]
+            if others and others[0] is not None:
+                sess.final_enemy_score = others[0]
+
+        # Stored roster = team composition only (identity, no stats — those live in
+        # the team summaries + local player columns). One slim record per player.
+        def _slim(p):
+            return {
+                "name":  p.get("name"),
+                "agent": p.get("agentName"),
+                "tank":  p.get("vehicleName"),
+                "role":  p.get("role"),
+            }
+        self._roster = {
+            "ally":  [_slim(p) for p in ally],
+            "enemy": [_slim(p) for p in enemy],
+        }
+        return True
+
     # Session finalization
 
     def _finalize(self, reason: str) -> None:
@@ -460,15 +799,19 @@ class HeatStatsPlugin(FusePlugin):
         sess.ended_at   = now
         sess.duration_s = round(now - sess.started_at, 2)
 
-        sess.final_kills       = self._snap_ki
-        sess.final_deaths      = self._hp_death_count  # authoritative — not snap-gated on match_state
-        sess.final_assists     = self._snap_as
-        sess.final_damage      = self._snap_da
-        sess.final_ally_score  = self._snap_al
-        sess.final_enemy_score = self._snap_es
-        sess.final_confirms    = self._snap_co
-        sess.final_denies      = self._snap_dn
-        sess.final_score       = self._snap_sc
+        # When the results screen was captured, _capture_postmatch already set the
+        # authoritative finals + team summaries. Otherwise (abandoned, no results
+        # screen) fall back to the live snapshots + hp death counter.
+        if not self._pm_captured:
+            sess.final_kills       = self._snap_ki
+            sess.final_deaths      = self._hp_death_count  # not snap-gated on match_state
+            sess.final_assists     = self._snap_as
+            sess.final_damage      = self._snap_da
+            sess.final_ally_score  = self._snap_al
+            sess.final_enemy_score = self._snap_es
+            sess.final_confirms    = self._snap_co
+            sess.final_denies      = self._snap_dn
+            sess.final_score       = self._snap_sc
 
         if self._perf_count > 0:
             sess.avg_ping = round(self._ping_sum / self._perf_count, 1)
@@ -484,6 +827,9 @@ class HeatStatsPlugin(FusePlugin):
             sess.outcome = "draw"
 
         payload = sess.to_dict()
+        # Team composition {ally:[{name,agent,tank,role}], enemy:[...]} for team
+        # metrics. Stored in match_samples_blob alongside the sample timeline.
+        payload["roster"] = self._roster if self._roster is not None else {}
         payload["hmac_hex"] = _sign(payload)
         payload["type"]     = "heat_stats.session_complete"
 
@@ -501,6 +847,11 @@ class HeatStatsPlugin(FusePlugin):
         if server is not None:
             server._schedule_broadcast(json.dumps(payload))
 
-        self._session    = None
-        self._saw_finish = False
-        self._state      = "IDLE"
+        self._session      = None
+        self._saw_finish   = False
+        self._pm_captured  = False
+        self._roster       = None
+        self._state        = "IDLE"
+        # If CDP is still live, we're back to waiting for the next match.
+        connected = bool(self._acc and self._acc.connected)
+        self._phase = "waiting" if connected else "idle"

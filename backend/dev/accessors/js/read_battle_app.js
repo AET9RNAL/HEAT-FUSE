@@ -56,6 +56,75 @@
     // returns, by matching player_name (primary) or damage+score (fallback)
     // against sb_ally_rows. See Accessors._match_local_row().
 
+    // ── Post-match results (postbattleScene) — populated only on the results screen.
+    // Each player record spreads the FULL deep stats object (~90 fields) and merges
+    // identity + assists/confirms/denies/kills/rolePoints from tacticalInfoModel
+    // (the stats object lacks those). One assembled roster the plugin can aggregate.
+    try {
+      var _pb = (typeof postbattleScene !== 'undefined') ? postbattleScene : null;
+      var _common = _pb && _pb.results && _pb.results.common;
+      if (_common && _common.teams && _common.gameMode) {
+        var _num = function(v){ return typeof v === 'bigint' ? Number(v) : v; };
+        // Identity/live map from tacticalInfoModel, keyed by playerId.
+        var _tm = (typeof tacticalInfoModel !== 'undefined') ? tacticalInfoModel : null;
+        var _idm = {};
+        if (_tm && _tm.players) {
+          for (var _pi2 = 0; _pi2 < _tm.players.length; _pi2++) {
+            var _tp = _tm.players[_pi2], _ac = _tp.account || {};
+            _idm[_tp.playerId] = {
+              name: _tp.userName || (_ac.uniqueName || ''),
+              clanTag: _ac.clanTag || '',
+              role: _tp.role, vehicleName: _tp.vehicleName, vehicleId: _tp.vehicleId,
+              agentName: _tp.agentName, level: _tp.level,
+              isBot: _tp.isBot ? 1 : 0, isPlayer: _tp.isPlayer ? 1 : 0,
+              assists: _tp.assists, killConfirmed: _tp.killConfirmed,
+              killDenied: _tp.killDenied, kills: _tp.kills, rolePoints: _tp.rolePoints
+            };
+          }
+        }
+        var _players = [], _teamScores = {};
+        for (var _t = 0; _t < _common.teams.length; _t++) {
+          var _te = _common.teams[_t], _tps = _te.players || {}, _teamNo = null;
+          for (var _pid in _tps) {
+            var _pr = _tps[_pid], _st = _pr.stats || {}, _piInfo = _pr.playerInfo || {};
+            _teamNo = _piInfo.team;
+            var _idn = _idm[_pid] || {};
+            var _rec = {};
+            for (var _k in _st) _rec[_k] = _num(_st[_k]);        // FULL stats object
+            _rec.playerId      = parseInt(_pid);
+            _rec.team          = _teamNo;
+            _rec.name          = _idn.name || '';
+            _rec.clanTag       = _idn.clanTag || '';
+            _rec.role          = _idn.role || null;
+            _rec.vehicleName   = _idn.vehicleName || null;
+            _rec.vehicleId     = _idn.vehicleId != null ? _idn.vehicleId : null;
+            _rec.agentName     = _idn.agentName || null;
+            _rec.level         = _idn.level != null ? _idn.level : null;
+            _rec.isBot         = _idn.isBot != null ? _idn.isBot : 0;
+            _rec.isPlayer      = _idn.isPlayer != null ? _idn.isPlayer : 0;
+            _rec.assists       = _idn.assists != null ? _idn.assists : (_st.killAssist != null ? _st.killAssist : null);
+            _rec.killConfirmed = _idn.killConfirmed != null ? _idn.killConfirmed : (_st.killConfirmed != null ? _st.killConfirmed : null);
+            _rec.killDenied    = _idn.killDenied != null ? _idn.killDenied : (_st.killDenied != null ? _st.killDenied : null);
+            _rec.kills         = _st.frags != null ? _st.frags : (_idn.kills != null ? _idn.kills : null);
+            _rec.rolePoints    = _idn.rolePoints != null ? _idn.rolePoints : (_st.rolePoints != null ? _st.rolePoints : null);
+            _players.push(_rec);
+          }
+          if (_teamNo != null) _teamScores[_teamNo] = _num(_te.score);
+        }
+        r.pm_available    = 1;
+        r.pm_game_mode    = _common.gameMode;
+        r.pm_map_slug     = (String(_common.battleWorld || '').match(/\/worlds\/(.+?)\.world/) || [])[1] || null;
+        r.pm_started_at   = _num(_common.startedAt);
+        r.pm_finished_at  = _num(_common.finishedAt);
+        r.pm_my_player_id = _pb.results.battlePlayerId != null ? _num(_pb.results.battlePlayerId) : null;
+        r.pm_my_team      = (_tm && _tm.currentPlayer) ? _tm.currentPlayer.team : null;
+        r.pm_team_scores  = _teamScores;
+        r.pm_players      = _players;
+      } else {
+        r.pm_available = 0;
+      }
+    } catch(e) { r.pm_err = e.message; }
+
   } catch(e) {
     r._err = e.message;
   }

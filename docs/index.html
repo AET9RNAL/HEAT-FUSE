@@ -832,6 +832,45 @@ function renderProfile(sessions) {
   }).join('');
   const roleModeHeaders = modes.map(m => `<th>${m}</th>`).join('');
 
+  // ── Deep post-match aggregates (only sessions that reached results screen) ──
+  const pmSessions = sessions.filter(s => s.p_shoot_done != null);
+  const pmCount = pmSessions.length;
+  const totalHitsPm = pmSessions.reduce((sum, s) => sum + (s.p_hits_done || 0), 0);
+  const totalShotsPm = pmSessions.reduce((sum, s) => sum + (s.p_shoot_done || 0), 0);
+  const hitRate = totalShotsPm > 0 ? (totalHitsPm / totalShotsPm * 100).toFixed(1) : '0.0';
+  const totalCritHitsPm = pmSessions.reduce((sum, s) => sum + (s.p_crit_hits_done || 0), 0);
+  const critRate = totalHitsPm > 0 ? (totalCritHitsPm / totalHitsPm * 100).toFixed(1) : '0.0';
+
+  const totalShellDmg = pmSessions.reduce((sum, s) => sum + (s.p_shell_hits_damage || 0), 0);
+  const totalAbilityDmg = pmSessions.reduce((sum, s) => sum + (s.p_ability_damage_done || 0), 0);
+  const totalBlocked = pmSessions.reduce((sum, s) => sum + (s.p_blocked_damage || 0), 0);
+  const totalRamming = pmSessions.reduce((sum, s) => sum + (s.p_ramming_damage || 0), 0);
+  const shellPct = totalDamage > 0 ? (totalShellDmg / totalDamage * 100).toFixed(1) : '0.0';
+  const abilityPct = totalDamage > 0 ? (totalAbilityDmg / totalDamage * 100).toFixed(1) : '0.0';
+  const blockedPct = totalDamage > 0 ? (totalBlocked / totalDamage * 100).toFixed(1) : '0.0';
+  const rammingPct = totalDamage > 0 ? (totalRamming / totalDamage * 100).toFixed(1) : '0.0';
+
+  const totalDmgTaken = pmSessions.reduce((sum, s) => sum + (s.p_damage_taken || 0), 0);
+  const totalHeal = pmSessions.reduce((sum, s) => sum + (s.p_heal || 0), 0);
+  const dmgTakenRatio = totalDamage > 0 ? (totalDmgTaken / totalDamage * 100).toFixed(1) : '0.0';
+
+  const totalCaptures = pmSessions.reduce((sum, s) => sum + (s.p_captured_base || 0), 0);
+  const capturesPerGame = pmCount > 0 ? (totalCaptures / pmCount).toFixed(1) : '0.0';
+
+  // ── Team contribution aggregates ──
+  const teamSessions = sessions.filter(s => s.ally_damage != null);
+  const teamCount = teamSessions.length;
+  const allyTotalDmg = teamSessions.reduce((sum, s) => sum + (s.ally_damage || 0), 0);
+  const myDmgShare = allyTotalDmg > 0 ? (totalDamage / allyTotalDmg * 100).toFixed(1) : '0.0';
+  const allyTotalKills = teamSessions.reduce((sum, s) => sum + (s.ally_kills || 0), 0);
+  const myKillShare = allyTotalKills > 0 ? (totalKills / allyTotalKills * 100).toFixed(1) : '0.0';
+  const allyTotalDeaths = teamSessions.reduce((sum, s) => sum + (s.ally_deaths || 0), 0);
+  const myDeathShare = allyTotalDeaths > 0 ? (totalDeaths / allyTotalDeaths * 100).toFixed(1) : '0.0';
+  const teamKd = allyTotalDeaths > 0 ? (allyTotalKills / allyTotalDeaths).toFixed(2) : '0.00';
+  const enemyTotalKills = teamSessions.reduce((sum, s) => sum + (s.enemy_kills || 0), 0);
+  const enemyTotalDeaths = teamSessions.reduce((sum, s) => sum + (s.enemy_deaths || 0), 0);
+  const enemyKd = enemyTotalDeaths > 0 ? (enemyTotalKills / enemyTotalDeaths).toFixed(2) : '0.00';
+
   const avgKills = totalBattles > 0 ? (totalKills / totalBattles).toFixed(2) : '0.00';
   const lethality = totalDeaths > 0 ? ((totalKills / totalDeaths) * 100).toFixed(1) : (totalKills > 0 ? '100.0' : '0.0');
   const winRate = totalBattles > 0 ? ((wins / totalBattles) * 100).toFixed(1) : '0.0';
@@ -1015,6 +1054,34 @@ function renderProfile(sessions) {
           <thead><tr><th>Role</th>${roleModeHeaders}</tr></thead>
           <tbody>${roleModeRows}</tbody>
         </table>
+      </div>` : ''}
+      ${pmCount > 0 ? `
+      <div class="profile-card">
+        <h2>Combat Breakdown</h2>
+        <div style="font-family:var(--font-microcopy);font-size:var(--fs-4);color:var(--text-muted);margin-bottom:var(--space-2)">${pmCount} session${pmCount===1?'':'s'} with post-match data</div>
+        <div class="profile-stats" style="grid-template-columns: repeat(3, 1fr);">
+          <div class="profile-stat-card"><div class="label">Hit Rate</div><div class="value accent-kd">${hitRate}%</div></div>
+          <div class="profile-stat-card"><div class="label">Crit Rate</div><div class="value accent-kd">${critRate}%</div></div>
+          <div class="profile-stat-card"><div class="label">Captures / Game</div><div class="value accent-win">${capturesPerGame}</div></div>
+          <div class="profile-stat-card"><div class="label">Shell Dmg %</div><div class="value accent-dmg">${shellPct}%</div></div>
+          <div class="profile-stat-card"><div class="label">Ability Dmg %</div><div class="value accent-dmg">${abilityPct}%</div></div>
+          <div class="profile-stat-card"><div class="label">Blocked Dmg %</div><div class="value accent-dmg">${blockedPct}%</div></div>
+          <div class="profile-stat-card"><div class="label">Ramming Dmg %</div><div class="value accent-dmg">${rammingPct}%</div></div>
+          <div class="profile-stat-card"><div class="label">Dmg Taken / Dealt</div><div class="value accent-enemy">${dmgTakenRatio}%</div></div>
+          <div class="profile-stat-card"><div class="label">Heal Total</div><div class="value accent-ally">${Number(totalHeal.toFixed(0)).toLocaleString()}</div></div>
+        </div>
+      </div>` : ''}
+      ${teamCount > 0 ? `
+      <div class="profile-card">
+        <h2>Team Contribution</h2>
+        <div style="font-family:var(--font-microcopy);font-size:var(--fs-4);color:var(--text-muted);margin-bottom:var(--space-2)">${teamCount} session${teamCount===1?'':'s'} with team data</div>
+        <div class="profile-stats" style="grid-template-columns: repeat(3, 1fr);">
+          <div class="profile-stat-card"><div class="label">My Damage Share</div><div class="value accent-dmg">${myDmgShare}%</div></div>
+          <div class="profile-stat-card"><div class="label">My Kill Share</div><div class="value accent-kd">${myKillShare}%</div></div>
+          <div class="profile-stat-card"><div class="label">My Death Share</div><div class="value accent-enemy">${myDeathShare}%</div></div>
+          <div class="profile-stat-card"><div class="label">Team K/D</div><div class="value accent-ally">${teamKd}</div></div>
+          <div class="profile-stat-card"><div class="label">Enemy K/D</div><div class="value accent-enemy">${enemyKd}</div></div>
+        </div>
       </div>` : ''}
     </div>`;
 
@@ -1407,6 +1474,96 @@ function renderDetail(S, samples) {
         <div class="sub">${S.sample_count} samples @ 5s</div>
       </div>
     </div>
+
+    ${S.p_shoot_done != null ? `
+    <h2 style="margin: var(--space-4) 0 var(--space-2); font-size: var(--fs-3); font-weight: var(--fw-medium);">Post-Match Breakdown</h2>
+    <div class="cards">
+      <div class="card">
+        <div class="label">Accuracy</div>
+        <div class="value accent-kill">${S.p_hits_done || 0} / ${S.p_shoot_done || 0}</div>
+        <div class="sub">${S.p_shoot_done > 0 ? ((S.p_hits_done / S.p_shoot_done) * 100).toFixed(1) : 0}% hit rate</div>
+      </div>
+      <div class="card">
+        <div class="label">Crit Rate</div>
+        <div class="value accent-kill">${S.p_crit_hits_done || 0} / ${S.p_hits_done || 0}</div>
+        <div class="sub">${S.p_hits_done > 0 ? ((S.p_crit_hits_done / S.p_hits_done) * 100).toFixed(1) : 0}% of hits</div>
+      </div>
+      <div class="card">
+        <div class="label">Shell Damage</div>
+        <div class="value accent-dmg">${fmtNum(S.p_shell_hits_damage, true)}</div>
+        <div class="sub">${S.final_damage > 0 ? ((S.p_shell_hits_damage / S.final_damage) * 100).toFixed(1) : 0}% of total</div>
+      </div>
+      <div class="card">
+        <div class="label">Ability Damage</div>
+        <div class="value accent-dmg">${fmtNum(S.p_ability_damage_done, true)}</div>
+        <div class="sub">${S.final_damage > 0 ? ((S.p_ability_damage_done / S.final_damage) * 100).toFixed(1) : 0}% of total</div>
+      </div>
+      <div class="card">
+        <div class="label">Blocked Damage</div>
+        <div class="value accent-dmg">${fmtNum(S.p_blocked_damage, true)}</div>
+        <div class="sub">${S.final_damage > 0 ? ((S.p_blocked_damage / S.final_damage) * 100).toFixed(1) : 0}% of dealt</div>
+      </div>
+      <div class="card">
+        <div class="label">Ramming Damage</div>
+        <div class="value accent-dmg">${fmtNum(S.p_ramming_damage, true)}</div>
+        <div class="sub">${S.final_damage > 0 ? ((S.p_ramming_damage / S.final_damage) * 100).toFixed(1) : 0}% of total</div>
+      </div>
+      <div class="card">
+        <div class="label">Damage Taken</div>
+        <div class="value accent-enemy">${fmtNum(S.p_damage_taken, true)}</div>
+        <div class="sub">${S.final_damage > 0 ? ((S.p_damage_taken / S.final_damage) * 100).toFixed(1) : 0}% of dealt</div>
+      </div>
+      <div class="card">
+        <div class="label">Heal</div>
+        <div class="value accent-ally">${fmtNum(S.p_heal, true)}</div>
+        <div class="sub">self / ally healing</div>
+      </div>
+      <div class="card">
+        <div class="label">Captures</div>
+        <div class="value accent-win">${S.p_captured_base || 0}</div>
+        <div class="sub">uncaptures: ${S.p_uncaptured_base || 0}</div>
+      </div>
+      <div class="card">
+        <div class="label">Capture Points</div>
+        <div class="value accent-win">${S.p_capture_points || 0}</div>
+        <div class="sub">objective score</div>
+      </div>
+    </div>` : ''}
+
+    ${S.ally_damage != null ? `
+    <h2 style="margin: var(--space-4) 0 var(--space-2); font-size: var(--fs-3); font-weight: var(--fw-medium);">Team Comparison</h2>
+    <div class="cards">
+      <div class="card">
+        <div class="label">Ally Kills</div>
+        <div class="value accent-ally">${S.ally_kills || 0}</div>
+        <div class="sub">enemy: ${S.enemy_kills || 0}</div>
+      </div>
+      <div class="card">
+        <div class="label">Ally Deaths</div>
+        <div class="value accent-enemy">${S.ally_deaths || 0}</div>
+        <div class="sub">enemy: ${S.enemy_deaths || 0}</div>
+      </div>
+      <div class="card">
+        <div class="label">Ally K/D</div>
+        <div class="value accent-ally">${(S.ally_deaths || 0) > 0 ? ((S.ally_kills || 0) / (S.ally_deaths || 1)).toFixed(2) : (S.ally_kills || 0).toFixed(2)}</div>
+        <div class="sub">enemy: ${(S.enemy_deaths || 0) > 0 ? ((S.enemy_kills || 0) / (S.enemy_deaths || 1)).toFixed(2) : (S.enemy_kills || 0).toFixed(2)}</div>
+      </div>
+      <div class="card">
+        <div class="label">Ally Damage</div>
+        <div class="value accent-dmg">${fmtNum(S.ally_damage, true)}</div>
+        <div class="sub">enemy: ${fmtNum(S.enemy_damage, true)}</div>
+      </div>
+      <div class="card">
+        <div class="label">My Dmg Share</div>
+        <div class="value accent-dmg">${S.ally_damage > 0 ? ((S.final_damage / S.ally_damage) * 100).toFixed(1) : 0}%</div>
+        <div class="sub">${fmtNum(S.final_damage, true)} / ${fmtNum(S.ally_damage, true)}</div>
+      </div>
+      <div class="card">
+        <div class="label">My Kill Share</div>
+        <div class="value accent-kill">${S.ally_kills > 0 ? ((S.final_kills / S.ally_kills) * 100).toFixed(1) : 0}%</div>
+        <div class="sub">${S.final_kills} / ${S.ally_kills || 0}</div>
+      </div>
+    </div>` : ''}
 
     <div class="score-bar-wrap">
       <div class="labels">

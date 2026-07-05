@@ -1,0 +1,10 @@
+{
+  "sample_interval_s": 5,
+  "summarize_hold_s": 5.0,
+  "overlay_pos": [
+    2376,
+    28
+  ],
+  "anim_width": 200,
+  "anim_height": 20
+}
