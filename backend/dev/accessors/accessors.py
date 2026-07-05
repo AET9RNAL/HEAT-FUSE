@@ -76,7 +76,7 @@ _EXTRA_KEYS = (
     # team scores / zones
     "ally_score", "enemy_score", "allied_zones", "enemy_zones",
     # player match stats
-    "player_kills", "player_damage", "player_role_pts",
+    "player_kills", "player_assists", "player_damage", "player_role_pts",
     "player_is_dead", "player_role", "player_vehicle", "player_agent_id", "player_name",
     # from markers page
     "on_fire", "debuff_count", "debuff_tags", "buff_count", "buff_tags",
@@ -407,8 +407,36 @@ class Accessors:
                 if adata.get("_err"):
                     logger.warning(f"Accessors: JS error (battle_app): {adata['_err']}")
                 self._update_cache(adata)
+                self._match_local_row(adata.get("sb_ally_rows") or [])
 
         return True
+
+    def _match_local_row(self, ally_rows: list) -> None:
+        """Identify the local player's scoreboard row and write deaths/confirms/denies to cache.
+
+        Primary: player_name (unique, always available from playerInfoModel).
+        Fallback: player_damage + player_role_pts (both live JS model values from battle_hud).
+        The JS models live on battle_hud; the scoreboard DOM lives on battle_app.
+        Python bridges the two pages after both _eval calls return.
+        """
+        p_name = self._cache.get("player_name")
+        p_dmg  = self._cache.get("player_damage")
+        p_sc   = self._cache.get("player_role_pts")
+        for row in ally_rows:
+            by_name  = bool(p_name and row.get("name") == p_name)
+            by_stats = (p_dmg is not None and p_sc is not None
+                        and row.get("damage") == p_dmg and row.get("score") == p_sc)
+            if by_name or by_stats:
+                self._cache["sb_player_deaths"] = row.get("deaths")
+                kcd   = row.get("kcd", "")
+                parts = kcd.split(" / ")
+                if len(parts) >= 3:
+                    try:
+                        self._cache["sb_player_confirms"] = int(parts[1])
+                        self._cache["sb_player_denies"]   = int(parts[2])
+                    except (ValueError, IndexError):
+                        pass
+                return
 
     def _update_cache(self, data: dict) -> None:
         for field, (key, typ) in _FIELD_MAP.items():

@@ -52,35 +52,9 @@
     }
     r.sb_ally_rows  = _allyRows;
     r.sb_enemy_rows = _enemyRows;
-
-    // Local player's scoreboard stats - identified by AgentInfo_base__disabled
-    // (the game marks the local player's own agent icon as non-interactive since
-    // you can't inspect yourself). Present only when the scoreboard tab is open.
-    // Deaths use hp=0 tracking in the plugin; this block captures KC confirms/denies.
-    try {
-      var _localAgentCell = document.querySelector('[class*="AgentInfo_base__disabled"]');
-      if (_localAgentCell) {
-        var _localRow = _localAgentCell.parentElement;
-        while (_localRow && _localRow.className.indexOf('PlayerRow_base') === -1) {
-          _localRow = _localRow.parentElement;
-        }
-        if (_localRow) {
-          var _localDeathEl = _localRow.querySelector('[class*="CellWrapper_base__deaths"]');
-          r.sb_player_deaths = _localDeathEl
-            ? (parseInt((_localDeathEl.textContent || '').trim()) || 0)
-            : null;
-          // Kill Confirm mode: kcd cell = "DESTROYED / CONFIRMS / DENIES"
-          var _kcdEl = _localRow.querySelector('[class*="CellWrapper_base__killConfirm"]');
-          if (_kcdEl) {
-            var _kcdParts = (_kcdEl.textContent || '').trim().split(' / ');
-            if (_kcdParts.length >= 3) {
-              r.sb_player_confirms = parseInt(_kcdParts[1]) || 0;
-              r.sb_player_denies   = parseInt(_kcdParts[2]) || 0;
-            }
-          }
-        }
-      }
-    } catch(e) {}
+    // sb_player_deaths / confirms / denies resolved in Python after this eval
+    // returns, by matching player_name (primary) or damage+score (fallback)
+    // against sb_ally_rows. See Accessors._match_local_row().
 
   } catch(e) {
     r._err = e.message;

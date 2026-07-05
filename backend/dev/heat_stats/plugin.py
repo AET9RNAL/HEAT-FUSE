@@ -13,7 +13,7 @@ from fuse.core.api import FusePlugin, FuseContext
 _HMAC_KEY = b"heat_fuse_stats_v1"
 _HMAC_EXCLUDE = ("hmac_hex", "type")
 
-PLUGIN_VERSION = "1.3.1"
+PLUGIN_VERSION = "1.3.3"
 
 _MS_FINISH = "ActiveFinish"
 
@@ -193,7 +193,10 @@ class HeatStatsPlugin(FusePlugin):
         self._snap_co: Optional[int] = None
         self._snap_dn: Optional[int] = None
         self._snap_sc: int           = 0
-        # hp=0 death counter — increments each time hp transitions from >0 to 0.
+        # Death detection: count hp>0 → hp==0 transitions, polled every tick()
+        # (not every sample) so fast respawns between 5s samples are still caught.
+        # The in-battle scoreboard death counter is unreliable — it only increments
+        # on respawn and misses the final death when the match ends while dead.
         self._hp_death_count: int           = 0
         self._last_hp:        Optional[int] = None
         # Timers and running aggregates
@@ -235,12 +238,25 @@ class HeatStatsPlugin(FusePlugin):
             self._check_match_start()
         elif self._state == "RECORDING":
             self._elapsed += dt
+            # Poll deaths every tick — the accessors cache refreshes hp every
+            # ~0.1s, so a death window (seconds) is always observed, even between
+            # the 5s stat samples where a fast respawn could otherwise hide it.
+            self._poll_deaths()
             self._sample_timer += dt
             interval = float(self._ctx.config.get("sample_interval_s"))
             if self._sample_timer >= interval:
                 self._sample_timer -= interval
                 self._take_sample()
             self._check_match_end()
+
+    def _poll_deaths(self) -> None:
+        """Increment the death counter on each hp>0 → hp==0 transition."""
+        hp = self._acc.read("health")
+        if hp is None:
+            return  # page not ready — keep last known hp, don't reset
+        if hp == 0 and self._last_hp not in (None, 0):
+            self._hp_death_count += 1
+        self._last_hp = hp
 
     def teardown(self) -> None:
         if self._state == "RECORDING" and self._session:
@@ -347,15 +363,10 @@ class HeatStatsPlugin(FusePlugin):
             return
         acc = self._acc
 
-        # Count deaths via hp hitting exactly 0 (explicit numeric condition).
         hp_now = acc.read("health")
-        if hp_now is not None and hp_now == 0 and self._last_hp not in (None, 0):
-            self._hp_death_count += 1
-        if hp_now is not None:
-            self._last_hp = hp_now
 
         ki  = acc.read("player_kills")       or 0
-        de  = self._hp_death_count
+        de  = self._hp_death_count           # hp-transition counter — always valid
         as_ = acc.read("player_assists")
         da  = acc.read("player_damage")      or 0
         al  = acc.read("ally_score")         or 0
@@ -450,7 +461,7 @@ class HeatStatsPlugin(FusePlugin):
         sess.duration_s = round(now - sess.started_at, 2)
 
         sess.final_kills       = self._snap_ki
-        sess.final_deaths      = self._snap_de
+        sess.final_deaths      = self._hp_death_count  # authoritative — not snap-gated on match_state
         sess.final_assists     = self._snap_as
         sess.final_damage      = self._snap_da
         sess.final_ally_score  = self._snap_al
