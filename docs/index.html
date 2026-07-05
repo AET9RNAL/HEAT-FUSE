@@ -377,9 +377,12 @@ body {
 }
 .profile-stats {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  grid-template-columns: repeat(4, 1fr);
   gap: var(--space-2);
   margin-bottom: var(--space-4);
+}
+@media (max-width: 720px) {
+  .profile-stats { grid-template-columns: repeat(2, 1fr); }
 }
 .profile-stat-card {
   background: var(--black-1-a);
@@ -716,8 +719,11 @@ function renderProfile(sessions) {
   const totalDeaths = sessions.reduce((sum, s) => sum + (s.final_deaths || 0), 0);
   const kd = totalDeaths > 0 ? (totalKills / totalDeaths).toFixed(2) : totalKills.toFixed(2);
 
+  const totalDamage = sessions.reduce((sum, s) => sum + (s.final_damage || 0), 0);
   const maxDmg = totalBattles > 0 ? Math.max(...sessions.map(s => s.final_damage || 0)) : 0;
-  const avgDmg = totalBattles > 0 ? (sessions.reduce((sum, s) => sum + (s.final_damage || 0), 0) / totalBattles).toFixed(0) : '0';
+  const avgDmg = totalBattles > 0 ? (totalDamage / totalBattles).toFixed(0) : '0';
+  const avgKills = totalBattles > 0 ? (totalKills / totalBattles).toFixed(2) : '0.00';
+  const lethality = totalDeaths > 0 ? ((totalKills / totalDeaths) * 100).toFixed(1) : (totalKills > 0 ? '100.0' : '0.0');
   const winRate = totalBattles > 0 ? ((wins / totalBattles) * 100).toFixed(1) : '0.0';
 
   const streakDots = sessions.slice(0, 50).map(s =>
@@ -778,6 +784,26 @@ function renderProfile(sessions) {
             <div class="value accent-kd">${kd}</div>
           </div>
           <div class="profile-stat-card">
+            <div class="label">Total Kills</div>
+            <div class="value accent-kd">${totalKills.toLocaleString()}</div>
+          </div>
+          <div class="profile-stat-card">
+            <div class="label">Total Deaths</div>
+            <div class="value accent-kd">${totalDeaths.toLocaleString()}</div>
+          </div>
+          <div class="profile-stat-card">
+            <div class="label">Avg Kills</div>
+            <div class="value accent-kd">${avgKills}</div>
+          </div>
+          <div class="profile-stat-card">
+            <div class="label">Lethality</div>
+            <div class="value accent-kd">${lethality}%</div>
+          </div>
+          <div class="profile-stat-card">
+            <div class="label">Total Damage</div>
+            <div class="value accent-dmg">${totalDamage.toLocaleString()}</div>
+          </div>
+          <div class="profile-stat-card">
             <div class="label">Avg Damage</div>
             <div class="value accent-dmg">${Number(avgDmg).toLocaleString()}</div>
           </div>
@@ -785,15 +811,16 @@ function renderProfile(sessions) {
             <div class="label">Max Damage</div>
             <div class="value accent-dmg">${maxDmg.toLocaleString()}</div>
           </div>
-          <div class="profile-stat-card">
-            <div class="label">Winrate</div>
-            <div class="winrate-wrap">
-              <canvas id="cWinrate"></canvas>
-              <div class="winrate-center">
-                <div class="pct">${winRate}%</div>
-                <div class="lbl">winrate</div>
-              </div>
-            </div>
+        </div>
+      </div>
+
+      <div class="profile-card">
+        <h2>Winrate</h2>
+        <div class="winrate-wrap">
+          <canvas id="cWinrate"></canvas>
+          <div class="winrate-center">
+            <div class="pct">${winRate}%</div>
+            <div class="lbl">${totalBattles} battles</div>
           </div>
         </div>
       </div>
