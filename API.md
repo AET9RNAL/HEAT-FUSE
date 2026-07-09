@@ -8,7 +8,15 @@ REST API for querying aggregate HEAT match statistics and per-session data. Host
 
 ## Authentication
 
-All requests require an API key passed in one of two headers:
+The API supports two access tiers:
+
+### Public (no key)
+
+The `/stats` endpoint is publicly accessible without an API key. No registration required.
+
+### Authenticated (API key)
+
+All other endpoints require an API key passed in one of two headers:
 
 ```
 x-api-key: fuse_<base64url token>
@@ -20,20 +28,20 @@ or
 Authorization: Bearer fuse_<base64url token>
 ```
 
-Keys are prefixed with `fuse_` and can be minted by authenticated FUSE users.
+Keys are prefixed with `fuse_` and can be minted by authenticated FUSE users from their profile page.
 
 ### Rate Limiting
 
-| Action | User Limit | Window |
-|--------|-----------|--------|
-| `api_v1_read` | 120 req/min | 1 min |
-| `api_key_mint` | 3 req/min | 1 min |
+| Tier | Limit | Window | Keyed On |
+|------|-------|--------|----------|
+| Public (no key) | 20 req/min | 1 min | Client IP |
+| Authenticated | 120 req/min | 1 min | API key user ID |
 
-Rate limiting is keyed on the API key's `requested_by` user ID. Exceeded requests return `429`.
+Exceeded requests return `429`. Public 429 responses include a message suggesting authentication for higher limits.
 
 ### Data Access Model
 
-A single API key can query any user's data, but users must explicitly opt in to 3rd-party API access.
+Stats are aggregated from all users who have opted in to 3rd-party API access. Session-level endpoints require an API key and respect the same opt-in.
 
 ---
 
@@ -41,18 +49,22 @@ A single API key can query any user's data, but users must explicitly opt in to 
 
 ### `GET /stats`
 
-Aggregate match statistics with optional filters and grouping.
+Aggregate match statistics with optional filters and grouping. **Public** — no API key required.
+
+When called without `player_name`, returns aggregate stats across all opted-in players. When called with `player_name`, returns stats for that player only.
 
 **Query Parameters:**
 
 | Param | Type | Required | Description |
 |-------|------|----------|-------------|
-| `group_by` | `string` | no | Group results by: `vehicle`, `agent`, `map`, `mode`. Omit for global aggregate. |
+| `player_name` | `string` | no | Filter to a specific player. Omit for cross-player global stats. |
+| `group_by` | `string` | no | Group results by: `vehicle`, `role`, `map`, `mode`, `agent`, `player`. Omit for a single aggregate row. |
 | `vehicle` | `string` | no | Filter by vehicle name (e.g. `g11_leopard2k_st`). |
 | `agent` | `int` | no | Filter by agent ID. |
-| `map_slug` | `string` | no | Filter by map slug. |
-| `game_mode` | `string` | no | Filter by game mode. |
-| `player_name` | `string` | no | Filter by player username. |
+| `map_slug` | `string` | no | Filter by map slug (e.g. `03_sunstroke`). |
+| `game_mode` | `string` | no | Filter by game mode (e.g. `Conquest`, `Control`). |
+
+Filters and `group_by` can be combined freely. For example, `?group_by=vehicle&game_mode=Conquest` returns per-vehicle stats filtered to Conquest mode only.
 
 **Response (200):**
 
@@ -61,46 +73,122 @@ Aggregate match statistics with optional filters and grouping.
   "stats": [
     {
       "group_key": "g11_leopard2k_st",
-      "total_sessions": 142,
-      "avg_kills": 3.21,
-      "avg_deaths": 1.87,
-      "avg_assists": 2.45,
-      "avg_damage": 1842.50,
-      "avg_kd": 1.72,
-      "win_rate": 58.2,
-      "loss_rate": 38.5,
-      "draw_rate": 3.3,
-      "avg_duration": 312.4,
-      "avg_ally_score": 4520.0,
-      "avg_enemy_score": 4180.0
+      "total_sessions": 33,
+
+      "avg_kills": 8.58,
+      "avg_deaths": 2.15,
+      "avg_assists": 2.73,
+      "avg_damage": 27976.2,
+      "avg_score": 3842.1,
+      "avg_kd": 3.99,
+      "max_damage": 52410,
+
+      "win_rate": 42.4,
+      "loss_rate": 54.5,
+      "draw_rate": 3.0,
+      "wins": 14,
+      "losses": 18,
+      "draws": 1,
+
+      "avg_duration": 612.3,
+      "avg_ally_score": 948.2,
+      "avg_enemy_score": 1021.5,
+
+      "damage_per_kill": 3260.6,
+      "kills_per_min": 0.84,
+      "score_per_min": 376.5,
+
+      "pm_sessions": 15,
+      "hit_rate": 62.1,
+      "crit_rate": 41.8,
+      "shell_dmg_pct": 38.2,
+      "ability_dmg_pct": 7.5,
+      "blocked_dmg_pct": 4.1,
+      "ramming_dmg_pct": 1.2,
+      "dmg_taken_ratio": 24.3,
+      "total_heal": 28400,
+      "captures_per_game": 1.3,
+
+      "team_sessions": 15,
+      "dmg_share": 52.4,
+      "kill_share": 58.1,
+      "death_share": 18.2,
+      "team_kd": 1.05,
+      "enemy_kd": 0.92
     }
   ],
   "group_by": "vehicle"
 }
 ```
 
+Results are sorted by `total_sessions` descending.
+
+**Response Fields:**
+
 | Field | Type | Description |
 |-------|------|-------------|
-| `group_key` | `string` | Grouping value (vehicle name, agent ID, map slug, mode, or `"all"`) |
+| `group_key` | `string` | Grouping value (vehicle name, role, map slug, mode, agent ID, player name, or `"all"`) |
 | `total_sessions` | `int` | Number of matching sessions |
+| | | **Core Averages** |
 | `avg_kills` | `float` | Average kills per session |
 | `avg_deaths` | `float` | Average deaths per session |
 | `avg_assists` | `float` | Average assists per session |
 | `avg_damage` | `float` | Average damage per session |
-| `avg_kd` | `float` | Average kill/death ratio |
+| `avg_score` | `float` | Average score per session |
+| `avg_kd` | `float` | Overall kill/death ratio (total kills / total deaths) |
+| `max_damage` | `int` | Highest damage in a single session |
+| | | **Win/Loss** |
 | `win_rate` | `float` | Win percentage (0–100) |
 | `loss_rate` | `float` | Loss percentage (0–100) |
 | `draw_rate` | `float` | Draw percentage (0–100) |
+| `wins` | `int` | Total wins |
+| `losses` | `int` | Total losses |
+| `draws` | `int` | Total draws |
+| | | **Duration & Scores** |
 | `avg_duration` | `float` | Average match duration in seconds |
 | `avg_ally_score` | `float` | Average ally team score |
 | `avg_enemy_score` | `float` | Average enemy team score |
+| | | **Efficiency** |
+| `damage_per_kill` | `float` | Average damage dealt per kill |
+| `kills_per_min` | `float` | Kills per minute of play |
+| `score_per_min` | `float` | Score per minute of play |
+| | | **Combat Breakdown** (from post-match data) |
+| `pm_sessions` | `int` | Sessions with post-match data (subset of `total_sessions`) |
+| `hit_rate` | `float` | Shot hit percentage (0–100) |
+| `crit_rate` | `float` | Critical hit percentage of hits (0–100) |
+| `shell_dmg_pct` | `float` | Shell damage as % of total damage |
+| `ability_dmg_pct` | `float` | Ability damage as % of total damage |
+| `blocked_dmg_pct` | `float` | Blocked damage as % of total damage |
+| `ramming_dmg_pct` | `float` | Ramming damage as % of total damage |
+| `dmg_taken_ratio` | `float` | Damage taken as % of damage dealt |
+| `total_heal` | `float` | Total healing done |
+| `captures_per_game` | `float` | Average base captures per session |
+| | | **Team Contribution** (from sessions with team data) |
+| `team_sessions` | `int` | Sessions with team data (subset of `total_sessions`) |
+| `dmg_share` | `float` | Player's damage as % of ally team total |
+| `kill_share` | `float` | Player's kills as % of ally team total |
+| `death_share` | `float` | Player's deaths as % of ally team total |
+| `team_kd` | `float` | Ally team overall K/D |
+| `enemy_kd` | `float` | Enemy team overall K/D |
+
+**Example Queries:**
+
+```
+GET /stats                                          → global aggregate, all players
+GET /stats?player_name=AET3RNAL                     → single player aggregate
+GET /stats?group_by=vehicle                         → per-vehicle stats, all players
+GET /stats?group_by=player                          → per-player leaderboard
+GET /stats?group_by=vehicle&game_mode=Conquest      → vehicles in Conquest mode
+GET /stats?group_by=map&player_name=AET3RNAL        → per-map stats for one player
+GET /stats?group_by=player&map_slug=06_aircraftcarrier  → player leaderboard on a specific map
+```
 
 **Errors:**
 
 | Status | Condition |
 |--------|-----------|
 | `400` | Invalid `group_by` value |
-| `401` | Missing or invalid API key |
+| `403` | Player specified by `player_name` has not enabled API access |
 | `429` | Rate limit exceeded |
 | `500` | Internal server error |
 
@@ -108,7 +196,7 @@ Aggregate match statistics with optional filters and grouping.
 
 ### `GET /sessions`
 
-List match sessions for a player. Only returns sessions from users who have opted in for 3rd party API access.
+List match sessions for a player. **Requires API key.** Only returns sessions from users who have opted in for 3rd-party API access.
 
 **Query Parameters:**
 
@@ -158,7 +246,6 @@ List match sessions for a player. Only returns sessions from users who have opte
 }
 ```
 
-
 **Errors:**
 
 | Status | Condition |
@@ -173,7 +260,7 @@ List match sessions for a player. Only returns sessions from users who have opte
 
 ### `GET /sessions/:id`
 
-Get a single match session by ID. Returns full summary.
+Get a single match session by ID. **Requires API key.** Returns full summary.
 
 **Path Parameters:**
 
@@ -230,7 +317,7 @@ Get a single match session by ID. Returns full summary.
 
 ### `GET /sessions/:id/samples`
 
-Get the high-resolution sample blob for a match session. Samples are retained for 90 days; older sessions return `404`.
+Get the high-resolution sample blob for a match session. **Requires API key.** Samples are retained for 90 days; older sessions return `404`.
 
 **Path Parameters:**
 
