@@ -82,6 +82,13 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
 
     const installing = ref<Record<string, 'idle' | 'downloading' | 'done' | 'error'>>({})
     const installedFiles = ref<Record<string, string>>({})
+    // projectId => currently installed version (matched by checksum on scan).
+    // Lets the UI detect "an older version of this project is installed" so the
+    // Install button becomes Update/Swap instead of installing a duplicate.
+    const installedByProject = ref<Record<string, { versionId: string; filePath: string; fileName: string }>>({})
+    // projectId => full version list (all versions, with checksums) from browse fetch.
+    // Used by reconcileInstallStates to match installed files against any version.
+    const projectVersionIndex = ref<Record<string, MarketplaceVersion[]>>({})
     const myVersions = ref<MarketplaceVersion[]>([])
     const loadingMyVersions = ref(false)
 
@@ -133,17 +140,21 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
 
             if (error) throw error
 
+            const indexBuffer: Record<string, MarketplaceVersion[]> = {}
             projects.value = (data ?? []).map(raw => {
                 const tagList: MarketplaceTag[] = (raw.marketplace_project_tags ?? [])
                     .map((pt: any) => pt.marketplace_tags)
                     .filter(Boolean)
 
                 const versionList: MarketplaceVersion[] = (raw.marketplace_versions ?? [])
+                    .map((v: any) => ({ ...v, project_id: raw.id }))
                     .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
 
                 const { marketplace_project_tags, marketplace_versions, ...rest } = raw
+                indexBuffer[raw.id] = versionList
                 return { ...rest, tags: tagList, latest_version: versionList[0] ?? null }
             })
+            projectVersionIndex.value = indexBuffer
             projects.value = await enrichWithUsernames(projects.value)
         } catch (err) {
             logger.error('fetchProjects:', { error: err })
@@ -606,25 +617,44 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
         return map
     })
 
-    // Called on mount and after any plugin deletion.
-    // scannedPlugins = results from pluginsAPI.scan() (includes checksum).
-    // Matches installed files by checksum against known marketplace versions.
-    // Also detects manually-installed plugins whose checksum resolves to a marketplace entry.
-    function reconcileInstallStates(scannedPlugins: { filePath: string; checksum: string }[]): void {
-        const checksumToVersionId = new Map<string, string>()
-        for (const project of projects.value) {
-            const v = project.latest_version
-            if (v?.checksum && v.id) checksumToVersionId.set(v.checksum, v.id)
+    // Map from version checksum → project, across ALL versions of every project.
+    // Preferred correlation for installed plugins: survives version updates
+    // (an old installed copy still links to its project), unlike file-name matching.
+    const checksumToProject = computed(() => {
+        const map = new Map<string, MarketplaceProject>()
+        const byId = new Map(projects.value.map(p => [p.id, p]))
+        for (const [projectId, vers] of Object.entries(projectVersionIndex.value)) {
+            const project = byId.get(projectId)
+            if (!project) continue
+            for (const v of vers) if (v.checksum) map.set(v.checksum, project)
         }
+        return map
+    })
+
+    // Called on mount and after any plugin deletion.
+    // scannedPlugins = results from pluginsAPI.scan() (includes checksum + filePath).
+    // Matches installed files by checksum against ALL known marketplace versions
+    // (not just latest), so an outdated install is still recognised as belonging
+    // to its project — enabling the Update/Swap flow instead of a duplicate install.
+    function reconcileInstallStates(scannedPlugins: { filePath: string; checksum: string }[]): void {
+        // checksum -> { projectId, version } across every version we know about
+        const checksumMap = new Map<string, { projectId: string; version: MarketplaceVersion }>()
+        const indexVersion = (v: MarketplaceVersion) => {
+            if (v.checksum && v.id && v.project_id) checksumMap.set(v.checksum, { projectId: v.project_id, version: v })
+        }
+        for (const vers of Object.values(projectVersionIndex.value)) for (const v of vers) indexVersion(v)
+        for (const v of versions.value) indexVersion(v) // detail-view versions (full row incl. project_id)
 
         const confirmedIds = new Set<string>()
         const confirmedFiles: Record<string, string> = {}
+        const confirmedProjects: Record<string, { versionId: string; filePath: string; fileName: string }> = {}
         for (const p of scannedPlugins) {
-            const versionId = checksumToVersionId.get(p.checksum)
-            if (versionId) {
-                confirmedIds.add(versionId)
-                confirmedFiles[versionId] = p.filePath.replace(/\\/g, '/').split('/').pop() ?? p.filePath
-            }
+            const hit = checksumMap.get(p.checksum)
+            if (!hit) continue
+            const fileName = p.filePath.replace(/\\/g, '/').split('/').pop() ?? p.filePath
+            confirmedIds.add(hit.version.id)
+            confirmedFiles[hit.version.id] = fileName
+            confirmedProjects[hit.projectId] = { versionId: hit.version.id, filePath: p.filePath, fileName }
         }
 
         for (const versionId of Object.keys(installedFiles.value)) {
@@ -637,6 +667,63 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
             installedFiles.value[versionId] = fileName
             installing.value[versionId] = 'done'
         }
+
+        for (const projectId of Object.keys(installedByProject.value)) {
+            if (!confirmedProjects[projectId]) delete installedByProject.value[projectId]
+        }
+        for (const [projectId, info] of Object.entries(confirmedProjects)) {
+            installedByProject.value[projectId] = info
+        }
+    }
+
+    type InstallUiState = 'idle' | 'downloading' | 'installed' | 'update' | 'swap' | 'error'
+
+    // Button state for a project card (acts on its latest_version).
+    function projectInstallState(project: MarketplaceProject): InstallUiState {
+        const latest = project.latest_version
+        if (!latest) return 'idle'
+        const transient = installing.value[latest.id]
+        if (transient === 'downloading') return 'downloading'
+        if (transient === 'error') return 'error'
+        const installed = installedByProject.value[project.id]
+        if (installed) return installed.versionId === latest.id ? 'installed' : 'update'
+        if (transient === 'done') return 'installed'
+        return 'idle'
+    }
+
+    // Button state for a single version row inside project detail.
+    function versionInstallState(version: MarketplaceVersion): InstallUiState {
+        const transient = installing.value[version.id]
+        if (transient === 'downloading') return 'downloading'
+        if (transient === 'error') return 'error'
+        const installed = installedByProject.value[version.project_id]
+        if (installed) return installed.versionId === version.id ? 'installed' : 'swap'
+        if (transient === 'done') return 'installed'
+        return 'idle'
+    }
+
+    // Install `version`, first removing any other installed version of the same
+    // project so only one copy ever lives in the plugins folder (fixes duplicates
+    // on update). Re-scans afterwards to refresh install state from disk.
+    async function switchToVersion(version: MarketplaceVersion): Promise<{ success: boolean; error?: string }> {
+        const projectId = version.project_id
+        const installed = projectId ? installedByProject.value[projectId] : undefined
+        if (installed && installed.versionId !== version.id) {
+            if (installed.filePath) await window.pluginsAPI.deleteFile(installed.filePath)
+            if (projectId) delete installedByProject.value[projectId]
+            if (installing.value[installed.versionId] === 'done') delete installing.value[installed.versionId]
+            delete installedFiles.value[installed.versionId]
+        }
+        const res = await installVersion(version)
+        if (res.success) {
+            try {
+                const scanned = await window.pluginsAPI.scan()
+                reconcileInstallStates(scanned)
+            } catch (err) {
+                logger.error('switchToVersion:rescan', { error: err })
+            }
+        }
+        return res
     }
 
     return {
@@ -655,6 +742,7 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
         filters,
         filteredProjects,
         fileToProject,
+        checksumToProject,
         fetchTags,
         fetchProjects,
         fetchProject,
@@ -678,11 +766,14 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
         clearFilters,
         buildPublicUrl,
         reconcileInstallStates,
+        projectInstallState,
+        versionInstallState,
+        switchToVersion,
         submitForReview,
         fetchRejectionReason,
     }
 }, {
     persist: {
-        pick: ['installedFiles'],
+        pick: ['installedFiles', 'installedByProject'],
     },
 })

@@ -12,7 +12,22 @@ const store = useMarketplaceStore()
 const auth  = useAuthStore()
 const { t } = useI18n()
 
-const installState = () => store.installing[props.version.id] ?? 'idle'
+const installState = () => store.versionInstallState(props.version)
+
+function installLabel() {
+    switch (installState()) {
+        case 'downloading': return t('appdiscover.installing')
+        case 'installed':   return t('appdiscover.installed')
+        case 'swap':        return t('appdiscover.swap')
+        default:            return t('appdiscover.install')
+    }
+}
+
+function handleInstall() {
+    if (!auth.isSignedIn()) { auth.setScreen('welcome'); return }
+    if (installState() === 'swap') store.switchToVersion(props.version)
+    else store.installVersion(props.version)
+}
 
 function formatDate(iso: string) {
     return new Intl.DateTimeFormat(undefined, { year: 'numeric', month: 'short', day: 'numeric' }).format(new Date(iso))
@@ -51,21 +66,16 @@ function formatSize(bytes: number | null) {
             <span class="meta-item">{{ version.download_count }} {{ t('appdiscover.downloads') }}</span>
         </div>
 
-        <template v-if="version.asset_key">
-            <eButton
-                v-if="auth.isSignedIn()"
-                size="half"
-                :label="installState() === 'downloading' ? t('appdiscover.installing')
-                       : installState() === 'done'        ? t('appdiscover.installed')
-                       : t('appdiscover.install')"
-                :systemState="installState() === 'downloading' ? 'processing'
-                            : installState() === 'error'       ? 'error'
-                            : 'idle'"
-                :disabled="installState() === 'done'"
-                @click="store.installVersion(version)"
-            />
-            <span v-else class="sign-in-required">{{ t('appdiscover.signInToInstall') }}</span>
-        </template>
+        <eButton
+            v-if="version.asset_key"
+            size="half"
+            :label="installLabel()"
+            :systemState="installState() === 'downloading' ? 'processing'
+                        : installState() === 'error'       ? 'error'
+                        : 'idle'"
+            :disabled="installState() === 'installed'"
+            @click="handleInstall"
+        />
         <span v-else class="no-file">—</span>
     </div>
 </template>

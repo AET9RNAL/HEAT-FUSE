@@ -17,7 +17,7 @@ from fuse.ui.config_schema import ConfigCategory, ConfigEntry
 _HMAC_KEY = b"heat_fuse_stats_v1"
 _HMAC_EXCLUDE = ("hmac_hex", "type")
 
-PLUGIN_VERSION = "2.0.0"
+PLUGIN_VERSION = "2.0.2"
 
 _MS_FINISH = "ActiveFinish"
 

@@ -26,9 +26,18 @@ function onNavigateDiscover({ projectId }: { projectId?: string }) {
     }
 }
 
+async function reconcileInstalls() {
+    try {
+        if (!window.pluginsAPI) return
+        const scanned = await window.pluginsAPI.scan()
+        store.reconcileInstallStates(scanned)
+    } catch { /* scan unavailable (e.g. web build) - leave states as-is */ }
+}
+
 onMounted(async () => {
     await store.fetchTags()
     await store.fetchProjects()
+    await reconcileInstalls()
     eventBus.on('navigate:discover', onNavigateDiscover)
 })
 
@@ -36,9 +45,9 @@ onUnmounted(() => {
     eventBus.off('navigate:discover', onNavigateDiscover)
 })
 
-watch(activeTab, (tab) => {
+watch(activeTab, async (tab) => {
     if (tab === 'mine') store.fetchMyProjects()
-    else store.fetchProjects()
+    else { await store.fetchProjects(); await reconcileInstalls() }
 })
 
 function toggleTagFilter(id: string) {

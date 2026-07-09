@@ -166,6 +166,33 @@ body {
   color: var(--text-main);
 }
 
+.timeframe-bar {
+  display: flex;
+  gap: var(--space-1);
+  margin-bottom: var(--space-4);
+  flex-wrap: wrap;
+}
+.timeframe-btn {
+  background: hsla(142, 10%, 8%, 0.92);
+  border: 1px solid rgba(255,255,255,0.06);
+  clip-path: var(--ch4);
+  padding: var(--space-1) var(--space-3);
+  font-family: var(--font-microcopy);
+  font-size: var(--fs-4);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.timeframe-btn:hover {
+  background: hsla(142, 10%, 14%, 0.92);
+  color: var(--text-main);
+}
+.timeframe-btn.active {
+  background: hsla(142, 10%, 18%, 0.92);
+  color: var(--text-main);
+  border-color: rgba(113,206,113,0.3);
+}
+
 .btn-sm {
   background: var(--black-1-a);
   border: none;
@@ -612,6 +639,12 @@ body {
         <button class="btn-sm" id="btn-disconnect">Disconnect</button>
       </div>
     </div>
+    <div class="timeframe-bar" id="timeframe-bar" style="display:none">
+      <button class="timeframe-btn" data-tf="all">All</button>
+      <button class="timeframe-btn" data-tf="25">Last 25</button>
+      <button class="timeframe-btn" data-tf="50">Last 50</button>
+      <button class="timeframe-btn" data-tf="100">Last 100</button>
+    </div>
     <div id="profile-content"></div>
     <div id="sessions-content"></div>
   </div>
@@ -628,6 +661,8 @@ const BASE = 'https://jypsytkbliqrwjipolhx.supabase.co/functions/v1/api-v1';
 let apiKey    = '';
 let playerName = '';
 let activeCharts = [];
+let allSessions = [];
+let currentTimeframe = 'all';
 
 // ── Views ──────────────────────────────────────────────────────────────────
 
@@ -691,10 +726,14 @@ document.getElementById('inp-player').addEventListener('keydown', e => {
 document.getElementById('btn-disconnect').addEventListener('click', () => {
   apiKey = '';
   playerName = '';
+  allSessions = [];
+  currentTimeframe = 'all';
   document.getElementById('inp-key').value = '';
   document.getElementById('inp-player').value = '';
   document.getElementById('profile-content').innerHTML = '';
   document.getElementById('sessions-content').innerHTML = '';
+  document.getElementById('timeframe-bar').style.display = 'none';
+  document.querySelectorAll('.timeframe-btn').forEach(btn => btn.classList.remove('active'));
   setConnected(false);
   document.getElementById('btn-connect').disabled = false;
   document.getElementById('btn-connect').textContent = 'Connect';
@@ -705,7 +744,32 @@ document.getElementById('btn-refresh').addEventListener('click', async () => {
   await loadSessions();
 });
 
+document.querySelectorAll('.timeframe-btn').forEach(btn => {
+  btn.addEventListener('click', () => setTimeframe(btn.dataset.tf));
+});
+
 // ── Sessions ───────────────────────────────────────────────────────────────
+
+function getFilteredSessions() {
+  if (currentTimeframe === 'all') return allSessions;
+  const n = parseInt(currentTimeframe, 10);
+  return allSessions.slice(0, n);
+}
+
+function setTimeframe(tf) {
+  currentTimeframe = tf;
+  document.querySelectorAll('.timeframe-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.tf === tf);
+  });
+  if (allSessions.length) {
+    const filtered = getFilteredSessions();
+    activeCharts.forEach(c => c.destroy());
+    activeCharts = [];
+    document.getElementById('profile-content').innerHTML = '';
+    renderProfile(filtered);
+    renderSessionsTable(filtered, allSessions.length);
+  }
+}
 
 async function loadSessions() {
   show('sessions-view');
@@ -717,9 +781,26 @@ async function loadSessions() {
     '<div class="loading"><div class="spinner"></div>Loading sessions…</div>';
 
   try {
-    const { sessions, total } = await apiFetch(`sessions?player_name=${encodeURIComponent(playerName)}&limit=50`);
-    renderProfile(sessions);
-    renderSessionsTable(sessions, total);
+    // Paginate to fetch ALL sessions (API caps limit at 100)
+    const pageSize = 100;
+    let offset = 0;
+    let totalCount = 0;
+    const all = [];
+    while (true) {
+      const { sessions, total, offset: respOffset } = await apiFetch(
+        `sessions?player_name=${encodeURIComponent(playerName)}&limit=${pageSize}&offset=${offset}`
+      );
+      if (!sessions || sessions.length === 0) break;
+      all.push(...sessions);
+      totalCount = total;
+      if (sessions.length < pageSize || all.length >= total) break;
+      offset += pageSize;
+    }
+    allSessions = all;
+    document.getElementById('timeframe-bar').style.display = 'flex';
+    const filtered = getFilteredSessions();
+    renderProfile(filtered);
+    renderSessionsTable(filtered, totalCount);
   } catch (e) {
     document.getElementById('sessions-content').innerHTML =
       `<div class="loading" style="color:var(--error-highlight)">${e.message}</div>`;

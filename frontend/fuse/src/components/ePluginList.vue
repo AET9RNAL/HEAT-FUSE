@@ -27,9 +27,15 @@ function fileBasename(filePath: string) {
     return filePath.replace(/\\/g, '/').split('/').pop() ?? filePath
 }
 
-function marketplaceMatchFor(filePath: string) {
-    if (!filePath) return null
-    return marketplaceStore.fileToProject.get(fileBasename(filePath)) ?? null
+function marketplaceMatchFor(plugin: { checksum?: string; filePath?: string }) {
+    // Prefer checksum: matches any version of the project, so the link survives updates.
+    if (plugin.checksum) {
+        const byChecksum = marketplaceStore.checksumToProject.get(plugin.checksum)
+        if (byChecksum) return byChecksum
+    }
+    // Fallback to latest-version file name (e.g. manually placed file with no known checksum).
+    if (plugin.filePath) return marketplaceStore.fileToProject.get(fileBasename(plugin.filePath)) ?? null
+    return null
 }
 
 function handleMarketplaceClick(projectId: string) {
@@ -173,7 +179,7 @@ onUnmounted(() => ro?.disconnect())
           :selected="selected[plugin.plugin_id] ?? false"
           :enabled="isEnabled(plugin.status)"
           :menu-options="menuOptionsFor(plugin.plugin_id)"
-          :marketplace-project="plugin.filePath ? marketplaceMatchFor(plugin.filePath) : null"
+          :marketplace-project="marketplaceMatchFor(plugin)"
           @update:selected="selected[plugin.plugin_id] = $event"
           @update:enabled="handleToggle(plugin.plugin_id, $event)"
           @marketplace-click="handleMarketplaceClick"

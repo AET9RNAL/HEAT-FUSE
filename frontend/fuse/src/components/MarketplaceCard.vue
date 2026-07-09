@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { MarketplaceProject } from '../stores/marketplace'
 import { useMarketplaceStore } from '../stores/marketplace'
+import { useAuthStore } from '../stores/auth'
 import { useI18n } from '../composables/useI18n'
 import eButton from './eButton.vue'
 import eBadge from './eBadge.vue'
@@ -10,23 +11,31 @@ const props = defineProps<{ project: MarketplaceProject }>()
 const emit = defineEmits<{ select: [project: MarketplaceProject] }>()
 
 const store = useMarketplaceStore()
+const auth  = useAuthStore()
 const { t } = useI18n()
 
 function iconUrl(project: MarketplaceProject): string | null {
     return project.icon_key ? store.buildPublicUrl(project.icon_key) : null
 }
 
-function installState(project: MarketplaceProject) {
-    const v = project.latest_version
-    if (!v) return 'idle'
-    return store.installing[v.id] ?? 'idle'
+const installState = (project: MarketplaceProject) => store.projectInstallState(project)
+
+function installLabel(project: MarketplaceProject) {
+    switch (installState(project)) {
+        case 'downloading': return t('appdiscover.installing')
+        case 'installed':   return t('appdiscover.installed')
+        case 'update':      return t('appdiscover.update')
+        default:            return t('appdiscover.install')
+    }
 }
 
 function handleInstall(e: MouseEvent) {
     e.stopPropagation()
+    if (!auth.isSignedIn()) { auth.setScreen('welcome'); return }
     const v = props.project.latest_version
     if (!v) return
-    store.installVersion(v)
+    if (installState(props.project) === 'update') store.switchToVersion(v)
+    else store.installVersion(v)
 }
 </script>
 
@@ -64,13 +73,11 @@ function handleInstall(e: MouseEvent) {
                 <eButton
                     v-if="project.latest_version"
                     size="half"
-                    :label="installState(project) === 'downloading' ? t('appdiscover.installing')
-                           : installState(project) === 'done'        ? t('appdiscover.installed')
-                           : t('appdiscover.install')"
+                    :label="installLabel(project)"
                     :systemState="installState(project) === 'downloading' ? 'processing'
                                 : installState(project) === 'error'       ? 'error'
                                 : 'idle'"
-                    :disabled="installState(project) === 'done'"
+                    :disabled="installState(project) === 'installed'"
                     @click="handleInstall"
                 />
             </div>

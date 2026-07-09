@@ -36,6 +36,7 @@ export interface PluginRecord {
     configValues: Record<string, unknown>
     hotkeys: PluginHotkey[]
     filePath?: string
+    checksum?: string
 }
 
 export const usePluginsStore = defineStore('plugins', () => {
@@ -57,6 +58,7 @@ export const usePluginsStore = defineStore('plugins', () => {
                 configValues: data.configValues ?? {},
                 hotkeys: data.hotkeys ?? [],
                 filePath: data.filePath,
+                checksum: data.checksum,
             })
         }
     }

@@ -94,6 +94,8 @@
         "installing": "Installing...",
         "installed": "Installed",
         "installError": "Install Failed",
+        "update": "Update",
+        "swap": "Swap",
         "signInToInstall": "Sign in to install",
         "viewDetails": "Details",
         "back": "Back",
