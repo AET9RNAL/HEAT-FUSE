@@ -6,12 +6,16 @@ import { eventBus } from '../events/eventBus'
 import { logger } from '../utils/logger'
 
 export type FuseState = 'idle' | 'spawning' | 'connecting' | 'running' | 'stopping' | 'error'
+// Runtime sub-state reported by the host while running. 'calibrate' means the
+// user still needs to lock plugins (Ctrl+L); 'locked' means they're initialized.
+export type FuseRuntimeState = 'calibrate' | 'locked' | null
 
 // ── Singleton state ────────────────────────────────────────────────────────
 
 const fuseState = ref<FuseState>('idle')
 const fuseError = ref<string | null>(null)
 const fusePid = ref<number | null>(null)
+const runtimeState = ref<FuseRuntimeState>(null)
 
 let _actionInProgress = false
 let _exitHandlerRegistered = false
@@ -31,6 +35,7 @@ async function startFuse(): Promise<boolean> {
     _actionInProgress = true
 
     try {
+        runtimeState.value = null
         _setState('spawning')
         eventBus.emit('agent:spawning')
         logger.info('FUSE: spawning process')
@@ -66,6 +71,9 @@ async function startFuse(): Promise<boolean> {
                 pluginsStore.updateConfigValue(msg['plugin_id'] as string, msg['key'] as string, msg['value'])
             } else if (type === 'hotkey:rebound') {
                 pluginsStore.updateHotkey(msg['plugin_id'] as string, msg['action'] as string, msg['combo'] as string)
+            } else if (type === 'host:state_changed') {
+                const state = msg['state'] as string
+                runtimeState.value = state === 'locked' ? 'locked' : state === 'calibrate' ? 'calibrate' : null
             }
         })
 
@@ -94,6 +102,7 @@ async function startFuse(): Promise<boolean> {
                 fusePid.value = null
 
                 usePluginsStore().resetRuntimeStatuses()
+                runtimeState.value = null
                 if (fuseState.value === 'running') {
                     _setState('idle')
                     eventBus.emit('agent:crashed', { code, signal })
@@ -124,6 +133,7 @@ async function stopFuse(): Promise<void> {
         await window.fuseAPI.kill()
         fusePid.value = null
         usePluginsStore().resetRuntimeStatuses()
+        runtimeState.value = null
         _setState('idle')
         eventBus.emit('agent:stopped', { code: null, signal: null })
         logger.info('FUSE: stopped')
@@ -165,6 +175,7 @@ export function useFuseControl() {
         fuseState: readonly(fuseState),
         fuseError: readonly(fuseError),
         fusePid: readonly(fusePid),
+        runtimeState: readonly(runtimeState),
         startFuse,
         stopFuse,
     }

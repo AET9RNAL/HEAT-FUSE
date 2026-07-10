@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { motion, AnimatePresence } from 'motion-v'
 import Icons from './Icons.vue'
 import eButton from './eButton.vue'
 import eContextMenu from './eContextMenu.vue'
@@ -7,12 +8,39 @@ import type { MenuOption } from './eContextMenu.vue'
 import { useAppStore } from '../stores/app'
 import { useFuseControl } from '../composables/useFuseControl'
 import { useI18n } from '../composables/useI18n'
-
+import { Dynamics } from '../composables/useMotion'
 const appStore = useAppStore()
 const { t } = useI18n()
-const { fuseState } = useFuseControl()
+const { fuseState, runtimeState } = useFuseControl()
 
 const isRunning = computed(() => fuseState.value === 'running')
+
+// While running but not yet locked, plugins are still in calibrate
+const promptVisible = ref(false)
+const promptLocked  = ref(false)
+const LOCK_HOLD_MS = 500
+let lockTimer: ReturnType<typeof setTimeout> | null = null
+
+function clearLockTimer() {
+  if (lockTimer) { clearTimeout(lockTimer); lockTimer = null }
+}
+
+watch([isRunning, runtimeState], ([running, state]) => {
+  if (running && state === 'calibrate') {
+    clearLockTimer()
+    promptLocked.value = false
+    promptVisible.value = true
+  } else if (running && state === 'locked' && promptVisible.value) {
+    // calibrate => locked
+    promptLocked.value = true
+    clearLockTimer()
+    lockTimer = setTimeout(() => { promptVisible.value = false; lockTimer = null }, LOCK_HOLD_MS)
+  } else {
+    clearLockTimer()
+    promptVisible.value = false
+    promptLocked.value = false
+  }
+}, { immediate: true })
 
 const emit = defineEmits<{ launch: []; stop: [] }>()
 
@@ -58,7 +86,7 @@ onMounted(() => {
   })
   ro.observe(panelEl.value)
 })
-onUnmounted(() => ro?.disconnect())
+onUnmounted(() => { ro?.disconnect(); clearLockTimer() })
 </script>
 
 <template>
@@ -81,7 +109,30 @@ onUnmounted(() => ro?.disconnect())
     </div>
 
     <div class="actions">
-      <eButton :icon="isRunning ? 'stop' : 'play'" :label="isRunning ? t('applaunch.stop') : t('applaunch.launch')" size="slim" @click="handleActionClick" />
+      <div class="launch-action">
+        <AnimatePresence>
+          <motion.div
+            v-if="promptVisible"
+            key="calib"
+            class="calibrate-prompt"
+            :class="{ locked: promptLocked }"
+            :initial="{ opacity: 0, x: 20 }"
+            :animate="{ opacity: 1, x: 0 }"
+            :exit="{ opacity: 0, x: 20 }"
+            :transition="Dynamics.spring"
+          >
+            <span class="calibrate-text">{{ promptLocked ? t('applaunch.lockedPrompt') : t('applaunch.calibratePrompt') }}</span>
+            <span v-if="!promptLocked" class="calibrate-hint">{{ t('applaunch.calibrateHint') }}</span>
+          </motion.div>
+        </AnimatePresence>
+        <eButton
+          class="launch-btn"
+          :icon="isRunning ? 'stop' : 'play'"
+          :label="isRunning ? t('applaunch.stop') : t('applaunch.launch')"
+          size="slim"
+          @click="handleActionClick"
+        />
+      </div>
       <eContextMenu :options="menuOptions" placement="bottom" />
     </div>
 
@@ -181,6 +232,67 @@ onUnmounted(() => ro?.disconnect())
   gap: var(--space-6, 42px);
   flex-shrink: 0;
   padding: var(--space-2);
+}
+
+.launch-action {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.launch-btn {
+  position: relative;
+  z-index: 2;
+}
+
+.calibrate-prompt {
+  position: absolute;
+  top: 0;
+  right: calc(100% - 10px);
+  height: 32px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 1px;
+  padding: 0 calc(var(--space-3) + 10px) 0 var(--space-3);
+  background: var(--black-1-a);
+  border-left: 2px solid var(--canary-yellow, #FDE047);
+  white-space: nowrap;
+  z-index: 1;
+  pointer-events: none;
+  clip-path: polygon(
+    6px 0%,
+    100% 0%,
+    100% 100%,
+    0% 100%,
+    0% 6px
+  );
+  transition: border-left-color 0.3s ease;
+}
+
+.calibrate-prompt.locked {
+  border-left-color: var(--light-green, #84FFB1);
+}
+
+.calibrate-text {
+  font-family: var(--font-primary);
+  font-size: var(--secondary-font-size-3);
+  font-weight: var(--font-weight-2);
+  color: var(--canary-yellow, #FDE047);
+  line-height: 1;
+  transition: color 0.3s ease;
+}
+
+.calibrate-prompt.locked .calibrate-text {
+  color: var(--light-green, #84FFB1);
+}
+
+.calibrate-hint {
+  font-family: var(--font-microcopy);
+  font-size: var(--secondary-font-size-4);
+  color: var(--text-muted);
+  line-height: 1;
 }
 
 .panel-stroke {

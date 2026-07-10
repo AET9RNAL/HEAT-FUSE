@@ -52,7 +52,7 @@ from fuse.core.resolver import resolve_load_order
 from fuse.core.events import EventBus
 from fuse.core.services import ServiceRegistry
 
-HOST_VERSION = "3.0.0"
+HOST_VERSION = "3.0.1"
 
 MouseCallback = Callable[[int, int, "pynmouse.Button", bool], None]
 
@@ -300,6 +300,11 @@ class PluginHost:
             _root_logger.info("All plugins initialized.")
             self._auto_lock_queue = False
             self._apply_hotkey_overrides()
+            # Everything is set up and locked now — settle the aggregate state so
+            # the next Ctrl+L enters calibrate and the UI stops showing "calibrate".
+            self._state = "locked"
+            self._calib_stage = 1
+            self.events.emit("host_state_changed", state=self._state, calib_stage=1)
             self.events.emit("host_ready")
             return
 
@@ -326,6 +331,7 @@ class PluginHost:
                 plugin.enter_locked()
             except Exception as e:
                 _root_logger.exception(f"{spec.name}: enter_locked failed: {e}")
+            self.events.emit("host_state_changed", state=self._state, calib_stage=1)
             self.root.after(0, self._dequeue_next_plugin)
             return
 
@@ -339,7 +345,8 @@ class PluginHost:
             _root_logger.exception(f"{spec.name}: enter_calibrate failed: {e}")
 
         if not plugin.requires_calibration:
-            # No UI to calibrate - lock immediately and advance.
+            # No UI to calibrate - lock immediately and advance. Host aggregate
+            # state is settled when the queue drains (see host_ready branch).
             try:
                 plugin.enter_locked()
                 ctx.state = "locked"
@@ -347,6 +354,12 @@ class PluginHost:
                 _root_logger.exception(f"{spec.name}: enter_locked failed: {e}")
             self._setup_active = None
             self.root.after(0, self._dequeue_next_plugin)
+            return
+
+        # A plugin is now awaiting calibration — surface it so the UI can prompt
+        # the user to lock (Ctrl+L).
+        self.events.emit("host_state_changed", state=self._state,
+                         calib_stage=self._setup_calib_stage)
 
     def _apply_hotkey_overrides(self, only_owner: str | None = None) -> None:
         """Apply persisted hotkey_overrides from fuse_host.json.

@@ -3,7 +3,7 @@ export type StatusState = 'None' | 'Initializing' | 'Connecting' | 'Running' | '
 </script>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, onMounted, onUnmounted } from 'vue'
 
 const props = withDefaults(defineProps<{
   state?: StatusState
@@ -28,12 +28,54 @@ const dotGlow = computed(() =>
     ? 'none'
     : `0 0 4px 1px ${dotColor.value}, 0 0 10px 2px ${dotColor.value}66`
 )
+
+// Clipped corners + SVG stroke overlay, matching eUpdateProgress.
+const CUT = 6
+const containerEl = ref<HTMLElement | null>(null)
+const elW = ref(0)
+const elH = ref(0)
+
+const svgPoints = computed(() => {
+  const w = elW.value
+  const h = elH.value
+  if (!w || !h) return ''
+  const cx = (CUT / w) * 100
+  const cy = (CUT / h) * 100
+  return `${cx},0 100,0 100,${100 - cy} ${100 - cx},100 0,100 0,${cy}`
+})
+
+let ro: ResizeObserver | null = null
+onMounted(() => {
+  if (!containerEl.value) return
+  ro = new ResizeObserver(([entry]) => {
+    const box = entry.borderBoxSize?.[0]
+    elW.value = box ? box.inlineSize : entry.contentRect.width
+    elH.value = box ? box.blockSize  : entry.contentRect.height
+  })
+  ro.observe(containerEl.value)
+})
+onUnmounted(() => ro?.disconnect())
 </script>
 
 <template>
-  <div class="e-status">
+  <div ref="containerEl" class="e-status">
     <span class="dot" :style="{ background: dotColor, boxShadow: dotGlow }" />
     <span class="label">{{ status }}</span>
+    <svg
+      v-if="svgPoints"
+      class="stroke-overlay"
+      viewBox="0 0 100 100"
+      preserveAspectRatio="none"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <polygon
+        :points="svgPoints"
+        fill="none"
+        stroke="#525252"
+        stroke-width="0.4"
+        vector-effect="non-scaling-stroke"
+      />
+    </svg>
   </div>
 </template>
 
@@ -43,44 +85,27 @@ const dotGlow = computed(() =>
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
-  padding: var(--space-1) var(--space-2) var(--space-1) var(--space-2);
-  background: var(--glass-surfaces-elevated-900);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 0.2px solid var(--base-600);
+  padding: var(--space-1) var(--space-3) var(--space-1) var(--space-3);
+  background-color: var(--black-1-a);
+  clip-path: polygon(
+    6px 0%,
+    100% 0%,
+    100% calc(100% - 6px),
+    calc(100% - 6px) 100%,
+    0% 100%,
+    0% 6px
+  );
+  user-select: none;
 }
 
-/* Corner brackets — ::before sits above the border */
-.e-status::before {
-  content: '';
+.stroke-overlay {
   position: absolute;
-  inset: -1px;
+  inset: 0;
+  width: 100%;
+  height: 100%;
   pointer-events: none;
-
-  --bc: var(--base-200);
-  --bs: 5px;
-  --bt: 1px;
-
-  background-image:
-    linear-gradient(var(--bc), var(--bc)),
-    linear-gradient(var(--bc), var(--bc)),
-    linear-gradient(var(--bc), var(--bc)),
-    linear-gradient(var(--bc), var(--bc)),
-    linear-gradient(var(--bc), var(--bc)),
-    linear-gradient(var(--bc), var(--bc)),
-    linear-gradient(var(--bc), var(--bc)),
-    linear-gradient(var(--bc), var(--bc));
-  background-size:
-    var(--bt) var(--bs), var(--bs) var(--bt),
-    var(--bt) var(--bs), var(--bs) var(--bt),
-    var(--bt) var(--bs), var(--bs) var(--bt),
-    var(--bt) var(--bs), var(--bs) var(--bt);
-  background-position:
-    top left,     top left,
-    top right,    top right,
-    bottom left,  bottom left,
-    bottom right, bottom right;
-  background-repeat: no-repeat;
+  overflow: visible;
+  z-index: 1;
 }
 
 .dot {
@@ -96,7 +121,7 @@ const dotGlow = computed(() =>
   font-family: var(--font-primary);
   font-size: var(--main-font-size-4);
   font-weight: var(--font-weight-3);
-  color: var(--base-50);
+  color: var(--base-200);
   white-space: nowrap;
   line-height: 1;
 }

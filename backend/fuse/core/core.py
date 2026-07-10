@@ -35,6 +35,7 @@ class FuseCore:
         self._clients: Set[WebSocket] = set()
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._host: Optional["PluginHost"] = None
+        self._last_host_state: Optional[tuple[str, int]] = None
 
         self._app = FastAPI()
         self._app.add_middleware(
@@ -85,6 +86,13 @@ class FuseCore:
                         "configValues": config_values,
                         "hotkeys": self._hotkeys_for(pid),
                     }))
+
+                # Hydrate the current runtime state (calibrate / locked).
+                await websocket.send_text(json.dumps({
+                    "type": "host:state_changed",
+                    "state": self._host.state,
+                    "calib_stage": 1,
+                }))
 
             # Main dispatch loop.
             while True:
@@ -306,6 +314,23 @@ class FuseCore:
         })
         self._schedule_broadcast(payload)
 
+    def notify_host_state_changed(self, state: str, calib_stage: int = 1) -> None:
+        """Broadcast the host runtime state (``calibrate`` / ``locked``).
+
+        Deduped against the last broadcast so rapid identical transitions
+        (e.g. auto-locking many plugins during a hot-reload) don't spam clients.
+        """
+        key = (state, calib_stage)
+        if key == self._last_host_state:
+            return
+        self._last_host_state = key
+        payload = json.dumps({
+            "type": "host:state_changed",
+            "state": state,
+            "calib_stage": calib_stage,
+        })
+        self._schedule_broadcast(payload)
+
     def _schedule_broadcast(self, message: str) -> None:
         if self._loop is None:
             return
@@ -405,6 +430,11 @@ class FuseCore:
         root = tk.Tk()
         host = PluginHost(root, server=self)
         self._host = host
+        host.events.subscribe(
+            "host_state_changed",
+            lambda state, calib_stage=1, **_: self.notify_host_state_changed(state, calib_stage),
+            owner="core",
+        )
         host.load_plugins()
         host.run()
 

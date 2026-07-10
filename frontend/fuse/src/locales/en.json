@@ -36,6 +36,9 @@
         "stop": "Stop",
         "showInExplorer": "Show In Explorer",
         "versionFallback": "m.m.p",
+        "calibratePrompt": "Calibration",
+        "calibrateHint": "Ctrl+L to lock",
+        "lockedPrompt": "Locked",
         "notifications": {
             "fuseDisabledTitle": "FUSE Is Disabled",
             "fuseDisabledMessage": "Enable FUSE with the master switch before launching.",

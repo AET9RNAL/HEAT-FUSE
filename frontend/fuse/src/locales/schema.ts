@@ -35,6 +35,9 @@ export interface TranslationSchema {
         stop: string
         showInExplorer: string
         versionFallback: string
+        calibratePrompt: string
+        calibrateHint: string
+        lockedPrompt: string
         notifications: {
             fuseDisabledTitle: string
             fuseDisabledMessage: string
