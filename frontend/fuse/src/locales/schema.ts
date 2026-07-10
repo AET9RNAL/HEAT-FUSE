@@ -133,6 +133,8 @@ export interface TranslationSchema {
                 showInExplorer: string
                 delete: string
             }
+            reloadWarningTitle: string
+            reloadWarningMessage: string
         }
         console: {
             searchPlaceholder: string

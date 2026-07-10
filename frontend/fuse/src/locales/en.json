@@ -285,7 +285,9 @@
                 "settings": "Settings",
                 "showInExplorer": "Show in Explorer",
                 "delete": "Delete"
-            }
+            },
+            "reloadWarningTitle": "Reload Required",
+            "reloadWarningMessage": "Plugin changes may not apply until you reload with Ctrl+R or restart FUSE."
         },
         "updateProgress": {
             "updating": "Updating",

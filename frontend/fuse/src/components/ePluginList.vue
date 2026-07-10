@@ -7,9 +7,11 @@ import { useMarketplaceStore } from '../stores/marketplace'
 import { useNavigationStore } from '../stores/navigation'
 import type { MenuOption } from './eContextMenu.vue'
 import { useI18n } from '../composables/useI18n'
+import { useFuseConnection } from '../composables/useFuseConnection'
 import { eventBus } from '../events/eventBus'
 
 const { t } = useI18n()
+const { connected } = useFuseConnection()
 
 const props = withDefaults(defineProps<{
   search?: string
@@ -75,6 +77,14 @@ function isEnabled(status: string) {
 
 async function handleToggle(pluginId: string, enabled: boolean) {
   await store.setEnabled(pluginId, enabled)
+  // Toggling a plugin while the runtime is live only takes effect after a reload.
+  if (enabled && connected.value) {
+    eventBus.emit('notification', {
+      title: t('components.plugin.reloadWarningTitle'),
+      message: t('components.plugin.reloadWarningMessage'),
+      type: 'warning',
+    })
+  }
 }
 
 function menuOptionsFor(pluginId: string): MenuOption[] {

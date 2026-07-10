@@ -3,9 +3,12 @@
   "disabled_plugins": [
     "game_memory",
     "heat_ailos_torc",
+    "heat_stats",
     "cruise_control",
+    "accessors",
+    "energy_bar",
     "noui",
-    "heat_stats"
+    "rive_animation"
   ],
   "hotkey_overrides": {
     "host": {
