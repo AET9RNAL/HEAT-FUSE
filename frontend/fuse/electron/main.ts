@@ -418,6 +418,32 @@ function createWindow() {
     }
   })
 
+  //Route any cross-origin http(s) URL to the user's real browser.
+  const openExternalIfWeb = (url: string): void => {
+    if (/^https?:\/\//i.test(url)) void shell.openExternal(url)
+  }
+  const isSameOrigin = (url: string): boolean => {
+    try {
+      return new URL(url).origin === new URL(win!.webContents.getURL()).origin
+    } catch {
+      return false
+    }
+  }
+
+  // window.open / target=_blank / ctrl+click, never open an in-app window.
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    openExternalIfWeb(url)
+    return { action: 'deny' }
+  })
+
+  // Plain clicks / location changes, allow same-origin SPA nav, externalize the rest.
+  win.webContents.on('will-navigate', (event, url) => {
+    if (!isSameOrigin(url)) {
+      event.preventDefault()
+      openExternalIfWeb(url)
+    }
+  })
+
   // Hide to tray on close when enabled
   win.on('close', (e) => {
     if (minimizeToTrayOnClose && win && !isQuitting) {
