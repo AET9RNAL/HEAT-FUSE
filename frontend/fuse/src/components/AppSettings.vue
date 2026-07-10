@@ -44,6 +44,17 @@ function startCapture(action: string) {
         if (['Control', 'Alt', 'Shift', 'Meta'].includes(e.key)) return
         if (e.key === 'Escape') { cancelCapture(); return }
 
+        // Reject non-Latin keys (e.g. Cyrillic layouts
+        if (/[^\x00-\x7F]/.test(e.key)) {
+            cancelCapture()
+            eventBus.emit('notification', {
+                title: t('appsettings.keybindings.latinOnlyTitle'),
+                message: t('appsettings.keybindings.latinOnly'),
+                type: 'error',
+            })
+            return
+        }
+
         const mods: string[] = []
         if (e.ctrlKey)  mods.push('ctrl')
         if (e.altKey)   mods.push('alt')

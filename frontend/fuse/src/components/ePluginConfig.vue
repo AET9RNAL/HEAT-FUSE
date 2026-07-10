@@ -6,8 +6,10 @@ import eToggle from './eToggle.vue'
 import type { PluginRecord, ConfigEntry } from '../stores/plugins'
 import { usePluginsStore } from '../stores/plugins'
 import { eventBus } from '../events/eventBus'
+import { useI18n } from '../composables/useI18n'
 
 const store = usePluginsStore()
+const { t } = useI18n()
 
 const props = defineProps<{ plugin: PluginRecord }>()
 const emit = defineEmits<{ close: [] }>()
@@ -147,6 +149,17 @@ function startCapture(action: string) {
         const ignored = ['Control', 'Alt', 'Shift', 'Meta', 'Escape']
         if (ignored.includes(e.key)) {
             if (e.key === 'Escape') cancelCapture()
+            return
+        }
+
+        // Reject non-Latin keys (e.g. Cyrillic layouts)
+        if (/[^\x00-\x7F]/.test(e.key)) {
+            cancelCapture()
+            eventBus.emit('notification', {
+                title: t('appsettings.keybindings.latinOnlyTitle'),
+                message: t('appsettings.keybindings.latinOnly'),
+                type: 'error',
+            })
             return
         }
 

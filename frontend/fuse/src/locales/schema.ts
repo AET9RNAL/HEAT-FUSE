@@ -82,6 +82,8 @@ export interface TranslationSchema {
             columnAction: string
             columnBinding: string
             rebind: string
+            latinOnlyTitle: string
+            latinOnly: string
         }
     }
     appabout: {

@@ -82,7 +82,9 @@
             "title": "FUSE Keybindings",
             "columnAction": "Action",
             "columnBinding": "Binding",
-            "rebind": "Rebind"
+            "rebind": "Rebind",
+            "latinOnlyTitle": "Invalid Key",
+            "latinOnly": "Only latin keys are allowed"
         },
         "privacy": {
             "title": "Privacy & Telemetry",
