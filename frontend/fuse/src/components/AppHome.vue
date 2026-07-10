@@ -13,6 +13,7 @@ import { usePluginsStore } from '../stores/plugins'
 import { useAppStore } from '../stores/app'
 import { useNavigationStore } from '../stores/navigation'
 import { useI18n } from '../composables/useI18n'
+import { eventBus } from '../events/eventBus'
 
 const { t } = useI18n()
 // import Compositor from './effects/Compositor.vue'
@@ -48,6 +49,39 @@ const filterValues  = ['all', 'active', 'disabled']
 
 async function handleLaunch() {
   if (!appStore.licenseAccepted) return
+
+  const dir = appStore.gameDirPaths[appStore.gamePlatform] ?? ''
+  if (!dir) {
+    eventBus.emit('notification', {
+      title: t('applaunch.notifications.noGamePathTitle'),
+      message: t('applaunch.notifications.noGamePathMessage'),
+      type: 'warning',
+    })
+    navStore.selectOption('settings')
+    return
+  }
+
+  const result = await appStore.checkDebugger(dir)
+  if (!result.success) {
+    eventBus.emit('notification', {
+      title: t('applaunch.notifications.noGamePathTitle'),
+      message: t('applaunch.notifications.noGamePathMessage'),
+      type: 'warning',
+    })
+    navStore.selectOption('settings')
+    return
+  }
+  if (!result.enabled) {
+    // FUSE disabled via the master switch - send the user there to enable it.
+    eventBus.emit('notification', {
+      title: t('applaunch.notifications.fuseDisabledTitle'),
+      message: t('applaunch.notifications.fuseDisabledMessage'),
+      type: 'warning',
+    })
+    navStore.selectOption('settings')
+    return
+  }
+
   appStore.enableFuse = true
 }
 

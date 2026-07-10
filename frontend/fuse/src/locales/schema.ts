@@ -35,6 +35,12 @@ export interface TranslationSchema {
         stop: string
         showInExplorer: string
         versionFallback: string
+        notifications: {
+            fuseDisabledTitle: string
+            fuseDisabledMessage: string
+            noGamePathTitle: string
+            noGamePathMessage: string
+        }
     }
     appsettings: {
         gameInstallation: {
@@ -65,6 +71,8 @@ export interface TranslationSchema {
         notifications: {
             gameConfigChangedTitle: string
             gameConfigChangedMessage: string
+            invalidPathTitle: string
+            invalidPathMessage: string
         }
         keybindings: {
             title: string
@@ -96,6 +104,8 @@ export interface TranslationSchema {
         }
         notification: {
             defaultTitle: string
+            dependencyErrorTitle: string
+            dependencyErrorMessage: string
         }
         dirSelector: {
             placeholder: string

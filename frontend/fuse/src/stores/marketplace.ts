@@ -261,6 +261,7 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
             eventBus.emit('notification', {
                 title: 'Plugin Installed',
                 message: `${version.file_name} installed. Restart the runtime to load it.`,
+                type: 'success',
             })
             return { success: true }
         } catch (err: any) {

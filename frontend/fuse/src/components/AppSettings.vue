@@ -92,15 +92,28 @@ const gameDirPath = computed({
 const debuggerEnabled = ref<boolean | null>(null)
 const debuggerBtnState = ref<SystemState>('idle')
 
-async function refreshDebuggerState(dir: string) {
+async function refreshDebuggerState(dir: string, notifyOnInvalid = false) {
   if (!dir) { debuggerEnabled.value = null; return }
   const result = await store.checkDebugger(dir)
-  debuggerEnabled.value = result.success ? (result.enabled ?? false) : null
+  if (result.success) {
+    debuggerEnabled.value = result.enabled ?? false
+  } else {
+    debuggerEnabled.value = null
+    if (notifyOnInvalid) {
+      eventBus.emit('notification', {
+        title: t('appsettings.notifications.invalidPathTitle'),
+        message: t('appsettings.notifications.invalidPathMessage'),
+        type: 'warning',
+      })
+    }
+  }
 }
 
-watch(gameDirPath, (dir) => {
+// oldDir === undefined only on the immediate mount run — don't nag about a
+// previously-saved path; only notify when the user actively picks a bad folder.
+watch(gameDirPath, (dir, oldDir) => {
   store.scanGameDir(dir)
-  refreshDebuggerState(dir)
+  refreshDebuggerState(dir, oldDir !== undefined)
 }, { immediate: true })
 
 async function handleDebuggerToggle() {
@@ -116,6 +129,7 @@ async function handleDebuggerToggle() {
     eventBus.emit('notification', {
       title: t('appsettings.notifications.gameConfigChangedTitle'),
       message: t('appsettings.notifications.gameConfigChangedMessage'),
+      type: 'success',
     })
   } else {
     debuggerBtnState.value = 'error'

@@ -63,7 +63,7 @@ async function handleSubmitForReview(type: 'project' | 'version', id: string) {
     const res = await store.submitForReview(type, id)
     submittingId.value = null
     if (!res.success) {
-        eventBus.emit('notification', { title: 'Error', message: res.error ?? 'Failed to submit' })
+        eventBus.emit('notification', { title: 'Error', message: res.error ?? 'Failed to submit', type: 'error' })
     } else {
         eventBus.emit('notification', { message: 'Submitted for review' })
     }
@@ -77,6 +77,7 @@ async function showRejectionReason(type: 'project' | 'version', id: string) {
     eventBus.emit('notification', {
         title: 'Rejection reason',
         message: parts.join(' — ') || 'No reason provided',
+        type: 'warning',
     })
 }
 
@@ -103,7 +104,7 @@ async function handleToggleVisibility(project: MarketplaceProject) {
     togglingId.value = project.id
     const res = await store.setVisibility(project.id, !project.visibility)
     if (!res.success) {
-        eventBus.emit('notification', { title: 'Error', message: res.error ?? 'Failed to update visibility' })
+        eventBus.emit('notification', { title: 'Error', message: res.error ?? 'Failed to update visibility', type: 'error' })
     } else {
         eventBus.emit('notification', {
             message: project.visibility
@@ -121,7 +122,7 @@ function confirmDeleteProject(project: MarketplaceProject) {
         cancelLabel: t('common.cancel'),
         onConfirm: async () => {
             const res = await store.deleteProject(project.id)
-            if (!res.success) eventBus.emit('notification', { title: 'Error', message: res.error ?? 'Failed to delete project' })
+            if (!res.success) eventBus.emit('notification', { title: 'Error', message: res.error ?? 'Failed to delete project', type: 'error' })
         },
     })
 }
@@ -147,7 +148,7 @@ function confirmDeleteVersion(ver: MarketplaceVersion) {
         cancelLabel: t('common.cancel'),
         onConfirm: async () => {
             const res = await store.deleteVersion(ver.id)
-            if (!res.success) eventBus.emit('notification', { title: 'Error', message: res.error ?? 'Failed to delete version' })
+            if (!res.success) eventBus.emit('notification', { title: 'Error', message: res.error ?? 'Failed to delete version', type: 'error' })
         },
     })
 }
@@ -170,7 +171,7 @@ async function handleSaveVersionMeta() {
     })
     savingVersion.value = false
     if (!res.success) {
-        eventBus.emit('notification', { title: 'Error', message: res.error ?? 'Failed to save' })
+        eventBus.emit('notification', { title: 'Error', message: res.error ?? 'Failed to save', type: 'error' })
     } else {
         activeVersion.value = null
         view.value = 'edit'

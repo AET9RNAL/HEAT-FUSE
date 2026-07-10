@@ -55,7 +55,7 @@ async function handleSave() {
             if (iconFile.value) {
                 await store.uploadIcon(props.editProject.id, iconFile.value)
             }
-            eventBus.emit('notification', { message: t('appdiscover.notify.projectUpdated') })
+            eventBus.emit('notification', { message: t('appdiscover.notify.projectUpdated'), type: 'success' })
         } else {
             const res = await store.createProject({
                 name: name.value,
@@ -67,11 +67,11 @@ async function handleSave() {
             if (iconFile.value) {
                 await store.uploadIcon(res.project.id, iconFile.value)
             }
-            eventBus.emit('notification', { message: t('appdiscover.notify.projectCreated') })
+            eventBus.emit('notification', { message: t('appdiscover.notify.projectCreated'), type: 'success' })
         }
         emit('done')
     } catch (err: any) {
-        eventBus.emit('notification', { title: 'Error', message: err.message ?? 'Failed to save project' })
+        eventBus.emit('notification', { title: 'Error', message: err.message ?? 'Failed to save project', type: 'error' })
     } finally {
         saving.value = false
     }

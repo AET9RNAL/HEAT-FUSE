@@ -78,10 +78,10 @@ async function handleSave() {
         })
         if (!finalRes.success) throw new Error(finalRes.error)
 
-        eventBus.emit('notification', { message: t('appdiscover.notify.versionFinalized') })
+        eventBus.emit('notification', { message: t('appdiscover.notify.versionFinalized'), type: 'success' })
         emit('done')
     } catch (err: any) {
-        eventBus.emit('notification', { title: 'Error', message: err.message ?? 'Upload failed' })
+        eventBus.emit('notification', { title: 'Error', message: err.message ?? 'Upload failed', type: 'error' })
     } finally {
         saving.value = false
     }

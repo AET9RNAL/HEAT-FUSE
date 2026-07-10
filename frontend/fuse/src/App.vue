@@ -49,7 +49,8 @@ useDiscordPresence()
 usePostHog()
 const { register: registerLogs } = useFuseLogs()
 
-const notification = ref<{ title?: string; message: string } | null>(null)
+type NotificationType = 'success' | 'warning' | 'error'
+const notification = ref<{ title?: string; message: string; type?: NotificationType } | null>(null)
 const activePluginConfigId = ref<string | null>(null)
 const activePlugin = computed(() =>
     activePluginConfigId.value
@@ -60,7 +61,7 @@ const activePlugin = computed(() =>
 const showAuth = computed(() => ['welcome', 'auth', 'otp', 'forgot-password'].includes(authStore.screen))
 const showResetPassword = computed(() => authStore.screen === 'reset-password')
 
-function showNotification(payload: { title?: string; message: string }) {
+function showNotification(payload: { title?: string; message: string; type?: NotificationType }) {
     notification.value = payload
 }
 
@@ -93,6 +94,7 @@ function handleUpdateError({ message }: { message: string }) {
     showNotification({
         title: t('components.updateProgress.notifErrorTitle'),
         message: message,
+        type: 'error',
     })
 }
 
@@ -159,6 +161,7 @@ onUnmounted(() => {
       <eNotification
         :title="notification.title"
         :message="notification.message"
+        :type="notification.type"
         @close="notification = null"
       />
     </motion.div>

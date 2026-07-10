@@ -31,7 +31,7 @@ watch(isUsernameDirty, (dirty) => {
             onConfirm: async () => {
                 const result = await appStore.saveUsername(usernameInput.value)
                 if (!result.success) {
-                    eventBus.emit('notification', { message: result.error ?? 'Failed to save username' })
+                    eventBus.emit('notification', { title: 'Error', message: result.error ?? 'Failed to save username', type: 'error' })
                     throw new Error(result.error)
                 }
             },
@@ -72,6 +72,7 @@ async function handleRevoke(fingerprint: string) {
         eventBus.emit('notification', {
             title: 'Error',
             message: result.error ?? 'Failed to remove device',
+            type: 'error',
         })
     }
     revokingFingerprint.value = null
@@ -83,6 +84,7 @@ async function handleChangePassword() {
         eventBus.emit('notification', {
             title: t('appaccount.changePassword'),
             message: 'Reset link sent to your email.',
+            type: 'success',
         })
     }
 }
@@ -98,6 +100,7 @@ async function handleDeleteAccount() {
         eventBus.emit('notification', {
             title: 'Error',
             message: result.error ?? 'Failed to delete account',
+            type: 'error',
         })
         confirmingDelete.value = false
     }
@@ -163,6 +166,7 @@ async function handleMintKey() {
             eventBus.emit('notification', {
                 title: 'Error',
                 message: (error as Error).message ?? 'Failed to create API key',
+                type: 'error',
             })
             return
         }
@@ -183,6 +187,7 @@ async function handleRevokeKey(id: string) {
         eventBus.emit('notification', {
             title: 'Error',
             message: 'Failed to revoke key',
+            type: 'error',
         })
         return
     }

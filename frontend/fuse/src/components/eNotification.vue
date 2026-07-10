@@ -6,18 +6,29 @@ import { useI18n } from '../composables/useI18n'
 
 const { t } = useI18n()
 
+export type NotificationType = 'success' | 'warning' | 'error'
+
 interface Props {
     title?: string
     message: string
     duration?: number
+    type?: NotificationType
 }
 
 const props = withDefaults(defineProps<Props>(), {
     title: undefined,
     duration: 5000,
+    type: 'success',
 })
 
 const resolvedTitle = computed(() => props.title ?? t('components.notification.defaultTitle'))
+
+const ACCENT_BY_TYPE: Record<NotificationType, string> = {
+    success: 'var(--light-green, #84FFB1)',
+    warning: 'var(--canary-yellow, #FDE047)',
+    error:   'var(--error-highlight, #FF6B6B)',
+}
+const accentColor = computed(() => ACCENT_BY_TYPE[props.type])
 
 const emit = defineEmits<{ close: [] }>()
 
@@ -25,22 +36,38 @@ const TICK = 50
 const progress = ref(1)
 let timer: ReturnType<typeof setInterval> | null = null
 
-onMounted(() => {
+function stopTimer() {
+    if (timer) { clearInterval(timer); timer = null }
+}
+
+function startTimer() {
+    stopTimer()
     const steps = props.duration / TICK
-    let elapsed = 0
+    let elapsed = (1 - progress.value) * steps
     timer = setInterval(() => {
         elapsed++
         progress.value = 1 - elapsed / steps
         if (elapsed >= steps) {
-            clearInterval(timer!)
+            stopTimer()
             emit('close')
         }
     }, TICK)
-})
+}
 
-onUnmounted(() => { if (timer) clearInterval(timer) })
+// Message is truncated to one line by default; clicking the body expands it to
+// full height
+const expanded = ref(false)
+function toggleExpand() {
+    expanded.value = !expanded.value
+    if (expanded.value) stopTimer()
+    else startTimer()
+}
 
-// SVG polygon stroke — traces the 6-point clip-path
+onMounted(() => { startTimer() })
+
+onUnmounted(() => { stopTimer() })
+
+// SVG polygon stroke - traces the 6-point clip-path
 const CUT = 8
 const notifEl = ref<HTMLElement | null>(null)
 const elW = ref(0)
@@ -73,20 +100,20 @@ onUnmounted(() => _ro?.disconnect())
                 <line
                     x1="0" y1="1"
                     :x2="progress * 100" y2="1"
-                    stroke="var(--light-green, #84FFB1)"
+                    :stroke="accentColor"
                     stroke-width="2"
                 />
             </svg>
 
-            <div class="notification-body">
+            <div class="notification-body" :class="{ expanded }" @click="toggleExpand">
                 <div class="notification-text">
-                    <span class="notification-title">{{ resolvedTitle }}</span>
-                    <span class="notification-message">{{ message }}</span>
+                    <span class="notification-title" :style="{ color: accentColor }">{{ resolvedTitle }}</span>
+                    <span class="notification-message" :class="{ expanded }">{{ message }}</span>
                 </div>
                 <motion.button
                     class="close-btn"
                     :whileTap="{ scale: 0.88 }"
-                    @click="emit('close')"
+                    @click.stop="emit('close')"
                 >
                     <Icons kind="cross" size="small" />
                 </motion.button>
@@ -163,6 +190,12 @@ onUnmounted(() => _ro?.disconnect())
     gap: var(--space-3);
     padding: var(--space-3) var(--space-3) var(--space-3) var(--space-4);
     padding-top: calc(var(--space-3) + 2px);
+    cursor: pointer;
+}
+
+/* When expanded, top-align so the wrapped message flows downward. */
+.notification-body.expanded {
+    align-items: flex-start;
 }
 
 .notification-text {
@@ -195,6 +228,13 @@ onUnmounted(() => _ro?.disconnect())
     text-overflow: ellipsis;
     user-select: none;
     -webkit-user-select: none;
+}
+
+.notification-message.expanded {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    overflow-wrap: anywhere;
 }
 
 .close-btn {

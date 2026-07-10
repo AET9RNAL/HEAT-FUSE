@@ -35,7 +35,13 @@
         "launch": "Launch",
         "stop": "Stop",
         "showInExplorer": "Show In Explorer",
-        "versionFallback": "m.m.p"
+        "versionFallback": "m.m.p",
+        "notifications": {
+            "fuseDisabledTitle": "FUSE Is Disabled",
+            "fuseDisabledMessage": "Enable FUSE with the master switch before launching.",
+            "noGamePathTitle": "Game Path Required",
+            "noGamePathMessage": "Select a valid game directory before launching."
+        }
     },
     "appsettings": {
         "gameInstallation": {
@@ -65,7 +71,9 @@
         },
         "notifications": {
             "gameConfigChangedTitle": "Game Configuration Changed",
-            "gameConfigChangedMessage": "Restart the game for changes to take effect."
+            "gameConfigChangedMessage": "Restart the game for changes to take effect.",
+            "invalidPathTitle": "Invalid Game Directory",
+            "invalidPathMessage": "The selected folder is not a valid game installation."
         },
         "keybindings": {
             "title": "FUSE Keybindings",
@@ -248,7 +256,9 @@
             "error": "Error"
         },
         "notification": {
-            "defaultTitle": "Notification"
+            "defaultTitle": "Notification",
+            "dependencyErrorTitle": "Dependency Error",
+            "dependencyErrorMessage": "\"{plugin}\" was skipped - it requires \"{dependency}\". Install the missing dependency and restart FUSE."
         },
         "dirSelector": {
             "placeholder": "Select directory..."

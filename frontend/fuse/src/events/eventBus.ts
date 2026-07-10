@@ -22,7 +22,7 @@ type Events = {
     'agent:error': { error: string }
 
     // Notifications
-    'notification': { title?: string; message: string }
+    'notification': { title?: string; message: string; type?: 'success' | 'warning' | 'error' }
 
     // Update lifecycle
     'update:found':       { version: string }

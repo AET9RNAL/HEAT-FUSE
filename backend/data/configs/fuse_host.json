@@ -3,16 +3,13 @@
   "disabled_plugins": [
     "game_memory",
     "heat_ailos_torc",
-    "accessors",
     "cruise_control",
-    "energy_bar",
-    "heat_stats",
     "noui",
-    "rive_animation"
+    "heat_stats"
   ],
   "hotkey_overrides": {
     "host": {
-      "Toggle Calibrate/Lock": "ctrl+s"
+      "Toggle Calibrate/Lock": "ctrl+l"
     }
   }
 }
