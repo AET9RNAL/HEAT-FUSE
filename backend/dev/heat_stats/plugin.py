@@ -386,7 +386,7 @@ class HeatStatsPlugin(FusePlugin):
                 logger.error(f"heat_stats: could not load Rive asset: {e}")
                 self._anim = None
         else:
-            logger.warning("heat_stats: 'rive_animation' service not available - no overlay")
+            logger.error("heat_stats: 'rive_animation' service not available - no overlay")
 
         sw = ctx.tk_root.winfo_screenwidth()
         sh = ctx.tk_root.winfo_screenheight()

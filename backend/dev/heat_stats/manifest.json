@@ -1,11 +1,11 @@
 {
   "plugin_id": "heat_stats",
   "name": "HEAT Stats",
-  "version": "2.0.2",
+  "version": "2.0.3",
   "author": "AETERNAL",
   "description": "Records per-match performance data.",
   "entry": "plugin:HeatStatsPlugin",
-  "dependencies": ["accessors"],
+  "dependencies": ["accessors", "rive_animation"],
   "default_config": {
     "sample_interval_s": 5
   }
