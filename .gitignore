@@ -24,3 +24,10 @@ frontend/fuse/.env
 .env.local
 deprecated/
 fuseadmin/
+
+# Node runtime port — build artifacts
+runtime/dist/
+runtime/node_modules/
+plugins-dist/
+plugins-cache/
+frontend/fuse/.rive-gate/

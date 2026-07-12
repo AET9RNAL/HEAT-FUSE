@@ -5,16 +5,15 @@ if (import.meta.env.VITE_SENTRY_DSN) {
 }
 import { autoUpdater } from 'electron-updater'
 import { spawn, execFile, type ChildProcess } from 'node:child_process'
-import { promisify } from 'node:util'
 import os from 'node:os'
 import crypto from 'node:crypto'
 import DiscordRPC from 'discord-rpc'
 
-const execFileAsync = promisify(execFile)
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import fs from 'node:fs'
 import { unzipSync, strFromU8 } from 'fflate'
+import { initOverlayStage, startOverlayStage, stopOverlayStage } from './overlayStage'
 
 declare const __RELEASE__: boolean
 
@@ -29,7 +28,7 @@ export const RENDERER_DIST = path.join(process.env.APP_ROOT, 'dist')
 process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL ? path.join(process.env.APP_ROOT, 'public') : RENDERER_DIST
 
 const IS_DEV   = !!VITE_DEV_SERVER_URL
-const REPO_ROOT = path.join(process.env.APP_ROOT!, '..', '..') // HEAT_SACLOS/ — only meaningful in dev
+const REPO_ROOT = path.join(process.env.APP_ROOT!, '..', '..') // HEAT_SACLOS/ - only meaningful in dev
 const USER_DATA_DIR = IS_DEV ? path.join(REPO_ROOT, 'backend', 'data') : app.getPath('userData')
 
 const PATHS: Record<string, string> = {
@@ -39,8 +38,10 @@ const PATHS: Record<string, string> = {
                       : process.resourcesPath,
   pluginsCore: IS_DEV ? path.join(REPO_ROOT, 'backend', 'fuse', 'plugins')
                       : path.join(USER_DATA_DIR, 'plugins'),
-  pluginsUser: IS_DEV ? path.join(REPO_ROOT, 'backend', 'plugins')
+  pluginsUser: IS_DEV ? path.join(REPO_ROOT, 'plugins-dist')
                       : path.join(USER_DATA_DIR, 'plugins'),
+  runtimeEntry: IS_DEV ? path.join(REPO_ROOT, 'runtime', 'dist', 'index.js')
+                      : path.join(process.resourcesPath, 'runtime', 'index.js'),
   trayIcon:    IS_DEV ? path.join(__dirname, '..', 'build', 'icon.png')
                       : path.join(process.resourcesPath, 'icon.png'),
   fileTypeIco: IS_DEV ? path.join(__dirname, '..', 'src', 'assets', 'fuse_filetype.ico')
@@ -140,20 +141,20 @@ let psRunner: ChildProcess | null = null
 let psBuffer = ''
 const psPending: Array<(result: string) => void> = []
 // Sentinels: PowerShell echoes typed stdin back to stdout, so we can't write
-// the literal markers — we'd find them in the echo instead of the real output.
+// the literal markers - we'd find them in the echo instead of the real output.
 // Instead, decode them at runtime via base64; the literal strings then only
 // appear in the actual command output stream, not in the echoed input.
 const PS_START = '__FUSE_START__'
 const PS_END = '__FUSE_END__'
 const PS_START_B64 = Buffer.from(PS_START).toString('base64')
 const PS_END_B64 = Buffer.from(PS_END).toString('base64')
-// Compact inline Add-Type — guard prevents recompilation after first call.
+// Compact inline Add-Type - guard prevents recompilation after first call.
 const PS_FW_DEF = `if(-not('FW'-as[type])){Add-Type 'using System;using System.Runtime.InteropServices;public class FW{[DllImport("user32")]public static extern IntPtr GetForegroundWindow();[DllImport("user32")]public static extern uint GetWindowThreadProcessId(IntPtr h,out uint p);}'}`
 
 function _ensurePsRunner() {
   if (psRunner && !psRunner.killed) return
   psBuffer = ''
-  // No -Command flag — stdin processed line-by-line. -NoLogo suppresses banner on stdout.
+  // No -Command flag - stdin processed line-by-line. -NoLogo suppresses banner on stdout.
   psRunner = spawn('powershell', ['-NoProfile', '-NonInteractive', '-NoLogo'], {
     stdio: ['pipe', 'pipe', 'ignore'],
     windowsHide: true,
@@ -213,8 +214,14 @@ async function _checkForegroundProcess(): Promise<string> {
   return (await _psRun(cmd)).toLowerCase()
 }
 
+const OWN_PROC = path.basename(process.execPath, path.extname(process.execPath)).toLowerCase()
 
-// File association helpers (.fuse → FusePlugin, HKCU — no elevation required)
+function _isGameFocused(fg: string): boolean {
+  return fg === 'engine_launcher' || fg === OWN_PROC
+}
+
+
+// File association helpers (.fuse → FusePlugin, HKCU - no elevation required)
 
 const FUSE_EXT     = '.fuse'
 const FUSE_PROG_ID = 'FusePlugin'
@@ -564,6 +571,13 @@ if (!app.requestSingleInstanceLock()) {
 app.whenReady().then(() => {
   createWindow()
 
+  // Register overlay-stage IPC + display listeners (windows open on fuse:spawn).
+  initOverlayStage({
+    devServerUrl: VITE_DEV_SERVER_URL,
+    rendererDist: RENDERER_DIST,
+    preload: PATHS.preload,
+  })
+
   // Cold-start deep link (app launched by OS protocol handler)
   const deepLinkArg = process.argv.find(a => a.startsWith('fuse://'))
   if (deepLinkArg) {
@@ -595,34 +609,20 @@ app.whenReady().then(() => {
   ipcMain.handle('fuse:spawn', async () => {
     if (fuseProcess) return { success: false, error: 'already running' }
 
-    let executable: string
-    let args: string[]
-    let spawnEnv: NodeJS.ProcessEnv
-
-    if (IS_DEV) {
-      const venvPython      = path.join(PATHS.fileBrowser, '.venv', 'Scripts', 'python.exe')
-      const requirementsTxt = path.join(PATHS.fileBrowser, 'fuse', 'requirements.txt')
-
-      try {
-        if (!fs.existsSync(venvPython)) {
-          await execFileAsync('python', ['-m', 'venv', path.join(PATHS.fileBrowser, '.venv')])
-        }
-        await execFileAsync(venvPython, ['-m', 'pip', 'install', '-r', requirementsTxt, '--quiet'])
-      } catch (e: unknown) {
-        return { success: false, error: `venv setup failed: ${(e as Error).message}` }
-      }
-
-      executable = venvPython
-      args       = [path.join(PATHS.fileBrowser, 'fuse', 'run_fuse.py')]
-      spawnEnv   = { ...process.env, PYTHONPATH: PATHS.fileBrowser }
-    } else {
-      executable = PATHS.backendExe
-      args       = []
-      spawnEnv   = {
-        ...process.env,
-        FUSE_DATA_DIR: USER_DATA_DIR,
-        FUSE_USER_PLUGINS_DIR: PATHS.pluginsUser,
-      }
+    // The runtime is a Node sidecar (runtime/dist/index.js). We run it with
+    // Electron's own Node via ELECTRON_RUN_AS_NODE so no system Node install is
+    // required in production; the sidecar prints {port,connectionToken} on its
+    // first stdout line, exactly as the old Python backend did.
+    if (!fs.existsSync(PATHS.runtimeEntry)) {
+      return { success: false, error: `runtime not built: ${PATHS.runtimeEntry} (run "npm run build:runtime")` }
+    }
+    const executable = process.execPath
+    const args = [PATHS.runtimeEntry]
+    const spawnEnv: NodeJS.ProcessEnv = {
+      ...process.env,
+      ELECTRON_RUN_AS_NODE: '1',
+      FUSE_DATA_DIR: USER_DATA_DIR,
+      FUSE_USER_PLUGINS_DIR: PATHS.pluginsUser,
     }
 
     return new Promise<{ success: boolean; pid?: number; port?: number; connectionToken?: string; error?: string }>((resolve) => {
@@ -683,10 +683,14 @@ app.whenReady().then(() => {
                 proc.on('exit', (code, signal) => {
                   fuseProcess = null
                   fusePort = null
+                  stopOverlayStage()
                   if (!isQuitting) {
                     win?.webContents.send('fuse:exited', { code: code ?? null, signal: signal ?? null })
                   }
                 })
+                // Open the transparent overlay stage windows now that the
+                // sidecar is up (they connect over WS with role:overlay).
+                startOverlayStage(port, connectionToken)
                 resolve({ success: true, pid: proc.pid, port, connectionToken })
               }
             } catch { /* not startup line yet */ }
@@ -707,6 +711,7 @@ app.whenReady().then(() => {
   })
 
   ipcMain.handle('fuse:kill', async () => {
+    stopOverlayStage()
     if (!fuseProcess) return { success: true }
     return new Promise<{ success: boolean }>((resolve) => {
       const proc = fuseProcess!
@@ -750,7 +755,7 @@ app.whenReady().then(() => {
     try {
       assertInPluginsDir(filePath)
       shell.showItemInFolder(path.resolve(filePath))
-    } catch { /* ignore — don't reveal why the path was rejected */ }
+    } catch { /* ignore - don't reveal why the path was rejected */ }
   })
 
   ipcMain.handle('plugins:delete', (_event, filePath: string) => {
@@ -1073,9 +1078,16 @@ app.whenReady().then(() => {
     if (focusWatcher) { clearInterval(focusWatcher); focusWatcher = null }
     if (!enabled) { gameFocused = false; return }
 
+    // Emit the initial state even if it matches the default `false`: consumers
+    // (e.g. cruise_control) start assuming focused, so without this first send
+    // they never learn the game ISN'T focused until it's focused once — and keep
+    // injecting keys into whatever app is foreground. `initialized` forces the
+    // first poll to broadcast unconditionally.
+    let initialized = false
     const poll = async () => {
-      const inFocus = (await _checkForegroundProcess()) === 'engine_launcher'
-      if (inFocus !== gameFocused) {
+      const inFocus = _isGameFocused(await _checkForegroundProcess())
+      if (!initialized || inFocus !== gameFocused) {
+        initialized = true
         gameFocused = inFocus
         win?.webContents.send('game:focus:changed', inFocus)
       }

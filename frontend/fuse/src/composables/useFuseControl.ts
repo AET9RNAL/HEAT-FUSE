@@ -161,6 +161,15 @@ export function useFuseControl() {
             void send('overlay.setVisible', { visible: inFocus }).catch(() => {})
         })
 
+        // Disabling focus-hiding stops the watcher, which would otherwise leave
+        // overlays stuck hidden f the game
+        // wasn't focused. Restore visibility when the feature is turned off.
+        watch(() => appStore.hideOnFocusLoss, (enabled) => {
+            if (enabled || fuseState.value !== 'running') return
+            const { send } = useFuseConnection()
+            void send('overlay.setVisible', { visible: true }).catch(() => {})
+        })
+
         watch(() => appStore.enableFuse, async (enabled) => {
             if (enabled) {
                 const ok = await startFuse()

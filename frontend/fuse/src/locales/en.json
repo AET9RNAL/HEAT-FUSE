@@ -4,6 +4,7 @@
         "confirm": "Confirm",
         "ok": "OK",
         "brandName": "FUSE",
+        "launcherName": "Launcher",
         "gameName": "WoT:HEAT"
     },
     "apptitlebar": {
@@ -84,13 +85,19 @@
             "columnBinding": "Binding",
             "rebind": "Rebind",
             "latinOnlyTitle": "Invalid Key",
-            "latinOnly": "Only latin keys are allowed"
+            "latinOnly": "Only latin keys are allowed",
+            "invalidCombo": "Use a modifier with a letter or number, or a single function key",
+            "latinLayoutHint": "Only Latin keyboard layouts"
         },
         "privacy": {
             "title": "Privacy & Telemetry",
             "analyticsConsent": "Help improve FUSE for everyone",
             "diagnosticsConsent": "Send anonymous diagnostic reports",
             "allowApiAccess": "Allow 3rd-party API access to my match data"
+        },
+        "debug": {
+            "title": "Debug",
+            "overlayDevtools": "Open overlay DevTools"
         }
     },
     "appabout": {

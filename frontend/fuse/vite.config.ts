@@ -11,6 +11,15 @@ export default defineConfig({
   define: {
     __RELEASE__: JSON.stringify(isRelease),
   },
+  build: {
+    rollupOptions: {
+      input: {
+        // Control app (existing) + the transparent overlay stage window.
+        main: path.join(__dirname, 'index.html'),
+        overlay: path.join(__dirname, 'overlay.html'),
+      },
+    },
+  },
   plugins: [
     vue(),
     !isRelease && vueDevTools(),

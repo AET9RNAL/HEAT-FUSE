@@ -100,6 +100,8 @@ onUnmounted(() => { ro?.disconnect(); clearLockTimer() })
         <div class="title-row">
           <span class="title-name">{{ t('common.brandName') }}</span>
           <span class="title-version">{{ appStore.backendVersion || t('applaunch.versionFallback') }}</span>
+          <span class="title-name title-name-launcher">{{ t('common.launcherName') }}</span>
+          <span class="title-version">{{ appStore.appVersion || t('applaunch.versionFallback') }}</span>
         </div>
         <div class="title-row">
           <span class="title-name">{{ t('common.gameName') }}</span>
@@ -214,6 +216,13 @@ onUnmounted(() => { ro?.disconnect(); clearLockTimer() })
   white-space: nowrap;
   user-select: none;
   -webkit-user-select: none;
+}
+
+.title-name-launcher {
+  font-family: var(--font-microcopy);
+  font-size: var(--secondary-font-size-4);
+  margin-left: var(--space-0);
+  color: var(--text-muted, #b3b3b3);
 }
 
 .title-version {

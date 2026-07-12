@@ -1,0 +1,20 @@
+{
+  "plugin_id": "heat_stats",
+  "name": "HEATStats",
+  "version": "3.0.0",
+  "author": "AETERNAL",
+  "description": "Records per-match performance data.",
+  "entry": "plugin:HeatStatsPlugin",
+  "runtime": "node",
+  "dependencies": ["accessors"],
+  "default_config": {
+    "sample_interval_s": 5,
+    "summarize_hold_s": 5.0,
+    "vue_overlay_pos": null,
+    "vue_width": 280,
+    "vue_height": 180,
+    "api_key": "fuse_Qlj84POyYh4xHy8YkUeV0AuADlRnLgboJRSVIl8sjUY",
+    "player_name": "",
+    "api_refresh_interval_s": 60
+  }
+}

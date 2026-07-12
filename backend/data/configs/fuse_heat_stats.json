@@ -1,10 +1,23 @@
 {
   "sample_interval_s": 5,
-  "summarize_hold_s": 5.0,
-  "overlay_pos": [
-    2360,
-    28
-  ],
+  "summarize_hold_s": 5,
+  "vue_overlay_pos": {
+    "x": 12,
+    "y": 94,
+    "w": 280,
+    "h": 180
+  },
+  "vue_width": 280,
+  "vue_height": 180,
+  "api_key": "fuse_Qlj84POyYh4xHy8YkUeV0AuADlRnLgboJRSVIl8sjUY",
+  "player_name": "AET3RNAL",
+  "api_refresh_interval_s": 60,
+  "overlay_pos": {
+    "x": 4,
+    "y": 34,
+    "w": 200,
+    "h": 20
+  },
   "anim_width": 200,
   "anim_height": 20
 }

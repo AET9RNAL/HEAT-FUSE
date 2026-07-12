@@ -1,0 +1,16 @@
+{
+  "plugin_id": "accessors",
+  "name": "Accessors",
+  "version": "4.0.0",
+  "author": "AETERNAL",
+  "description": "FUSE Core Service Provider. In-game values provider.",
+  "entry": "plugin:AccessorsPlugin",
+  "core": true,
+  "runtime": "node",
+  "default_config": {
+    "cdp_port": 9222,
+    "connect_timeout_s": 8.0,
+    "reconnect_interval_s": 5.0,
+    "poll_interval_s": 0.1
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "plugin_id": "noui",
+  "name": "No UI",
+  "version": "3.0.0",
+  "author": "AETERNAL",
+  "description": "Allows to hide individual UI elements",
+  "entry": "plugin:NoUiPlugin",
+  "runtime": "node",
+  "dependencies": ["accessors"],
+  "hotkeys": {
+    "toggle": "ctrl+h"
+  },
+  "default_config": {
+    "hide_all": false
+  }
+}

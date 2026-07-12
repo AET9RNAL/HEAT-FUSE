@@ -1,0 +1,35 @@
+{
+  "name": "fuse-runtime",
+  "version": "4.0.0-alpha.0",
+  "private": true,
+  "description": "FUSE plugin-host runtime",
+  "type": "module",
+  "main": "dist/index.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@nut-tree-fork/nut-js": "^4.2.6",
+    "chrome-remote-interface": "^0.33.3",
+    "fflate": "^0.8.2",
+    "uiohook-napi": "^1.5.4",
+    "ws": "^8.18.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/chrome-remote-interface": "^0.31.14",
+    "@types/node": "^22.10.0",
+    "@types/ws": "^8.5.13",
+    "esbuild": "^0.28.1",
+    "tsup": "^8.3.5",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}

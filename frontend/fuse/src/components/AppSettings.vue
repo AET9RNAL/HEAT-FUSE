@@ -23,6 +23,7 @@ const FUSE_HOTKEYS: FuseHotkey[] = [
     { action: 'Hot-Reload Plugins',    label: 'Hot-Reload Plugins',    defaultCombo: 'ctrl+r' },
     { action: 'Quit FUSE',             label: 'Quit FUSE',             defaultCombo: 'ctrl+p' },
     { action: 'Toggle Calibrate/Lock', label: 'Toggle Calibrate/Lock', defaultCombo: 'ctrl+l' },
+    { action: 'Toggle Interactive',    label: 'Toggle Interactive',    defaultCombo: 'ctrl+i' },
 ]
 
 const hotkeyOverrides = ref<Record<string, string>>({})
@@ -32,6 +33,19 @@ let captureListener: ((e: KeyboardEvent) => void) | null = null
 function getCombo(action: string): string {
     return hotkeyOverrides.value[action] ?? FUSE_HOTKEYS.find(h => h.action === action)?.defaultCombo ?? ''
 }
+
+// Toggle Chrome DevTools on the transparent overlay stage window (main process
+// handles the IPC in overlayStage.ts). Only way to inspect overlays in prod.
+const overlayDevtoolsOpen = ref(false)
+watch(overlayDevtoolsOpen, () => {
+    window.ipcRenderer?.send('overlay:toggle-devtools')
+})
+
+// Keys allowed to bind on their own (no modifier). Function/navigation keys only
+const STANDALONE_KEYS = new Set<string>([
+    ...Array.from({ length: 24 }, (_, i) => `f${i + 1}`),
+    'home', 'end', 'pageup', 'pagedown', 'insert', 'delete', 'enter', 'space',
+])
 
 function startCapture(action: string) {
     if (capturingAction.value) cancelCapture()
@@ -55,11 +69,27 @@ function startCapture(action: string) {
             return
         }
 
+        // Enforce standard keybind shapes:
+        //  - with a modifier: key must be a letter or digit (Ctrl/Alt/Shift + a-z/0-9)
+        //  - without a modifier: only a function/navigation key (bare F5, Enter, Home…)
+        const key = e.key === ' ' ? 'space' : e.key.toLowerCase()
+        const hasMod = e.ctrlKey || e.altKey || e.shiftKey
+        const validShape = hasMod ? /^[a-z0-9]$/.test(key) : STANDALONE_KEYS.has(key)
+        if (!validShape) {
+            cancelCapture()
+            eventBus.emit('notification', {
+                title: t('appsettings.keybindings.latinOnlyTitle'),
+                message: t('appsettings.keybindings.invalidCombo'),
+                type: 'error',
+            })
+            return
+        }
+
         const mods: string[] = []
         if (e.ctrlKey)  mods.push('ctrl')
         if (e.altKey)   mods.push('alt')
         if (e.shiftKey) mods.push('shift')
-        const combo = [...mods, e.key.toLowerCase()].join('+')
+        const combo = [...mods, key].join('+')
 
         hotkeyOverrides.value = { ...hotkeyOverrides.value, [action]: combo }
         capturingAction.value = null
@@ -120,7 +150,7 @@ async function refreshDebuggerState(dir: string, notifyOnInvalid = false) {
   }
 }
 
-// oldDir === undefined only on the immediate mount run — don't nag about a
+// oldDir === undefined only on the immediate mount run - don't nag about a
 // previously-saved path; only notify when the user actively picks a bad folder.
 watch(gameDirPath, (dir, oldDir) => {
   store.scanGameDir(dir)
@@ -270,7 +300,10 @@ onUnmounted(() => ro?.disconnect())
         </div>
 
         <div class="section">
-          <h2 class="section-header">{{ t('appsettings.keybindings.title') }}</h2>
+          <div class="kb-title-row">
+            <h2 class="section-header">{{ t('appsettings.keybindings.title') }}</h2>
+            <span class="kb-hint">{{ t('appsettings.keybindings.latinLayoutHint') }}</span>
+          </div>
           <div class="section-body">
             <div class="kb-table">
               <div class="kb-header">
@@ -284,7 +317,7 @@ onUnmounted(() => ro?.disconnect())
               >
                 <span class="kb-label">{{ hk.label }}</span>
                 <span class="kb-combo" :class="{ capturing: capturingAction === hk.action }">
-                  {{ capturingAction === hk.action ? '— press keys —' : getCombo(hk.action) }}
+                  {{ capturingAction === hk.action ? '- press keys -' : getCombo(hk.action) }}
                 </span>
                 <eButton
                   :label="t('appsettings.keybindings.rebind')"
@@ -313,6 +346,16 @@ onUnmounted(() => ro?.disconnect())
               <eCheckbox v-model="store.diagnosticsConsent" :width="18" :height="18" />
             </div>
 
+          </div>
+        </div>
+
+        <div class="section">
+          <h2 class="section-header">{{ t('appsettings.debug.title') }}</h2>
+          <div class="section-body">
+            <div class="setting-row">
+              <span class="setting-label">{{ t('appsettings.debug.overlayDevtools') }}</span>
+              <eCheckbox v-model="overlayDevtoolsOpen" :width="18" :height="18" />
+            </div>
           </div>
         </div>
 
@@ -396,6 +439,22 @@ onUnmounted(() => ro?.disconnect())
   padding-top: var(--space-2);
   margin: 0;
   line-height: 1;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.kb-title-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.kb-hint {
+  font-family: var(--font-microcopy);
+  font-size: var(--secondary-font-size-4, 12px);
+  font-weight: var(--font-weight-3);
+  color: var(--error-base);
   user-select: none;
   -webkit-user-select: none;
 }

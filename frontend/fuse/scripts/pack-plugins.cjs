@@ -1,18 +1,3 @@
-/**
- * pack-plugins.cjs
- *
- * Packs every plugin directory under backend/dev/ into a .fuse archive
- * (ZIP format) in backend/plugins/.
- *
- * Archive layout:  <plugin_id>/<file>  (mirrors the on-disk layout)
- * Output filename: <Name>-<version>.fuse  (from the plugin's manifest.json)
- *
- * Usage:
- *   node scripts/pack-plugins.cjs           # pack all changed plugins
- *   node scripts/pack-plugins.cjs --force   # pack all regardless of change
- *   node scripts/pack-plugins.cjs --watch   # pack + re-pack on file change
- */
-
 'use strict';
 
 const fs      = require('fs');

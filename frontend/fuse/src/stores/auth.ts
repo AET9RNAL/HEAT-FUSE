@@ -234,7 +234,10 @@ export const useAuthStore = defineStore('auth', () => {
         setError(null)
         try {
             const { error: fnError } = await supabase.functions.invoke('delete-account')
-            if (fnError) throw fnError
+            if (fnError) {
+                const body = await (fnError as any).context?.json?.().catch(() => null)
+                throw new Error(body?.error || fnError.message)
+            }
             session.value = null
             clearForm()
             eventBus.emit('auth:logout')

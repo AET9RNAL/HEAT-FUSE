@@ -3,6 +3,7 @@ import { ref, watch, type Ref } from 'vue'
 import { supabase } from '../composables/supabase-client'
 import { eventBus } from '../events/eventBus'
 import { useAuthStore } from './auth'
+import { useAppStore } from './app'
 import { logger } from '../utils/logger'
 
 function debounce<T extends (...args: any[]) => any>(fn: T, ms: number) {
@@ -93,6 +94,13 @@ export const useExtendedAuthStore = defineStore('extendedauth', () => {
         watch(refVal, (value) => queueSave(column, value))
     })
 
+    // Backend connects asynchronously after init, so backendVersion is often
+    // empty when fetchDeviceInfo runs. Mirror it into agent_version once it lands.
+    const appStore = useAppStore()
+    watch(() => appStore.backendVersion, (v) => {
+        if (v) agentVersion.value = v
+    })
+
     async function loadSettings() {
         if (!deviceFingerprint.value) return
         isLoading = true
@@ -129,6 +137,13 @@ export const useExtendedAuthStore = defineStore('extendedauth', () => {
         deviceName.value = name ?? null
         deviceOS.value = osInfo ?? null
         ipAddress.value = ip ?? null
+
+        // Version info comes from the app store, not IPC.
+        // app_version  = FUSE app version (package.json)
+        // agent_version = backend/agent version (set on fuse connect)
+        const appStore = useAppStore()
+        appVersion.value = appStore.appVersion || null
+        agentVersion.value = appStore.backendVersion || null
     }
 
     async function initExtendedAuth() {

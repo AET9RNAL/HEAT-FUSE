@@ -133,6 +133,12 @@ function setNumber(entry: ConfigEntry, raw: string) {
 const capturingAction = ref<string | null>(null)
 let captureListener: ((e: KeyboardEvent) => void) | null = null
 
+// Keys allowed to bind on their own (no modifier). Function/navigation keys only
+const STANDALONE_KEYS = new Set<string>([
+    ...Array.from({ length: 24 }, (_, i) => `f${i + 1}`),
+    'home', 'end', 'pageup', 'pagedown', 'insert', 'delete', 'enter', 'space',
+])
+
 function startCapture(action: string) {
     if (capturingAction.value) cancelCapture()
     capturingAction.value = action
@@ -163,7 +169,23 @@ function startCapture(action: string) {
             return
         }
 
-        const combo = [...mods, e.key.toLowerCase()].join('+')
+        // Enforce standard keybind shapes:
+        //  - with a modifier: key must be a letter or digit (Ctrl/Alt/Shift + a-z/0-9)
+        //  - without a modifier: only a function/navigation key (bare F5, Enter, Home…)
+        const key = e.key === ' ' ? 'space' : e.key.toLowerCase()
+        const hasMod = e.ctrlKey || e.altKey || e.shiftKey
+        const validShape = hasMod ? /^[a-z0-9]$/.test(key) : STANDALONE_KEYS.has(key)
+        if (!validShape) {
+            cancelCapture()
+            eventBus.emit('notification', {
+                title: t('appsettings.keybindings.latinOnlyTitle'),
+                message: t('appsettings.keybindings.invalidCombo'),
+                type: 'error',
+            })
+            return
+        }
+
+        const combo = [...mods, key].join('+')
         pendingHotkeys.value = { ...pendingHotkeys.value, [action]: combo }
         capturingAction.value = null
         document.removeEventListener('keydown', captureListener!, true)
