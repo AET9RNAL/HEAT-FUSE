@@ -456,7 +456,9 @@ function createWindow() {
     if (minimizeToTrayOnClose && win && !isQuitting) {
       e.preventDefault()
       win.hide()
+      return
     }
+    stopOverlayStage()
   })
 
   // Inform renderer of visibility changes (useSuspension)
@@ -508,6 +510,7 @@ let fuseCleanupDone = false
 app.on('before-quit', (event) => {
   isQuitting = true
   disconnectDiscord()
+  stopOverlayStage()
 
   if (gameWatcher) { clearInterval(gameWatcher); gameWatcher = null }
   if (focusWatcher) { clearInterval(focusWatcher); focusWatcher = null }
@@ -652,7 +655,9 @@ app.whenReady().then(() => {
           else if (m[1] === 'WARNING') level = 'warn'
           else if (m[1] === 'DEBUG') level = 'debug'
         }
-        win?.webContents.send('fuse:log', { level, text: clean, timestamp: Date.now() })
+        if (win && !win.isDestroyed() && !win.webContents.isDestroyed()) {
+          win.webContents.send('fuse:log', { level, text: clean, timestamp: Date.now() })
+        }
       }
 
       proc.stderr?.on('data', (chunk: Buffer) => {

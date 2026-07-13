@@ -23,9 +23,23 @@ async function run(): Promise<void> {
   await host.loadPlugins();
   host.start();
 
-  const shutdown = (): void => host.quit();
+  let quitting = false;
+  const shutdown = (): void => {
+    if (quitting) return;
+    quitting = true;
+    host.quit();
+  };
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
+
+  // Orphan guard. Electron spawns us with a piped stdin and holds its write
+  // end open for our whole lifetime. When the app exits — cleanly, on crash,
+  // or hard-killed (no signal reaches us on Windows) — that pipe closes and we
+  // get 'end'/'close'. Self-exit so we never linger as an orphan spewing errors.
+  process.stdin.on("end", shutdown);
+  process.stdin.on("close", shutdown);
+  process.stdin.on("error", shutdown);
+  process.stdin.resume();
 }
 
 run().catch((e) => {

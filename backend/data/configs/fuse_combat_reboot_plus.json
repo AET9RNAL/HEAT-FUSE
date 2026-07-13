@@ -1,0 +1,19 @@
+{
+  "vue_overlay_pos": {
+    "x": 1222,
+    "y": 675,
+    "w": 117,
+    "h": 42
+  },
+  "vue_overlay_pos_fp": {
+    "x": 1222,
+    "y": 675,
+    "w": 117,
+    "h": 42
+  },
+  "vue_width": 150,
+  "vue_height": 44,
+  "threshold_damage": 2000,
+  "window_s": 20,
+  "cooldown_s": 60
+}

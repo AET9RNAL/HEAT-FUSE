@@ -52,7 +52,8 @@ async function packOne(id) {
   const files = {};
   files[`${pluginId}/${moduleName}.js`] = new TextEncoder().encode(bundled);
   files[`${pluginId}/manifest.json`] = new TextEncoder().encode(JSON.stringify(manifest, null, 2));
-  for (const sub of ["js", "assets"]) {
+  // `ui` carries raw UI-library sources (.vue/.js/.css/.riv) served to overlays.
+  for (const sub of ["js", "assets", "ui"]) {
     const dir = path.join(srcDir, sub);
     if (fs.existsSync(dir)) addDir(dir, `${pluginId}/${sub}`, files);
   }

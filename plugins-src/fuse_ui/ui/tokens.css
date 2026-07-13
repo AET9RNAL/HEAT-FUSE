@@ -1,0 +1,64 @@
+/*
+ * FUSE UI design tokens. Mirrors the control app's :root variables so the kit
+ * components render identically inside plugin overlays. Injected once into the
+ * overlay document when a plugin imports "@fuse/ui" (via index.js).
+ *
+ * Custom fonts ('Normalidad', 'Geist Mono') aren't shipped to the overlay stage,
+ * so the stacks fall back to system-ui / monospace there.
+ */
+:root {
+  /* Spacing */
+  --space-0: 2px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 42px;
+
+  /* Brand */
+  --tea-green: hsl(142, 100%, 89%);
+  --light-green: hsl(142, 100%, 78%);
+  --canary-yellow: hsl(57, 100%, 74%);
+  --yellow: hsl(60, 100%, 48%);
+
+  /* Blacks + alpha */
+  --black-1: hsl(142, 1%, 4%);
+  --black-2: hsl(142, 1%, 10%);
+  --black-3: hsl(142, 1%, 20%);
+  --black-1-a: hsla(142, 10%, 4%, 0.6);
+  --black-2-a: hsla(142, 10%, 10%, 0.6);
+  --black-3-a: hsla(142, 10%, 20%, 0.6);
+
+  /* Base palette */
+  --base-50: rgba(242, 242, 242, 1);
+  --base-100: rgba(217, 217, 217, 1);
+  --base-200: rgba(179, 179, 179, 1);
+  --base-600: rgba(82, 82, 82, 1);
+
+  /* Accents */
+  --accent-50: var(--tea-green);
+  --accent-200: var(--light-green);
+
+  /* State */
+  --success-color: rgba(113, 206, 113, 1);
+  --warning-color: rgba(255, 219, 140, 1);
+  --error-base: rgba(200, 69, 84, 1);
+  --error-highlight: rgba(255, 106, 98, 1);
+
+  /* Typography */
+  --font-primary: 'Normalidad', system-ui, sans-serif;
+  --font-microcopy: 'Geist Mono', 'Courier New', monospace;
+  --main-font-size-1: 24px;
+  --main-font-size-2: 20px;
+  --main-font-size-3: 16px;
+  --main-font-size-4: 12px;
+  --main-font-size-5: 8px;
+  --font-weight-1: 700;
+  --font-weight-2: 500;
+  --font-weight-3: 400;
+
+  /* Text */
+  --text-main: var(--base-50);
+  --text-muted: var(--base-200);
+}
