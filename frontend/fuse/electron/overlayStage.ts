@@ -41,6 +41,21 @@ function virtualBounds(): { x: number; y: number; width: number; height: number 
   return { x: minX, y: minY, width: maxX - minX, height: maxY - minY }
 }
 
+/**
+ * Resize the stage to span the whole virtual desktop.
+ *
+ * On Windows a `resizable: false` window caps its maximum size at the size it
+ * was created with, so a later setBounds can't grow it to reach a second
+ * monitor. We lift the constraint around the resize.
+ */
+function applyVirtualBounds(win: BrowserWindow): void {
+  if (win.isDestroyed()) return
+  const wasResizable = win.isResizable()
+  if (!wasResizable) win.setResizable(true)
+  win.setBounds(virtualBounds())
+  if (!wasResizable) win.setResizable(false)
+}
+
 function createStageWindow(): void {
   if (!stageParams || !env) return
   const b = virtualBounds()
@@ -78,6 +93,9 @@ function createStageWindow(): void {
   }
   win.once('ready-to-show', () => {
     win.showInactive()
+    applyVirtualBounds(win)
+    setTimeout(() => applyVirtualBounds(win), 500)
+    setTimeout(() => applyVirtualBounds(win), 1500)
     if (env?.devServerUrl) win.webContents.openDevTools({ mode: 'detach' })
   })
   win.on('closed', () => { if (stageWindow === win) stageWindow = null })
@@ -85,7 +103,7 @@ function createStageWindow(): void {
 }
 
 function resizeToVirtualDesktop(): void {
-  if (stageWindow && !stageWindow.isDestroyed()) stageWindow.setBounds(virtualBounds())
+  if (stageWindow && !stageWindow.isDestroyed()) applyVirtualBounds(stageWindow)
 }
 
 export function initOverlayStage(stageEnv: StageEnv): void {
