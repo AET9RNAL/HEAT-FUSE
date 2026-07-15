@@ -223,6 +223,23 @@ class HUD:
     # Battle Objectives
     BATTLE_OBJECTIVES  = _c("BattleObjectives_base")
 
+    # Objective banner (rendered inside the BombEvent objective message)
+    GAME_OBJECTIVE     = _c("GameObjective_base")
+
+    # Game Score widget (top-right: match timer + team score bars)
+    GAME_SCORE         = _c("GameScore_base")        # whole widget (timer + both bars)
+    SCORE_BARS         = _c("DefaultScore_scores")   # ally/enemy score bars only
+    BATTLE_TIMER       = _c("BattleTimer_base")      # match countdown only
+
+    # Capture-point status (top-right A/B/C hexes)
+    BASES_INFO         = _c("BasesInfo_base")
+
+    # Module buffs (conditional bonuses: Wings of War, Empowered, ...)
+    CONDITIONAL_BONUS  = _c("ConditionalBonus_base")
+
+    # Active Camo overlay (Leopard 2K ST advanced camouflage ability UI)
+    ADVANCED_CAMO      = _c("AdvancedCamouflageAiming_base")
+
     # Last Damage panel (bottom-right)
     LAST_DAMAGE        = _c("LastDamage_base")
     LAST_DAMAGE_LIST   = _c("LastDamage_list")
@@ -294,6 +311,14 @@ class HUD:
     TACTICAL_POINTER_DIR   = _c("TacticalPlayerPointer_playerDirection")
     ABILITY_POINTER        = _c("AbilityPlayerPointer_base")
     ABILITY_POINTER_LABEL  = _c("AbilityPlayerPointer_label")
+
+    # Self status effects (bottom-center, e.g. MASKED concealment circle)
+    STATUS_EFFECT          = _c("StatusEffect_base")
+
+    # Objective / capture-zone markers (world-space A/B/C + distance label).
+    # Layer container is a custom element with no stable *_base class of its own,
+    # so target the tag directly; children render on demand.
+    ZONE_MARKERS           = "zone-markers"
 
     # Rampage vignette (screen edge effect)
     RAMPAGE_VIGNETTE       = _c("RampageVignette_base")

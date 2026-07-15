@@ -43,6 +43,12 @@ const ELEMENTS: Element[] = [
   ["hide_drop_calc", "Scope / Rangefinder", [HUD.RETICLE]],
   ["hide_target_dist", "Rangefinder Distance", [HUD.TARGET_DISTANCE]],
   ["hide_action_hints", "Action Hints (Fire)", [HUD.TARGETING_HINTS]],
+  ["hide_timer", "Match Timer", [HUD.BATTLE_TIMER]],
+  ["hide_score", "Team Score Bars", [HUD.SCORE_BARS]],
+  ["hide_capture", "Capture Points (A / B / C)", [HUD.BASES_INFO]],
+  ["hide_objective_banner", "Objective Banner", [HUD.GAME_OBJECTIVE]],
+  ["hide_module_buffs", "Module Buffs", [HUD.CONDITIONAL_BONUS]],
+  ["hide_active_camo", "Active Camo Overlay", [HUD.ADVANCED_CAMO]],
 ];
 
 const MARKERS_ELEMENTS: Element[] = [
@@ -52,6 +58,8 @@ const MARKERS_ELEMENTS: Element[] = [
   ["hide_major_effects", "Major Status Effects", [HUD.MARKER_MAJOR_EFFECT]],
   ["hide_ability_markers", "Ability / Duration Markers", [HUD.TARGET_MARKERS]],
   ["hide_aux_markers", "Auxiliary Markers (Mines / Objects)", [HUD.AUX_MARKER]],
+  ["hide_status_effects", "Status Effects", [HUD.STATUS_EFFECT]],
+  ["hide_objective_markers", "Objective Markers (A / B + Distance)", [HUD.ZONE_MARKERS]],
 ];
 
 const HANGAR_ELEMENTS: Element[] = [
@@ -158,6 +166,18 @@ export class NoUiPlugin extends FusePlugin {
         new ConfigEntry({ key: "hide_perk_notif", label: "Skill Activation Banner", type: "bool" }),
         new ConfigEntry({ key: "hide_perk_bars", label: "Skill XP Bars", type: "bool" }),
         new ConfigEntry({ key: "hide_xp_score", label: "Battle Score Number", type: "bool" }),
+      ]),
+      new ConfigCategory("Match / Objectives", [
+        new ConfigEntry({ key: "hide_timer", label: "Match Timer", type: "bool" }),
+        new ConfigEntry({ key: "hide_score", label: "Team Score Bars", type: "bool" }),
+        new ConfigEntry({ key: "hide_capture", label: "Capture Points (A / B / C)", type: "bool" }),
+        new ConfigEntry({ key: "hide_objective_banner", label: "Objective Banner", type: "bool" }),
+        new ConfigEntry({ key: "hide_objective_markers", label: "Objective Markers (A / B + Distance)", type: "bool" }),
+      ]),
+      new ConfigCategory("Buffs / Status", [
+        new ConfigEntry({ key: "hide_module_buffs", label: "Module Buffs", type: "bool" }),
+        new ConfigEntry({ key: "hide_status_effects", label: "Self Status Effects", type: "bool" }),
+        new ConfigEntry({ key: "hide_active_camo", label: "Active Camo Overlay", type: "bool" }),
       ]),
       new ConfigCategory("Enemies", [
         new ConfigEntry({ key: "hide_enemy_markers", label: "Enemy Markers (HP / Name / Class)", type: "bool" }),

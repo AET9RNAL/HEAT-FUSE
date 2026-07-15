@@ -1,7 +1,5 @@
 /**
- * CSS selector constants for battle_hud/markers/hangar DOM - generated from
- * backend/dev/accessors/hud_selectors.py by runtime/scripts/gen-selectors.mjs.
- * Do not edit by hand; regenerate instead.
+ * CSS selector constants for battle_hud/markers/hangar DOM
  */
 
 export const HUD = {
@@ -124,6 +122,13 @@ export const HUD = {
   DEATH_CARD: "[class*=\"DeathCard_base\"]",
   TACTICAL_MAP: "[class*=\"TacticalMap_base\"]",
   BATTLE_OBJECTIVES: "[class*=\"BattleObjectives_base\"]",
+  GAME_OBJECTIVE: "[class*=\"GameObjective_base\"]",
+  GAME_SCORE: "[class*=\"GameScore_base\"]",
+  SCORE_BARS: "[class*=\"DefaultScore_scores\"]",
+  BATTLE_TIMER: "[class*=\"BattleTimer_base\"]",
+  BASES_INFO: "[class*=\"BasesInfo_base\"]",
+  CONDITIONAL_BONUS: "[class*=\"ConditionalBonus_base\"]",
+  ADVANCED_CAMO: "[class*=\"AdvancedCamouflageAiming_base\"]",
   LAST_DAMAGE: "[class*=\"LastDamage_base\"]",
   LAST_DAMAGE_LIST: "[class*=\"LastDamage_list\"]",
   TARGETING_HINTS: "[class*=\"TargetingHints_base\"]",
@@ -175,6 +180,8 @@ export const HUD = {
   TACTICAL_POINTER_DIR: "[class*=\"TacticalPlayerPointer_playerDirection\"]",
   ABILITY_POINTER: "[class*=\"AbilityPlayerPointer_base\"]",
   ABILITY_POINTER_LABEL: "[class*=\"AbilityPlayerPointer_label\"]",
+  STATUS_EFFECT: "[class*=\"StatusEffect_base\"]",
+  ZONE_MARKERS: "zone-markers",
   RAMPAGE_VIGNETTE: "[class*=\"RampageVignette_base\"]",
 } as const;
 
