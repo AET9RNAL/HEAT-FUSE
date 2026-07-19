@@ -193,6 +193,29 @@ body {
   border-color: rgba(113,206,113,0.3);
 }
 
+.session-search-wrap {
+  margin-bottom: var(--space-4);
+}
+#session-search {
+  width: 100%;
+  max-width: 480px;
+  background: hsla(142, 10%, 8%, 0.92);
+  border: 1px solid rgba(255,255,255,0.06);
+  clip-path: var(--ch4);
+  padding: var(--space-2) var(--space-3);
+  font-family: var(--font-microcopy);
+  font-size: var(--fs-4);
+  color: var(--text-main);
+  outline: none;
+  transition: border-color 0.15s;
+}
+#session-search::placeholder {
+  color: var(--text-muted);
+}
+#session-search:focus {
+  border-color: rgba(113,206,113,0.3);
+}
+
 .btn-sm {
   background: var(--black-1-a);
   border: none;
@@ -646,6 +669,9 @@ body {
       <button class="timeframe-btn" data-tf="100">Last 100</button>
     </div>
     <div id="profile-content"></div>
+    <div class="session-search-wrap" id="session-search-wrap" style="display:none">
+      <input type="text" id="session-search" placeholder="Search by tank, map, agent, mode…">
+    </div>
     <div id="sessions-content"></div>
   </div>
 </div>
@@ -663,6 +689,7 @@ let playerName = '';
 let activeCharts = [];
 let allSessions = [];
 let currentTimeframe = 'all';
+let sessionSearch = '';
 
 // ── Views ──────────────────────────────────────────────────────────────────
 
@@ -733,6 +760,9 @@ document.getElementById('btn-disconnect').addEventListener('click', () => {
   document.getElementById('profile-content').innerHTML = '';
   document.getElementById('sessions-content').innerHTML = '';
   document.getElementById('timeframe-bar').style.display = 'none';
+  document.getElementById('session-search-wrap').style.display = 'none';
+  document.getElementById('session-search').value = '';
+  sessionSearch = '';
   document.querySelectorAll('.timeframe-btn').forEach(btn => btn.classList.remove('active'));
   setConnected(false);
   document.getElementById('btn-connect').disabled = false;
@@ -748,12 +778,38 @@ document.querySelectorAll('.timeframe-btn').forEach(btn => {
   btn.addEventListener('click', () => setTimeframe(btn.dataset.tf));
 });
 
+document.getElementById('session-search').addEventListener('input', e => {
+  setSearch(e.target.value);
+});
+
 // ── Sessions ───────────────────────────────────────────────────────────────
 
 function getFilteredSessions() {
   if (currentTimeframe === 'all') return allSessions;
   const n = parseInt(currentTimeframe, 10);
   return allSessions.slice(0, n);
+}
+
+function getTableSessions() {
+  const tf = getFilteredSessions();
+  if (!sessionSearch.trim()) return tf;
+  const q = sessionSearch.toLowerCase();
+  return tf.filter(s => {
+    const haystack = [
+      s.player_vehicle || '',
+      s.map_name || s.map_slug || '',
+      s.player_role || '',
+      s.game_mode || ''
+    ].join(' ').toLowerCase();
+    return haystack.includes(q);
+  });
+}
+
+function setSearch(q) {
+  sessionSearch = q;
+  if (allSessions.length) {
+    renderSessionsTable(getTableSessions(), allSessions.length);
+  }
 }
 
 function setTimeframe(tf) {
@@ -767,7 +823,7 @@ function setTimeframe(tf) {
     activeCharts = [];
     document.getElementById('profile-content').innerHTML = '';
     renderProfile(filtered);
-    renderSessionsTable(filtered, allSessions.length);
+    renderSessionsTable(getTableSessions(), allSessions.length);
   }
 }
 
@@ -798,9 +854,10 @@ async function loadSessions() {
     }
     allSessions = all;
     document.getElementById('timeframe-bar').style.display = 'flex';
+    document.getElementById('session-search-wrap').style.display = 'block';
     const filtered = getFilteredSessions();
     renderProfile(filtered);
-    renderSessionsTable(filtered, totalCount);
+    renderSessionsTable(getTableSessions(), totalCount);
   } catch (e) {
     document.getElementById('sessions-content').innerHTML =
       `<div class="loading" style="color:var(--error-highlight)">${e.message}</div>`;

@@ -1,0 +1,184 @@
+/* Shared by both Vite entries. Split out of style.css because that file's
+   `html, body` and `#app` rules would break the overlay stage's transparency. */
+
+/* ========================================
+   Font Faces - Geist Mono (Variable)
+   ======================================== */
+@font-face {
+  font-family: 'Geist Mono';
+  src: url('../assets/types/GeistMono/GeistMono-VariableFont_wght.ttf') format('truetype-variations');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: block;
+}
+
+@font-face {
+  font-family: 'Geist Mono';
+  src: url('../assets/types/GeistMono/GeistMono-Italic-VariableFont_wght.ttf') format('truetype-variations');
+  font-weight: 100 900;
+  font-style: italic;
+  font-display: block;
+}
+
+/* ========================================
+   Font Faces - Normalidad Compact
+   ======================================== */
+@font-face {
+  font-family: 'Normalidad';
+  src: url('../assets/types/Normalidad/Normalidad_Compact_Thin.otf') format('opentype');
+  font-weight: 100;
+  font-style: normal;
+  font-display: block;
+}
+
+@font-face {
+  font-family: 'Normalidad';
+  src: url('../assets/types/Normalidad/Normalidad_Compact_Light.otf') format('opentype');
+  font-weight: 300;
+  font-style: normal;
+  font-display: block;
+}
+
+@font-face {
+  font-family: 'Normalidad';
+  src: url('../assets/types/Normalidad/Normalidad_Compact_Regular.otf') format('opentype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: block;
+}
+
+@font-face {
+  font-family: 'Normalidad';
+  src: url('../assets/types/Normalidad/Normalidad_Compact_Medium.otf') format('opentype');
+  font-weight: 500;
+  font-style: normal;
+  font-display: block;
+}
+
+@font-face {
+  font-family: 'Normalidad';
+  src: url('../assets/types/Normalidad/Normalidad_Compact_Bold.otf') format('opentype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: block;
+}
+
+@font-face {
+  font-family: 'Normalidad';
+  src: url('../assets/types/Normalidad/Normalidad_Compact_Black.otf') format('opentype');
+  font-weight: 900;
+  font-style: normal;
+  font-display: block;
+}
+
+:root {
+  font-family: 'Normalidad', system-ui, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+
+  color-scheme: light dark;
+  background-color: transparent;
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+
+  --roundness: 9px;
+
+  /* Spacing scale */
+  --space-0: 2px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 42px;
+  --space-7: 48px;
+  --space-8: 96px;
+  --space-9: 192px;
+
+  /* Icon sizes */
+  --icon-small: 8px;
+  --icon-normal: 16px;
+  --icon-large: 24px;
+  --icon-xlarge: 64px;
+
+  /* Glass - Surfaces */
+  --glass-surfaces-accented-600: hsla(142, 100%, 89%, 0.4);
+  --glass-surfaces-close-600: hsla(0, 0%, 32%, 0.8);
+  --glass-surfaces-subtle-800: var(--black-3-a);
+  --glass-surfaces-elevated-900: var(--black-2-a);
+  --glass-surfaces-base-1000: var(--black-1-a);
+
+  /* Brand colors */
+  --tea-green: hsl(142, 100%, 89%);
+  --light-green: hsl(142, 100%, 78%);
+  --canary-yellow: hsl(57, 100%, 74%);
+  --yellow: hsl(60, 100%, 48%);
+
+  /* Blacks */
+  --black-1: hsl(142, 1%, 4%);
+  --black-2: hsl(142, 1%, 10%);
+  --black-3: hsl(142, 1%, 20%);
+
+  /* Blacks w/ Alpha */
+  --black-1-a: hsla(142, 10%, 4%, 0.6);
+  --black-2-a: hsla(142, 10%, 10%, 0.6);
+  --black-3-a: hsla(142, 10%, 20%, 0.6);
+
+  /* Base colors */
+  --base-50: rgba(242, 242, 242, 1);
+  --base-100: rgba(217, 217, 217, 1);
+  --base-200: rgba(179, 179, 179, 1);
+  --base-600: rgba(82, 82, 82, 1);
+  --base-800: var(--black-3);
+  --base-900: var(--black-2);
+  --base-1000: var(--black-1);
+
+  --accent-50: var(--tea-green);
+  --accent-150: hsl(219, 100%, 85%);
+  --accent-200: var(--light-green);
+  --accent-600: var(--canary-yellow);
+  --accent-800: var(--yellow);
+
+  /* State colors */
+  --success-color: rgba(113, 206, 113, 1);
+  --success-muted: rgba(28, 61, 28, 1);
+  --warning-color: rgba(255, 219, 140, 1);
+  --warning-muted: rgba(61, 51, 28, 1);
+  --error-base: rgba(200, 69, 84, 1);
+  --error-color: rgba(102, 35, 43, 1);
+  --error-highlight: rgba(255, 106, 98, 1);
+
+  /* Typography */
+  --font-primary: 'Normalidad', system-ui, sans-serif;
+  --font-microcopy: 'Geist Mono', 'Courier New', monospace;
+
+  /* Font sizes */
+  --main-font-size-1: 24px;
+  --main-font-size-2: 20px;
+  --main-font-size-3: 16px;
+  --main-font-size-4: 12px;
+  --main-font-size-5: 8px;
+
+  --secondary-font-size-1: 24px;
+  --secondary-font-size-2: 20px;
+  --secondary-font-size-3: 16px;
+  --secondary-font-size-4: 12px;
+  --secondary-font-size-5: 8px;
+
+  /* Font weights */
+  --font-weight-1: 700;
+  --font-weight-2: 500;
+  --font-weight-3: 400;
+  --font-weight-4: 300;
+
+  /* Text colors */
+  --text-main: var(--base-50);
+  --text-muted: var(--base-200);
+}
+
+/* Backdrop blur */
+.bb-weak   { backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
+.bb-strong { backdrop-filter: blur(35px); -webkit-backdrop-filter: blur(35px); }

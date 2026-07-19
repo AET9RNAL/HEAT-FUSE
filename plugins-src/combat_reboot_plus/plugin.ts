@@ -64,8 +64,8 @@ export class CombatRebootPlusPlugin extends FusePlugin {
       .defaults({
         vue_overlay_pos: null,
         vue_overlay_pos_fp: null,
-        vue_width: 150,
-        vue_height: 44,
+        vue_width: 115,
+        vue_height: 30,
         threshold_damage: 2000,
         window_s: 20,
         cooldown_s: 60,
@@ -100,8 +100,8 @@ export class CombatRebootPlusPlugin extends FusePlugin {
 
   private size(): { w: number; h: number } {
     return {
-      w: Number(this.ctx.config.get("vue_width", 150)) || 150,
-      h: Number(this.ctx.config.get("vue_height", 44)) || 44,
+      w: Number(this.ctx.config.get("vue_width", 115)) || 115,
+      h: Number(this.ctx.config.get("vue_height", 30)) || 30,
     };
   }
 

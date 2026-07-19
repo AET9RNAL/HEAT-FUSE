@@ -49,6 +49,8 @@ const ELEMENTS: Element[] = [
   ["hide_objective_banner", "Objective Banner", [HUD.GAME_OBJECTIVE]],
   ["hide_module_buffs", "Module Buffs", [HUD.CONDITIONAL_BONUS]],
   ["hide_active_camo", "Active Camo Overlay", [HUD.ADVANCED_CAMO]],
+  ["hide_vehicle_switch", "Vehicle Switch Indicator", [HUD.PROXY_PET]],
+  ["hide_switch_hint", "Switch Hint (R)", [HUD.ACTION_HINT]],
 ];
 
 const MARKERS_ELEMENTS: Element[] = [
@@ -178,6 +180,10 @@ export class NoUiPlugin extends FusePlugin {
         new ConfigEntry({ key: "hide_module_buffs", label: "Module Buffs", type: "bool" }),
         new ConfigEntry({ key: "hide_status_effects", label: "Self Status Effects", type: "bool" }),
         new ConfigEntry({ key: "hide_active_camo", label: "Active Camo Overlay", type: "bool" }),
+      ]),
+      new ConfigCategory("Vehicle", [
+        new ConfigEntry({ key: "hide_vehicle_switch", label: "Vehicle Switch Indicator", type: "bool" }),
+        new ConfigEntry({ key: "hide_switch_hint", label: "Switch Hint (R)", type: "bool" }),
       ]),
       new ConfigCategory("Enemies", [
         new ConfigEntry({ key: "hide_enemy_markers", label: "Enemy Markers (HP / Name / Class)", type: "bool" }),

@@ -40,6 +40,34 @@ interface Descriptor {
   positionConfigKey?: string;
 }
 
+/**
+ * Coerce an inbound rect into a valid one, merging over the overlay's current
+ * rect. The stage is an untrusted-ish input path: a NaN slipping through here
+ * would be written straight to a plugin's config file and poison it.
+ *
+ * Merging (rather than defaulting) matters because plugins reposition overlays
+ * with a bare `{x,y,w,h}` - `savedRect` helpers typically reconstruct only
+ * those four. Defaulting the absent fields would silently wipe the rotation and
+ * opacity the user set during calibration. A plugin that genuinely wants to
+ * reset either one passes it explicitly (`rot: 0` / `opacity: 1`).
+ */
+function sanitizeRect(rect: Partial<Rect>, d: { size: { w: number; h: number }; rect?: Rect }): Rect {
+  const num = (v: unknown, fallback: number): number =>
+    typeof v === "number" && Number.isFinite(v) ? v : fallback;
+  const prev = d.rect;
+  const r: Rect = {
+    x: num(rect.x, num(prev?.x, 0)),
+    y: num(rect.y, num(prev?.y, 0)),
+    w: Math.max(1, num(rect.w, num(prev?.w, d.size.w))),
+    h: Math.max(1, num(rect.h, num(prev?.h, d.size.h))),
+  };
+  const rot = num(rect.rot, num(prev?.rot, 0));
+  if (rot !== 0) r.rot = ((rot % 360) + 360) % 360;
+  const opacity = num(rect.opacity, num(prev?.opacity, 1));
+  if (opacity !== 1) r.opacity = Math.min(1, Math.max(0, opacity));
+  return r;
+}
+
 interface PluginReg {
   pluginId: string;
   assetsRoot: string;
@@ -88,12 +116,13 @@ export class OverlayHub {
     return [...this.descriptors.values()].map((d) => this.declaredPayload(d));
   }
 
-  onOverlayTransform(overlayId: string, rect: Record<string, number>): void {
+  onOverlayTransform(overlayId: string, rect: Partial<Rect>): void {
     const d = this.descriptors.get(overlayId);
     if (!d) return;
-    const r: Rect = { x: rect.x ?? 0, y: rect.y ?? 0, w: rect.w ?? d.size.w, h: rect.h ?? d.size.h };
-    d.rect = r;
-    this.persistRect(d, r);
+    // Echo the sanitized result back to every stage client, including the
+    // sender: the descriptor is the single source of truth, and a client that
+    // only mutated its own local copy would drift from what got persisted.
+    this.setRect(d, rect as Rect);
   }
 
   // --- internal (used by ScopedOverlayManager / handles) ------------------
@@ -161,9 +190,10 @@ export class OverlayHub {
   }
 
   setRect(desc: Descriptor, rect: Rect): void {
-    desc.rect = rect;
-    this.persistRect(desc, rect);
-    this.server.broadcastOverlay({ type: "overlay:transform", overlayId: desc.overlayId, rect });
+    const r = sanitizeRect(rect, desc);
+    desc.rect = r;
+    this.persistRect(desc, r);
+    this.server.broadcastOverlay({ type: "overlay:transform", overlayId: desc.overlayId, rect: r });
   }
 
   setVisible(desc: Descriptor, visible: boolean): void {

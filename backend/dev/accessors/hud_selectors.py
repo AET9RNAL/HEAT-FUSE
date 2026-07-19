@@ -240,6 +240,13 @@ class HUD:
     # Active Camo overlay (Leopard 2K ST advanced camouflage ability UI)
     ADVANCED_CAMO      = _c("AdvancedCamouflageAiming_base")
 
+    # Proxy-pet / vehicle-switch indicator (bottom-right: two tank icons + switch
+    # arrows, "R" to swap between deployed vehicles)
+    PROXY_PET          = _c("ProxyPetWidget_base")
+
+    # Generic action hint (e.g. bottom-right "R  Switch" key prompt)
+    ACTION_HINT        = _c("ActionHint_base")
+
     # Last Damage panel (bottom-right)
     LAST_DAMAGE        = _c("LastDamage_base")
     LAST_DAMAGE_LIST   = _c("LastDamage_list")

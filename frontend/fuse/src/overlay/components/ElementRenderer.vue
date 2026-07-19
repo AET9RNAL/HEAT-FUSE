@@ -14,7 +14,7 @@ defineProps<{ descriptor: OverlayDescriptor }>();
 
 <style scoped>
 .unsupported {
-  color: #ff6b6b;
+  color: var(--error-highlight);
   font: 12px monospace;
 }
 </style>

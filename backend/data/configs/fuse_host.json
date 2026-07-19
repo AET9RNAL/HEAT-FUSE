@@ -3,7 +3,8 @@
   "disabled_plugins": [
     "game_memory",
     "heat_ailos_torc",
-    "rive_animation"
+    "rive_animation",
+    "cruise_control"
   ],
   "hotkey_overrides": {
     "host": {

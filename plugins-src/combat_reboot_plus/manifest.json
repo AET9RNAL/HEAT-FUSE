@@ -1,7 +1,7 @@
 {
   "plugin_id": "combat_reboot_plus",
   "name": "Combat Reboot Plus",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "AETERNAL",
   "description": "Tracks XM1-90's PDU-1546S module status",
   "entry": "plugin:CombatRebootPlusPlugin",

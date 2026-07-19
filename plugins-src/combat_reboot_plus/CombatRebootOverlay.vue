@@ -106,21 +106,28 @@ onUnmounted(() => ro?.disconnect());
   width: 100%;
   height: 100%;
   display: flex;
-  align-items: center;
-  justify-content: center;
   transition: opacity 0.25s;
+  container-type: size;
 }
 
 .crb-overlay.dim {
   opacity: 0.4;
 }
 
+/* Fills the wrapper rather than sizing to its cells, so dragging a corner
+   scales the bar instead of leaving it centred in empty space. Background is
+   opaque - the wrapper owns transparency now. */
 .crb-box {
   position: relative;
-  display: inline-flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  box-sizing: border-box;
+  display: flex;
   align-items: center;
+  justify-content: center;
   padding: var(--space-2) var(--space-3);
-  background-color: var(--black-1-a);
+  background-color: var(--black-1);
   clip-path: polygon(
     6px 0%,
     100% 0%,
@@ -161,7 +168,7 @@ onUnmounted(() => ro?.disconnect());
   width: 14px;
   height: 14px;
   overflow: hidden;
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--black-3);
   clip-path: polygon(
     3px 0%,
     100% 0%,

@@ -2,10 +2,11 @@
   "sample_interval_s": 5,
   "summarize_hold_s": 5,
   "vue_overlay_pos": {
-    "x": 12,
-    "y": 94,
-    "w": 196,
-    "h": 145
+    "x": 16,
+    "y": 64,
+    "w": 245,
+    "h": 104,
+    "opacity": 0.7
   },
   "vue_width": 280,
   "vue_height": 180,
@@ -13,8 +14,8 @@
   "player_name": "AET3RNAL",
   "api_refresh_interval_s": 60,
   "overlay_pos": {
-    "x": 4,
-    "y": 34,
+    "x": 0,
+    "y": 40,
     "w": 200,
     "h": 20
   },

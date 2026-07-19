@@ -37,6 +37,14 @@ watch(() => props.modelValue, (newValue) => {
     }
 })
 
+// Keep the Rive-internal disabled flag in sync when the prop changes after
+// load (e.g. a host that enables/disables based on selection).
+watch(() => props.isDisabled, (newValue) => {
+    if (isDisabledProperty) {
+        isDisabledProperty.value = newValue
+    }
+})
+
 // Poll ViewModel for changes (Rive doesn't have onChange callback for VM properties)
 function startPolling() {
     const checkValue = () => {

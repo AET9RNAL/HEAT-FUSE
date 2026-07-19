@@ -5,12 +5,21 @@ export interface Size {
   h: number;
 }
 
-/** Rect in device-independent pixels (DIPs), absolute in the display space. */
+/**
+ * Rect in device-independent pixels (DIPs), absolute in the display space.
+ *
+ * `x`/`y` are the *unrotated* top-left; rotation is applied about the rect's
+ * center, so the two stay independent and a rotation never moves the origin.
+ */
 export interface Rect {
   x: number;
   y: number;
   w: number;
   h: number;
+  /** Clockwise degrees in [0, 360). Defaults to 0. */
+  rot?: number;
+  /** 0..1. Defaults to 1. */
+  opacity?: number;
 }
 
 export interface OverlayDeclaration {

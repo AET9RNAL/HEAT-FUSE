@@ -1,5 +1,7 @@
 /**
- * CSS selector constants for battle_hud/markers/hangar DOM
+ * CSS selector constants for battle_hud/markers/hangar DOM — generated from
+ * backend/dev/accessors/hud_selectors.py by runtime/scripts/gen-selectors.mjs.
+ * Do not edit by hand; regenerate instead.
  */
 
 export const HUD = {
@@ -129,6 +131,8 @@ export const HUD = {
   BASES_INFO: "[class*=\"BasesInfo_base\"]",
   CONDITIONAL_BONUS: "[class*=\"ConditionalBonus_base\"]",
   ADVANCED_CAMO: "[class*=\"AdvancedCamouflageAiming_base\"]",
+  PROXY_PET: "[class*=\"ProxyPetWidget_base\"]",
+  ACTION_HINT: "[class*=\"ActionHint_base\"]",
   LAST_DAMAGE: "[class*=\"LastDamage_base\"]",
   LAST_DAMAGE_LIST: "[class*=\"LastDamage_list\"]",
   TARGETING_HINTS: "[class*=\"TargetingHints_base\"]",

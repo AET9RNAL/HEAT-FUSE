@@ -1,10 +1,13 @@
 import type { OverlayInput } from "./rive";
 
+/** Mirrors `Rect` in runtime/src/sdk/overlay.ts - keep the two in sync. */
 export interface OverlayRect {
   x: number;
   y: number;
   w: number;
   h: number;
+  rot?: number;
+  opacity?: number;
 }
 
 export interface OverlayDescriptor {

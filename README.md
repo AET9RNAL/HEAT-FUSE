@@ -41,14 +41,14 @@ Violations of these terms automatically terminate your rights under GPLv3 with r
 
 ![Static Badge](https://img.shields.io/badge/-BUILT_WITH-1D1D1D?style=for-the-badge&labelColor=1D1D1D&color=1D1D1D)
 ![Logo](https://img.shields.io/badge/-RIVE-f3f2f4?style=for-the-badge&logo=rive&logoColor=f3f2f4&labelColor=1D1D1D&color=1D1D1D)
-![Logo](https://img.shields.io/badge/-PYTHON-f3f2f4?style=for-the-badge&logo=python&logoColor=f3f2f4&labelColor=1D1D1D&color=1D1D1D)
-![Logo](https://img.shields.io/badge/-C++-f3f2f4?style=for-the-badge&logo=cplusplus&logoColor=f3f2f4&labelColor=1D1D1D&color=1D1D1D)
+![Logo](https://img.shields.io/badge/-NODE-f3f2f4?style=for-the-badge&logo=nodedotjs&logoColor=f3f2f4&labelColor=1D1D1D&color=1D1D1D)
+![Logo](https://img.shields.io/badge/-TYPESCRIPT-f3f2f4?style=for-the-badge&logo=typescript&logoColor=f3f2f4&labelColor=1D1D1D&color=1D1D1D)
 ![Logo](https://img.shields.io/badge/-ELECTRON-f3f2f4?style=for-the-badge&logo=electron&logoColor=f3f2f4&labelColor=1D1D1D&color=1D1D1D)
 ![Logo](https://img.shields.io/badge/-VUE-f3f2f4?style=for-the-badge&logo=vue.js&logoColor=f3f2f4&labelColor=1D1D1D&color=1D1D1D)
 
 
-![Static Badge](https://img.shields.io/badge/RUNTIME_VERSION-4.2.1-1D1D1D?style=for-the-badge&labelColor=1D1D1D&color=434343)
-![Static Badge](https://img.shields.io/badge/LAUNCHER_VERSION-1.2.1-1D1D1D?style=for-the-badge&labelColor=1D1D1D&color=434343)
+![Static Badge](https://img.shields.io/badge/RUNTIME_VERSION-4.3.0-1D1D1D?style=for-the-badge&labelColor=1D1D1D&color=434343)
+![Static Badge](https://img.shields.io/badge/LAUNCHER_VERSION-1.3.0-1D1D1D?style=for-the-badge&labelColor=1D1D1D&color=434343)
 
 Get In Touch
 [![Discord](https://img.shields.io/badge/-DISCORD-f3f2f4?style=for-the-badge&logo=discord&logoColor=f3f2f4&labelColor=1D1D1D&color=1D1D1D)](https://discord.com/users/678198830767931431)
@@ -58,12 +58,11 @@ Get In Touch
 
 - [Getting Started](#getting-started)
 - [Installing Plugins](#installing-plugins)
+- [Overlay Editor](#overlay-editor)
 - [Hotkeys](#hotkeys)
-- [Plugins](#plugins)
-  - [Energy Bar](#energy-bar)
+- [Shipped Plugins](#shipped-plugins)
 
 > **Launch order matters:** enable FUSE in Settings before starting the game if this is your first time. Changes take effect only on a fresh game session.
-
 
 ---
 
@@ -75,21 +74,17 @@ Get In Touch
 - [.fuse Archive Format](#fuse-archive-format)
 - [Discovery & Load Order](#discovery--load-order)
 - [Core APIs](#core-apis)
-- [Built-in Utilities](#built-in-utilities)
+- [Overlays](#overlays)
 - [Host Lifecycle](#host-lifecycle)
-- [Plugin Manager](#plugin-manager)
-- [Built-in Plugins](#built-in-plugins)
-  - [accessors](#accessors)
-  - [rive_animation](#rive_animation)
-  - [game_memory (deprecated)](#game_memory-deprecated)
-- [Native DLLs](#native-dlls)
+- [WebSocket Protocol](#websocket-protocol)
+- [accessors Service](#accessors-service)
 - [Project Layout](#project-layout)
 
 ---
 
 # For Players
 
-FUSE runs alongside WoT:HEAT and displays real-time HUD overlays driven by live game data: energy bars, rangefinders, cooldown trackers, and more. Plugins are distributed as single `.fuse` files.
+FUSE runs alongside WoT:HEAT and displays real-time HUD overlays driven by live game data: energy bars, stat cards, cooldown trackers, and more. Plugins are distributed as single `.fuse` files and managed from the FUSE launcher.
 
 ## Getting Started
 
@@ -98,19 +93,34 @@ FUSE runs alongside WoT:HEAT and displays real-time HUD overlays driven by live 
 3. Go to **Settings**, set your game instance and installation directory, and enable runtime under **Master Switch**. Important: path should resolve to the game's root directory (e.g., `C:\YourPath\HEAT`).
 4. Start WoT:HEAT (or restart it if already running - the runtime requires a fresh game session).
 5. Hit **Launch** in the FUSE launcher. Overlays will appear on screen.
-6. Each overlays goes through 2 calibration stages:
-   - First stage: Adjust the overlay position in 3rd person view.
-   - Second stage: Adjust the overlay position in 1st person view.
+6. Position your overlays in calibration mode (see [Overlay Editor](#overlay-editor)), then press `Ctrl+L` to lock.
 
-To cycle through stages press `Ctrl + L` by default.
+Some overlays calibrate in two stages: first the 3rd-person position, then the 1st-person position. Each `Ctrl+L` press advances one stage.
+
 > Overlays take ~4 seconds to update after entering a battle. This is normal - the game HUD is not present before that point.
 
 > You may have to right-click the downloaded installer => properties => Unblock. This is because the installer is not digitally signed, so smart screen may silently prevent execution.
+
 ---
 
 ## Installing Plugins
 
 Drop any `.fuse` file into the `plugins/` folder inside the FUSE install directory. The launcher scans it automatically on every launch. Use the **Plugins** tab in the launcher to enable or disable individual plugins without restarting.
+
+---
+
+## Overlay Editor
+
+While in calibration mode (`Ctrl+L`), the overlay stage works like a design tool:
+
+- **Select** an overlay with left click. Selection shows a bounds outline and corner handles.
+- **Drag** to reposition. Smart guides snap the overlay to edges and centers of other overlays and the screen. Hold `Alt` to disable snapping.
+- **Resize** by dragging any corner handle. Hold `Shift` to preserve aspect ratio. Rive overlays have a fixed render size and cannot be resized.
+- **Inspector panel** edits the selected overlay numerically: X/Y position, rotation, width/height, opacity. Quick actions rotate 90 degrees or flip. Alignment buttons snap to screen edges and centers. Drag its header to move the panel.
+- **Grid**: toggle a visual grid, set its size, and switch snap mode between Smart, Grid, and Off in the inspector footer.
+- **Deselect** with `Esc` or the inspector's close button.
+
+Positions, rotation, and opacity persist per plugin and are restored on the next launch.
 
 ---
 
@@ -120,209 +130,181 @@ Active globally while FUSE is running.
 
 | Combo | Action |
 |-------|--------|
-| `Ctrl+L` | Confirm calibration / advance to the next calibration stage. |
+| `Ctrl+L` | Toggle calibrate/lock. Advances calibration stages for multi-stage overlays. |
+| `Ctrl+I` | Toggle interactive mode. Overlays stay pinned but accept clicks and input. |
 | `Ctrl+R` | Hot-reload all plugins from disk without restarting FUSE. |
 | `Ctrl+P` | Quit FUSE. |
 
 ---
 
-## Plugins
+## Shipped Plugins
 
-### Energy Bar
+| Plugin | What it does |
+|--------|--------------|
+| **EnergyBar** | Animated Rive energy bar tracking vehicle energy. Separate 3rd-person and 1st-person positions, switches automatically on zoom. |
+| **HEATStats** | Per-match performance tracking with an in-game stats card: win rate, K/D, total kills, recent battle streak. |
+| **Combat Reboot Plus** | Tracks the XM1-90's PDU-1546S module status with a segmented charge bar. |
+| **Cruise Control** | Simple cruise control functionality. |
+| **No UI** | Hides individual game UI elements. |
+| **FUSE UI** | Shared component library used by other plugins. No visible overlay of its own. |
+| **Accessors** | Core service. Reads live game values for every other plugin. Always enabled. |
 
-`EnergyBar-2.0.1.fuse` — animated energy bar that tracks vehicle energy in real time. Supports separate positions for 3rd-person and 1st-person views and switches automatically.
+Per-plugin settings live in the launcher's **Plugins** tab. Position keys (type `position`) are set by dragging in the overlay editor, not typed by hand.
 
-**Calibration (two stages)**
-
-1. Launch FUSE. The bar appears in calibration mode.
-2. Click the bar frame and drag it to position in **3rd-person** view, then press `Ctrl+L`.
-3. Drag to position in **1st-person** view, then press `Ctrl+L` again to lock.
-
-While locked the bar switches positions automatically on zoom.
-
-**Configuration**
-
-| Category | Key | Type | Description |
-|----------|-----|------|-------------|
-| Memory Source | `memory_chain` | choice | `multiplayer_vehicle_energy` or `training_vehicle_energy` |
-| Colors | `color_high` | hex RGB | Bar color above 60% energy |
-| Colors | `color_mid` | hex RGB | Bar color between 30%–60% energy |
-| Colors | `color_low` | hex RGB | Bar color below 30% energy |
-| Style | `stroke_weight` | float `0.5`–`3.0` | Bar stroke thickness |
-| Animation | `anim_width` / `anim_height` | int `10`–`3000` | Render-target dimensions in pixels |
-| Rotation | `rotation` | float `-360`–`360` | Bar rotation in degrees |
-| Position | `bar_custom_pos` | position | 3rd-person position (set by stage-1 drag) |
-| Position | `bar_custom_pos_fp` | position | 1st-person position (set by stage-2 drag) |
-
+---
 
 # For Developers
 
-FUSE provides:
+FUSE is a three-process system:
 
-- **Per-pixel-alpha HUD overlays** via Win32 `LayeredWindow` (`CreateWindowExW` + `UpdateLayeredWindow`). Each pixel carries its own alpha channel.
-- **In-game state reads** via the `accessors` service - CDP-based reads from the Gameface debugger.
-- **Rive animation rendering** via a native C++ runtime (`rive_plugin.dll`, D3D11/WARP).
-- **Plugin-based architecture** - FUSE discovers, resolves dependencies, calibrates, and manages overlays sequentially. Plugins never create global state.
-- **Distributable `.fuse` plugin archives** - single-file ZIP packages loaded via Python `zipimport`.
+- **Launcher** (Electron + Vue): the control app. Plugin management, settings, marketplace.
+- **Runtime** (Node sidecar): the plugin host. Discovers and runs `.fuse` plugins, owns global hotkeys, serves the WebSocket protocol and overlay assets.
+- **Overlay stage** (transparent Electron window): renders overlays on top of the game. Click-through except over overlay content and editor UI.
 
-### Entry Points
-
-| Script | Purpose |
-|--------|---------|
-| `run.bat` | Conda env setup + interactive launcher menu |
-| `run_heat_overlay.py` | Boots FUSE; `plugins/*.fuse` archives are auto-scanned |
-| `rebuild_dll.ps1` | Rebuild `native/bin/rive_plugin.dll` |
-
----
+Plugins are TypeScript classes bundled into single-file `.fuse` archives. They declare overlays (Rive animations or Vue components), read game state through the `accessors` service, and persist config as JSON.
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│  PluginHost (Tk root, pynput listeners, idle loop, manager)     │
-├─────────────────────────────────────────────────────────────────┤
-│  EventBus  │  ServiceRegistry  │  HotkeyRegistry  │  Config    │
-├─────────────────────────────────────────────────────────────────┤
-│  Plugin A  │  Plugin B         │  Plugin C        │ ...        │
-│  ────────  │  ────────         │  ────────                     │
-│  setup()   │  setup()          │  setup()                      │
-│  tick()    │  tick()           │  tick()                       │
-│  enter_*() │  enter_*()        │  enter_*()                    │
-│  teardown()│  teardown()       │  teardown()                   │
-└─────────────────────────────────────────────────────────────────┘
+┌────────────────────┐   WS (role: control)   ┌─────────────────────────────┐
+│  Launcher          │◄──────────────────────►│  Runtime (Node sidecar)     │
+│  Electron + Vue    │                        │  FuseHost                   │
+└────────────────────┘                        │  ├ WsServer (WS + HTTP)     │
+┌────────────────────┐   WS (role: overlay)   │  ├ OverlayHub               │
+│  Overlay stage     │◄──────────────────────►│  ├ EventBus / Services      │
+│  transparent window│   /overlay-asset/*     │  ├ ConfigManager            │
+└────────────────────┘                        │  └ Plugin A, B, C ...       │
+                                              └─────────────────────────────┘
 ```
 
-**PluginHost** (`fuse/core/host.py`) owns the Tk root (withdrawn), one pynput keyboard listener, one pynput mouse listener, per-plugin `PluginConfig` instances, and the global calibrate/locked state machine. It also manages a `FuseManager` window toggled by `Ctrl+M`.
+The runtime binds a WebSocket server to `127.0.0.1` on a free port and prints `{ port, connectionToken }` to stdout. Electron spawns it, parses the handshake line, and passes connection params to both windows. Clients authenticate with the token and declare a role: `control` (launcher UI) or `overlay` (stage window).
 
-Plugins are instantiated **one at a time** in dependency order. After each `setup()` returns, the host puts the plugin into calibrate mode. Plugins that declare `requires_calibration = True` block the queue until the user presses `Ctrl+L` to lock them. Plugins that do not require calibration are locked automatically and the queue advances immediately.
-
-The host calls `tick(dt)` on every active plugin every ~50 ms from a single `root.after` idle loop. All teardown calls happen in reverse load order during shutdown.
+The host runs a state machine with three states: `calibrate` (overlays draggable/editable), `locked` (click-through, positions frozen), and `interactive` (overlays pinned but clickable). Plugins tick every ~50 ms.
 
 ---
 
 ## Plugin Contract
 
-Every plugin subclasses `FusePlugin` and ships as a folder with `manifest.json` (built-ins) or inside a `.fuse` archive (user plugins).
+Every plugin subclasses `FusePlugin` from `@fuse/plugin-sdk` and receives a `FuseContext` in `setup()`.
 
-```python
-from fuse.core.api import FusePlugin, FuseContext
+```ts
+import { FusePlugin, type FuseContext } from "@fuse/plugin-sdk";
 
-class MyPlugin(FusePlugin):
-    requires_calibration = False
-    calibration_stages   = 1   # set to 2+ for multi-pass calibration
+export class MyPlugin extends FusePlugin {
+  static override pluginName = "My Plugin";
+  static override version = "1.0.0";
+  static override requiresCalibration = true;
+  static override calibrationStages = 1;   // 2+ for multi-pass calibration
 
-    def setup(self, ctx: FuseContext) -> None:
-        ...
+  private ctx!: FuseContext;
 
-    def tick(self, dt: float) -> None:
-        ...
+  override setup(ctx: FuseContext): void {
+    this.ctx = ctx;
+  }
 
-    def enter_calibrate(self, stage: int = 1) -> None:
-        ...
-
-    def enter_locked(self) -> None:
-        ...
-
-    def teardown(self) -> None:
-        ...
+  override tick(dt: number): void {}
+  override enterCalibrate(stage = 1): void {}
+  override enterLocked(): void {}
+  override enterInteractive(): void {}
+  override setOverlayVisible(visible: boolean): void {}
+  override teardown(): void {}
+}
 ```
 
-#### Lifecycle Hooks
+### Lifecycle Hooks
 
 | Hook | Called When |
 |------|-------------|
-| `setup(ctx)` | Once after instantiation. Build widgets, load config, register hotkeys, consume services. |
-| `tick(dt)` | Every ~50 ms from the host idle loop. `dt` is seconds since last tick. |
-| `enter_calibrate(stage)` | Entering calibrate mode (or advancing to the next stage). `stage` is 1-based. |
-| `enter_locked()` | Final `Ctrl+L` press - panel positions are persisted, click-through enabled. |
-| `teardown()` | On shutdown or reload. Persist state, release handles. |
+| `setup(ctx)` | Once after instantiation. Declare overlays, load config, register hotkeys, consume services. May be async. |
+| `tick(dt)` | Every ~50 ms from the host tick loop. `dt` is seconds since last tick. |
+| `enterCalibrate(stage)` | Entering calibrate mode or advancing a stage. `stage` is 1-based. |
+| `enterLocked()` | Final `Ctrl+L` press. Positions are persisted, overlays go click-through. |
+| `enterInteractive()` | `Ctrl+I` pressed. Overlays stay pinned but receive pointer input. |
+| `setOverlayVisible(v)` | Game focus changed. Show or hide overlays accordingly. |
+| `teardown()` | On shutdown or hot reload. Persist state, release resources. |
 
-#### Class Attributes
+### Static Attributes
 
-- `requires_calibration` - `True` if the plugin has interactive calibration UI. The host blocks the setup queue until the user presses `Ctrl+L` to lock the plugin.
-- `calibration_stages` - Number of `Ctrl+L` presses required to complete calibration. Default `1`. Set to `2` for plugins that need two passes (e.g. 3rd-person then 1st-person position). The host calls `enter_calibrate(2..N-1)` for intermediate stages, then `enter_locked()` on the final press.
+- `requiresCalibration` - `true` blocks the setup queue until the user locks the plugin with `Ctrl+L`.
+- `calibrationStages` - number of `Ctrl+L` presses to complete calibration. Default `1`. Set `2` for 3rd-person + 1st-person passes.
 
 ---
 
 ## Manifest
 
-Each plugin must contain a `manifest.json` at the package root:
+Each plugin ships a `manifest.json` at the package root:
 
 ```json
 {
   "plugin_id": "my_plugin",
   "name": "My Plugin",
-  "version": "1.0",
+  "version": "1.0.0",
   "author": "AETERNAL",
   "description": "What it does.",
   "entry": "plugin:MyPlugin",
-  "min_host_version": "2.0",
+  "runtime": "node",
+  "min_host_version": "4.0.0",
   "dependencies": ["accessors"],
-  "optional_dependencies": [],
-  "hotkeys": {"toggle": "ctrl+t"},
-  "default_config": {"opacity": 200}
+  "hotkeys": { "toggle": "ctrl+t" },
+  "default_config": { "opacity": 200 }
 }
 ```
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| `plugin_id` | yes | Programmatic identifier used for config files, deps, enable/disable. Must match the archive's top-level directory name for `.fuse` plugins. |
+| `plugin_id` | yes | Programmatic identifier used for config files, deps, enable/disable. Must match the archive's top-level directory name. |
 | `name` | yes | Display name shown in UI and logs. |
 | `version` | yes | Semver string. |
-| `author` | no | Display author shown in Plugin Manager. |
+| `entry` | yes | `"module:ClassName"`. Module is the source file bundled as the plugin entry. |
+| `runtime` | yes | `"node"`. |
+| `author` | no | Shown in the launcher's Plugins tab. |
 | `description` | no | Short human-readable summary. |
-| `entry` | yes | `"module:ClassName"`. Module resolved relative to the plugin package. |
-| `min_host_version` | no | Minimum FUSE host version (current: `2.4.0`). |
-| `dependencies` | no | Required plugin names. Supports versioned dict: `{"name": ">=1.0"}`. |
+| `core` | no | `true` marks a core plugin. Core plugins load before user plugins. |
+| `min_host_version` | no | Minimum runtime version (current: `4.3.0`). Incompatible plugins are skipped. |
+| `dependencies` | no | Required plugin ids. Providers load before consumers. |
 | `optional_dependencies` | no | Soft load-order hints; missing plugins do not block loading. |
-| `hotkeys` | no | `{"logical_name": "combo"}` combos exposed via `ctx.hotkey_for()`. |
+| `hotkeys` | no | `{"logical_name": "combo"}` combos exposed via `ctx.hotkeyFor()`. |
 | `default_config` | no | Default values for `ctx.config`. |
 
 ---
 
 ## .fuse Archive Format
 
-User plugins are distributed as `.fuse` files - standard ZIP archives with the plugin package at the root:
+A `.fuse` file is a ZIP with a single top-level directory named after `plugin_id`:
 
 ```
-my_plugin-1.0.fuse  (ZIP)
+MyPlugin-1.0.0.fuse  (ZIP)
 └── my_plugin/
     ├── manifest.json
-    ├── __init__.py
-    ├── plugin.py
+    ├── plugin.js          # esbuild bundle of the entry module
     └── assets/
-        └── icon.png
+        └── overlay.riv
 ```
 
-The archive root **must** contain a single directory whose name matches `plugin_id`. Python's `zipimport` requires this layout. FUSE adds the archive path to `sys.path` so `import my_plugin.plugin` works transparently.
+On discovery the archive is extracted to `data/plugins-cache/<plugin_id>-<checksum>/` and the entry class is loaded via dynamic `import()`. The extracted directory doubles as the asset root, served over HTTP at `/overlay-asset/<plugin_id>/<path>`.
 
-**Packing** (use during plugin development):
+**Packing.** Plugin sources live in `plugins-src/<plugin_id>/`. From `frontend/fuse`:
 
-```python
-from fuse.packaging.pack import pack, verify
-
-pack("dev/my_plugin")             # → out/MyPlugin-1.0.fuse
-verify("out/MyPlugin-1.0.fuse")   # bool - checks ZIP structure + manifest
+```
+npm run pack:plugins
 ```
 
-`pack()` excludes `__pycache__/`, `.git/`, `.pyc`, etc. Output filename is `<plugin_name>-<version>.fuse` written to `out/`.
-
-**Asset access** - because plugin code cannot use `pathlib.Path` against a ZIP, always read assets through `ctx.assets` (see [PluginAssets](#pluginassets)).
+This runs `runtime/scripts/pack-plugins.mjs`, which esbuild-bundles each plugin's entry (aliasing `@fuse/plugin-sdk` to the runtime SDK source), zips the result with its manifest and assets, and writes `plugins-dist/<Name>-<version>.fuse`.
 
 ---
 
 ## Discovery & Load Order
 
-FUSE scans plugins from a single directory (`USER_PLUGINS_DIR`, set via `FUSE_USER_PLUGINS_DIR` env var in production, `<repo>/plugins` in dev). All plugins — core and user — live here as `.fuse` archives. Core plugins are distinguished by `"core": true` in their manifest.
+The runtime scans a single directory for `.fuse` archives: `FUSE_USER_PLUGINS_DIR` env var in production, `<repo>/plugins` in dev. Then the resolver applies:
 
-After discovery the resolver:
-
-1. **Enable/disable filter** - `fuse_host.json` `disabled_plugins` excludes; non-null `enabled_plugins` is a whitelist.
-2. **Compatibility check** - `min_host_version` is compared against `HOST_VERSION` (`2.4.0`). Incompatible plugins are skipped.
-3. **Dependency filter** - missing or version-mismatched required deps drop the dependent plugin.
-4. **Core-first ordering** - core plugins (`"core": true`) always load before user plugins. Within each group, topological sort applies.
-5. **Topological sort** - required deps are hard edges; optional deps are soft edges. Providers always load before consumers.
+1. **Enable/disable filter** - `fuse_host.json` `disabled_plugins` excludes; a non-null `enabled_plugins` acts as a whitelist.
+2. **Compatibility check** - `min_host_version` vs the runtime's `HOST_VERSION`. Incompatible plugins are skipped.
+3. **Dependency filter** - missing required deps drop the dependent plugin.
+4. **Core-first ordering** - `"core": true` plugins load before user plugins.
+5. **Topological sort** - required deps are hard edges; optional deps are soft edges.
 6. **Cycle detection** - cyclic dependencies are dropped with an error log.
+
+Plugins initialize one at a time, in order, starting when the first control client connects. A plugin with `requiresCalibration` blocks the queue until locked.
 
 ---
 
@@ -330,686 +312,283 @@ After discovery the resolver:
 
 ### FuseContext
 
-`FuseContext` is a `@dataclass` handed to every plugin during `setup()`. It bundles every shared service so plugins never construct global state.
-
-```python
-@dataclass
-class FuseContext:
-    tk_root: tk.Tk
-    config: PluginConfig
-    hotkeys: HotkeyRegistry
-    assets: PluginAssets       # ctx.assets.load_image("logo.png"), .read(), .load_font(), ...
-    host: PluginHost
-    state: str                 # "calibrate" | "locked"
-    package_root: Traversable  # raw root - prefer ctx.assets for normal access
-    events: EventBus
-    services: ServiceRegistry
-    manifest_hotkeys: dict
-    extras: dict               # plugin-private scratch space
-    logger: Any                # loguru logger bound with plugin=name
-```
-
-**Key fields**
-
-- `tk_root` - The host's hidden Tk root. Use for scheduling `root.after()` calls from worker threads.
-- `config` - `PluginConfig` instance scoped to this plugin (see below).
-- `hotkeys` - Shared `HotkeyRegistry`; plugins register combos, the host's pynput listener fans out presses.
-- `assets` - `PluginAssets` accessor bound to the plugin's `assets/` directory. Works identically whether the plugin lives on disk or inside a `.fuse` archive.
-- `package_root` - Raw `Traversable` (a `pathlib.Path` or `zipfile.Path`) pointing at the plugin package root. Use `ctx.assets` for normal access; this is for advanced cases.
-- `state` - Current host state (`"calibrate"` or `"locked"`). Updated by the host on transitions.
-- `events`, `services` - See below.
-- `manifest_hotkeys` - Dict of `{"logical_name": "combo"}` from `manifest.json`.
-- `logger` - A `loguru` logger pre-bound with `plugin=<plugin_id>`.
-
-`ctx.hotkey_for(name, fallback="")` returns the combo for a logical hotkey from the manifest, or `fallback` if undefined.
-
----
-
-### PluginAssets
-
-`ctx.assets` exposes the plugin's `assets/` directory through a uniform API. Works for both folder plugins and `.fuse` archives.
-
-```python
-ctx.assets.read("rive/gauge.riv")            # → bytes
-ctx.assets.open("logo.png")                   # → seekable io.BytesIO (PIL-safe)
-ctx.assets.exists("optional.wav")             # → bool
-ctx.assets.load_image("logo.png")             # → PIL.Image (RGBA)
-ctx.assets.load_font("Montserrat.ttf", "mt")  # registers TTF with Windows GDI (in-memory)
-ctx.assets.load_sound("intercept.wav")        # → WAV bytes for winsound.PlaySound(SND_MEMORY)
-```
-
-Always prefer `ctx.assets` over `importlib.resources` or raw `Path` arithmetic - the latter break inside `.fuse` archives.
-
----
-
-### EventBus
-
-Lightweight pub/sub for cross-plugin communication. All handler invocations are dispatched on the Tk thread via `root.after(0, ...)`, so callbacks can safely mutate widgets.
-
-```python
-class EventBus:
-    def subscribe(self, event: str, cb: Callable, *, owner: str = "") -> None
-    def unsubscribe(self, event: str, cb: Callable) -> None
-    def emit(self, event: str, **kwargs) -> None
-```
-
-```python
-ctx.events.subscribe("accessors.connected", self._on_connected, owner=self.name)
-ctx.events.emit("accessors.connected")
-```
-
-`emit` is fire-and-forget. Handlers that raise are caught + logged; they do not block other subscribers. Host-emitted events include `host_state_changed` (with `state` and `calib_stage`).
-
----
-
-### ServiceRegistry
-
-Named object registry for inter-plugin APIs. Because the resolver loads providers before consumers, `require()` is safe inside a consumer's `setup()`.
-
-```python
-class ServiceRegistry:
-    def register(self, name: str, impl: object, *, owner: str = "") -> None
-    def get(self, name: str) -> Optional[object]   # None if missing
-    def require(self, name: str) -> object         # RuntimeError if missing
-    def unregister(self, name: str) -> None
-```
-
-A consumer should list the provider in `dependencies` so the resolver orders them correctly.
-
----
-
-### HotkeyRegistry
-
-Global keyboard listener (pynput) fanned out to registered callbacks. The host owns the single `pynput.keyboard.Listener`; plugins never create their own.
-
-```python
-ctx.hotkeys.register("ctrl+l", self._on_lock, label="Lock")
-ctx.hotkeys.register("shift+f1", self._on_shout, label="Shout")
-```
-
-Combos are parsed as `modifier+modifier+key`. Supported modifiers: `ctrl`, `shift`, `alt`. Case-insensitive. Re-registrations overwrite with a warning. Rebinding from the Plugin Manager (Ctrl+M → Keybindings → Rebind) updates the binding live.
-
----
-
-### PluginConfig
-
-Per-plugin JSON config with auto-save, watchers, schema-driven UI, and hot-reload from disk.
-
-```python
-class PluginConfig:
-    def defaults(self, _dict=None, **kwargs) -> PluginConfig
-    def schema(self, categories: list) -> PluginConfig
-    def load(self) -> PluginConfig
-    def save(self) -> None
-    def reload(self) -> None                    # re-read disk, fire watchers for changed keys
-    def check_reload(self) -> bool              # poll mtime (≤1×/sec); reload if changed
-    def get(self, key, default=...) -> Any
-    def set(self, key, value) -> None           # saves + fires watchers
-    def update(self, data: dict) -> None        # batch set
-    def snapshot(self) -> dict
-    def watch(self, key: str, callback) -> None
-```
-
-```python
-ctx.config.defaults(opacity=200, position=None).load()
-
-opacity = ctx.config.get("opacity")
-ctx.config.watch("opacity", self._on_opacity_changed)
-ctx.config.set("opacity", 180)               # persists + fires watcher
-
-# In tick(), pick up live edits to data/configs/fuse_<plugin>.json:
-def tick(self, dt):
-    self.ctx.config.check_reload()
-```
-
-Config files live in `data/configs/fuse_<plugin_id>.json`.
-
-**Declarative schema** (drives the Plugin Manager Settings tab and auto-clamps `int`/`float` to `min`/`max` on `set()`):
-
-```python
-from fuse.ui.config_schema import ConfigCategory, ConfigEntry
-
-ctx.config.schema([
-    ConfigCategory("Display", [
-        ConfigEntry("opacity",   "Opacity",    type="int",   min=0, max=255),
-        ConfigEntry("show_logo", "Show Logo",  type="bool"),
-        ConfigEntry("theme",     "Theme",      type="choice", choices=["dark", "light"]),
-    ]),
-    ConfigCategory("Position", [
-        ConfigEntry("hud_pos", "HUD Position", type="position"),
-    ]),
-])
-```
-
-Entry types: `bool`, `int`, `float`, `str`, `choice`, `position`.
-
----
-
-## Built-in Utilities
-
-### LayeredWindow
-
-Win32 per-pixel-alpha overlay window via `CreateWindowExW` + `UpdateLayeredWindow`. Works alongside the Tkinter mainloop (Tcl's event loop dispatches Win32 messages on the same thread).
-
-Each `update_image()`:
-1. Converts the PIL RGBA image to **premultiplied BGRA** (numpy vectorised multiply + channel reorder).
-2. Builds a bottom-up DIB section via `CreateDIBSection` + `memmove`.
-3. Calls `UpdateLayeredWindow` with `AC_SRC_ALPHA` per-pixel alpha and an optional global `SourceConstantAlpha`.
-
-`update_image(img)` (no `x,y`) leaves the window position untouched - safe during OS drag.
-
-```python
-from fuse.ui.layered_window import LayeredWindow
-
-win = LayeredWindow("My Overlay", x=100, y=200, draggable=False)
-win.create(pil_rgba_image, global_alpha=220)
-win.show()
-win.move(300, 400)
-win.update_image(new_image)
-win.set_click_through(True)   # WS_EX_TRANSPARENT
-win.set_draggable(True)       # WM_NCHITTEST → HTCAPTION
-win.destroy()
-```
-
----
-
-### FusePanel
-
-`LayeredWindow` wrapper with config-backed position and calibrate/locked lifecycle.
-
-```python
-from fuse.ui.panel import FusePanel, FusePanelGroup
-
-# Single-view panel. ctx_or_config accepts a FuseContext OR a raw PluginConfig.
-panel = FusePanel("hud_name", "hud_pos", ctx,
-                  title="My HUD", default_x=100, default_y=50)
-panel.create(pil_rgba_image)
-panel.enter_calibrate()       # draggable, click-enabled, visible
-panel.enter_locked()          # saves position, click-through, visible
-panel.update(new_image)                  # animation frame (no position snap)
-panel.update(new_image, x=100, y=200)    # atomic reposition + repaint
-```
-
-**Dual-view calibration** (3rd-person + 1st-person positions). The plugin sets `calibration_stages = 2`:
-
-```python
-panel = FusePanel("hud", "hud_pos_3p", ctx,
-                  config_key_fp="hud_pos_1p",
-                  default_x=100, default_y=50)
-
-# Host calls these on successive Ctrl+L presses:
-panel.enter_calibrate(stage=1)   # user drags to 3rd-person target
-panel.enter_calibrate(stage=2)   # 3P saved, user drags to 1st-person target
-panel.enter_locked()             # 1P saved, panel is click-through
-
-# In tick() while locked, switch between positions by view flag:
-def tick(self, dt):
-    panel.update_view(acc.read("multiplayer_is_fp_view"))
-```
-
-`persist_position()` saves the current window position to whichever key matches the last seen view - call from `teardown()`.
-
-`FusePanelGroup` fans out `enter_calibrate(stage)` / `enter_locked()` / `update_view(flag)` / `show_all()` / `hide_all()` / `destroy_all()` to a collection.
-
----
-
-### Screen Capture
-
-```python
-from fuse.ui.screen_capture import grab_region_np
-
-arr = grab_region_np((x1, y1, x2, y2))   # np.ndarray (H, W, 3) RGB uint8
-```
-
-Prefers `mss` (~3–8 ms), falls back to PIL `ImageGrab` (~20 ms). Thread-safe via thread-local `mss` instances.
-
----
-
-### AnimationLoop
-
-`root.after`-based animation helper with fps control and clean stop.
-
-```python
-from fuse.render.animation import AnimationLoop
-
-loop = AnimationLoop(ctx.tk_root, self._tick_frame, fps=30)
-loop.start()   # idempotent
-loop.stop()    # cancels pending callback
-```
-
-Exceptions in the callback are caught per-frame and logged without stopping the loop.
-
----
-
-### RiveAnimation
-
-`ctypes` wrapper around `native/bin/rive_plugin.dll`. Each instance owns its own D3D11 WARP device + pixel buffer; renders a straight-alpha RGBA `PIL.Image` ready for `FusePanel.update()`.
-
-```python
-from fuse.render.rive_animation import RiveAnimation
-
-anim = RiveAnimation(256, 256)
-anim.load_bytes(ctx.assets.read("rive/gauge.riv"))   # .fuse-safe
-anim.set_state_machine("engine")
-anim.vm_bind("GaugeVM")
-
-# each frame:
-anim.vm_set_number("heat", 0.42)
-anim.vm_set_color("colorProperty", 0xFFFF9800)   # ARGB
-anim.advance(1 / 30)
-img = anim.get_image()
-anim.close()
-```
-
-**ViewModel API** (path syntax `"property"` or `"nested/property"`):
-
-- `vm_bind(name)`
-- `vm_set_number(path, float)` / `vm_get_number(path)`
-- `vm_set_bool(path, bool)` / `vm_get_bool(path)`
-- `vm_set_string(path, str)`
-- `vm_set_color(path, argb)` - 32-bit ARGB integer
-- `vm_set_enum(path, label)`
-- `vm_trigger(path)`
-
-**State Machine API**: `set_state_machine(name)`, `sm_bool/sm_number/sm_trigger(name, value)`.
-
-Prefer consuming the `rive_animation` service (`ctx.services.get("rive_animation").create(w, h)`) over importing directly - the service handles the DLL-missing case centrally.
-
----
-
-### OCR
-
-Tesseract-based screen-OCR utilities. No game-specific masks live here; callers supply regions.
-
-```python
-from fuse.vision.ocr import ocr_capture_int, IntHysteresisFilter, TESSERACT_OK
-
-if TESSERACT_OK:
-    val = ocr_capture_int(
-        (x1, y1, x2, y2),
-        min_val=0, max_val=9999,
-        _filter=IntHysteresisFilter(jump_tol=12),
-    )
-```
-
-`ocr_capture_int` tries multiple binarisation strategies (bright-text thresholds + Otsu), upscales 5x, and iterates PSM modes 7, 8, 13, 6 until a value in `[min_val, max_val]` is found. Returns `None` on failure.
-
-**Filters**
-
-- `TemporalOCRFilter(window=3, tolerance=0.10)` - sliding-window confirmation (≥2 agreeing reads).
-- `IntHysteresisFilter(jump_tol=12)` - outliers must repeat before adoption.
-
----
-
-### Fonts
-
-```python
-from fuse.ui.fonts import load_font, load_font_from_bytes, unload_mem_fonts
-
-load_font("assets/MyFont.ttf")                                    # path-based (built-ins + dev)
-load_font_from_bytes(ctx.assets.read("F.ttf"), key="myfont")      # .fuse-safe
-```
-
-`load_font_from_bytes` uses `AddFontMemResourceEx` - no temp file needed, works inside `.fuse` archives. The host calls `unload_mem_fonts()` on shutdown.
-
----
-
-### Packing (`fuse.packaging.pack`)
-
-```python
-from fuse.packaging.pack import pack, verify
-
-archive = pack("dev/my_plugin")    # → out/MyPlugin-1.0.fuse
-verify(archive)                    # → bool
-```
-
-Excludes `__pycache__/`, `.git/`, `*.pyc/.pyo/.pyd`. `verify()` checks ZIP validity, single top-level directory, and that the embedded `manifest.json` has an `entry` field.
-
-## Host Lifecycle
-
-1. **Boot** (`fuse/core/runner.py`)
-   - Sets up logging (`logs/fuse_YYYY-MM-DD--HH-MM.log`, `enqueue=True` for background sink).
-   - Auto-registers the `.fuse` file association on first run.
-   - Loads FUSE fonts via GDI.
-   - Creates `PluginHost`, calls `host.load_plugins()`, starts `host.run()`.
-
-2. **Setup Queue**
-   - `discover()` finds plugins from `fuse/plugins/` (folders) + `plugins/*.fuse` (archives) + env / extra dirs.
-   - `resolve_load_order()` sorts by dependencies.
-   - `_dequeue_next_plugin()` instantiates one plugin, calls `setup()`, enters calibrate mode.
-   - For `requires_calibration = True`, the host waits for `Ctrl+L`. With `calibration_stages > 1`, each press advances `enter_calibrate(stage)` until the final press triggers `enter_locked()` and dequeues the next plugin.
-   - `setup()` exceptions mark the plugin `ERROR`; the queue continues.
-
-3. **Hot Reload** (`Ctrl+R`)
-   - Tears down every active plugin in reverse order.
-   - Purges cached modules under `fuse/plugins/` and `plugins/` from `sys.modules` so edited sources are re-read.
-   - Re-discovers and re-instantiates everything; all plugins enter the current host state directly (no calibrate stage).
-
-4. **Idle Loop** - `tick(dt)` is called on every active plugin every ~50 ms. Per-plugin exceptions are caught and logged.
-
-5. **Shutdown** - `teardown()` runs in reverse load order. Listeners stop, in-memory fonts are unregistered, the Tk mainloop exits.
-
----
-
-## Plugin Manager
-
-Press `Ctrl+M` to open a dark `tk.Toplevel` with three tabs (custom `clam` theme, `#1a1a1a` background).
-
-- **Plugins** - list of every discovered plugin with state dot, version, author, and Enable/Disable toggle. Toggling at runtime tears down or re-instantiates the plugin without a host restart.
-- **Settings** - per-plugin form generated from `ctx.config.schema([...])`. Widgets: checkbox (`bool`), validated Entry with min/max clamp (`int`/`float`), Combobox (`choice`), free Entry (`str`), read-only label (`position`). Edits buffer in a pending dict; unsaved changes block tab switching with a flash warning. Save commits via `PluginConfig.set()`; Discard rebuilds the form.
-- **Keybindings** - registered hotkeys with action label + current combo. Click **Rebind**, press the new combo, and the binding updates live. The pynput listener is suspended during capture so host hotkeys do not fire.
-
----
-
-## Built-in Plugins
-
-Shipped under `fuse/plugins/`. Always loaded before user plugins.
-
----
-
-### accessors
-
-The primary FUSE game API. Connects to the Coherent Gameface CDP debugger (WebSocket on port 9222) and registers an `Accessors` instance as the `"accessors"` service. Polls `battle_hud` and `markers` pages each tick, merging all values into a single flat cache.
-
-```json
-{
-  "plugin_id": "accessors",
-  "name": "Accessors",
-  "version": "1.0",
-  "entry": "plugin:AccessorsPlugin"
+Handed to every plugin in `setup()`. Bundles all shared infrastructure so plugins never create global state.
+
+```ts
+interface FuseContext {
+  config: PluginConfig;              // per-plugin persisted JSON config
+  hotkeys: HotkeyRegistryView;       // global hotkey registration
+  assets: PluginAssets;              // file access inside the extracted archive
+  services: ServiceRegistry;         // named inter-plugin APIs
+  events: EventBus;                  // pub/sub between plugins
+  overlays: OverlayManager;          // declare and control overlays
+  host: HostView;                    // state, getPlugin, getService, broadcast
+  logger: Logger;                    // scoped logger
+
+  state: HostState;                  // "calibrate" | "locked" | "interactive"
+  packageRoot: string;               // extracted archive root
+  manifestHotkeys: Record<string, string>;
+  extras: Map<string, unknown>;      // plugin-private scratch space
+
+  hotkeyFor(name: string, fallback?: string): string;
 }
 ```
 
-Consumer usage:
+### PluginConfig
 
-```python
-# In manifest.json: "dependencies": ["accessors"]
+Per-plugin JSON config with watchers and a declarative schema that drives the launcher's settings UI.
 
-acc = ctx.services.require("accessors")   # → Accessors
+```ts
+ctx.config.get<number>("opacity", 200);
+ctx.config.set("opacity", 180);          // persists + fires watchers
+ctx.config.watch("opacity", (v) => { ... });
+ctx.config.snapshot();                    // full dict
 
-def tick(self, dt):
-    hp    = acc.read("multiplayer_vehicle_health")   # int | None
-    fire  = acc.read("on_fire")                      # 1 | 0 | None
-    ab1cd = acc.read("ab1_cd")                       # float seconds | None
+ctx.config.schema([
+  new ConfigCategory("Display", [
+    new ConfigEntry({ key: "opacity", label: "Opacity", type: "int", min: 0, max: 255 }),
+    new ConfigEntry({ key: "theme", label: "Theme", type: "choice", choices: ["dark", "light"] }),
+  ]),
+]);
 ```
 
-Events emitted on `ctx.events`:
+Entry types: `bool`, `int`, `float`, `str`, `choice`, `position`. `int`/`float` are clamped to `min`/`max` on `set()`. `position` entries are written by the overlay editor, not typed by hand. Files live in `data/configs/fuse_<plugin_id>.json`.
 
-| Event | When |
-|-------|------|
-| `accessors.connected` | CDP WebSocket established |
-| `accessors.disconnected` | CDP connection lost (will auto-retry) |
+### EventBus
+
+Fire-and-forget pub/sub. Handler exceptions are caught and logged without affecting other subscribers.
+
+```ts
+ctx.events.subscribe("accessors.connected", () => { ... });
+ctx.events.emit("my_plugin.something", { value: 1 });
+```
+
+### ServiceRegistry
+
+Named object registry for inter-plugin APIs. Because providers load before consumers, `require()` is safe inside a consumer's `setup()`.
+
+```ts
+ctx.services.register("my_service", impl);
+const acc = ctx.services.require<Accessors>("accessors");  // throws if missing
+const maybe = ctx.services.get("optional_service");        // undefined if missing
+```
+
+### Hotkeys
+
+The runtime owns one global keyboard hook (uiohook). Plugins register combos; rebinding from the launcher updates bindings live.
+
+```ts
+ctx.hotkeys.register("ctrl+t", () => this.toggle(), "Toggle My Overlay");
+ctx.hotkeys.register(ctx.hotkeyFor("toggle", "ctrl+t"), cb, "Toggle");
+```
+
+Combos are `modifier+modifier+key` with `ctrl`, `shift`, `alt`. Case-insensitive.
+
+### PluginAssets
+
+Reads files from the extracted archive. Use this instead of raw path arithmetic.
+
+```ts
+const bytes = ctx.assets.read("assets/overlay.riv");
+const exists = ctx.assets.exists("assets/optional.json");
+```
+
+---
+
+## Overlays
+
+Plugins declare overlays; the stage window renders them. Two kinds:
+
+- **`rive`** - a `.riv` animation rendered with the Rive web runtime. Sized by its declaration; not resizable in the editor.
+- **`vue`** - a Vue SFC compiled at runtime in the stage (vue3-sfc-loader). Resizable, can be interactive.
+
+```ts
+const overlay = ctx.overlays.declare({
+  id: "bar",
+  kind: "rive",
+  asset: "assets/energyBar.riv",
+  size: { w: 300, h: 300 },
+  artboard: "Bar",
+  stateMachine: "engine",
+  viewModel: "energyBarVM",
+  defaultRect: { x: 100, y: 100, w: 300, h: 300 },
+  positionConfigKey: "bar_custom_pos",   // rect persists under this config key
+});
+```
+
+### OverlayHandle
+
+```ts
+overlay.set("energyValue", 0.42);        // number input
+overlay.setBool("isSetupComplete", true);
+overlay.setString("state", "COMPLETE");
+overlay.setColor("colorProperty", 0xFF84FFB1);  // 32-bit ARGB
+overlay.setEnum("mode", "battle");
+overlay.trigger("flash");
+overlay.setJson("rows", [...]);          // structured props for Vue overlays
+overlay.setRect({ x, y, w, h });         // reposition (rot/opacity optional)
+overlay.setVisible(false);
+overlay.onAction((action, payload) => { ... });  // Vue overlay buttons/inputs
+overlay.remove();
+```
+
+Input updates are coalesced into one message per overlay per flush. Non-trigger values are retained and replayed to a stage window that connects later.
+
+### Rect
+
+Position in device-independent pixels, absolute in display space. `x`/`y` are the unrotated top-left; rotation is applied about the center.
+
+```ts
+interface Rect {
+  x: number; y: number; w: number; h: number;
+  rot?: number;      // clockwise degrees [0, 360), default 0
+  opacity?: number;  // 0..1, default 1
+}
+```
+
+Rects edited in the overlay editor (drag, resize, inspector) are sanitized by the runtime, persisted under `positionConfigKey` in the plugin's config, and echoed back to all stage clients. A plugin `setRect` with a bare `{x,y,w,h}` keeps the user's saved rotation and opacity; pass `rot: 0` or `opacity: 1` explicitly to reset them.
+
+### Vue Overlays
+
+The stage mounts the SFC with these props:
+
+```ts
+{
+  data: Record<string, unknown>,   // inputs pushed via handle.set*/setJson
+  state: HostState,
+  interactive: boolean,            // true in interactive mode
+  emitAction: (action: string, payload?: unknown) => void,
+}
+```
+
+Imports available inside overlay SFCs:
+
+- `vue`, `motion-v`, `@rive-app/canvas` - provided by the stage bundle.
+- `<pluginId>/<path>` - cross-plugin imports fetched from that plugin's assets. The `fuse_ui` plugin ships shared components this way: declare `"dependencies": ["fuse_ui"]` and `import { eButton } from "@fuse/ui"` or `import "fuse_ui/ui/tokens.css"` for design tokens.
+- Relative imports and CSS work as expected; stylesheets are injected once.
+
+Overlay roots should fill the wrapper (`width: 100%; height: 100%`) and scale their content, since users resize them freely in the editor. Use opaque backgrounds; the wrapper's opacity control owns transparency.
+
+---
+
+## Host Lifecycle
+
+1. **Boot** (`runtime/src/index.ts`) - starts `WsServer`, prints the `{ port, connectionToken }` handshake line to stdout, loads plugins. Exits when Electron's stdin pipe closes (orphan guard).
+2. **Plugin init** - begins when the first authenticated control client connects. Plugins initialize sequentially in dependency order; calibration-requiring plugins block the queue until locked.
+3. **Tick loop** - `tick(dt)` on every active plugin every ~50 ms. Per-plugin exceptions are caught and logged; one plugin cannot kill the host.
+4. **Hot reload** (`Ctrl+R`) - tears down all plugins in reverse order, re-discovers archives, re-instantiates everything in the current host state.
+5. **Shutdown** (`Ctrl+P` or launcher exit) - `teardown()` in reverse load order, then the process exits.
+
+---
+
+## WebSocket Protocol
+
+Single WS endpoint at `ws://127.0.0.1:<port>/ws`. First message must be `{ type: "auth", token, role }` within 5 s. Roles: `control`, `overlay`.
+
+**Runtime to control:** `plugin:registered`, `plugin:status_changed`, `config:value_changed`, `hotkey:rebound`, `host:state_changed`.
+
+**Runtime to overlay:** `overlay:declared`, `overlay:data`, `overlay:transform`, `overlay:visibility`, `overlay:removed`, `host:state_changed`.
+
+**Overlay to runtime:** `overlay:transform` (editor commits a rect), `overlay:action` (interactive overlay event).
+
+**Control to runtime (JSON-RPC 2.0):** `config.update`, `plugin.setEnabled`, `hotkey.rebind`, `overlay.setVisible`.
+
+HTTP on the same port: `/health`, `GET /overlay-asset/<pluginId>/<path>`.
+
+---
+
+## accessors Service
+
+The primary game API. Connects to the game's Coherent Gameface CDP debugger (port `9222`), polls the HUD pages, and merges all values into a flat cache.
+
+```ts
+// manifest.json: "dependencies": ["accessors"]
+const acc = ctx.services.require<Accessors>("accessors");
+
+override tick(dt: number): void {
+  const hp = acc.read("health");        // number | null
+  const fp = acc.read("is_fp");         // 1 | 0 | null
+}
+```
+
+Events on `ctx.events`: `accessors.connected`, `accessors.disconnected` (auto-retries).
 
 Config keys: `cdp_port` (default `9222`), `connect_timeout_s`, `reconnect_interval_s`, `poll_interval_s`.
 
-#### Accessors Field Reference
-
-All values return `None` when not in battle or the relevant HUD element is absent.
+All values return `null` when not in battle or the HUD element is absent.
 
 **Vehicle**
 
 | Name | Type | Description |
 |------|------|-------------|
-| `multiplayer_vehicle_health` | `int` | Current HP |
-| `multiplayer_vehicle_energy` | `int` | Ability mana (rounded) |
-| `multiplayer_vehicle_boost` | `int` | Sprint energy 0–100 |
-| `multiplayer_camera_zoom` | `int` | Active zoom stage index (0-based) |
-| `multiplayer_is_fp_view` | `int` | 1 = first-person, 0 = third-person |
+| `health` | `int` | Current HP |
 | `health_regen` | `float` | HP regen per second |
-| `health_pct` | `float` | HP bar fill 0–100 |
+| `health_pct` | `float` | HP bar fill 0-100 |
+| `energy` | `int` | Ability mana (rounded) |
 | `energy_regen` | `float` | Mana regen per second |
+| `boost` | `int` | Sprint energy 0-100 |
 | `boost_active` | `int` | 1 = boost glow visible |
-| `zoom_val` | `float` | Active zoom magnification (e.g. 3.0, 10.0) |
-| `zoom_idx` | `int` | Active zoom stage index |
+| `speed` | `int` | Vehicle speed km/h |
+| `is_fp` | `int` | 1 = first-person, 0 = third-person |
+| `zoom_val` | `float` | Active zoom magnification |
+| `zoom_idx` | `int` | Active zoom stage index (0-based) |
 | `num_zooms` | `int` | Total available zoom levels |
 | `zooms` | `list[float]` | All zoom magnification values |
-| `speed` | `int` | Vehicle speed km/h |
 
-**Abilities (F / T keys)**
-
-| Name | Type | Description |
-|------|------|-------------|
-| `ab1_state` | `int` | Ability 1 (F) state: 1=ready, 6=cooldown, 20=active |
-| `ab1_cd` | `float` | Ability 1 cooldown remaining seconds (0 when ready) |
-| `ab1_charges` | `int\|None` | Ability 1 charges available; `None` if not charge-based |
-| `ab2_state` | `int` | Ability 2 (T) state |
-| `ab2_cd` | `float` | Ability 2 cooldown remaining seconds |
-| `ab2_charges` | `int\|None` | Ability 2 charges available |
-
-**Ultimate (R key)**
+**Abilities and Equipment**
 
 | Name | Type | Description |
 |------|------|-------------|
-| `ult_state` | `int` | Ultimate state: 19=charging, 1=ready |
-| `ult_charge_pct` | `int` | Ultimate charge 0–100% |
-
-**Equipment (Q / E slots)**
-
-| Name | Type | Description |
-|------|------|-------------|
-| `equip1_state` | `int` | Q-slot state: 1=ready, 6=cooldown |
-| `equip1_cd` | `int` | Q-slot cooldown remaining seconds (rounded) |
-| `equip1_charges` | `int\|None` | Q-slot charges; `None` if not charge-based |
-| `equip2_state` | `int` | E-slot state |
-| `equip2_cd` | `int` | E-slot cooldown remaining seconds |
-| `equip2_charges` | `int\|None` | E-slot charges |
-
-**Conditional Trait / Passive**
-
-| Name | Type | Description |
-|------|------|-------------|
+| `ab1_state` / `ab2_state` | `int` | Ability (F / T) state: 1=ready, 6=cooldown, 20=active |
+| `ab1_cd` / `ab2_cd` | `float` | Cooldown remaining seconds (0 when ready) |
+| `ab1_charges` / `ab2_charges` | `int\|null` | Charges; `null` if not charge-based |
+| `equip1_state` / `equip2_state` | `int` | Equipment (Q / E) state |
+| `equip1_cd` / `equip2_cd` | `int` | Cooldown remaining seconds |
+| `equip1_charges` / `equip2_charges` | `int\|null` | Charges; `null` if not charge-based |
+| `ult_state` | `int` | Ultimate: 19=charging, 1=ready |
+| `ult_charge_pct` | `int` | Ultimate charge 0-100 |
 | `trait_state` | `int` | Trait state (0=idle, non-zero=charging or active) |
-| `trait_cur_time` | `float` | Current progress time within current state |
-| `trait_time` | `float` | Total time for current state |
-| `trait_type` | `str\|None` | Trait type identifier string |
+| `trait_cur_time` / `trait_time` | `float` | Trait progress / total time |
+| `trait_type` | `str\|null` | Trait type identifier |
 
-**Rangefinder** (from `battle_hud`)
-
-| Name | Type | Description |
-|------|------|-------------|
-| `target_dist` | `int\|None` | Distance to crosshair target in metres; retains last value when hidden |
-| `target_dist_vis` | `int` | 1 = rangefinder currently visible (reticle on target), 0 = stale/hidden |
-
-**ATGMs** (from `markers` page)
+**Battle**
 
 | Name | Type | Description |
 |------|------|-------------|
-| `missile_in_flight` | `int` | 1 = missile is airborne, 0 = no missile |
-| `missile_dist` | `int\|None` | Distance from player to missile in metres (0–n); `None` when not in flight |
+| `battle_state` | `int` | Battle phase state (8 = in progress) |
+| `battle_countdown` | `int` | Battle timer seconds remaining |
+| `game_mode` | `str` | Current game mode |
+| `match_state` | `str` | Match state identifier |
+| `map_slug` | `str` | Map identifier |
+| `ally_score` / `enemy_score` | `int` | Team scores |
+| `allied_zones` / `enemy_zones` | `int` | Captured zones |
+| `target_dist` | `int\|null` | Distance to crosshair target in metres |
+| `target_dist_vis` | `int` | 1 = rangefinder currently visible |
+| `xp_action` | `int\|null` | XP gained in last action popup (transient) |
+| `xp_action_type` | `str\|null` | Action type of last XP event |
+| `fps` / `ping` | `int` | Client performance counters |
 
-**Status Effects** (from `markers` page)
+**Player**
+
+| Name | Type | Description |
+|------|------|-------------|
+| `player_name` | `str` | Player name |
+| `player_kills` / `player_assists` / `player_damage` | `int` | Score line |
+| `player_role` / `player_role_pts` | `str` / `int` | Role and role points |
+| `player_vehicle` / `player_agent_id` | `str` | Vehicle and agent ids |
+| `player_is_dead` | `int` | 1 = destroyed |
+
+**Status Effects** (markers page)
 
 | Name | Type | Description |
 |------|------|-------------|
 | `on_fire` | `int` | 1 = burning debuff active |
-| `debuff_count` | `int` | Number of active unique debuffs |
-| `debuff_tags` | `list[str]` | Active debuff tag names (e.g. `["burning"]`) |
-| `buff_count` | `int` | Number of active unique buffs |
-| `buff_tags` | `list[str]` | Active buff tag names |
-| `major_effect_count` | `int` | Active major visual effects (e.g. fire animation) |
+| `debuff_count` / `debuff_tags` | `int` / `list[str]` | Active debuffs |
+| `buff_count` / `buff_tags` | `int` / `list[str]` | Active buffs |
+| `major_effect_count` | `int` | Active major visual effects |
+| `missile_in_flight` | `int` | 1 = ATGM airborne |
+| `missile_dist` | `int\|null` | Player-to-missile distance in metres |
 
-**XP / Battle**
-
-| Name | Type | Description |
-|------|------|-------------|
-| `xp_action` | `int\|None` | XP gained in last action popup (transient) |
-| `xp_action_type` | `str\|None` | Action type of last XP event |
-| `battle_state` | `int` | Battle phase state (8 = in progress) |
-| `battle_countdown` | `int` | Battle timer seconds remaining |
+Legacy aliases remain readable for old plugins: `multiplayer_vehicle_health`, `multiplayer_vehicle_energy`, `multiplayer_vehicle_boost`, `multiplayer_camera_zoom`, `multiplayer_is_fp_view`.
 
 ---
-
-### rive_animation
-
-Wraps `native/bin/rive_plugin.dll` and registers a `RiveAnimationService` factory as the `rive_animation` service.
-
-```json
-{
-  "plugin_id": "rive_animation",
-  "name": "Rive Animation",
-  "version": "1.0",
-  "entry": "plugin:RiveAnimationPlugin"
-}
-```
-
-```python
-svc  = ctx.services.require("rive_animation")
-anim = svc.create(width, height)
-anim.load_bytes(ctx.assets.read("rive/gauge.riv"))
-anim.set_state_machine("engine")
-anim.vm_bind("GaugeVM")
-```
-
-If the DLL is missing, the plugin logs an error and **does not register** the service. Dependent plugins should `ctx.services.get("rive_animation")` and self-disable gracefully when `None`.
-
-See [RiveAnimation](#riveanimation) for the full API and [BUILD.md](BUILD.md) for build instructions.
-
----
-
-### game_memory (deprecated)
-
-> **Deprecated - do not use in new plugins.** `game_memory` reads a narrow set of values via a compiled native DLL (`game_memory.dll`) whose sources are not distributed. It is superseded by the `accessors` service which covers all the same fields plus many more through the Gameface CDP debugger. `game_memory` will be removed in future.
-
-Opens the game process and registers a `GameMemory` instance as the `"game_memory"` service.
-
-```python
-# legacy usage - prefer "accessors" instead
-mem = ctx.services.require("game_memory")
-energy = mem.read("multiplayer_vehicle_energy")   # int | None
-```
-
-Config keys: `process_name` (default `"engine_launcher.exe"`), `reconnect_interval_s` (default `5.0`).
-
----
-
-## Overlay Plugins - Technical Notes
-
-User plugins shipped under `plugins/` as `.fuse` archives. For end-user configuration see [Plugins](#plugins).
-
-### energy_bar
-
-`EnergyBar-2.0.1.fuse` - see [Energy Bar](#energy-bar) for calibration and configuration details.
-
-**Rive contract** (`assets/rive/energyBar.riv`)
-
-- ViewModel `energyBarVM`
-  - `energyValue` - float `0.0`–`1.0`
-  - `colorProperty` - 32-bit ARGB color
-  - `strokeWeight` - float (default `1.5`)
-  - `rotation` - float (degrees)
-  - `isSetupComplete` - bool (driven by calibration state)
-  - `state` - string (`"CALIBRATING 3rd PERSON"` / `"CALIBRATING 1st PERSON"` / `"COMPLETE"`)
-- State machine: `energyEngine`
-
-**Dual-view calibration** - `calibration_stages = 2`. First `Ctrl+L` saves the 3rd-person bar position, second saves the 1st-person position. While locked, `panel.update_view(acc.read("multiplayer_is_fp_view"))` swaps positions automatically when the in-game view changes.
-
----
-
-## Native DLLs
-
-### rive_plugin.dll
-
-Required by the `rive_animation` core plugin. Thin C ABI over [rive-runtime](https://github.com/rive-app/rive-runtime) (D3D11 with WARP fallback). Source: `native/rive_plugin/`.
-
-**Build:** see [BUILD.md](BUILD.md).
-
-**Quick rebuild:** `rebuild_dll.ps1` kills any python process holding the DLL and runs MSBuild against the existing VS solution.
-
-**Exposed C ABI** (consumed by `fuse/render/rive_animation.py`):
-
-- `rive_create(w, h)` / `rive_destroy(handle)`
-- `rive_load_file(handle, path)` / `rive_load_bytes(handle, data, size)`
-- State machine: `rive_set_state_machine`, `rive_sm_bool`, `rive_sm_number`, `rive_sm_trigger`
-- ViewModel: `rive_vm_bind`, `rive_vm_set_{number,bool,string,color,enum}`, `rive_vm_trigger`, `rive_vm_get_{number,bool}`
-- Rendering: `rive_advance(handle, dt)`, `rive_render(handle, pixel_buffer)`
-
-### game_memory.dll
-
-Required by the deprecated `game_memory` core plugin. Compiled native reader; sources are not distributed.
-
----
-
-## Project Layout
-
-```
-HEAT_SACLOS/
-├── fuse/                          # FUSE plugin framework
-│   ├── core/                      # Runtime kernel
-│   │   ├── api.py                 # FusePlugin, FuseContext, HotkeyRegistry
-│   │   ├── config.py              # PluginConfig, ConfigManager
-│   │   ├── discovery.py           # Folder + .fuse scanning, manifest parsing
-│   │   ├── events.py              # EventBus
-│   │   ├── host.py                # PluginHost - lifecycle, listeners, idle loop
-│   │   ├── log.py                 # loguru session logging
-│   │   ├── resolver.py            # Dependency resolution & topological sort
-│   │   ├── runner.py              # CLI entry point
-│   │   └── services.py            # ServiceRegistry
-│   ├── ui/                        # Windowing, overlay, and UI helpers
-│   │   ├── assets.py              # PluginAssets (.fuse-safe asset accessor)
-│   │   ├── config_schema.py       # Declarative config schema
-│   │   ├── fonts.py               # GDI font registration (path + in-memory)
-│   │   ├── layered_window.py      # Win32 LayeredWindow
-│   │   ├── manager.py             # Plugin Manager (Ctrl+M)
-│   │   ├── panel.py               # FusePanel / FusePanelGroup
-│   │   ├── screen_capture.py      # mss / PIL grab_region_np
-│   │   └── window_utils.py        # Win32 window helpers
-│   ├── render/                    # Animation and Rive rendering
-│   │   ├── animation.py           # AnimationLoop
-│   │   └── rive_animation.py      # ctypes wrapper around rive_plugin.dll
-│   ├── vision/                    # Game-state reading and computer vision
-│   │   ├── accessors.py           # Accessors - CDP WebSocket reader (primary)
-│   │   ├── game_memory.py         # GameMemory - ctypes wrapper (deprecated)
-│   │   ├── ocr.py                 # Tesseract OCR helpers
-│   │   └── js/
-│   │       ├── read_all.js        # IIFE executed in battle_hud CDP page
-│   │       └── read_markers.js    # IIFE executed in markers CDP page
-│   ├── packaging/                 # Archive tooling
-│   │   ├── file_assoc.py          # HKCU registration for .fuse extension
-│   │   └── pack.py                # pack() / verify() for .fuse archives
-│   ├── plugins/                   # Built-in core plugins (folders)
-│   │   ├── accessors/             # CDP game-state service (primary)
-│   │   ├── game_memory/           # Native DLL game-state service (deprecated)
-│   │   └── rive_animation/        # Rive animation factory service
-│   └── utils/
-│       └── paths.py               # Path resolution helpers
-│
-├── plugins/                       # User drop-in directory - place .fuse archives here
-│   ├── EnergyBar-2.0.1.fuse
-│   └── H.E.A.T.AILOSTORC-1.0.fuse
-│
-├── dev/                           # Plugin source trees (pack to .fuse before deploying)
-│   └── energy_bar/
-│
-├── out/                           # Packed .fuse archives (output of pack())
-│
-├── native/                        # Native DLL plugins
-│   ├── bin/
-│   │   ├── rive_plugin.dll        # Rive runtime (see BUILD.md)
-│   │   └── game_memory.dll        # Compiled game reader (deprecated; sources: private)
-│   └── rive_plugin/
-│       ├── rive_plugin.cpp
-│       ├── rive_plugin.h
-│       └── premake5.lua
-│
-├── assets/                        # Framework-wide assets
-│   ├── NotoSans-VariableFont_wdth,wght.ttf
-│   ├── NotoSans-Italic-VariableFont_wdth,wght.ttf
-│   ├── logo.png
-│   └── fuse_banner.png
-│
-├── data/                          # Persistent data (gitignored)
-│   ├── configs/                   # fuse_<plugin>.json + fuse_host.json
-│   └── fuse_filetype.ico          # Generated .fuse Explorer icon
-│
-├── untracked/                     # Dev/debug scripts (not shipped)
-│   
-│
-├── logs/                          # Session logs (auto-created, gitignored)
-│
-├── run.bat                        # Windows launcher menu
-├── run_heat_overlay.py            # FUSE overlay entry
-├── rebuild_dll.ps1                # Rebuild rive_plugin.dll via MSBuild
-├── BUILD.md                       # rive_plugin.dll build instructions
-├── requirements.txt               # pynput, Pillow, pytesseract, numpy, mss, loguru, websocket-client
-└── README.md                      # This file
-```

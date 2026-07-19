@@ -143,11 +143,11 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .load-error {
-  color: #ff6b6b;
+  color: var(--error-highlight);
   font: 12px monospace;
 }
 .loading {
-  color: #888;
+  color: var(--text-muted);
   font: 12px monospace;
 }
 </style>

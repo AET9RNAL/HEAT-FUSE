@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import "fuse_ui/ui/tokens.css";
 
 export interface HeatStatsData {
   playerName: string;
@@ -77,20 +78,9 @@ const battles = computed(() => {
 
 <style scoped>
 .heat-stats-overlay {
-  --tea-green: hsl(142, 100%, 89%);
-  --light-green: hsl(142, 100%, 78%);
-  --black-1-a: hsla(142, 10%, 4%, 0.6);
-  --black-2-a: hsla(142, 10%, 10%, 0.6);
-  --base-50: rgba(242, 242, 242, 1);
-  --base-200: rgba(179, 179, 179, 1);
-  --success-color: rgba(113, 206, 113, 1);
-  --error-base: rgba(200, 69, 84, 1);
-  --warning-color: rgba(255, 219, 140, 1);
   --win: var(--success-color);
   --loss: var(--error-base);
   --kill: var(--tea-green);
-  --font-primary: system-ui, sans-serif;
-  --font-microcopy: 'Courier New', monospace;
   --ch4: polygon(4px 0%, 100% 0%, 100% calc(100% - 4px), calc(100% - 4px) 100%, 0% 100%, 0% 4px);
   --ch6: polygon(6px 0%, 100% 0%, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0% 100%, 0% 6px);
   --ch8: polygon(8px 0%, 100% 0%, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0% 100%, 0% 8px);
@@ -98,62 +88,79 @@ const battles = computed(() => {
   width: 100%;
   height: 100%;
   display: flex;
-  align-items: flex-start;
-  justify-content: center;
   font-family: var(--font-primary);
-  color: var(--base-50);
+  color: var(--text-main);
   transition: opacity 0.2s;
+  container-type: size;
 }
 
-.heat-stats-overlay.dim {
+/* .heat-stats-overlay.dim {
   opacity: 0.4;
-}
+} */
 
 .hs-card {
-  background: hsla(142, 10%, 4%, 0.92);
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  box-sizing: border-box;
+  background: var(--black-1);
   clip-path: var(--ch8);
-  padding: 12px 16px;
-  width: 100%;
+  padding: clamp(6px, 5cqh, 14px) clamp(8px, 5cqw, 18px);
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: clamp(4px, 4cqh, 10px);
+  overflow: hidden;
 }
 
 .hs-header {
+  flex: none;
   font-family: var(--font-primary);
-  font-size: 20px;
-  font-weight: 500;
-  color: var(--base-50);
+  font-size: clamp(11px, 13cqh, 22px);
+  font-weight: var(--font-weight-2);
+  color: var(--text-main);
   line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .hs-stats {
+  flex: 1;
+  min-height: 0;
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 6px;
+  gap: clamp(3px, 2cqw, 8px);
 }
 
 .hs-stat {
-  background: var(--black-1-a);
+  min-width: 0;
+  background: var(--black-2);
   clip-path: var(--ch8);
-  padding: 8px 10px;
+  padding: clamp(3px, 3cqh, 10px) clamp(4px, 2cqw, 10px);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
   text-align: center;
+  overflow: hidden;
 }
 
 .hs-stat-label {
   font-family: var(--font-microcopy);
-  font-size: 8px;
+  font-size: clamp(6px, 5cqh, 10px);
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: var(--base-200);
-  margin-bottom: 2px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .hs-stat-value {
   font-family: var(--font-primary);
-  font-size: 20px;
-  font-weight: 500;
-  line-height: 1;
+  font-size: clamp(11px, 12cqh, 22px);
+  font-weight: var(--font-weight-2);
+  line-height: 1.1;
+  white-space: nowrap;
 }
 
 .hs-stat-value.accent-win {
@@ -166,55 +173,63 @@ const battles = computed(() => {
 
 .hs-stat-sub {
   font-family: var(--font-microcopy);
-  font-size: 8px;
-  color: var(--base-200);
-  margin-top: 2px;
+  font-size: clamp(6px, 5cqh, 10px);
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .hs-refresh {
+  flex: none;
   font-family: var(--font-microcopy);
-  font-size: 10px;
+  font-size: clamp(7px, 6cqh, 11px);
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: var(--base-50);
-  background: var(--black-2-a);
+  color: var(--text-main);
+  background: var(--black-2);
   border: 1px solid var(--light-green);
   clip-path: var(--ch6);
-  padding: 6px 10px;
+  padding: clamp(3px, 3cqh, 8px) clamp(6px, 3cqw, 12px);
   cursor: pointer;
   transition: background 0.12s;
 }
 
 .hs-refresh:hover {
-  background: hsla(142, 100%, 78%, 0.18);
+  background: var(--black-3);
 }
 
 .hs-recent {
+  flex: none;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: clamp(4px, 3cqw, 10px);
+  min-width: 0;
 }
 
 .hs-recent-label {
   font-family: var(--font-microcopy);
-  font-size: 8px;
+  font-size: clamp(6px, 5cqh, 10px);
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: var(--base-200);
+  color: var(--text-muted);
+  white-space: nowrap;
 }
 
 .hs-streak-bar {
   display: flex;
-  gap: 4px;
+  gap: clamp(2px, 1cqw, 5px);
+  min-width: 0;
 }
 
 .hs-streak-dot {
-  width: 14px;
-  height: 14px;
+  height: clamp(7px, 9cqh, 16px);
+  aspect-ratio: 1;
   clip-path: var(--ch4);
-  background: rgba(255, 255, 255, 0.10);
+  background: var(--black-3);
   padding: 1px;
-  flex-shrink: 0;
+  box-sizing: border-box;
+  flex: 0 1 auto;
 }
 
 .hs-streak-dot.empty {

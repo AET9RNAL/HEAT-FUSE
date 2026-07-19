@@ -1,12 +1,12 @@
 {
   "plugin_id": "heat_stats",
   "name": "HEATStats",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "author": "AETERNAL",
   "description": "Records per-match performance data.",
   "entry": "plugin:HeatStatsPlugin",
   "runtime": "node",
-  "dependencies": ["accessors"],
+  "dependencies": ["accessors", "fuse_ui"],
   "default_config": {
     "sample_interval_s": 5,
     "summarize_hold_s": 5.0,

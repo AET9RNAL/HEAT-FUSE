@@ -108,9 +108,10 @@ function handle(m: Record<string, unknown>): void {
         m.state === "calibrate" ? "calibrate" : m.state === "interactive" ? "interactive" : "locked";
       // Locked => fully click-through. Calibrate/interactive => start
       // click-through; the hover hit-test (StageApp) enables interaction only
-      // over an overlay. Only interactive makes the window focusable (text input).
+      // over an overlay or the editor UI. Both states need a focusable window:
+      // interactive for overlay text input, calibrate for the inspector fields.
       setWindowIgnore(true);
-      setWindowFocusable(hostState.value === "interactive");
+      setWindowFocusable(hostState.value === "interactive" || hostState.value === "calibrate");
       break;
     }
   }

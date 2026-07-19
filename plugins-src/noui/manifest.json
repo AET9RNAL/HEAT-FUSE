@@ -1,7 +1,7 @@
 {
   "plugin_id": "noui",
   "name": "No UI",
-  "version": "3.1.0",
+  "version": "3.2.0",
   "author": "AETERNAL",
   "description": "Allows to hide individual UI elements",
   "entry": "plugin:NoUiPlugin",
