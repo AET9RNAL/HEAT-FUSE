@@ -14,7 +14,7 @@ import path from 'node:path'
 import fs from 'node:fs'
 import { unzipSync, strFromU8 } from 'fflate'
 import { initOverlayStage, startOverlayStage, stopOverlayStage } from './overlayStage'
-import { startObsServer, stopObsServer, setObsParams, obsUrl } from './obsServer'
+import { startObsServer, stopObsServer, setObsParams, obsUrl, obsParamsUrl, listObsDisplays } from './obsServer'
 
 declare const __RELEASE__: boolean
 
@@ -129,7 +129,26 @@ let minimizeToTrayOnClose = false
 
 let fuseProcess: ChildProcess | null = null
 let fusePort: number | null = null
+let fuseToken: string | null = null
 let currentObsUrl: string | null = null
+
+/**
+ * Browser Source URL for a display selection ('all' = whole virtual desktop,
+ * null/unknown = primary).
+ *
+ * In prod the OBS server serves the overlay bundle itself and injects the params
+ * endpoint. In dev Vite serves it, so the URL has to carry the runtime params
+ * plus an absolute pointer at /obs-params for the display viewport.
+ */
+function buildObsUrl(display?: string | null): string | null {
+  if (!VITE_DEV_SERVER_URL) return obsUrl(display)
+  if (fusePort === null || fuseToken === null) return null
+  const q = new URLSearchParams({ port: String(fusePort), token: fuseToken })
+  const paramsUrl = obsParamsUrl()
+  if (paramsUrl) q.set('paramsUrl', paramsUrl)
+  if (display) q.set('display', display)
+  return `${VITE_DEV_SERVER_URL}overlay.html?${q.toString()}`
+}
 
 // Game process watcher 
 
@@ -586,8 +605,9 @@ app.whenReady().then(() => {
 
   // Bind the OBS browser-source listener once, for the whole app lifetime, so
   // its URL never changes under a configured OBS source. Params are published
-  // per FUSE launch via setObsParams(). Dev has no renderer dist - skipped.
-  if (!VITE_DEV_SERVER_URL) void startObsServer(RENDERER_DIST)
+  // per FUSE launch via setObsParams(). Runs in dev too: Vite serves the overlay
+  // bundle there, but /obs-params (display viewports) still comes from here.
+  void startObsServer(RENDERER_DIST)
 
   // Cold-start deep link (app launched by OS protocol handler)
   const deepLinkArg = process.argv.find(a => a.startsWith('fuse://'))
@@ -693,9 +713,11 @@ app.whenReady().then(() => {
                 clearTimeout(timeout)
                 fuseProcess = proc
                 fusePort = port
+                fuseToken = connectionToken
                 proc.on('exit', (code, signal) => {
                   fuseProcess = null
                   fusePort = null
+                  fuseToken = null
                   stopOverlayStage()
                   // Leave the OBS listener bound (its URL must stay valid) and
                   // just clear the params - the captured page polls until FUSE
@@ -710,14 +732,11 @@ app.whenReady().then(() => {
                 // sidecar is up (they connect over WS with role:overlay).
                 startOverlayStage(port, connectionToken)
                 // Expose the overlay bundle to OBS as a Browser Source. In dev
-                // the bundle is served by Vite, so hand over that URL directly;
-                // in prod the (already bound) OBS server just gets fresh params.
-                if (VITE_DEV_SERVER_URL) {
-                  currentObsUrl = `${VITE_DEV_SERVER_URL}overlay.html?port=${port}&token=${connectionToken}`
-                } else {
-                  setObsParams({ wsPort: port, token: connectionToken })
-                  currentObsUrl = obsUrl()
-                }
+                // the bundle is served by Vite, so hand over that URL and point
+                // it at our params endpoint; in prod the (already bound) OBS
+                // server serves the page and injects that itself.
+                setObsParams({ wsPort: port, token: connectionToken })
+                currentObsUrl = buildObsUrl(null)
                 win?.webContents.send('fuse:obs-url', currentObsUrl)
                 // Also returned inline: the event above races the renderer's
                 // listener registration and would be missed on a first launch.
@@ -743,6 +762,7 @@ app.whenReady().then(() => {
   ipcMain.handle('fuse:kill', async () => {
     stopOverlayStage()
     setObsParams(null)
+    fuseToken = null
     currentObsUrl = null
     if (!fuseProcess) return { success: true }
     return new Promise<{ success: boolean }>((resolve) => {
@@ -752,6 +772,10 @@ app.whenReady().then(() => {
       proc.kill('SIGTERM')
     })
   })
+
+  // Broadcast target picker: which monitor's region the OBS source should show.
+  ipcMain.handle('obs:displays', () => listObsDisplays())
+  ipcMain.handle('obs:url', (_event, display?: string | null) => buildObsUrl(display))
 
   ipcMain.handle('fuse:status', () => ({
     running: !!fuseProcess,

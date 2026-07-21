@@ -21,6 +21,13 @@ export const overlayBus = mitt<DataEvents>();
 export const overlays = reactive(new Map<string, OverlayDescriptor>());
 export const hostState = ref<HostState>("locked");
 export const connected = ref(false);
+/**
+ * Region of the virtual desktop this client renders, when broadcasting a single
+ * display to OBS. Overlay rects are in virtual-desktop coordinates, so the stage
+ * shifts by -x/-y to bring the chosen monitor's region into view. Null in the
+ * Electron stage window, which already spans the whole virtual desktop.
+ */
+export const viewport = ref<{ x: number; y: number; w: number; h: number } | null>(null);
 /** True while an overlay is being dragged (suppresses hover click-through toggling). */
 export const dragging = ref(false);
 
@@ -68,9 +75,23 @@ const RECONNECT_MS = 1000;
  */
 async function fetchParams(url: string): Promise<FuseOverlayParams | null> {
   try {
-    const res = await fetch(url, { cache: "no-store" });
+    // Forward this page's ?display= so the server resolves the matching viewport.
+    // Built via URL so it works whether `url` is relative (prod, injected) or
+    // absolute with its own query (dev, passed as ?paramsUrl=).
+    const sel = new URLSearchParams(location.search).get("display");
+    const target = new URL(url, location.href);
+    if (sel) target.searchParams.set("display", sel);
+    const res = await fetch(target.toString(), { cache: "no-store" });
     if (!res.ok) return null;
-    const j = (await res.json()) as { running?: boolean; port?: number; token?: string };
+    const j = (await res.json()) as {
+      running?: boolean;
+      port?: number;
+      token?: string;
+      viewport?: { x: number; y: number; w: number; h: number };
+    };
+    // Applied even while the runtime is down so the stage is already framed on
+    // the right monitor when overlays arrive.
+    if (j.viewport) viewport.value = j.viewport;
     if (!j.running || !j.port || !j.token) return null;
     return { port: Number(j.port), token: String(j.token) };
   } catch {
@@ -80,8 +101,11 @@ async function fetchParams(url: string): Promise<FuseOverlayParams | null> {
 
 export function connectOverlay(): void {
   // OBS browser-source mode: params come from the server, fresh on every attempt.
-  const paramsUrl = (window as unknown as { __FUSE_OVERLAY_PARAMS_URL__?: string })
-    .__FUSE_OVERLAY_PARAMS_URL__;
+  // Injected when this server serves the page (prod); passed as a query param
+  // when Vite serves it (dev).
+  const paramsUrl =
+    (window as unknown as { __FUSE_OVERLAY_PARAMS_URL__?: string }).__FUSE_OVERLAY_PARAMS_URL__ ??
+    new URLSearchParams(location.search).get("paramsUrl");
   if (typeof paramsUrl === "string") {
     void fetchParams(paramsUrl).then((p) => {
       // FUSE not running yet (or still booting) - keep polling until it is.

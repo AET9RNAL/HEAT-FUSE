@@ -39,6 +39,7 @@ export type IconKind =
   | 'password'
   | 'views'
   | 'obs'
+  | 'monitor'
 </script>
 
 <script setup lang="ts">

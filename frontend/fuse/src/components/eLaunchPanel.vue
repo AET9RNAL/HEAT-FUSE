@@ -16,18 +16,36 @@ const { fuseState, runtimeState, obsUrl } = useFuseControl()
 
 const isRunning = computed(() => fuseState.value === 'running')
 
+interface ObsDisplay { id: string; label: string; width: number; height: number; primary: boolean }
+
 const obsCopyState = ref<'idle' | 'success'>('idle')
+const obsDisplays = ref<ObsDisplay[]>([])
+const obsPickerOpen = ref(false)
 let obsCopyTimer: ReturnType<typeof setTimeout> | null = null
-async function copyObsUrl() {
-  if (!obsUrl.value) return
+const obsReady = computed(() =>
+  isRunning.value && runtimeState.value === 'locked' && !!obsUrl.value,
+)
+
+async function onObsClick() {
+  try { obsDisplays.value = await window.fuseAPI.obsDisplays() } catch { obsDisplays.value = [] }
+  if (obsDisplays.value.length > 1) { obsPickerOpen.value = true; return }
+  await copyObsUrl(null)
+}
+
+async function copyObsUrl(displayId: string | null) {
+  const url = displayId ? await window.fuseAPI.obsUrlFor(displayId) : obsUrl.value
+  if (!url) return
   try {
-    await navigator.clipboard.writeText(obsUrl.value)
+    await navigator.clipboard.writeText(url)
+    obsPickerOpen.value = false
     obsCopyState.value = 'success'
     eventBus.emit('notification', { message: t('applaunch.obsUrlCopied'), type: 'success' })
     if (obsCopyTimer) clearTimeout(obsCopyTimer)
     obsCopyTimer = setTimeout(() => { obsCopyState.value = 'idle'; obsCopyTimer = null }, 1500)
   } catch { /* clipboard unavailable */ }
 }
+
+watch(obsReady, (ready) => { if (!ready) obsPickerOpen.value = false })
 
 // While running but not yet locked, plugins are still in calibrate
 const promptVisible = ref(false)
@@ -126,9 +144,28 @@ onUnmounted(() => { ro?.disconnect(); clearLockTimer(); if (obsCopyTimer) clearT
 
     <div class="actions">
       <div class="launch-cluster">
-        <AnimatePresence>
+        <AnimatePresence mode="wait">
+          <motion.div
+            v-if="obsReady && obsPickerOpen"
+            key="obs-picker"
+            class="obs-picker"
+            :initial="{ opacity: 0, scale: 0.9 }"
+            :animate="{ opacity: 1, scale: 1 }"
+            :exit="{ opacity: 0, scale: 0.9 }"
+            :transition="Dynamics.spring"
+          >
+            <eButton
+              v-for="d in obsDisplays"
+              :key="d.id"
+              icon="monitor"
+              :label="d.label"
+              :title="t('applaunch.copyObsUrlFor', { w: d.width, h: d.height })"
+              size="slim"
+              @click="copyObsUrl(d.id)"
+            />
+          </motion.div>
           <motion.span
-            v-if="isRunning && obsUrl"
+            v-else-if="obsReady"
             key="obs-copy"
             :title="t('applaunch.copyObsUrl')"
             :initial="{ opacity: 0, scale: 0.8 }"
@@ -140,7 +177,7 @@ onUnmounted(() => { ro?.disconnect(); clearLockTimer(); if (obsCopyTimer) clearT
               icon="obs"
               size="slim"
               :systemState="obsCopyState"
-              @click="copyObsUrl"
+              @click="onObsClick"
             />
           </motion.span>
         </AnimatePresence>
@@ -278,6 +315,12 @@ onUnmounted(() => { ro?.disconnect(); clearLockTimer(); if (obsCopyTimer) clearT
 }
 
 .launch-cluster {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.obs-picker {
   display: flex;
   align-items: center;
   gap: var(--space-2);

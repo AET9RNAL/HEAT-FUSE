@@ -41,6 +41,7 @@
         "calibrateHint": "Ctrl+L to lock",
         "lockedPrompt": "Locked",
         "copyObsUrl": "Copy OBS Browser Source URL",
+        "copyObsUrlFor": "Copy URL for this monitor ({w}x{h})",
         "obsUrlCopied": "OBS Browser Source URL copied to clipboard",
         "notifications": {
             "fuseDisabledTitle": "FUSE Is Disabled",

@@ -39,6 +39,8 @@ export interface TranslationSchema {
         calibrateHint: string
         lockedPrompt: string
         copyObsUrl: string
+        copyObsUrlFor: string
+        obsUrlCopied: string
         notifications: {
             fuseDisabledTitle: string
             fuseDisabledMessage: string

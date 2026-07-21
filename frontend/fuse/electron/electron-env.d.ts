@@ -143,5 +143,7 @@ interface Window {
     offLog: () => void
     onObsUrl: (cb: (url: string | null) => void) => void
     offObsUrl: () => void
+    obsDisplays: () => Promise<Array<{ id: string; label: string; width: number; height: number; primary: boolean }>>
+    obsUrlFor: (display?: string | null) => Promise<string | null>
   }
 }

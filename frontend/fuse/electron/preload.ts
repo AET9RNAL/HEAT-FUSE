@@ -202,6 +202,10 @@ contextBridge.exposeInMainWorld('fuseAPI', {
     ipcRenderer.on('fuse:obs-url', (_event, url) => cb(url)),
   offObsUrl: () =>
     ipcRenderer.removeAllListeners('fuse:obs-url'),
+  obsDisplays: (): Promise<Array<{ id: string; label: string; width: number; height: number; primary: boolean }>> =>
+    ipcRenderer.invoke('obs:displays'),
+  obsUrlFor: (display?: string | null): Promise<string | null> =>
+    ipcRenderer.invoke('obs:url', display),
   onLog: (cb: (entry: { level: string; text: string; timestamp: number }) => void) =>
     ipcRenderer.on('fuse:log', (_event, entry) => cb(entry)),
   offLog: () =>
