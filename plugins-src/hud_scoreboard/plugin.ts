@@ -47,8 +47,14 @@ const SLUG_SEED: Record<string, string> = {
   "1": "a01_chrysler_xm1_volcano",
   "2": "a13_chrysler_xm1_ares_90",
   "3": "a02_m1e1_120",
+  "8": "g11_leopard2k_st",
+  "24": "gb01_challenger",
+  "34": "a07_hstv_l",
   "39": "a12_alvt",
   "42": "g01_leopard_1_a6_120",
+  "53": "a08_m3_bradley",
+  "97": "a05_m551a1_sheridan",
+  "100": "g07_marder1a3",
   "101": "a20_m60a2",
 };
 
@@ -61,9 +67,15 @@ const DISPLAY_SLUGS: Record<string, string> = {
   "M60A1": "a14_m60a1",
   "M60A2": "a20_m60a2",
   "Leo 1A6A1": "g01_leopard_1_a6_120",
+  "LEO 2KST": "g11_leopard2k_st",
+  "LEO 2FK": "g06_leopard2fk_atgm",
   "AMX10 RC": "f05_amx_10_rc",
   "Obj. 287": "r08_object_287",
   "FV4030 X": "gb01_challenger",
+  "HSTV-L": "a07_hstv_l",
+  "M551A1": "a05_m551a1_sheridan",
+  "M3E1": "a08_m3_bradley",
+  "Marder 1A3": "g07_marder1a3",
 };
 
 const CLASS_ORDER = ["marksman", "assault", "defender"];
