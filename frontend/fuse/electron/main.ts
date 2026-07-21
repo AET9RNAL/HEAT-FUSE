@@ -14,6 +14,7 @@ import path from 'node:path'
 import fs from 'node:fs'
 import { unzipSync, strFromU8 } from 'fflate'
 import { initOverlayStage, startOverlayStage, stopOverlayStage } from './overlayStage'
+import { startObsServer, stopObsServer, setObsParams, obsUrl } from './obsServer'
 
 declare const __RELEASE__: boolean
 
@@ -128,6 +129,7 @@ let minimizeToTrayOnClose = false
 
 let fuseProcess: ChildProcess | null = null
 let fusePort: number | null = null
+let currentObsUrl: string | null = null
 
 // Game process watcher 
 
@@ -511,6 +513,7 @@ app.on('before-quit', (event) => {
   isQuitting = true
   disconnectDiscord()
   stopOverlayStage()
+  stopObsServer()
 
   if (gameWatcher) { clearInterval(gameWatcher); gameWatcher = null }
   if (focusWatcher) { clearInterval(focusWatcher); focusWatcher = null }
@@ -581,6 +584,11 @@ app.whenReady().then(() => {
     preload: PATHS.preload,
   })
 
+  // Bind the OBS browser-source listener once, for the whole app lifetime, so
+  // its URL never changes under a configured OBS source. Params are published
+  // per FUSE launch via setObsParams(). Dev has no renderer dist - skipped.
+  if (!VITE_DEV_SERVER_URL) void startObsServer(RENDERER_DIST)
+
   // Cold-start deep link (app launched by OS protocol handler)
   const deepLinkArg = process.argv.find(a => a.startsWith('fuse://'))
   if (deepLinkArg) {
@@ -628,7 +636,7 @@ app.whenReady().then(() => {
       FUSE_USER_PLUGINS_DIR: PATHS.pluginsUser,
     }
 
-    return new Promise<{ success: boolean; pid?: number; port?: number; connectionToken?: string; error?: string }>((resolve) => {
+    return new Promise<{ success: boolean; pid?: number; port?: number; connectionToken?: string; obsUrl?: string | null; error?: string }>((resolve) => {
       const proc = spawn(executable, args, {
         stdio: ['pipe', 'pipe', 'pipe'],
         windowsHide: true,
@@ -689,6 +697,11 @@ app.whenReady().then(() => {
                   fuseProcess = null
                   fusePort = null
                   stopOverlayStage()
+                  // Leave the OBS listener bound (its URL must stay valid) and
+                  // just clear the params - the captured page polls until FUSE
+                  // is back, then reconnects on its own.
+                  setObsParams(null)
+                  currentObsUrl = null
                   if (!isQuitting) {
                     win?.webContents.send('fuse:exited', { code: code ?? null, signal: signal ?? null })
                   }
@@ -696,7 +709,19 @@ app.whenReady().then(() => {
                 // Open the transparent overlay stage windows now that the
                 // sidecar is up (they connect over WS with role:overlay).
                 startOverlayStage(port, connectionToken)
-                resolve({ success: true, pid: proc.pid, port, connectionToken })
+                // Expose the overlay bundle to OBS as a Browser Source. In dev
+                // the bundle is served by Vite, so hand over that URL directly;
+                // in prod the (already bound) OBS server just gets fresh params.
+                if (VITE_DEV_SERVER_URL) {
+                  currentObsUrl = `${VITE_DEV_SERVER_URL}overlay.html?port=${port}&token=${connectionToken}`
+                } else {
+                  setObsParams({ wsPort: port, token: connectionToken })
+                  currentObsUrl = obsUrl()
+                }
+                win?.webContents.send('fuse:obs-url', currentObsUrl)
+                // Also returned inline: the event above races the renderer's
+                // listener registration and would be missed on a first launch.
+                resolve({ success: true, pid: proc.pid, port, connectionToken, obsUrl: currentObsUrl })
               }
             } catch { /* not startup line yet */ }
           } else {
@@ -717,6 +742,8 @@ app.whenReady().then(() => {
 
   ipcMain.handle('fuse:kill', async () => {
     stopOverlayStage()
+    setObsParams(null)
+    currentObsUrl = null
     if (!fuseProcess) return { success: true }
     return new Promise<{ success: boolean }>((resolve) => {
       const proc = fuseProcess!
@@ -730,6 +757,7 @@ app.whenReady().then(() => {
     running: !!fuseProcess,
     pid: fuseProcess?.pid ?? null,
     port: fusePort,
+    obsUrl: currentObsUrl,
   }))
 
   ipcMain.handle('plugins:scan', () => {

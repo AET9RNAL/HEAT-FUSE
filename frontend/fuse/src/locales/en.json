@@ -40,6 +40,8 @@
         "calibratePrompt": "Calibration",
         "calibrateHint": "Ctrl+L to lock",
         "lockedPrompt": "Locked",
+        "copyObsUrl": "Copy OBS Browser Source URL",
+        "obsUrlCopied": "OBS Browser Source URL copied to clipboard",
         "notifications": {
             "fuseDisabledTitle": "FUSE Is Disabled",
             "fuseDisabledMessage": "Enable FUSE with the master switch before launching.",

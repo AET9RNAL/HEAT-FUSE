@@ -1,7 +1,7 @@
 {
   "plugin_id": "hud_scoreboard",
   "name": "Hud Scoreboard",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "author": "AETERNAL",
   "description": "See the Ally and enemy roster without having to TAB every time.",
   "entry": "plugin:HudScoreboardPlugin",

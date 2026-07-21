@@ -10,5 +10,20 @@
   "mirror_enemies": true,
   "show_names": false,
   "layout": "scoreboard",
-  "vehicle_slugs": {}
+  "vehicle_slugs": {
+    "1": "a01_chrysler_xm1_volcano",
+    "2": "a13_chrysler_xm1_ares_90",
+    "3": "a02_m1e1_120",
+    "5": "a14_m60a1",
+    "8": "g11_leopard2k_st",
+    "24": "gb01_challenger",
+    "34": "a07_hstv_l",
+    "39": "a12_alvt",
+    "42": "g01_leopard_1_a6_120",
+    "53": "a08_m3_bradley",
+    "56": "r08_object_287",
+    "97": "a05_m551a1_sheridan",
+    "100": "g07_marder1a3",
+    "101": "a20_m60a2"
+  }
 }

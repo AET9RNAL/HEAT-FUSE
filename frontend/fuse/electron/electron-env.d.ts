@@ -134,12 +134,14 @@ interface Window {
     getIP: () => Promise<string | null>
   }
   fuseAPI: {
-    spawn: () => Promise<{ success: boolean; pid?: number; port?: number; connectionToken?: string; error?: string }>
+    spawn: () => Promise<{ success: boolean; pid?: number; port?: number; connectionToken?: string; obsUrl?: string | null; error?: string }>
     kill: () => Promise<{ success: boolean }>
-    status: () => Promise<{ running: boolean; pid: number | null; port: number | null }>
+    status: () => Promise<{ running: boolean; pid: number | null; port: number | null; obsUrl: string | null }>
     onExited: (cb: (data: { code: number | null; signal: string | null }) => void) => void
     offExited: () => void
     onLog: (cb: (entry: { level: string; text: string; timestamp: number }) => void) => void
     offLog: () => void
+    onObsUrl: (cb: (url: string | null) => void) => void
+    offObsUrl: () => void
   }
 }

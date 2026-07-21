@@ -6,7 +6,9 @@
     "rive_animation",
     "cruise_control",
     "combat_reboot_plus",
-    "heat_stats"
+    "heat_stats",
+    "witchery",
+    "noui"
   ],
   "hotkey_overrides": {
     "host": {

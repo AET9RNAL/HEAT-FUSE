@@ -9,11 +9,25 @@ import { useAppStore } from '../stores/app'
 import { useFuseControl } from '../composables/useFuseControl'
 import { useI18n } from '../composables/useI18n'
 import { Dynamics } from '../composables/useMotion'
+import { eventBus } from '../events/eventBus'
 const appStore = useAppStore()
 const { t } = useI18n()
-const { fuseState, runtimeState } = useFuseControl()
+const { fuseState, runtimeState, obsUrl } = useFuseControl()
 
 const isRunning = computed(() => fuseState.value === 'running')
+
+const obsCopyState = ref<'idle' | 'success'>('idle')
+let obsCopyTimer: ReturnType<typeof setTimeout> | null = null
+async function copyObsUrl() {
+  if (!obsUrl.value) return
+  try {
+    await navigator.clipboard.writeText(obsUrl.value)
+    obsCopyState.value = 'success'
+    eventBus.emit('notification', { message: t('applaunch.obsUrlCopied'), type: 'success' })
+    if (obsCopyTimer) clearTimeout(obsCopyTimer)
+    obsCopyTimer = setTimeout(() => { obsCopyState.value = 'idle'; obsCopyTimer = null }, 1500)
+  } catch { /* clipboard unavailable */ }
+}
 
 // While running but not yet locked, plugins are still in calibrate
 const promptVisible = ref(false)
@@ -86,7 +100,7 @@ onMounted(() => {
   })
   ro.observe(panelEl.value)
 })
-onUnmounted(() => { ro?.disconnect(); clearLockTimer() })
+onUnmounted(() => { ro?.disconnect(); clearLockTimer(); if (obsCopyTimer) clearTimeout(obsCopyTimer) })
 </script>
 
 <template>
@@ -111,7 +125,26 @@ onUnmounted(() => { ro?.disconnect(); clearLockTimer() })
     </div>
 
     <div class="actions">
-      <div class="launch-action">
+      <div class="launch-cluster">
+        <AnimatePresence>
+          <motion.span
+            v-if="isRunning && obsUrl"
+            key="obs-copy"
+            :title="t('applaunch.copyObsUrl')"
+            :initial="{ opacity: 0, scale: 0.8 }"
+            :animate="{ opacity: 1, scale: 1 }"
+            :exit="{ opacity: 0, scale: 0.8 }"
+            :transition="Dynamics.spring"
+          >
+            <eButton
+              icon="obs"
+              size="slim"
+              :systemState="obsCopyState"
+              @click="copyObsUrl"
+            />
+          </motion.span>
+        </AnimatePresence>
+        <div class="launch-action">
         <AnimatePresence>
           <motion.div
             v-if="promptVisible"
@@ -134,6 +167,7 @@ onUnmounted(() => { ro?.disconnect(); clearLockTimer() })
           size="slim"
           @click="handleActionClick"
         />
+        </div>
       </div>
       <eContextMenu :options="menuOptions" placement="bottom" />
     </div>
@@ -241,6 +275,12 @@ onUnmounted(() => { ro?.disconnect(); clearLockTimer() })
   gap: var(--space-6, 42px);
   flex-shrink: 0;
   padding: var(--space-2);
+}
+
+.launch-cluster {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
 }
 
 .launch-action {

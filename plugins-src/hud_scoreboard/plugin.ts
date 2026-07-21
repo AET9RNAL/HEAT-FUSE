@@ -51,6 +51,7 @@ const SLUG_SEED: Record<string, string> = {
   "24": "gb01_challenger",
   "34": "a07_hstv_l",
   "39": "a12_alvt",
+  "41": "r01_t_62a",
   "42": "g01_leopard_1_a6_120",
   "53": "a08_m3_bradley",
   "97": "a05_m551a1_sheridan",

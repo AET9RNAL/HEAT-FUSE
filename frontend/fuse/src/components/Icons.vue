@@ -38,6 +38,7 @@ export type IconKind =
   | 'unlock'
   | 'password'
   | 'views'
+  | 'obs'
 </script>
 
 <script setup lang="ts">

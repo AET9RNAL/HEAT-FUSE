@@ -16,6 +16,8 @@ const fuseState = ref<FuseState>('idle')
 const fuseError = ref<string | null>(null)
 const fusePid = ref<number | null>(null)
 const runtimeState = ref<FuseRuntimeState>(null)
+// OBS Browser Source URL for the overlay bundle, set once the runtime is up.
+const obsUrl = ref<string | null>(null)
 
 let _actionInProgress = false
 let _exitHandlerRegistered = false
@@ -51,6 +53,9 @@ async function startFuse(): Promise<boolean> {
         }
 
         fusePid.value = result.pid ?? null
+        // Taken from the spawn result rather than the 'fuse:obs-url' event: main
+        // emits that before spawn() resolves, so a first launch would miss it.
+        obsUrl.value = result.obsUrl ?? null
         eventBus.emit('agent:started', { pid: result.pid ?? 0, port: result.port })
 
         _setState('connecting')
@@ -100,6 +105,7 @@ async function startFuse(): Promise<boolean> {
                 const { disconnect } = useFuseConnection()
                 disconnect()
                 fusePid.value = null
+                obsUrl.value = null
 
                 usePluginsStore().resetRuntimeStatuses()
                 runtimeState.value = null
@@ -132,6 +138,7 @@ async function stopFuse(): Promise<void> {
 
         await window.fuseAPI.kill()
         fusePid.value = null
+        obsUrl.value = null
         usePluginsStore().resetRuntimeStatuses()
         runtimeState.value = null
         _setState('idle')
@@ -148,6 +155,10 @@ export function useFuseControl() {
     if (!_watcherSetUp) {
         _watcherSetUp = true
         const appStore = useAppStore()
+
+        // Registered before the enableFuse watcher below, which may launch FUSE
+        // immediately (startWithGame), so no update can slip past.
+        window.fuseAPI.onObsUrl?.((url) => { obsUrl.value = url })
 
         window.gameProcessAPI?.onProcessDetected(() => {
             if (appStore.startWithGame) appStore.enableFuse = true
@@ -185,6 +196,7 @@ export function useFuseControl() {
         fuseError: readonly(fuseError),
         fusePid: readonly(fusePid),
         runtimeState: readonly(runtimeState),
+        obsUrl: readonly(obsUrl),
         startFuse,
         stopFuse,
     }

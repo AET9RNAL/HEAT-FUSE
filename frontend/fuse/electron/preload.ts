@@ -188,16 +188,20 @@ contextBridge.exposeInMainWorld('deviceAPI', {
 })
 
 contextBridge.exposeInMainWorld('fuseAPI', {
-  spawn: (): Promise<{ success: boolean; pid?: number; port?: number; connectionToken?: string; error?: string }> =>
+  spawn: (): Promise<{ success: boolean; pid?: number; port?: number; connectionToken?: string; obsUrl?: string | null; error?: string }> =>
     ipcRenderer.invoke('fuse:spawn'),
   kill: (): Promise<{ success: boolean }> =>
     ipcRenderer.invoke('fuse:kill'),
-  status: (): Promise<{ running: boolean; pid: number | null; port: number | null }> =>
+  status: (): Promise<{ running: boolean; pid: number | null; port: number | null; obsUrl: string | null }> =>
     ipcRenderer.invoke('fuse:status'),
   onExited: (cb: (data: { code: number | null; signal: string | null }) => void) =>
     ipcRenderer.on('fuse:exited', (_event, data) => cb(data)),
   offExited: () =>
     ipcRenderer.removeAllListeners('fuse:exited'),
+  onObsUrl: (cb: (url: string | null) => void) =>
+    ipcRenderer.on('fuse:obs-url', (_event, url) => cb(url)),
+  offObsUrl: () =>
+    ipcRenderer.removeAllListeners('fuse:obs-url'),
   onLog: (cb: (entry: { level: string; text: string; timestamp: number }) => void) =>
     ipcRenderer.on('fuse:log', (_event, entry) => cb(entry)),
   offLog: () =>

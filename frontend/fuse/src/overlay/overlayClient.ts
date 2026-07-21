@@ -59,18 +59,56 @@ export function assetBase(): string {
   return base ? `http://${base}` : "";
 }
 
+const RECONNECT_MS = 1000;
+
+/**
+ * Fetch live params from the OBS server. The port/token change on every runtime
+ * restart, so a page served under a stable URL (and cached by OBS indefinitely)
+ * must re-read them per attempt rather than trust anything baked in at load.
+ */
+async function fetchParams(url: string): Promise<FuseOverlayParams | null> {
+  try {
+    const res = await fetch(url, { cache: "no-store" });
+    if (!res.ok) return null;
+    const j = (await res.json()) as { running?: boolean; port?: number; token?: string };
+    if (!j.running || !j.port || !j.token) return null;
+    return { port: Number(j.port), token: String(j.token) };
+  } catch {
+    return null;
+  }
+}
+
 export function connectOverlay(): void {
+  // OBS browser-source mode: params come from the server, fresh on every attempt.
+  const paramsUrl = (window as unknown as { __FUSE_OVERLAY_PARAMS_URL__?: string })
+    .__FUSE_OVERLAY_PARAMS_URL__;
+  if (typeof paramsUrl === "string") {
+    void fetchParams(paramsUrl).then((p) => {
+      // FUSE not running yet (or still booting) - keep polling until it is.
+      if (!p) setTimeout(connectOverlay, RECONNECT_MS);
+      else openSocket(p);
+    });
+    return;
+  }
+
   const params = resolveParams();
   if (!params) {
     console.error("[overlay] no connection params (window.__FUSE_OVERLAY__ or ?port&token)");
     return;
   }
+  openSocket(params);
+}
+
+function openSocket(params: FuseOverlayParams): void {
   base = `127.0.0.1:${params.port}`;
   ws = new WebSocket(`ws://${base}/ws`);
   ws.onopen = () => ws!.send(JSON.stringify({ type: "auth", token: params.token, role: "overlay" }));
   ws.onclose = () => {
     connected.value = false;
-    setTimeout(connectOverlay, 1000); // simple auto-reconnect
+    // Drop descriptors from the dead session; the next auth re-hydrates them.
+    // Without this a reconnect to a restarted runtime leaves ghost overlays.
+    overlays.clear();
+    setTimeout(connectOverlay, RECONNECT_MS); // simple auto-reconnect
   };
   ws.onmessage = (ev) => handle(JSON.parse(ev.data));
 }
