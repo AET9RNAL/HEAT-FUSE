@@ -12,6 +12,11 @@ const loadError = ref<string | null>(null);
 
 const fullUrl = computed(() => assetBase() + props.descriptor.assetUrl);
 
+// Absolute base for this plugin's served assets (the overlay's own asset dir,
+// minus the component filename). Handed to the mounted component so overlays can
+// build image URLs (`${assetBase}/assets/...`) without hardcoding host/port.
+const assetBaseUrl = computed(() => assetBase() + props.descriptor.assetUrl.replace(/\/[^/]*$/, ""));
+
 // Back-channel: interactive overlays call this to notify the owning plugin.
 function emitAction(action: string, payload?: unknown): void {
   sendAction(props.descriptor.overlayId, action, payload);
@@ -136,6 +141,7 @@ onBeforeUnmount(() => {
     :state="hostState"
     :interactive="hostState === 'interactive'"
     :emit-action="emitAction"
+    :asset-base="assetBaseUrl"
   />
   <div v-else-if="loadError" class="load-error">overlay load error: {{ loadError }}</div>
   <div v-else class="loading">loading overlay...</div>

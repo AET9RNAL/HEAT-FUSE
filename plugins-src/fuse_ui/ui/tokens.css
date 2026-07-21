@@ -40,6 +40,10 @@
   --accent-50: var(--tea-green);
   --accent-200: var(--light-green);
 
+  /* Team colors (ally / enemy) */
+  --woth-ally: #7abfdf;
+  --woth-enemy: #ff6d46;
+
   /* State */
   --success-color: rgba(113, 206, 113, 1);
   --warning-color: rgba(255, 219, 140, 1);

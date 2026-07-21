@@ -136,16 +136,18 @@ export class WsServer {
       return;
     }
     const ext = path.extname(abs).toLowerCase();
-    const type =
-      ext === ".riv"
-        ? "application/octet-stream"
-        : ext === ".png"
-          ? "image/png"
-          : ext === ".json"
-            ? "application/json"
-            : ext === ".vue"
-              ? "text/plain"
-              : "application/octet-stream";
+    const MIME: Record<string, string> = {
+      ".riv": "application/octet-stream",
+      ".png": "image/png",
+      ".svg": "image/svg+xml",
+      ".jpg": "image/jpeg",
+      ".jpeg": "image/jpeg",
+      ".webp": "image/webp",
+      ".gif": "image/gif",
+      ".json": "application/json",
+      ".vue": "text/plain",
+    };
+    const type = MIME[ext] ?? "application/octet-stream";
     res.writeHead(200, { "content-type": type, "cache-control": "no-cache" });
     fs.createReadStream(abs).pipe(res);
   }

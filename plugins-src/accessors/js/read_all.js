@@ -228,6 +228,66 @@
       }
     } catch(e) {}
 
+    // Live team roster - tacticalInfoModel.players is the FULL 10-player roster
+    // (topPlayersModel is only a top-3 leaderboard and lacks isDead), with live
+    // alive/dead + health + class role + team, driving the scoreboard strip.
+    // NOTE: vehicleName here is a localized DISPLAY callsign ("M1E1"), not the
+    // art slug. The art slug ("a02_m1e1_120") only appears in topPlayersModel,
+    // joined by vehicleId - harvested below as sb_vehicle_slugs so a consumer can
+    // cache vehicleId -> slug across matches. agent_icon = frontmanIcon basename,
+    // which maps 1:1 to the agents/ portrait art for every player.
+    try {
+      if (typeof tacticalInfoModel !== 'undefined' && tacticalInfoModel && tacticalInfoModel.players) {
+        var _iconName = function(p) {
+          var s = p.frontmanIcon || p.frontmanBig || '';
+          var m = String(s).match(/([^/]+)\.png$/i);
+          return m ? m[1] : null;
+        };
+        var _slimWarrior = function(p) {
+          return {
+            name:         p.userName || (p.account && p.account.uniqueName) || '',
+            team:         p.team != null ? p.team : null,
+            role:         p.role || '',
+            vehicle_id:   p.vehicleId != null ? p.vehicleId : null,
+            vehicle_disp: p.vehicleName || null,
+            agent_icon:   _iconName(p),
+            agent:        p.agentName || null,
+            is_dead:      p.isDead ? 1 : 0,
+            health_pct:   p.healthPrc != null ? Math.round(p.healthPrc) : null,
+            respawning:   p.respawnInProcess ? 1 : 0,
+            has_bomb:     p.hasBomb ? 1 : 0,
+            place:        p.place != null ? p.place : null,
+            is_bot:       p.isBot ? 1 : 0,
+            is_player:    p.isPlayer ? 1 : 0,
+            level:        p.level != null ? p.level : null
+          };
+        };
+        var _warriors = [];
+        for (var _wi = 0; _wi < tacticalInfoModel.players.length; _wi++) {
+          try { _warriors.push(_slimWarrior(tacticalInfoModel.players[_wi])); } catch(e) {}
+        }
+        r.sb_warriors = _warriors;
+        if (tacticalInfoModel.currentPlayer && tacticalInfoModel.currentPlayer.team != null)
+          r.sb_my_team = tacticalInfoModel.currentPlayer.team;
+      }
+    } catch(e) {}
+
+    // Harvest vehicleId -> art-slug pairs (topPlayersModel exposes the slug only
+    // for its few leaderboard entries); consumers accumulate these over matches.
+    try {
+      if (typeof topPlayersModel !== 'undefined' && topPlayersModel && topPlayersModel.topPlayers) {
+        var _slugs = {};
+        for (var _ti = 0; _ti < topPlayersModel.topPlayers.length; _ti++) {
+          var _tp = topPlayersModel.topPlayers[_ti];
+          if (_tp && _tp.vehicleId != null && _tp.vehicleName) {
+            var _slug = String(_tp.vehicleName).split('.')[0];
+            if (_slug) _slugs[_tp.vehicleId] = _slug;
+          }
+        }
+        if (Object.keys(_slugs).length) r.sb_vehicle_slugs = _slugs;
+      }
+    } catch(e) {}
+
   } catch(e) {
     r._err = e.message;
   }

@@ -4,7 +4,9 @@
     "game_memory",
     "heat_ailos_torc",
     "rive_animation",
-    "cruise_control"
+    "cruise_control",
+    "combat_reboot_plus",
+    "heat_stats"
   ],
   "hotkey_overrides": {
     "host": {

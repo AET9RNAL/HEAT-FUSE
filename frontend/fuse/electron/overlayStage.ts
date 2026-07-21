@@ -8,7 +8,7 @@ const OVERLAY_CSP =
   "default-src 'self';" +
   " script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval';" +
   " style-src 'self' 'unsafe-inline';" +
-  " img-src 'self' data: blob: https:;" +
+  " img-src 'self' data: blob: https: http://127.0.0.1:* http://localhost:*;" +
   " font-src 'self' data:;" +
   " connect-src 'self' http://127.0.0.1:* ws://127.0.0.1:* http://localhost:* ws://localhost:*;" +
   " object-src 'none';" +

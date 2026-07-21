@@ -42,6 +42,7 @@ const EXTRA_KEYS: readonly string[] = [
   "missile_dist", "missile_in_flight",
   "sb_open", "sb_map_name", "sb_game_mode_name",
   "sb_ally_rows", "sb_enemy_rows",
+  "sb_warriors", "sb_my_team", "sb_vehicle_slugs",
   "sb_player_deaths", "sb_player_confirms", "sb_player_denies",
   "pm_available", "pm_game_mode", "pm_map_slug", "pm_started_at", "pm_finished_at",
   "pm_my_player_id", "pm_my_team", "pm_team_scores", "pm_players",
