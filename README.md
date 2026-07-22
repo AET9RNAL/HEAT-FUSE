@@ -60,6 +60,7 @@ Get In Touch
 - [Installing Plugins](#installing-plugins)
 - [Overlay Editor](#overlay-editor)
 - [Hotkeys](#hotkeys)
+- [For Streamers](#for-streamers)
 - [Shipped Plugins](#shipped-plugins)
 
 > **Launch order matters:** enable FUSE in Settings before starting the game if this is your first time. Changes take effect only on a fresh game session.
@@ -105,7 +106,9 @@ Some overlays calibrate in two stages: first the 3rd-person position, then the 1
 
 ## Installing Plugins
 
-Drop any `.fuse` file into the `plugins/` folder inside the FUSE install directory. The launcher scans it automatically on every launch. Use the **Plugins** tab in the launcher to enable or disable individual plugins without restarting.
+### Manual way:
+
+Drop any `.fuse` file into the `plugins/` folder inside the FUSE install directory. The launcher scans it automatically on every launch. Use the **HOME** tab in the launcher to enable or disable individual plugins, or configure via context menu next to toggle.
 
 ---
 
@@ -134,6 +137,50 @@ Active globally while FUSE is running.
 | `Ctrl+I` | Toggle interactive mode. Overlays stay pinned but accept clicks and input. |
 | `Ctrl+R` | Hot-reload all plugins from disk without restarting FUSE. |
 | `Ctrl+P` | Quit FUSE. |
+
+---
+
+## For Streamers
+
+FUSE overlays **cannot be captured with OBS Game Capture**. Game Capture hooks a game's DirectX swapchain, and the overlay stage is a Chromium window - OBS will tell you as much if you try. Instead FUSE serves the overlay stage over local HTTP so OBS can render it directly as a **Browser Source**, with real transparency and no screen capture involved.
+
+### Adding the Browser Source
+
+1. Launch FUSE and lock your overlays with `Ctrl+L`. The **OBS button** appears next to **Launch** once everything is locked.
+2. Click the OBS button. A notification confirms once the URL is in your clipboard.
+   - **One monitor:** the URL is copied straight away.
+   - **Multiple monitors:** the button expands into one button per monitor. Hover to see each monitor's size, then click the one you play on and where your overlays are.
+3. In OBS: **Sources => + => Browser**, then name it whatever (e.g. `FUSE Overlays`).
+4. Paste the URL into **URL** input field.
+5. **Set Width and Height to the size shown in that monitor's tooltip.** This is the step that matters most - see below.
+6. Click **OK**, then drag the source above your game capture layer in the scene.
+
+Keep your existing Game Capture or Display Capture for the game itself. The Browser Source carries only the overlays, composited on top.
+
+### Setting the size correctly
+
+The Browser Source size must match the monitor you selected, or overlays will sit outside the captured frame and the source will look empty. OBS defaults to 800x600, which is almost never right.
+
+Use the numbers from the monitor button's tooltip as a hint. FUSE positions overlays in the same scaled units, so the tooltip already gives you the right numbers.
+
+Once the source is the right size, scale or reposition it freely inside your scene - that only affects the composite, not the capture.
+
+### Day to day
+
+The URL is static. It does not change when you restart FUSE, restart the game, or reboot - set the source up once and leave it. If FUSE stops, the source goes blank and reconnects on its own when FUSE comes back, with no action needed in OBS.
+
+
+### Troubleshooting
+
+| Symptom | Cause and fix |
+|---------|---------------|
+| Source is blank, but the URL works in a web browser | Width/Height don't match the monitor. Set them to the tooltip values. Or the values you believe your monitor size to be. |
+| Source is blank and shows nothing anywhere | FUSE isn't running, or overlays aren't locked yet. Press `Ctrl+L` until the launcher shows **Locked**. |
+| Wrong monitor's overlays, or overlays cut off | The URL is for a different monitor. Click the OBS button again and pick the right one. |
+| Overlays stuck on old values after a FUSE restart | Right-click the source → **Refresh cache of current page**. Only needed if the self-reconnect doesn't recover within a few seconds. |
+| Overlays visible in-game but not in the source | The OBS button hands out a per-monitor URL. If you moved the game to another monitor, re-copy the URL for that one. |
+
+> **Advanced:** appending `?display=all` to the URL broadcasts the entire virtual desktop instead of a single monitor. Size the source to the combined bounding box of all your displays.
 
 ---
 
