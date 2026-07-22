@@ -68,6 +68,46 @@ function sign(payload: Record<string, unknown>): string {
   return createHmac("sha256", HMAC_KEY).update(canonical(filtered)).digest("hex");
 }
 
+// Session / trend helpers
+
+/** How many of the most recent EMA samples the trend graph plots. */
+const GRAPH_POINTS = 20;
+
+/** Epoch seconds, epoch ms, or an ISO string -> ms. */
+function toMs(t: unknown): number {
+  const n = typeof t === "number" ? t : Date.parse(String(t ?? ""));
+  if (!Number.isFinite(n)) return 0;
+  return n < 1e12 ? n * 1000 : n;
+}
+
+/** Exponential moving average; N=5 => alpha = 2/(N+1). */
+function ema(xs: number[], n = 5): number[] {
+  const alpha = 2 / (n + 1);
+  const out: number[] = [];
+  let prev = 0;
+  xs.forEach((x, i) => {
+    prev = i === 0 ? x : alpha * x + (1 - alpha) * prev;
+    out.push(Math.round(prev * 1000) / 1000);
+  });
+  return out;
+}
+
+/** Per-match K/D (deathless matches score their kill count). */
+function kdOf(s: Record<string, unknown>): number {
+  const k = Number(s.final_kills ?? 0);
+  const d = Number(s.final_deaths ?? 0);
+  return d > 0 ? k / d : k;
+}
+
+/** Vehicle slug -> display text, e.g. "a20_m60a2" -> "M60A2". */
+function prettyVehicle(v: unknown): string {
+  const s = String(v ?? "")
+    .replace(/^[a-z]{1,3}\d{1,3}_/i, "")
+    .replace(/_/g, " ")
+    .trim();
+  return s ? s.toUpperCase() : "-";
+}
+
 type Phase = "idle" | "waiting" | "recording" | "summarizing" | "finalizing";
 type State = "IDLE" | "WAITING" | "RECORDING" | "SUMMARIZING";
 
@@ -132,16 +172,39 @@ export class HeatStatsPlugin extends FusePlugin {
         vue_overlay_pos: null,
         anim_width: 300,
         anim_height: 300,
-        vue_width: 280,
-        vue_height: 180,
+        vue_width: 440,
+        vue_height: 300,
         //TO-DO: don't ship the key you dumbell
         api_key: "",
         player_name: "",
         api_refresh_interval_s: 60,
+        // Epoch seconds marking the start of the current session. Sessions older
+        // than this are filtered out of the overlay. 0 = show everything.
+        session_started_at: 0,
+        // "default" = single view. "carousel" = looped animated scenes.
+        mode: "default",
+        scene_time_s: 8.0,
       })
       .load();
 
     ctx.config.schema([
+      new ConfigCategory("Display", [
+        new ConfigEntry({
+          key: "mode",
+          label: "Mode",
+          type: "choice",
+          choices: ["default", "carousel"],
+          description: "Single view, or a looped carousel of animated scenes",
+        }),
+        new ConfigEntry({
+          key: "scene_time_s",
+          label: "Scene Time (s)",
+          type: "float",
+          min: 2.0,
+          max: 60.0,
+          description: "Carousel: how long each scene is shown",
+        }),
+      ]),
       new ConfigCategory("API", [
         new ConfigEntry({ key: "api_key", label: "API Key", type: "str", description: "HEAT Stats API key (fuse_...)" }),
         new ConfigEntry({ key: "player_name", label: "Player Name", type: "str", description: "Player name to fetch stats for" }),
@@ -173,6 +236,8 @@ export class HeatStatsPlugin extends FusePlugin {
 
     ctx.config.watch("api_key", () => { void this.fetchAndPushStats(); });
     ctx.config.watch("player_name", () => { void this.fetchAndPushStats(); });
+    ctx.config.watch("mode", () => this.pushDisplayConfig());
+    ctx.config.watch("scene_time_s", () => this.pushDisplayConfig());
 
     const w = Number(ctx.config.get("anim_width", 300)) || 300;
     const h = Number(ctx.config.get("anim_height", 300)) || 300;
@@ -188,8 +253,8 @@ export class HeatStatsPlugin extends FusePlugin {
     });
     this.ov.setBool("isSetupComplete", false);
 
-    const vw = Number(ctx.config.get("vue_width", 280)) || 280;
-    const vh = Number(ctx.config.get("vue_height", 180)) || 180;
+    const vw = Number(ctx.config.get("vue_width", 440)) || 440;
+    const vh = Number(ctx.config.get("vue_height", 300)) || 300;
     this.vueOv = ctx.overlays.declare({
       id: "heatStatsVue",
       kind: "vue",
@@ -201,8 +266,15 @@ export class HeatStatsPlugin extends FusePlugin {
     // Interactive overlay button (Refresh stats) -> re-fetch on demand.
     this.vueOv.onAction((action) => {
       if (action === "refresh") void this.fetchAndPushStats();
+      // Start a new session: everything recorded before this moment is filtered
+      // out of the overlay (the API keeps them; we just stop showing them).
+      if (action === "newSession") {
+        this.ctx.config.set("session_started_at", Math.floor(Date.now() / 1000));
+        void this.fetchAndPushStats();
+      }
     });
 
+    this.pushDisplayConfig();
     void this.fetchAndPushStats();
     if (this.ctx.state === "locked") this.startApiRefresh();
 
@@ -594,6 +666,14 @@ export class HeatStatsPlugin extends FusePlugin {
     };
   }
 
+  /** Display mode + carousel timing, pushed on setup and whenever they change. */
+  private pushDisplayConfig(): void {
+    const ov = this.vueOv;
+    if (!ov) return;
+    ov.setString("mode", String(this.ctx.config.get("mode", "default")));
+    ov.set("sceneTime", Number(this.ctx.config.get("scene_time_s", 8)) || 8);
+  }
+
   private pushStats(): void {
     const ov = this.vueOv;
     if (!ov) return;
@@ -657,26 +737,78 @@ export class HeatStatsPlugin extends FusePlugin {
         if (data.total != null && sessions.length >= data.total) break;
       }
 
-      if (sessions.length === 0) return;
-
-      const total = sessions.length;
-      const wins = sessions.filter((s) => s.outcome === "win").length;
-      const totalKills = sessions.reduce((sum, s) => sum + (s.final_kills as number ?? 0), 0);
-      const totalDeaths = sessions.reduce((sum, s) => sum + (s.final_deaths as number ?? 0), 0);
-      const winRate = (wins / total) * 100;
-      const kd = totalDeaths > 0 ? totalKills / totalDeaths : totalKills;
-      const validOutcome = (o: unknown) => ["win", "loss", "draw", "abandoned"].includes(String(o));
-      const recent = sessions.slice(0, 5).map((s) => (validOutcome(s.outcome) ? String(s.outcome) : ""));
-
       const ov = this.vueOv;
       if (!ov) return;
+
+      // Session filter: drop everything recorded before the session marker.
+      const startedAt = Number(this.ctx.config.get("session_started_at", 0)) || 0;
+      const cutoffMs = startedAt > 0 ? startedAt * 1000 : 0;
+      const inSession = sessions.filter((s) => toMs(s.started_at) >= cutoffMs);
+
+      // API returns newest-first; the graph reads left->right with latest right.
+      const chrono = [...inSession].reverse();
+      const total = chrono.length;
+
+      const emaKd = ema(chrono.map(kdOf));
+      const emaWr = ema(chrono.map((s) => (String(s.outcome) === "win" ? 100 : 0)));
+      const emaDmg = ema(chrono.map((s) => Number(s.final_damage ?? 0)));
+      const last = (a: number[]): number => (a.length ? a[a.length - 1]! : 0);
+
+      const latest = inSession.slice(0, 5).map((s) => ({
+        vehicle: prettyVehicle(s.player_vehicle),
+        map: String(s.map_name ?? s.map_slug ?? "?"),
+        mode: String(s.game_mode ?? "?"),
+        score: Number(s.final_score ?? 0),
+        damage: Number(s.final_damage ?? 0),
+        kills: Number(s.final_kills ?? 0),
+        deaths: Number(s.final_deaths ?? 0),
+        assists: Number(s.final_assists ?? 0),
+        outcome: String(s.outcome ?? ""),
+      }));
+
+      // ── Scene 2: efficiency + per-game-mode breakdown ──
+      const sum = (f: (s: Record<string, unknown>) => number): number =>
+        chrono.reduce((acc, s) => acc + f(s), 0);
+      const totalKills = sum((s) => Number(s.final_kills ?? 0));
+      const totalDamage = sum((s) => Number(s.final_damage ?? 0));
+      const totalScore = sum((s) => Number(s.final_score ?? 0));
+      const totalMin = sum((s) => Number(s.duration_s ?? 0)) / 60;
+      const efficiency = {
+        dmgPerKill: totalKills > 0 ? Math.round(totalDamage / totalKills) : 0,
+        killsPerMin: totalMin > 0 ? Math.round((totalKills / totalMin) * 100) / 100 : 0,
+        scorePerMin: totalMin > 0 ? Math.round((totalScore / totalMin) * 10) / 10 : 0,
+      };
+
+      const modeAgg = new Map<string, { wins: number; count: number }>();
+      for (const s of chrono) {
+        const m = String(s.game_mode ?? "?");
+        const e = modeAgg.get(m) ?? { wins: 0, count: 0 };
+        e.count += 1;
+        if (String(s.outcome) === "win") e.wins += 1;
+        modeAgg.set(m, e);
+      }
+      const byMode = [...modeAgg.entries()].map(([mode, v]) => ({
+        mode,
+        winRate: v.count ? Math.round((v.wins / v.count) * 1000) / 10 : 0,
+        count: v.count,
+      }));
+
       ov.setString("playerName", playerName);
-      ov.set("winRate", Math.round(winRate * 10) / 10);
-      ov.set("kd", Math.round(kd * 100) / 100);
-      ov.set("totalKills", totalKills);
       ov.set("battleCount", total);
-      ov.setJson("recentBattles", recent);
-      this.ctx.logger.info(`heat_stats: fetched ${total} sessions from API`);
+      ov.setJson("efficiency", efficiency);
+      ov.setJson("byMode", byMode);
+      ov.set("sessionStartedAt", startedAt);
+      ov.set("kd", Math.round(last(emaKd) * 100) / 100);
+      ov.set("winRate", Math.round(last(emaWr) * 10) / 10);
+      ov.set("damage", Math.round(last(emaDmg)));
+      // EMA is computed over the whole session, but only the most recent slice
+      // is plotted - otherwise a long session collapses into unreadable noise.
+      const tail = (a: number[]): number[] => a.slice(-GRAPH_POINTS);
+      ov.setJson("series", { kd: tail(emaKd), wr: tail(emaWr), dmg: tail(emaDmg) });
+      ov.setJson("latest", latest);
+      this.ctx.logger.info(
+        `heat_stats: fetched ${sessions.length} sessions (${total} in session) from API`,
+      );
     } catch (e) {
       this.ctx.logger.warning(`heat_stats: API fetch failed: ${e instanceof Error ? e.message : String(e)}`);
     }

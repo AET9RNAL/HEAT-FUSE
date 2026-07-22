@@ -26,7 +26,7 @@ function emitAction(action: string, payload?: unknown): void {
 // once in the overlay app). Any other bare specifier is treated as a
 // cross-plugin import `<pluginId>/<path>` and fetched from that plugin's assets
 // - so a plugin can ship a reusable component library with no app changes.
-const HOST_MODULES = new Set(["vue", "motion-v", "@rive-app/canvas"]);
+const HOST_MODULES = new Set(["vue", "motion-v", "@rive-app/canvas", "chart.js", "chart.js/auto"]);
 // De-duped stylesheet injection (e.g. a UI library's tokens imported by many
 // overlays).
 const injectedCss = new Set<string>();
@@ -34,15 +34,24 @@ const injectedCss = new Set<string>();
 async function loadComponent(url: string): Promise<void> {
   loadError.value = null;
   try {
-    const [{ loadModule }, vue, motion, rive] = await Promise.all([
+    const [{ loadModule }, vue, motion, rive, chart] = await Promise.all([
       import("vue3-sfc-loader"),
       import("vue"),
       import("motion-v"),
       import("@rive-app/canvas"),
+      // `chart.js/auto` self-registers every controller/scale, so overlays can
+      // `new Chart(...)` without wiring up registrations themselves.
+      import("chart.js/auto"),
     ]);
     const overlayAssetRoot = `${assetBase()}/overlay-asset`;
     const mod = await loadModule(url, {
-      moduleCache: { vue, "motion-v": motion, "@rive-app/canvas": rive },
+      moduleCache: {
+        vue,
+        "motion-v": motion,
+        "@rive-app/canvas": rive,
+        "chart.js": chart,
+        "chart.js/auto": chart,
+      },
       pathResolve({ refPath, relPath }: { refPath: string | undefined; relPath: string }) {
         const rel = String(relPath);
         if (HOST_MODULES.has(rel)) return rel;

@@ -1,7 +1,7 @@
 {
   "plugin_id": "heat_stats",
   "name": "HEATStats",
-  "version": "3.1.0",
+  "version": "4.0.0",
   "author": "AETERNAL",
   "description": "Records per-match performance data.",
   "entry": "plugin:HeatStatsPlugin",
@@ -11,10 +11,13 @@
     "sample_interval_s": 5,
     "summarize_hold_s": 5.0,
     "vue_overlay_pos": null,
-    "vue_width": 280,
-    "vue_height": 180,
+    "vue_width": 440,
+    "vue_height": 300,
     "api_key": "fuse_Qlj84POyYh4xHy8YkUeV0AuADlRnLgboJRSVIl8sjUY",
     "player_name": "",
-    "api_refresh_interval_s": 60
+    "api_refresh_interval_s": 60,
+    "session_started_at": 0,
+    "mode": "default",
+    "scene_time_s": 8.0
   }
 }

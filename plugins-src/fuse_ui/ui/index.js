@@ -5,6 +5,7 @@
 import "./tokens.css";
 
 export { default as eButton } from "./eButton.vue";
+export { default as eMaterialButton } from "./eMaterialButton.vue";
 export { default as eToggle } from "./eToggle.vue";
 export { default as eCheckbox } from "./eCheckbox.vue";
 export { default as eInputField } from "./eInputField.vue";
