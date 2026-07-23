@@ -144,6 +144,8 @@ export class HeatStatsPlugin extends FusePlugin {
 
   private hpDeathCount = 0;
   private lastHp: Num = null;
+  private hostVisible = true;
+  private lastVueVisible: boolean | null = null;
   private sawFinish = false;
   private pmCaptured = false;
   private roster: { ally: unknown[]; enemy: unknown[] } | null = null;
@@ -184,6 +186,8 @@ export class HeatStatsPlugin extends FusePlugin {
         // "default" = single view. "carousel" = looped animated scenes.
         mode: "default",
         scene_time_s: 8.0,
+        // Keep the stats board out of the way while a battle is running.
+        hide_in_battle: false,
       })
       .load();
 
@@ -203,6 +207,12 @@ export class HeatStatsPlugin extends FusePlugin {
           min: 2.0,
           max: 60.0,
           description: "Carousel: how long each scene is shown",
+        }),
+        new ConfigEntry({
+          key: "hide_in_battle",
+          label: "Hide During Battle",
+          type: "bool",
+          description: "Hide the stats board while you're in battle",
         }),
       ]),
       new ConfigCategory("API", [
@@ -306,14 +316,30 @@ export class HeatStatsPlugin extends FusePlugin {
     this.startApiRefresh();
   }
   override setOverlayVisible(visible: boolean): void {
+    this.hostVisible = visible;
     if (this.ctx.state === "calibrate") return;
     this.ov?.setVisible(visible);
+    this.applyVueVisibility();
+  }
+
+  /** battle_hud only exists while a battle is running. */
+  private get inBattle(): boolean {
+    return !!this.acc?.connected;
+  }
+
+  private applyVueVisibility(): void {
+    if (this.ctx.state === "calibrate") return;
+    const hideInBattle = Boolean(this.ctx.config.get("hide_in_battle", false));
+    const visible = this.hostVisible && !(hideInBattle && this.inBattle);
+    if (visible === this.lastVueVisible) return;
+    this.lastVueVisible = visible;
     this.vueOv?.setVisible(visible);
   }
 
   override tick(dt: number): void {
     this.ctx.config.checkReload();
     this.pushPhase();
+    this.applyVueVisibility();
     if (this.ctx.state !== "locked" || !this.acc) return;
 
     // Mid-match recovery if we went IDLE while still connected.
