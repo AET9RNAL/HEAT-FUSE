@@ -46,6 +46,9 @@ export interface HeatStatsData {
   latest: SessionRow[];
   mode: string;
   sceneTime: number;
+  graphScale: string;
+  graphPoints: number;
+  graphValueScale: number;
   efficiency: Efficiency;
   byMode: ModeRow[];
 }
@@ -133,12 +136,15 @@ onBeforeUnmount(() => {
           :exit="{ opacity: 0, x: -14 }"
           :transition="{ duration: 0.3, ease: 'easeOut' }"
         >
-          <eTrend
+          <eTrend class="e-trend"
             v-if="scene === 0"
             :series="series"
             :kd="data.kd"
             :win-rate="data.winRate"
             :damage="data.damage"
+            :scale-mode="data.graphScale"
+            :points="data.graphPoints"
+            :value-scale="data.graphValueScale"
           />
           <eEfficiency v-else :efficiency="efficiency" :by-mode="byMode" :asset-base="assetBase" />
         </motion.div>
@@ -146,7 +152,7 @@ onBeforeUnmount(() => {
     </div>
 
     <div class="hs-sessions">
-      <eSessions v-for="(s, i) in latest" :key="i" :session="s" />
+      <eSessions class="e-sessions" v-for="(s, i) in latest" :key="i" :session="s" />
     </div>
   </div>
 </template>
@@ -261,5 +267,15 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
+}
+
+.e-trend {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.e-sessions {
+  user-select: none;
+  -webkit-user-select: none;
 }
 </style>

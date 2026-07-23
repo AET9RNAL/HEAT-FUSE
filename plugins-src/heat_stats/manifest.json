@@ -1,7 +1,7 @@
 {
   "plugin_id": "heat_stats",
   "name": "HEATStats",
-  "version": "4.1.0",
+  "version": "4.2.0",
   "author": "AETERNAL",
   "description": "Records per-match performance data.",
   "entry": "plugin:HeatStatsPlugin",
@@ -19,6 +19,9 @@
     "session_started_at": 0,
     "mode": "default",
     "scene_time_s": 8.0,
-    "hide_in_battle": false
+    "hide_in_battle": false,
+    "graph_scale": "auto",
+    "graph_points": 20,
+    "graph_value_scale": 1.0
   }
 }

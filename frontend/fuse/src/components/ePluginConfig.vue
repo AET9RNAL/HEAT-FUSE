@@ -525,6 +525,7 @@ function getCombo(action: string): string {
 }
 
 .config-category-label {
+    flex-shrink: 0;
     font-family: var(--font-microcopy);
     font-size: var(--secondary-font-size-4);
     font-weight: var(--font-weight-2);
@@ -542,18 +543,17 @@ function getCombo(action: string): string {
 }
 
 .config-row {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: var(--space-4);
+    flex-shrink: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+    column-gap: var(--space-4);
     min-height: 28px;
-    padding: var(--space-1) 0;
+    padding: var(--space-2) 0;
 }
 
 .config-row-label {
-    flex: 1;
     min-width: 0;
-    max-width: 55%;
     display: flex;
     flex-direction: column;
     gap: 2px;
@@ -564,6 +564,7 @@ function getCombo(action: string): string {
     font-size: var(--main-font-size-4);
     font-weight: var(--font-weight-2);
     color: var(--text-main);
+    line-height: 1.3;
     user-select: none;
     -webkit-user-select: none;
 }
@@ -572,12 +573,15 @@ function getCombo(action: string): string {
     font-family: var(--font-microcopy);
     font-size: var(--secondary-font-size-4);
     color: var(--text-muted);
+    line-height: 1.35;
+    overflow-wrap: anywhere;
     user-select: none;
     -webkit-user-select: none;
 }
 
 .config-row-control {
-    flex-shrink: 0;
+    justify-self: end;
+    align-self: start;
     display: flex;
     align-items: center;
     padding-top: 2px;

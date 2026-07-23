@@ -2,10 +2,10 @@
   "sample_interval_s": 5,
   "summarize_hold_s": 5,
   "vue_overlay_pos": {
-    "x": 767,
-    "y": 199,
-    "w": 588,
-    "h": 637
+    "x": 17,
+    "y": 76,
+    "w": 396,
+    "h": 420
   },
   "vue_width": 280,
   "vue_height": 180,
@@ -13,8 +13,12 @@
   "player_name": "AET3RNAL",
   "api_refresh_interval_s": 60,
   "session_started_at": 0,
-  "mode": "carousel",
+  "mode": "default",
   "scene_time_s": 8,
+  "hide_in_battle": false,
+  "graph_scale": "auto",
+  "graph_points": 60,
+  "graph_value_scale": 1,
   "overlay_pos": {
     "x": 0,
     "y": 40,

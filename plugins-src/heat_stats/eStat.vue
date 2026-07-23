@@ -1,16 +1,10 @@
 <script setup lang="ts">
-/**
- * eStat - a single stat segment. Used as the call-out for the graph's latest
- * cut-off line. Same visual language as the old .hs-stat block: microcopy label
- * over a large accented value, on a chamfered --black-2 plate.
- */
 import "fuse_ui/ui/tokens.css";
 
 withDefaults(
   defineProps<{
     label: string;
     value: string;
-    /** CSS colour for the value (e.g. var(--kill)). */
     accent?: string;
     sub?: string;
   }>(),
@@ -28,6 +22,8 @@ withDefaults(
 
 <style scoped>
 .estat {
+  user-select: none;
+  -webkit-user-select: none;
   --ch6: polygon(6px 0%, 100% 0%, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0% 100%, 0% 6px);
   min-width: 0;
   box-sizing: border-box;

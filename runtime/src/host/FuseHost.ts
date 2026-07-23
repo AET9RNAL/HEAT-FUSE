@@ -32,7 +32,7 @@ import { PluginAssets } from "../sdk/assets.js";
 import { HotkeyInput, type MouseCallback } from "../input/hotkeys.js";
 import type { PluginHydration, RuntimeBridge, WsServer } from "../server/WsServer.js";
 
-export const HOST_VERSION = "4.3.0";
+export const HOST_VERSION = "4.4.0";
 const HOST_CONFIG_FILENAME = "fuse_host.json";
 
 interface HostConfigState {

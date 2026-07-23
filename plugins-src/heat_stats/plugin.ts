@@ -69,9 +69,7 @@ function sign(payload: Record<string, unknown>): string {
 }
 
 // Session / trend helpers
-
-/** How many of the most recent EMA samples the trend graph plots. */
-const GRAPH_POINTS = 20;
+const GRAPH_MAX = 60;
 
 /** Epoch seconds, epoch ms, or an ISO string -> ms. */
 function toMs(t: unknown): number {
@@ -180,14 +178,13 @@ export class HeatStatsPlugin extends FusePlugin {
         api_key: "",
         player_name: "",
         api_refresh_interval_s: 60,
-        // Epoch seconds marking the start of the current session. Sessions older
-        // than this are filtered out of the overlay. 0 = show everything.
         session_started_at: 0,
-        // "default" = single view. "carousel" = looped animated scenes.
         mode: "default",
         scene_time_s: 8.0,
-        // Keep the stats board out of the way while a battle is running.
         hide_in_battle: false,
+        graph_scale: "auto",
+        graph_points: 20,
+        graph_value_scale: 1.0,
       })
       .load();
 
@@ -198,7 +195,7 @@ export class HeatStatsPlugin extends FusePlugin {
           label: "Mode",
           type: "choice",
           choices: ["default", "carousel"],
-          description: "Single view, or a looped carousel of animated scenes",
+          description: "Single view, or a looped carousel",
         }),
         new ConfigEntry({
           key: "scene_time_s",
@@ -212,7 +209,30 @@ export class HeatStatsPlugin extends FusePlugin {
           key: "hide_in_battle",
           label: "Hide During Battle",
           type: "bool",
-          description: "Hide the stats board while you're in battle",
+          description: "Only visible in hangar",
+        }),
+        new ConfigEntry({
+          key: "graph_scale",
+          label: "Graph Scale",
+          type: "choice",
+          choices: ["auto", "manual"],
+          description: "Auto fits the trend graph to the overlay size; manual uses the values below",
+        }),
+        new ConfigEntry({
+          key: "graph_points",
+          label: "Graph Points (manual)",
+          type: "int",
+          min: 4,
+          max: 60,
+          description: "Manual scale: how many recent matches the trend graph shows",
+        }),
+        new ConfigEntry({
+          key: "graph_value_scale",
+          label: "Graph Label Scale (manual)",
+          type: "float",
+          min: 0.5,
+          max: 2.5,
+          description: "Manual scale: axis + label size multiplier",
         }),
       ]),
       new ConfigCategory("API", [
@@ -248,6 +268,9 @@ export class HeatStatsPlugin extends FusePlugin {
     ctx.config.watch("player_name", () => { void this.fetchAndPushStats(); });
     ctx.config.watch("mode", () => this.pushDisplayConfig());
     ctx.config.watch("scene_time_s", () => this.pushDisplayConfig());
+    ctx.config.watch("graph_scale", () => this.pushDisplayConfig());
+    ctx.config.watch("graph_points", () => this.pushDisplayConfig());
+    ctx.config.watch("graph_value_scale", () => this.pushDisplayConfig());
 
     const w = Number(ctx.config.get("anim_width", 300)) || 300;
     const h = Number(ctx.config.get("anim_height", 300)) || 300;
@@ -698,6 +721,9 @@ export class HeatStatsPlugin extends FusePlugin {
     if (!ov) return;
     ov.setString("mode", String(this.ctx.config.get("mode", "default")));
     ov.set("sceneTime", Number(this.ctx.config.get("scene_time_s", 8)) || 8);
+    ov.setString("graphScale", String(this.ctx.config.get("graph_scale", "auto")));
+    ov.set("graphPoints", Number(this.ctx.config.get("graph_points", 20)) || 20);
+    ov.set("graphValueScale", Number(this.ctx.config.get("graph_value_scale", 1)) || 1);
   }
 
   private pushStats(): void {
@@ -829,7 +855,7 @@ export class HeatStatsPlugin extends FusePlugin {
       ov.set("damage", Math.round(last(emaDmg)));
       // EMA is computed over the whole session, but only the most recent slice
       // is plotted - otherwise a long session collapses into unreadable noise.
-      const tail = (a: number[]): number[] => a.slice(-GRAPH_POINTS);
+      const tail = (a: number[]): number[] => a.slice(-GRAPH_MAX);
       ov.setJson("series", { kd: tail(emaKd), wr: tail(emaWr), dmg: tail(emaDmg) });
       ov.setJson("latest", latest);
       this.ctx.logger.info(

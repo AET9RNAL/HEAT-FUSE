@@ -15,10 +15,45 @@ const props = defineProps<{
   kd?: number;
   winRate?: number;
   damage?: number;
+  scaleMode?: string;
+  points?: number;
+  valueScale?: number;
 }>();
 
-const series = computed<Series>(() => props.series ?? { kd: [], wr: [], dmg: [] });
-const hasData = computed(() => (series.value.kd?.length ?? 0) > 0);
+const fullSeries = computed<Series>(() => props.series ?? { kd: [], wr: [], dmg: [] });
+const fullLen = computed(() => fullSeries.value.kd?.length ?? 0);
+const hasData = computed(() => fullLen.value > 0);
+
+const MIN_POINTS = 4;
+const PX_PER_POINT = 22; // target horizontal spacing so labels stay readable
+const wrapW = ref(0);
+const wrapH = ref(0);
+
+const displayCount = computed(() => {
+  const len = fullLen.value;
+  if (len === 0) return 0;
+  if (props.scaleMode === "manual") {
+    return Math.min(Math.max(props.points ?? 20, MIN_POINTS), len);
+  }
+  const fit = Math.round((wrapW.value || 1) / PX_PER_POINT);
+  return Math.min(Math.max(fit, MIN_POINTS), len);
+});
+
+/** Axis / legend label size. Manual multiplies the base; auto tracks height. */
+const fontPx = computed(() => {
+  const base = 9;
+  if (props.scaleMode === "manual") {
+    return Math.round(base * Math.max(0.5, props.valueScale ?? 1));
+  }
+  return Math.max(8, Math.min(14, Math.round((wrapH.value || 150) * 0.06)));
+});
+
+const series = computed<Series>(() => {
+  const n = displayCount.value;
+  const s = fullSeries.value;
+  const tail = (a: number[]): number[] => (a ?? []).slice(-n);
+  return { kd: tail(s.kd), wr: tail(s.wr), dmg: tail(s.dmg) };
+});
 
 const kdStr = computed(() => (props.kd ?? 0).toFixed(2));
 const wrStr = computed(() => `${(props.winRate ?? 0).toFixed(1)}%`);
@@ -85,6 +120,7 @@ function drawInAnimation(pointCount: number) {
 }
 
 const canvasEl = ref<HTMLCanvasElement | null>(null);
+const wrapEl = ref<HTMLElement | null>(null);
 let chart: Chart | null = null;
 
 function chartData() {
@@ -115,69 +151,88 @@ function chartData() {
   };
 }
 
-function build(): void {
-  if (!canvasEl.value || chart || !hasData.value) return;
+function chartOptions() {
   const muted = cssVar("--base-200", "#b3b3b3");
   const grid = "rgba(255,255,255,0.06)";
-  const tick = { color: muted, font: { family: MONO, size: 9 } };
+  const size = fontPx.value;
+  const tick = { color: muted, font: { family: MONO, size } };
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    animation: drawInAnimation(series.value.kd?.length ?? 0),
+    interaction: { mode: "index" as const, intersect: false },
+    layout: { padding: { top: 2, right: 2, bottom: 0, left: 2 } },
+    plugins: {
+      tooltip: { enabled: false },
+      legend: {
+        display: true,
+        position: "top" as const,
+        labels: {
+          color: muted,
+          boxWidth: 10,
+          boxHeight: 2,
+          padding: 8,
+          font: { family: MONO, size },
+        },
+      },
+    },
+    scales: {
+      x: { ticks: { ...tick, autoSkip: true, maxRotation: 0 }, grid: { color: grid } },
+      yKd: {
+        position: "left" as const,
+        ticks: { ...tick, color: cssVar("--tea-green", "#a9ffc9") },
+        grid: { color: grid },
+      },
+      yDmg: {
+        position: "right" as const,
+        ticks: {
+          ...tick,
+          color: cssVar("--error-highlight", "#ff6a62"),
+          callback: (v: unknown) => Number(v).toLocaleString(),
+        },
+        grid: { display: false },
+      },
+      // Win-rate shares the plot but keeps its own 0-100 range off-axis.
+      yWr: { display: false, min: 0, max: 100 },
+    },
+  };
+}
 
+function build(): void {
+  if (!canvasEl.value || chart || !hasData.value) return;
   chart = new Chart(canvasEl.value, {
     type: "line",
     data: chartData(),
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      animation: drawInAnimation(series.value.kd?.length ?? 0),
-      interaction: { mode: "index", intersect: false },
-      layout: { padding: { top: 2, right: 2, bottom: 0, left: 2 } },
-      plugins: {
-        tooltip: { enabled: false },
-        legend: {
-          display: true,
-          position: "top",
-          labels: {
-            color: muted,
-            boxWidth: 10,
-            boxHeight: 2,
-            padding: 8,
-            font: { family: MONO, size: 9 },
-          },
-        },
-      },
-      scales: {
-        x: { ticks: tick, grid: { color: grid } },
-        yKd: {
-          position: "left",
-          ticks: { ...tick, color: cssVar("--tea-green", "#a9ffc9") },
-          grid: { color: grid },
-        },
-        yDmg: {
-          position: "right",
-          ticks: {
-            ...tick,
-            color: cssVar("--error-highlight", "#ff6a62"),
-            callback: (v) => Number(v).toLocaleString(),
-          },
-          grid: { display: false },
-        },
-        // Win-rate shares the plot but keeps its own 0-100 range off-axis.
-        yWr: { display: false, min: 0, max: 100 },
-      },
-    },
+    options: chartOptions(),
     plugins: [cutLinePlugin],
   });
 }
 
-onMounted(build);
-watch(series, () => {
+let ro: ResizeObserver | null = null;
+onMounted(() => {
+  if (wrapEl.value) {
+    ro = new ResizeObserver(([entry]) => {
+      const box = entry.contentRect;
+      wrapW.value = box.width;
+      wrapH.value = box.height;
+    });
+    ro.observe(wrapEl.value);
+  }
+  build();
+});
+// Data refresh: update in place. Scale change: resize labels/points.
+watch([series, fontPx], ([, f], [, pf]) => {
   if (!chart) {
     build();
     return;
   }
   chart.data = chartData();
+  if (f !== pf) chart.options = chartOptions();
   chart.update("none");
 });
 onBeforeUnmount(() => {
+  ro?.disconnect();
+  ro = null;
   chart?.destroy();
   chart = null;
 });
@@ -185,7 +240,7 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="trend">
-    <div class="trend-canvas-wrap">
+    <div ref="wrapEl" class="trend-canvas-wrap">
       <canvas v-show="hasData" ref="canvasEl" />
       <div v-if="!hasData" class="trend-empty">No matches this session</div>
     </div>
@@ -200,6 +255,8 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .trend {
+  user-select: none;
+  -webkit-user-select: none;
   width: 100%;
   height: 100%;
   box-sizing: border-box;
