@@ -1,0 +1,11 @@
+{
+  "vue_overlay_pos": {
+    "x": 730,
+    "y": 0,
+    "w": 1100,
+    "h": 75
+  },
+  "vue_width": 620,
+  "vue_height": 44,
+  "hide_native": true
+}

@@ -229,6 +229,7 @@ class HUD:
     # Game Score widget (top-right: match timer + team score bars)
     GAME_SCORE         = _c("GameScore_base")        # whole widget (timer + both bars)
     SCORE_BARS         = _c("DefaultScore_scores")   # ally/enemy score bars only
+    OBJECTIVE_PROGRESS = _c("ObjectiveProgress_base") # Control-mode capture race bar
     BATTLE_TIMER       = _c("BattleTimer_base")      # match countdown only
 
     # Capture-point status (top-right A/B/C hexes)

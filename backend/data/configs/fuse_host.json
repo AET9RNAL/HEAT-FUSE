@@ -6,9 +6,8 @@
     "rive_animation",
     "cruise_control",
     "combat_reboot_plus",
-    "witchery",
-    "noui",
     "energy_bar",
+    "heat_stats",
     "hud_scoreboard"
   ],
   "hotkey_overrides": {

@@ -202,10 +202,61 @@
     // Team scores / zone control
     try {
       if (typeof scoreInfoModel !== 'undefined' && scoreInfoModel) {
-        r.ally_score   = scoreInfoModel.ally        != null ? scoreInfoModel.ally        : null;
-        r.enemy_score  = scoreInfoModel.enemy       != null ? scoreInfoModel.enemy       : null;
-        r.allied_zones = scoreInfoModel.alliedZones != null ? scoreInfoModel.alliedZones : null;
-        r.enemy_zones  = scoreInfoModel.enemyZones  != null ? scoreInfoModel.enemyZones  : null;
+        r.ally_score    = scoreInfoModel.ally        != null ? scoreInfoModel.ally        : null;
+        r.enemy_score   = scoreInfoModel.enemy       != null ? scoreInfoModel.enemy       : null;
+        r.allied_zones  = scoreInfoModel.alliedZones != null ? scoreInfoModel.alliedZones : null;
+        r.enemy_zones   = scoreInfoModel.enemyZones  != null ? scoreInfoModel.enemyZones  : null;
+        // desired = win target; the match-progress bars fill by score / desired.
+        r.desired_score = scoreInfoModel.desired     != null ? scoreInfoModel.desired     : null;
+        r.team_leads    = scoreInfoModel.teamLeads   != null ? scoreInfoModel.teamLeads   : null;
+      }
+    } catch(e) {}
+
+    // Objective progress (Control-style modes) - the game shows an
+    // ObjectiveProgress bar driven by objectiveProgressModel<id> (dynamic id, one
+    // per objective) with per-team capture % + overtime. Pick the active
+    // (unlocked) instance with the most progress.
+    try {
+      var _bestObj = null;
+      for (var _ok in window) {
+        if (_ok.indexOf('objectiveProgressModel') !== 0) continue;
+        try {
+          var _om = window[_ok];
+          var _oa = _om && _om.allyProgressBar, _oe = _om && _om.enemyProgressBar;
+          if (!_oa || !_oe) continue;
+          var _cand = {
+            a: _oa, e: _oe,
+            locked: !!(_oa.isLocked && _oe.isLocked),
+            max: Math.max(_oa.progressPrc || 0, _oe.progressPrc || 0),
+          };
+          if (!_bestObj || (!_cand.locked && _bestObj.locked) ||
+              (_cand.locked === _bestObj.locked && _cand.max > _bestObj.max)) _bestObj = _cand;
+        } catch(e) {}
+      }
+      if (_bestObj) {
+        r.obj_active    = 1;
+        r.obj_ally_prc  = _bestObj.a.progressPrc  != null ? Math.round(_bestObj.a.progressPrc)  : null;
+        r.obj_enemy_prc = _bestObj.e.progressPrc != null ? Math.round(_bestObj.e.progressPrc) : null;
+        r.obj_overtime  = (_bestObj.a.isOvertime || _bestObj.e.isOvertime) ? 1 : 0;
+      }
+    } catch(e) {}
+
+    // Overtime - a separate model, populated only in game modes that have it
+    // (e.g. Control). Field names vary, so read a few candidates defensively;
+    // absent (null) in modes without overtime.
+    try {
+      var _ot = (typeof overtimeModel   !== 'undefined' && overtimeModel)   ? overtimeModel
+              : (typeof OvertimeModel    !== 'undefined' && OvertimeModel)    ? OvertimeModel
+              : null;
+      if (_ot) {
+        var _otProg = _ot.overtimeProgress   != null ? _ot.overtimeProgress   : _ot.progress;
+        var _otTot  = _ot.overtimeTotalTime  != null ? _ot.overtimeTotalTime  : _ot.totalTime;
+        var _otAct  = _ot.isOvertime != null ? _ot.isOvertime
+                    : _ot.overtimeActive != null ? _ot.overtimeActive
+                    : _ot.isActive != null ? _ot.isActive : (_otProg != null);
+        r.overtime_active   = _otAct ? 1 : 0;
+        r.overtime_progress = _otProg != null ? _otProg : null;
+        r.overtime_total    = _otTot != null ? _otTot : null;
       }
     } catch(e) {}
 

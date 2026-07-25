@@ -45,6 +45,7 @@ const ELEMENTS: Element[] = [
   ["hide_action_hints", "Action Hints (Fire)", [HUD.TARGETING_HINTS]],
   ["hide_timer", "Match Timer", [HUD.BATTLE_TIMER]],
   ["hide_score", "Team Score Bars", [HUD.SCORE_BARS]],
+  ["hide_objective_progress", "Objective Progress Bar", [HUD.OBJECTIVE_PROGRESS]],
   ["hide_capture", "Capture Points (A / B / C)", [HUD.BASES_INFO]],
   ["hide_objective_banner", "Objective Banner", [HUD.GAME_OBJECTIVE]],
   ["hide_module_buffs", "Module Buffs", [HUD.CONDITIONAL_BONUS]],
@@ -172,6 +173,7 @@ export class NoUiPlugin extends FusePlugin {
       new ConfigCategory("Match / Objectives", [
         new ConfigEntry({ key: "hide_timer", label: "Match Timer", type: "bool" }),
         new ConfigEntry({ key: "hide_score", label: "Team Score Bars", type: "bool" }),
+        new ConfigEntry({ key: "hide_objective_progress", label: "Objective Progress Bar", type: "bool" }),
         new ConfigEntry({ key: "hide_capture", label: "Capture Points (A / B / C)", type: "bool" }),
         new ConfigEntry({ key: "hide_objective_banner", label: "Objective Banner", type: "bool" }),
         new ConfigEntry({ key: "hide_objective_markers", label: "Objective Markers (A / B + Distance)", type: "bool" }),

@@ -127,6 +127,7 @@ export const HUD = {
   GAME_OBJECTIVE: "[class*=\"GameObjective_base\"]",
   GAME_SCORE: "[class*=\"GameScore_base\"]",
   SCORE_BARS: "[class*=\"DefaultScore_scores\"]",
+  OBJECTIVE_PROGRESS: "[class*=\"ObjectiveProgress_base\"]",
   BATTLE_TIMER: "[class*=\"BattleTimer_base\"]",
   BASES_INFO: "[class*=\"BasesInfo_base\"]",
   CONDITIONAL_BONUS: "[class*=\"ConditionalBonus_base\"]",
