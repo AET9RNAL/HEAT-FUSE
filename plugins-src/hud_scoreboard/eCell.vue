@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, reactive } from "vue";
 import "fuse_ui/ui/tokens.css";
+import eSquadCell from "./eSquadCell.vue";
 
 export interface Cell {
   tank: string | null;
@@ -13,6 +14,8 @@ export interface Cell {
   isPlayer: boolean;
   hasBomb: boolean;
   isSelf: boolean;
+  /** Squad group ID within the team; 0 = solo (no squad). */
+  squad: number;
 }
 
 const props = withDefaults(
@@ -61,8 +64,9 @@ const fallbackUrl = computed(() => classIconUrl(props.cell.role));
     </div>
     <span v-if="variant === 'row'" class="ecell-name">{{ cell.name }}</span>
     <div class="ecell-veil" />
+    <div v-if="cell.squad > 0" class="ecell-squad"><eSquadCell :squad="cell.squad" /></div>
     <span v-if="cell.hasBomb" class="ecell-bomb" />
-    <div class="ecell-hp"><span :style="{ width: (cell.health ?? 0) + '%' }" /></div>
+    <div v-if="cell.health != null" class="ecell-hp"><span :style="{ width: cell.health + '%' }" /></div>
   </div>
 </template>
 
@@ -195,6 +199,15 @@ const fallbackUrl = computed(() => classIconUrl(props.cell.role));
 }
 .ecell.dead .ecell-hp > span {
   width: 0 !important;
+}
+
+.ecell-squad {
+  position: absolute;
+  top: var(--bw);
+  right: var(--bw);
+  z-index: 4;
+  width: clamp(15px, 24cqh, 20px);
+  height: clamp(15px, 24cqh, 20px);
 }
 
 .ecell-bomb {

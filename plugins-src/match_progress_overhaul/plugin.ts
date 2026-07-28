@@ -22,6 +22,12 @@ export class MatchProgressOverhaulPlugin extends FusePlugin {
   private lastJson = "";
   private lastConnected = false;
   private nativeHidden = false;
+  // Fill-rate tracking for prediction (P3): EMA of d(fill)/dt per team.
+  private lastT = 0;
+  private lastAllyFill = 0;
+  private lastEnemyFill = 0;
+  private allyRate = 0;
+  private enemyRate = 0;
 
   private rd(name: string): unknown {
     return this.acc ? this.acc.read(name) : undefined;
@@ -36,9 +42,17 @@ export class MatchProgressOverhaulPlugin extends FusePlugin {
     this.acc = ctx.services.get<Accessors>("accessors");
 
     ctx.config
-      .defaults({ vue_overlay_pos: null, vue_width: 1100, vue_height: 75, hide_native: true })
+      .defaults({ vue_overlay_pos: null, vue_width: 1100, vue_height: 100, hide_native: true, enhanced: true })
       .load();
     ctx.config.schema([
+      new ConfigCategory("Enhancements", [
+        new ConfigEntry({
+          key: "enhanced",
+          label: "Lead / Proximity Cues",
+          type: "bool",
+          description: "Advanced UX cues",
+        }),
+      ]),
       new ConfigCategory("Native HUD", [
         new ConfigEntry({
           key: "hide_native",
@@ -53,7 +67,7 @@ export class MatchProgressOverhaulPlugin extends FusePlugin {
     ]);
 
     const w = Number(ctx.config.get("vue_width", 1100)) || 1100;
-    const h = Number(ctx.config.get("vue_height", 75)) || 75;
+    const h = Number(ctx.config.get("vue_height", 100)) || 100;
     this.ov = ctx.overlays.declare({
       id: "matchProgress",
       kind: "vue",
@@ -68,6 +82,30 @@ export class MatchProgressOverhaulPlugin extends FusePlugin {
   }
   override enterLocked(): void {
     this.lastJson = "";
+    this.resetRates();
+  }
+
+  private resetRates(): void {
+    this.lastT = 0;
+    this.allyRate = 0;
+    this.enemyRate = 0;
+  }
+
+  /** EMA of d(fill)/dt per team; guards against stale/huge gaps (reconnects). */
+  private updateRates(allyFill: number, enemyFill: number): void {
+    const now = Date.now() / 1000;
+    const dt = this.lastT > 0 ? now - this.lastT : 0;
+    if (dt > 0.02 && dt < 5) {
+      const a = 0.1;
+      this.allyRate = a * ((allyFill - this.lastAllyFill) / dt) + (1 - a) * this.allyRate;
+      this.enemyRate = a * ((enemyFill - this.lastEnemyFill) / dt) + (1 - a) * this.enemyRate;
+    } else if (dt >= 5) {
+      this.allyRate = 0;
+      this.enemyRate = 0;
+    }
+    this.lastT = now;
+    this.lastAllyFill = allyFill;
+    this.lastEnemyFill = enemyFill;
   }
   override setOverlayVisible(visible: boolean): void {
     if (this.ctx.state === "calibrate") return;
@@ -169,15 +207,51 @@ export class MatchProgressOverhaulPlugin extends FusePlugin {
       enemyTeamScore = null;
     }
 
+    const rawLead = allyFill - enemyFill; // -1..1, +ve = ally ahead
+    const lead = Math.sign(rawLead) * Math.pow(Math.min(1, Math.abs(rawLead)), 0.6);
+    const leader = rawLead > 0.02 ? "ally" : rawLead < -0.02 ? "enemy" : "tie";
+    const NEAR = 0.9;
+
+    // ── P3 prediction ──
+    // Extrapolate each team's fill to the threshold at its current rate; the ETA
+    // is only meaningful if reachable within the remaining match time. The
+    // projected winner is whoever hits first, else the current leader at timeout.
+    this.updateRates(allyFill, enemyFill);
+    const eta = (fill: number, rate: number): number => {
+      const r = Math.max(0, rate);
+      if (fill >= 1 || r < 3e-3) return -1;
+      return Math.round((1 - fill) / r);
+    };
+    const allyEta = eta(allyFill, this.allyRate);
+    const enemyEta = eta(enemyFill, this.enemyRate);
+    let projWinner: "ally" | "enemy" | "tie" = leader;
+    if (allyEta >= 0 && (enemyEta < 0 || allyEta < enemyEta)) projWinner = "ally";
+    else if (enemyEta >= 0 && (allyEta < 0 || enemyEta < allyEta)) projWinner = "enemy";
+
+    // Pace ghost
+    const PROJECT_S = 8;
+    const allyProj = Math.min(1, allyFill + Math.max(0, this.allyRate) * PROJECT_S);
+    const enemyProj = Math.min(1, enemyFill + Math.max(0, this.enemyRate) * PROJECT_S);
+
     this.pushData({
       inMatch: true,
       isControl,
+      enhanced: Boolean(this.ctx.config.get("enhanced", true)),
       ally: allyText,
       enemy: enemyText,
       allyFill,
       enemyFill,
       allyTeamScore,
       enemyTeamScore,
+      lead,
+      leader,
+      allyNear: allyFill >= NEAR,
+      enemyNear: enemyFill >= NEAR,
+      allyProj,
+      enemyProj,
+      projWinner,
+      allyEta,
+      enemyEta,
       time: this.fmtTime(this.num("battle_countdown")),
       leads: this.num("team_leads") ?? 0,
       overtime,
@@ -188,12 +262,22 @@ export class MatchProgressOverhaulPlugin extends FusePlugin {
     this.pushData({
       inMatch: true,
       isControl: false,
+      enhanced: Boolean(this.ctx.config.get("enhanced", true)),
       ally: "2000",
       enemy: "1900",
       allyFill: 1,
       enemyFill: 0.68,
       allyTeamScore: 1,
       enemyTeamScore: 0,
+      lead: Math.pow(0.32, 0.6),
+      leader: "ally",
+      allyNear: true,
+      enemyNear: false,
+      allyProj: 1,
+      enemyProj: 0.82,
+      projWinner: "ally",
+      allyEta: 45,
+      enemyEta: -1,
       time: "15:05",
       leads: 0,
       overtime: { progress: 50, total: 100, frac: 0.5 },

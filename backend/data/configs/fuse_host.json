@@ -6,9 +6,12 @@
     "rive_animation",
     "cruise_control",
     "combat_reboot_plus",
-    "energy_bar",
     "heat_stats",
-    "hud_scoreboard"
+    "fuse_ui",
+    "hud_scoreboard",
+    "match_progress_overhaul",
+    "noui",
+    "energy_bar"
   ],
   "hotkey_overrides": {
     "host": {

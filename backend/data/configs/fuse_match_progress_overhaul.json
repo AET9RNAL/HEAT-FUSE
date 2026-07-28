@@ -3,9 +3,10 @@
     "x": 730,
     "y": 0,
     "w": 1100,
-    "h": 75
+    "h": 100
   },
-  "vue_width": 620,
-  "vue_height": 44,
-  "hide_native": true
+  "vue_width": 1100,
+  "vue_height": 100,
+  "hide_native": true,
+  "enhanced": true
 }

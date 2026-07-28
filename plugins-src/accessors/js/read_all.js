@@ -310,7 +310,11 @@
             place:        p.place != null ? p.place : null,
             is_bot:       p.isBot ? 1 : 0,
             is_player:    p.isPlayer ? 1 : 0,
-            level:        p.level != null ? p.level : null
+            level:        p.level != null ? p.level : null,
+            // Squad grouping: platoonNumber is per-team (0 = solo), so squad
+            // identity is (team, platoon_number). platoon_mate = slot in squad.
+            platoon_number: p.platoonNumber != null ? p.platoonNumber : 0,
+            platoon_mate:   p.platoonMateNumber != null ? p.platoonMateNumber : 0
           };
         };
         var _warriors = [];

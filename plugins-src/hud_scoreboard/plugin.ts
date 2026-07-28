@@ -23,6 +23,8 @@ interface Warrior {
   is_bot: number;
   is_player: number;
   level: number | null;
+  platoon_number: number;
+  platoon_mate: number;
 }
 
 interface Cell {
@@ -36,6 +38,8 @@ interface Cell {
   isPlayer: boolean;
   hasBomb: boolean;
   isSelf: boolean;
+  /** Squad group ID within the team; 0 = solo (no squad). */
+  squad: number;
 }
 
 interface ClassGroup {
@@ -223,8 +227,8 @@ export class HudScoreboardPlugin extends FusePlugin {
       inMatch: true,
       layout,
       showNames: Boolean(this.ctx.config.get("show_names", false)),
-      allies: this.groupByClass(allies, myName, false),
-      enemies: this.groupByClass(enemies, myName, mirror),
+      allies: this.groupByClass(allies, myName, false, true),
+      enemies: this.groupByClass(enemies, myName, mirror, false),
     });
   }
 
@@ -239,7 +243,11 @@ export class HudScoreboardPlugin extends FusePlugin {
     return null;
   }
 
-  private groupByClass(rows: Warrior[], myName: string, reverse: boolean): ClassGroup[] {
+  private squadOf(w: Warrior): number {
+    return w.platoon_number > 0 ? w.platoon_number : 0;
+  }
+
+  private groupByClass(rows: Warrior[], myName: string, reverse: boolean, isAlly: boolean): ClassGroup[] {
     const byRole = new Map<string, Cell[]>();
     const sorted = [...rows].sort(
       (a, b) => classRank(a.role) - classRank(b.role) || (a.place ?? 99) - (b.place ?? 99),
@@ -254,11 +262,12 @@ export class HudScoreboardPlugin extends FusePlugin {
         role: w.role,
         dead: w.is_dead === 1,
         respawning: w.respawning === 1,
-        health: w.health_pct,
+        health: isAlly ? w.health_pct : null,
         name: w.name,
         isPlayer: w.is_player === 1,
         hasBomb: w.has_bomb === 1,
         isSelf: !!myName && w.name === myName,
+        squad: this.squadOf(w),
       };
       const list = byRole.get(w.role) ?? [];
       list.push(cell);
@@ -270,23 +279,24 @@ export class HudScoreboardPlugin extends FusePlugin {
   }
 
   private pushPlaceholder(): void {
-    const mk = (role: string, dead: boolean, self = false): Cell => ({
-      tank: null, agent: null, role, dead, respawning: false, health: dead ? 0 : 100,
-      name: role, isPlayer: true, hasBomb: false, isSelf: self,
+    const mk = (role: string, dead: boolean, self = false, isAlly = true, squad = 0): Cell => ({
+      tank: null, agent: null, role, dead, respawning: false,
+      health: isAlly ? (dead ? 0 : 100) : null,
+      name: role, isPlayer: true, hasBomb: false, isSelf: self, squad,
     });
     this.pushData({
       inMatch: true,
       layout: String(this.ctx.config.get("layout", "scoreboard")),
       showNames: Boolean(this.ctx.config.get("show_names", false)),
       allies: [
-        { role: "marksman", cells: [mk("marksman", false, true), mk("marksman", false)] },
+        { role: "marksman", cells: [mk("marksman", false, true, true, 1), mk("marksman", false, false, true, 1)] },
         { role: "assault", cells: [mk("assault", false)] },
         { role: "defender", cells: [mk("defender", false), mk("defender", true)] },
       ],
       enemies: [
-        { role: "defender", cells: [mk("defender", false), mk("defender", true)] },
-        { role: "assault", cells: [mk("assault", false), mk("assault", false)] },
-        { role: "marksman", cells: [mk("marksman", true)] },
+        { role: "defender", cells: [mk("defender", false, false, false), mk("defender", true, false, false)] },
+        { role: "assault", cells: [mk("assault", false, false, false), mk("assault", false, false, false)] },
+        { role: "marksman", cells: [mk("marksman", true, false, false)] },
       ],
     });
   }

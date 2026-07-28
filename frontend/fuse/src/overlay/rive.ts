@@ -1,9 +1,10 @@
 /**
- * Rive overlay controller - wraps @rive-app/canvas and applies the FUSE overlay
- * view-model data-binding protocol (the `overlay:data` inputs streamed from the
- * runtime). Shared by the Vue `RiveOverlay` component and the Rive gate spike.
+ * Rive overlay controller - wraps the Rive WebGL2 runtime (the Rive Renderer)
+ * and applies the FUSE overlay view-model data-binding protocol (the
+ * `overlay:data` inputs streamed from the runtime). Shared by the Vue
+ * `RiveOverlay` component and the Rive gate spike.
  */
-import { Rive, type ViewModelInstance } from "@rive-app/canvas";
+import { Rive, type ViewModelInstance } from "@rive-app/webgl2";
 
 export type OverlayInputType = "number" | "bool" | "string" | "color" | "enum" | "trigger" | "json";
 export interface OverlayInput {

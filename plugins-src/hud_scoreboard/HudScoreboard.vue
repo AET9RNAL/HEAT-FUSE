@@ -16,6 +16,7 @@ interface Cell {
   isPlayer: boolean;
   hasBomb: boolean;
   isSelf: boolean;
+  squad: number;
 }
 interface ClassGroup {
   role: string;

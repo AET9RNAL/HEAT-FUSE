@@ -19,12 +19,22 @@ interface Overtime {
 interface Board {
   inMatch: boolean;
   isControl?: boolean;
+  enhanced?: boolean;
   ally?: string;
   enemy?: string;
   allyFill?: number;
   enemyFill?: number;
   allyTeamScore?: number | null;
   enemyTeamScore?: number | null;
+  lead?: number;
+  leader?: "ally" | "enemy" | "tie";
+  allyNear?: boolean;
+  enemyNear?: boolean;
+  allyProj?: number;
+  enemyProj?: number;
+  projWinner?: "ally" | "enemy" | "tie";
+  allyEta?: number;
+  enemyEta?: number;
   time?: string;
   leads?: number;
   overtime?: Overtime | null;
@@ -72,11 +82,29 @@ function makeBar(side: "ally" | "enemy") {
     animate(sweepOpacity, 0, { duration: 0.65, ease: "easeIn" });
   }
 
-  return { target, clip, filter, sweepLeft, sweepOpacity, sweep };
+  // Pace ghost: projected fill a few seconds out, revealed the same way as fill.
+  const projTarget = useMotionValue(0);
+  const projSpring = useSpring(projTarget, { stiffness: 90, damping: 20, mass: 0.6 });
+  const projHidden = useTransform(projSpring, (v: number) => (1 - clamp01(v)) * 100);
+  const projClip =
+    side === "ally"
+      ? useMotionTemplate`inset(0 ${projHidden}% 0 0)`
+      : useMotionTemplate`inset(0 0 0 ${projHidden}%)`;
+
+  return { target, clip, filter, sweepLeft, sweepOpacity, sweep, projTarget, projClip };
 }
 
 const ally = makeBar("ally");
 const enemy = makeBar("enemy");
+
+// ── P1 decision cues ──
+const enhanced = computed(() => board.value.enhanced !== false);
+const leader = computed(() => board.value.leader ?? "tie");
+const leadTarget = useMotionValue(0);
+const leadSpring = useSpring(leadTarget, { stiffness: 120, damping: 22, mass: 0.6 });
+watch(() => board.value.lead, (v) => leadTarget.set(typeof v === "number" ? v : 0));
+const leadLeft = useTransform(leadSpring, (v: number) => `${v > 0 ? 50 - v * 50 : 50}%`);
+const leadWidth = useTransform(leadSpring, (v: number) => `${Math.abs(v) * 50}%`);
 
 function drive(bar: ReturnType<typeof makeBar>, next: number | undefined): void {
   const v = clamp01(next);
@@ -85,9 +113,25 @@ function drive(bar: ReturnType<typeof makeBar>, next: number | undefined): void 
 }
 watch(() => board.value.allyFill, (v) => drive(ally, v));
 watch(() => board.value.enemyFill, (v) => drive(enemy, v));
+watch(() => board.value.allyProj, (v) => ally.projTarget.set(clamp01(v)));
+watch(() => board.value.enemyProj, (v) => enemy.projTarget.set(clamp01(v)));
 onMounted(() => {
   ally.target.set(clamp01(board.value.allyFill));
   enemy.target.set(clamp01(board.value.enemyFill));
+  ally.projTarget.set(clamp01(board.value.allyProj));
+  enemy.projTarget.set(clamp01(board.value.enemyProj));
+  leadTarget.set(typeof board.value.lead === "number" ? board.value.lead : 0);
+});
+
+// Projected-winner ETA
+function fmtEta(s: number): string {
+  const m = Math.floor(s / 60);
+  return `${m}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+}
+const projEtaStr = computed(() => {
+  const w = board.value.projWinner;
+  const e = w === "ally" ? board.value.allyEta : w === "enemy" ? board.value.enemyEta : -1;
+  return typeof e === "number" && e >= 0 ? fmtEta(e) : "";
 });
 
 const overtime = computed(() => board.value.overtime ?? null);
@@ -119,10 +163,18 @@ const overtime = computed(() => board.value.overtime ?? null);
     <div class="mph-row">
       <span v-if="board.allyTeamScore != null" class="mph-teamscore mph-teamscore--ally">{{ board.allyTeamScore }}</span>
 
-      <div class="mph-bar">
+      <div
+        class="mph-bar mph-bar--ally"
+        :class="{ trailing: enhanced && leader === 'enemy', near: enhanced && board.allyNear }"
+      >
         <svg class="mph-svg" viewBox="0 0 271 20" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
           <path :d="ALLY_PATH" fill="#0b0b0b" fill-opacity="0.5" stroke="#8abddc" stroke-width="0.25" />
         </svg>
+        <motion.div v-if="enhanced" class="mph-ghost" :style="{ clipPath: ally.projClip }">
+          <svg class="mph-svg" viewBox="0 0 271 20" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+            <path :d="ALLY_PATH" fill="var(--woth-ally)" />
+          </svg>
+        </motion.div>
         <motion.div class="mph-fill" :style="{ clipPath: ally.clip, filter: ally.filter }">
           <svg class="mph-svg" viewBox="0 0 271 20" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
             <path :d="ALLY_PATH" fill="var(--woth-ally)" />
@@ -135,10 +187,18 @@ const overtime = computed(() => board.value.overtime ?? null);
 
       <div class="mph-time">{{ board.time }}</div>
 
-      <div class="mph-bar">
+      <div
+        class="mph-bar mph-bar--enemy"
+        :class="{ trailing: enhanced && leader === 'ally', near: enhanced && board.enemyNear }"
+      >
         <svg class="mph-svg" viewBox="0 0 271 20" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
           <path :d="ENEMY_PATH" fill="#0b0b0b" fill-opacity="0.5" stroke="#ff6d46" stroke-width="0.25" />
         </svg>
+        <motion.div v-if="enhanced" class="mph-ghost" :style="{ clipPath: enemy.projClip }">
+          <svg class="mph-svg" viewBox="0 0 271 20" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+            <path :d="ENEMY_PATH" fill="var(--woth-enemy)" />
+          </svg>
+        </motion.div>
         <motion.div class="mph-fill" :style="{ clipPath: enemy.clip, filter: enemy.filter }">
           <svg class="mph-svg" viewBox="0 0 271 20" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
             <path :d="ENEMY_PATH" fill="var(--woth-enemy)" />
@@ -152,6 +212,18 @@ const overtime = computed(() => board.value.overtime ?? null);
       <span v-if="board.enemyTeamScore != null" class="mph-teamscore mph-teamscore--enemy">{{ board.enemyTeamScore }}</span>
     </div>
 
+    <div v-if="enhanced" class="mph-lead">
+      <div
+        class="mph-eta"
+        :class="`eta-${board.projWinner}`"
+        :style="{ visibility: projEtaStr ? 'visible' : 'hidden' }"
+      >▸ {{ projEtaStr || "0:00" }}</div>
+      <div class="mph-lead-track">
+        <motion.div class="mph-lead-fill" :class="`lead-${leader}`" :style="{ left: leadLeft, width: leadWidth }" />
+        <span class="mph-lead-center" />
+      </div>
+    </div>
+
     <div v-if="overtime" class="mph-ot">
       <div class="mph-ot-label">Overtime</div>
       <div class="mph-ot-bar"><span :style="{ width: clamp01(overtime.frac) * 100 + '%' }" /></div>
@@ -161,6 +233,8 @@ const overtime = computed(() => board.value.overtime ?? null);
 
 <style scoped>
 .mph {
+  --near-glow: 15px;
+
   width: 100%;
   height: 100%;
   box-sizing: border-box;
@@ -193,6 +267,32 @@ const overtime = computed(() => board.value.overtime ?? null);
   position: relative;
   height: 100%;
   aspect-ratio: 271 / 20;
+  transition: opacity 0.2s;
+}
+.mph-bar--ally {
+  --glow: var(--woth-ally);
+}
+.mph-bar--enemy {
+  --glow: var(--woth-enemy);
+}
+/* Leader emphasis: dim the trailing side so ordinal is pre-attentive. */
+.mph-bar.trailing {
+  opacity: 0.5;
+}
+/* Proximity*/
+.mph-bar.near {
+  animation: mph-pulse 0.85s ease-in-out infinite;
+}
+/* Attention grabber, I estimate this will suffice to be noticeble enough vua peripheral vision */
+@keyframes mph-pulse {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 calc(var(--near-glow) * 0.25) var(--glow));
+  }
+  50% {
+    filter: drop-shadow(0 0 var(--near-glow) var(--glow))
+      drop-shadow(0 0 calc(var(--near-glow) * 2) var(--glow)) brightness(1.15);
+  }
 }
 .mph-svg {
   position: absolute;
@@ -206,6 +306,14 @@ const overtime = computed(() => board.value.overtime ?? null);
   inset: 0;
   overflow: hidden;
   will-change: clip-path, filter;
+}
+/* Pace ghost: */
+.mph-ghost {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  opacity: 0.26;
+  pointer-events: none;
 }
 
 .mph-sweep {
@@ -294,5 +402,62 @@ const overtime = computed(() => board.value.overtime ?? null);
   background: #f9d970;
   box-shadow: inset 0 0 2px 0 #fff;
   transition: width 0.2s linear;
+}
+
+.mph-lead {
+  flex: none;
+  width: 62%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+}
+/* Projected-winner ETA to the win threshold. */
+.mph-eta {
+  font-family: var(--font-microcopy);
+  font-size: clamp(7px, 22cqh, 11px);
+  font-weight: var(--font-weight-2);
+  letter-spacing: 0.04em;
+  line-height: 1;
+  min-height: 1em;
+}
+.mph-eta.eta-ally {
+  color: var(--woth-ally);
+}
+.mph-eta.eta-enemy {
+  color: var(--woth-enemy);
+}
+.mph-lead-track {
+  position: relative;
+  width: 100%;
+  height: clamp(3px, 12cqh, 6px);
+  background: var(--black-1-alpha, #0b0b0b80);
+  overflow: hidden;
+}
+.mph-lead-fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+}
+.mph-lead-fill.lead-ally {
+  background: var(--woth-ally);
+  box-shadow: inset 0 0 2px 0 rgba(255, 255, 255, 0.5);
+}
+.mph-lead-fill.lead-enemy {
+  background: var(--woth-enemy);
+  box-shadow: inset 0 0 2px 0 rgba(255, 255, 255, 0.5);
+}
+.mph-lead-fill.lead-tie {
+  display: none;
+}
+.mph-lead-center {
+  position: absolute;
+  left: 50%;
+  top: -1px;
+  bottom: -1px;
+  width: 1px;
+  transform: translateX(-50%);
+  background: var(--base-200);
+  opacity: 0.7;
 }
 </style>

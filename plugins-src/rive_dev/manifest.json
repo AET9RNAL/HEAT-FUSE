@@ -1,0 +1,16 @@
+{
+  "plugin_id": "rive_dev",
+  "name": "RiveDev",
+  "version": "1.0.0",
+  "author": "AETERNAL",
+  "description": "Dev env",
+  "entry": "plugin:RiveDevPlugin",
+  "runtime": "node",
+  "dependencies": [],
+  "hotkeys": {},
+  "default_config": {
+    "rive_pos": null,
+    "anim_width": 400,
+    "anim_height": 400
+  }
+}
