@@ -144,6 +144,14 @@ export interface TranslationSchema {
             reloadWarningTitle: string
             reloadWarningMessage: string
         }
+        releaseNotes: {
+            title: string
+            version: string
+            loading: string
+            empty: string
+            viewOnline: string
+            close: string
+        }
         console: {
             searchPlaceholder: string
             clear: string

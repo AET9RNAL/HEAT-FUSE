@@ -1,0 +1,12 @@
+{
+  "plugin_id": "prism",
+  "name": "Prism",
+  "version": "1.0.0",
+  "author": "AETERNAL",
+  "description": "Fine tune your native game UI",
+  "entry": "plugin:PrismPlugin",
+  "runtime": "node",
+  "dependencies": ["accessors"],
+  "hotkeys": {},
+  "default_config": {}
+}

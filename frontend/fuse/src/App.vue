@@ -7,6 +7,7 @@ import eNotification from './components/eNotification.vue'
 import ePluginConfig from './components/ePluginConfig.vue'
 import eSimpleModal from './components/eSimpleModal.vue'
 import eLicense from './components/eLicense.vue'
+import eReleaseNotes from './components/eReleaseNotes.vue'
 import { useAppStore } from './stores/app'
 import { useAuthStore } from './stores/auth'
 import { useExtendedAuthStore } from './stores/extendedauth'
@@ -60,6 +61,10 @@ const activePlugin = computed(() =>
 
 const showAuth = computed(() => ['welcome', 'auth', 'otp', 'forgot-password'].includes(authStore.screen))
 const showResetPassword = computed(() => authStore.screen === 'reset-password')
+// Queues behind the license gate and the auth overlays, both full-screen.
+const showReleaseNotes = computed(() =>
+    appStore.releaseNotesOpen && appStore.licenseAccepted && !showAuth.value && !showResetPassword.value
+)
 
 function showNotification(payload: { title?: string; message: string; type?: NotificationType }) {
     notification.value = payload
@@ -119,7 +124,13 @@ watch(() => appStore.licenseAccepted, async (accepted) => {
     eventBus.on('update:installed', handleUpdateInstalled)
     eventBus.on('update:error', handleUpdateError)
 
-    await authStore.initializeAuth()
+    try {
+        await authStore.initializeAuth()
+    } finally {
+        // After auth: lastSeenVersion is the DB value, not just the local one.
+        // Runs even if session restore failed - notes are not auth-gated.
+        await appStore.checkReleaseNotes()
+    }
 }, { immediate: true })
 
 onUnmounted(() => {
@@ -173,6 +184,20 @@ onUnmounted(() => {
       v-if="activePlugin"
       :plugin="activePlugin"
       @close="activePluginConfigId = null"
+    />
+  </AnimatePresence>
+
+  <!-- Release notes, once per version after an update -->
+  <AnimatePresence>
+    <eReleaseNotes
+      v-if="showReleaseNotes"
+      key="release-notes"
+      :version="appStore.appVersion"
+      :notes="appStore.releaseNotes?.notes ?? ''"
+      :release-date="appStore.releaseNotes?.releaseDate"
+      :url="appStore.releaseNotes?.url"
+      :loading="appStore.releaseNotesLoading"
+      @close="appStore.dismissReleaseNotes()"
     />
   </AnimatePresence>
 

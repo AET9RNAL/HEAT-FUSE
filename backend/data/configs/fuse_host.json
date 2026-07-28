@@ -7,11 +7,12 @@
     "cruise_control",
     "combat_reboot_plus",
     "heat_stats",
+    "noui",
+    "rive_dev",
+    "energy_bar",
     "fuse_ui",
     "hud_scoreboard",
-    "match_progress_overhaul",
-    "noui",
-    "energy_bar"
+    "match_progress_overhaul"
   ],
   "hotkey_overrides": {
     "host": {

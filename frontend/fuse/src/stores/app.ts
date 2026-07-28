@@ -38,6 +38,7 @@ export const useAppStore = defineStore('app', () => {
     const diagnosticsConsent = ref<boolean>(false)
     const username = ref<string | null>(null)
     const allowApiAccess = ref<boolean>(false)
+    const lastSeenVersion = ref<string>('')
 
     // Setting registry
     // Each entry maps a ref to a DB column key and a load default.
@@ -65,6 +66,7 @@ export const useAppStore = defineStore('app', () => {
         analyticsConsent:       { ref: analyticsConsent,       db: 'analytics_consent',          default: false },
         diagnosticsConsent:     { ref: diagnosticsConsent,     db: 'diagnostics_consent',        default: false },
         allowApiAccess:         { ref: allowApiAccess,         db: 'allow_api_access',            default: false },
+        lastSeenVersion:        { ref: lastSeenVersion,        db: 'last_seen_version',           default: '' },
     }
 
     // Batched save system (wire DB when auth is ready)
@@ -250,6 +252,105 @@ export const useAppStore = defineStore('app', () => {
         return { success: true }
     }
 
+    // Release notes ("what's new" after an update)
+
+    // A fresh install has no recorded version - record it silently rather than
+    // greeting a first-time user with the changelog.
+    const SHOW_NOTES_ON_FIRST_RUN = false
+
+    interface ReleaseNotesEntry {
+        version: string
+        notes: string
+        releaseDate?: string
+        url?: string
+    }
+
+    const releaseNotes = ref<ReleaseNotesEntry | null>(null)
+    const releaseNotesLoading = ref<boolean>(false)
+    const releaseNotesOpen = ref<boolean>(false)
+
+    async function fetchReleaseNotes(version = appVersion.value, refresh = false): Promise<ReleaseNotesEntry | null> {
+        if (!version) return null
+        if (!refresh && releaseNotes.value?.version === version) return releaseNotes.value
+
+        releaseNotesLoading.value = true
+        try {
+            const result = await window.updateAPI?.getReleaseNotes(version, { refresh })
+            if (result && !result.success) {
+                logger.warn('Release notes lookup failed:', { error: result.error })
+            }
+            releaseNotes.value = result?.entry ?? null
+            return releaseNotes.value
+        } catch (err: any) {
+            logger.error('Failed to load release notes:', { error: err })
+            return null
+        } finally {
+            releaseNotesLoading.value = false
+        }
+    }
+
+    // Dev only
+    function forceReleaseNotes(): boolean {
+        try {
+            return import.meta.env.DEV && localStorage.getItem('fuse:force-release-notes') === '1'
+        } catch {
+            return false
+        }
+    }
+
+    // Auto-show once per version, right after an update installed.
+    async function checkReleaseNotes() {
+        const version = appVersion.value
+        if (!version) return
+
+        const forced = forceReleaseNotes()
+        logger.info('[release-notes] check', { version, lastSeen: lastSeenVersion.value, forced })
+
+        if (!forced) {
+            if (lastSeenVersion.value === version) return
+
+            if (!lastSeenVersion.value && !SHOW_NOTES_ON_FIRST_RUN) {
+                lastSeenVersion.value = version
+                return
+            }
+        }
+
+        const entry = await fetchReleaseNotes(version)
+        logger.info('[release-notes] fetched', { version, hasNotes: !!entry?.notes })
+        // No notes yet (draft release, offline) - leave lastSeenVersion alone so
+        // the next launch retries.
+        if (!entry?.notes) return
+        releaseNotesOpen.value = true
+    }
+
+    // TO-DO wire that up in AppAbout
+    async function openReleaseNotes(refresh = false) {
+        releaseNotesOpen.value = true
+        await fetchReleaseNotes(appVersion.value, refresh)
+    }
+
+    // Dismiss marks the version seen - a crash before dismiss re-shows it.
+    function dismissReleaseNotes() {
+        releaseNotesOpen.value = false
+        if (appVersion.value) lastSeenVersion.value = appVersion.value
+    }
+
+    if (import.meta.env.DEV) {
+        // Console testing
+        ;(window as any).__fuseNotes = {
+            check: checkReleaseNotes,
+            open:  openReleaseNotes,
+            fetch: fetchReleaseNotes,
+            state: () => ({
+                appVersion:  appVersion.value,
+                lastSeen:    lastSeenVersion.value,
+                open:        releaseNotesOpen.value,
+                loading:     releaseNotesLoading.value,
+                notesLength: releaseNotes.value?.notes.length ?? 0,
+            }),
+        }
+    }
+
     async function checkDebugger(dirPath: string) {
         return window.gameAPI.checkDebugger(dirPath)
     }
@@ -283,6 +384,14 @@ export const useAppStore = defineStore('app', () => {
         diagnosticsConsent,
         username,
         allowApiAccess,
+        lastSeenVersion,
+        releaseNotes,
+        releaseNotesLoading,
+        releaseNotesOpen,
+        fetchReleaseNotes,
+        checkReleaseNotes,
+        openReleaseNotes,
+        dismissReleaseNotes,
         saveUsername,
         setGameDirPath,
         scanGameDir,
@@ -315,6 +424,7 @@ export const useAppStore = defineStore('app', () => {
             'diagnosticsConsent',
             'username',
             'allowApiAccess',
+            'lastSeenVersion',
         ],
     },
 })

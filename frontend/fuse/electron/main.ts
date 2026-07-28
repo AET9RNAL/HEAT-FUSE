@@ -72,6 +72,76 @@ interface HostConfig {
   hotkey_overrides?: Record<string, Record<string, string>>
 }
 
+// Release notes (GitHub release body)
+
+const GH_OWNER = 'AET9RNAL'
+const GH_REPO  = 'HEAT-FUSE'
+const RELEASE_NOTES_CACHE = path.join(USER_DATA_DIR, 'release-notes.json')
+const VERSION_RE = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/
+
+interface ReleaseNotesEntry {
+  version: string
+  notes: string
+  releaseDate?: string
+  url?: string
+}
+
+// electron-updater hands back either a markdown string or [{ version, note }]
+function normalizeReleaseNotes(raw: unknown): string {
+  if (typeof raw === 'string') return raw.trim()
+  if (Array.isArray(raw)) {
+    return raw
+      .map(item => (item && typeof item === 'object' && 'note' in item
+        ? String((item as { note?: unknown }).note ?? '')
+        : String(item ?? '')))
+      .filter(Boolean)
+      .join('\n\n')
+      .trim()
+  }
+  return ''
+}
+
+function readReleaseNotesCache(): ReleaseNotesEntry | null {
+  try {
+    if (!fs.existsSync(RELEASE_NOTES_CACHE)) return null
+    const entry = JSON.parse(fs.readFileSync(RELEASE_NOTES_CACHE, 'utf-8')) as ReleaseNotesEntry
+    return entry && typeof entry.version === 'string' && typeof entry.notes === 'string' ? entry : null
+  } catch {
+    return null
+  }
+}
+
+function writeReleaseNotesCache(entry: ReleaseNotesEntry) {
+  if (!entry.notes) return
+  try {
+    fs.mkdirSync(path.dirname(RELEASE_NOTES_CACHE), { recursive: true })
+    fs.writeFileSync(RELEASE_NOTES_CACHE, JSON.stringify(entry, null, 2), 'utf-8')
+  } catch { /* cache is best-effort */ }
+}
+
+// Anonymous API access only sees published releases - drafts fall back to the
+// cache written while the update was still being downloaded.
+async function fetchReleaseNotesFromGitHub(version: string): Promise<ReleaseNotesEntry | null> {
+  const headers = {
+    'Accept': 'application/vnd.github+json',
+    'User-Agent': `FUSE/${app.getVersion()}`,
+  }
+  for (const tag of [`v${version}`, version]) {
+    try {
+      const res = await net.fetch(
+        `https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/releases/tags/${encodeURIComponent(tag)}`,
+        { headers },
+      )
+      if (!res.ok) continue
+      const data = await res.json() as { body?: string; published_at?: string; html_url?: string }
+      const notes = (data.body ?? '').trim()
+      if (!notes) continue
+      return { version, notes, releaseDate: data.published_at, url: data.html_url }
+    } catch { /* offline / rate limited - try next tag form */ }
+  }
+  return null
+}
+
 function assertWithinRoot(target: string, root: string) {
   const a = path.resolve(target)
   const r = path.resolve(root)
@@ -1030,9 +1100,13 @@ app.whenReady().then(() => {
       win?.webContents.send('update:checking')
     })
     autoUpdater.on('update-available', (info) => {
+      const notes = normalizeReleaseNotes(info.releaseNotes)
+      // Cache now: after restart the release may still be a draft, invisible to
+      // the anonymous GitHub API.
+      writeReleaseNotesCache({ version: info.version, notes, releaseDate: info.releaseDate })
       win?.webContents.send('update:available', {
         version: info.version,
-        releaseNotes: info.releaseNotes ?? '',
+        releaseNotes: notes,
         releaseDate: info.releaseDate,
       })
     })
@@ -1048,6 +1122,11 @@ app.whenReady().then(() => {
       })
     })
     autoUpdater.on('update-downloaded', (info) => {
+      writeReleaseNotesCache({
+        version: info.version,
+        notes: normalizeReleaseNotes(info.releaseNotes),
+        releaseDate: info.releaseDate,
+      })
       win?.webContents.send('update:downloaded', {
         version: info.version,
         releaseDate: info.releaseDate,
@@ -1106,6 +1185,50 @@ app.whenReady().then(() => {
     } catch (err: unknown) {
       return { success: false, error: (err as Error).message }
     }
+  })
+
+  ipcMain.handle('update:release-notes', async (_event, version: string, opts?: { refresh?: boolean }) => {
+    if (typeof version !== 'string' || !VERSION_RE.test(version)) {
+      return { success: false, error: 'invalid_version' }
+    }
+    if (VITE_DEV_SERVER_URL) {
+      return {
+        success: true,
+        entry: {
+          version,
+          notes: [
+            `## FUSE ${version}`,
+            '',
+            '**NEW**',
+            '',
+            '- Dev mode mock release notes - the real body comes from the GitHub release',
+            '- Second mock entry',
+            '',
+            '**IMPROVEMENTS**',
+            '',
+            '- Mock improvement entry',
+            '',
+            '**FIXED**',
+            '',
+            '- Nothing, this is a mock',
+          ].join('\n'),
+          releaseDate: new Date().toISOString(),
+          url: `https://github.com/${GH_OWNER}/${GH_REPO}/releases`,
+        } satisfies ReleaseNotesEntry,
+      }
+    }
+
+    const cached = readReleaseNotesCache()
+    const cacheHit = cached?.version === version && !!cached.notes
+    if (cacheHit && !opts?.refresh) return { success: true, entry: cached }
+
+    const fetched = await fetchReleaseNotesFromGitHub(version)
+    if (fetched) {
+      writeReleaseNotesCache(fetched)
+      return { success: true, entry: fetched }
+    }
+    if (cacheHit) return { success: true, entry: cached }
+    return { success: true, entry: null }
   })
 
   ipcMain.handle('update:install', () => {

@@ -93,6 +93,14 @@ contextBridge.exposeInMainWorld('updateAPI', {
     ipcRenderer.invoke('update:download'),
   install: (): Promise<{ success: boolean }> =>
     ipcRenderer.invoke('update:install'),
+  getReleaseNotes: (
+    version: string,
+    opts?: { refresh?: boolean },
+  ): Promise<{
+    success: boolean
+    error?: string
+    entry?: { version: string; notes: string; releaseDate?: string; url?: string } | null
+  }> => ipcRenderer.invoke('update:release-notes', version, opts),
   onChecking: (cb: () => void) =>
     ipcRenderer.on('update:checking', () => cb()),
   onAvailable: (cb: (info: { version: string; releaseNotes: string; releaseDate: string }) => void) =>

@@ -314,6 +314,14 @@
             "notifReadyMessage": "Restarting to apply...",
             "notifErrorTitle": "Update Failed"
         },
+        "releaseNotes": {
+            "title": "RELEASE NOTES",
+            "version": "v{version}",
+            "loading": "Loading release notes...",
+            "empty": "No release notes available for this version.",
+            "viewOnline": "View Release Notes",
+            "close": "CLOSE"
+        },
         "console": {
             "searchPlaceholder": "Search logs...",
             "clear": "Clear",

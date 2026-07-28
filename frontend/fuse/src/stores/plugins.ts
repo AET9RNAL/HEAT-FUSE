@@ -13,11 +13,13 @@ export interface PluginHotkey {
 export interface ConfigEntry {
     key: string
     label: string
-    type: 'bool' | 'int' | 'float' | 'string' | 'select' | 'position'
+    type: 'bool' | 'int' | 'float' | 'string' | 'select' | 'position' | 'color'
     min?: number
     max?: number
     choices?: string[]
     description?: string
+    /** color entries only: whether the alpha channel is editable (default true) */
+    alpha?: boolean
 }
 
 export interface ConfigCategory {

@@ -79,6 +79,11 @@ interface Window {
     check: () => Promise<{ success: boolean; updateInfo?: unknown; error?: string }>
     download: () => Promise<{ success: boolean; error?: string }>
     install: () => Promise<{ success: boolean }>
+    getReleaseNotes: (version: string, opts?: { refresh?: boolean }) => Promise<{
+      success: boolean
+      error?: string
+      entry?: { version: string; notes: string; releaseDate?: string; url?: string } | null
+    }>
     onChecking: (cb: () => void) => void
     onAvailable: (cb: (info: { version: string; releaseNotes: string; releaseDate: string }) => void) => void
     onNotAvailable: (cb: (info: { version: string }) => void) => void

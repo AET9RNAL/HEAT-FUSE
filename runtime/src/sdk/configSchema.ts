@@ -3,11 +3,12 @@
  * Serializes to the exact JSON shape the control app already consumes
  * (`frontend/fuse/src/stores/plugins.ts`).
  *
- * Entry types: bool | int | float | str | choice | position
+ * Entry types: bool | int | float | str | choice | position | color
  *   str    => "string"
  *   choice => "select"
+ *   color  => "color"   (value is an "#RRGGBBAA" hex string)
  */
-export type ConfigEntryType = "bool" | "int" | "float" | "str" | "choice" | "position";
+export type ConfigEntryType = "bool" | "int" | "float" | "str" | "choice" | "position" | "color";
 
 const TYPE_MAP: Record<string, string> = { str: "string", choice: "select" };
 
@@ -19,6 +20,8 @@ export interface ConfigEntryInit {
   max?: number;
   choices?: string[];
   description?: string;
+  /** color entries only: allow editing the alpha channel (default true). */
+  alpha?: boolean;
 }
 
 export class ConfigEntry {
@@ -29,6 +32,7 @@ export class ConfigEntry {
   max?: number;
   choices?: string[];
   description: string;
+  alpha?: boolean;
 
   constructor(init: ConfigEntryInit) {
     this.key = init.key;
@@ -38,6 +42,7 @@ export class ConfigEntry {
     this.max = init.max;
     this.choices = init.choices;
     this.description = init.description ?? "";
+    this.alpha = init.alpha;
   }
 
   toDict(): Record<string, unknown> {
@@ -50,6 +55,7 @@ export class ConfigEntry {
     if (this.max != null) d.max = this.max;
     if (this.choices != null) d.choices = this.choices;
     if (this.description) d.description = this.description;
+    if (this.type === "color" && this.alpha != null) d.alpha = this.alpha;
     return d;
   }
 }

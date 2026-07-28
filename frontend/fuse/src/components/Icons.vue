@@ -40,6 +40,8 @@ export type IconKind =
   | 'views'
   | 'obs'
   | 'monitor'
+  | 'eyedropper'
+  | 'chevron-down'
 </script>
 
 <script setup lang="ts">

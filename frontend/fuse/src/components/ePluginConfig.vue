@@ -3,6 +3,7 @@ import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { motion } from 'motion-v'
 import Icons from './Icons.vue'
 import eToggle from './eToggle.vue'
+import eColorPicker from './eColorPicker.vue'
 import type { PluginRecord, ConfigEntry } from '../stores/plugins'
 import { usePluginsStore } from '../stores/plugins'
 import { eventBus } from '../events/eventBus'
@@ -126,6 +127,36 @@ function setNumber(entry: ConfigEntry, raw: string) {
     if (entry.min !== undefined) n = Math.max(entry.min, n)
     if (entry.max !== undefined) n = Math.min(entry.max, n)
     setValue(entry.key, n)
+}
+
+// Colour picker popover 
+const openColorKey = ref<string | null>(null)
+const colorPos = ref<{ left: number; top: number }>({ left: 0, top: 0 })
+
+function colorValue(key: string): string {
+    const v = getValue(key)
+    return typeof v === 'string' && v ? v : '#FFFFFFFF'
+}
+function toggleColorPicker(key: string, e: MouseEvent) {
+    if (openColorKey.value === key) { openColorKey.value = null; return }
+    const btn = (e.currentTarget as HTMLElement).getBoundingClientRect()
+    const PW = 264, PH = 300
+    let left = btn.right - PW
+    let top = btn.bottom + 6
+    if (top + PH > window.innerHeight) top = Math.max(8, btn.top - PH - 6)
+    if (left < 8) left = 8
+    colorPos.value = { left, top }
+    openColorKey.value = key
+}
+function closeColorPicker() { openColorKey.value = null }
+function onColorInput(key: string, hex: string) { setValue(key, hex) }
+
+function colorEntryAlpha(key: string): boolean {
+    for (const cat of props.plugin.configSchema) {
+        const e = cat.entries.find(en => en.key === key)
+        if (e) return e.alpha !== false
+    }
+    return true
 }
 
 // ── Keybind capture ────────────────────────────────────────────────────
@@ -303,6 +334,15 @@ function getCombo(action: string): string {
                                     <span v-else-if="entry.type === 'position'" class="position-display">
                                         {{ JSON.stringify(getValue(entry.key)) }}
                                     </span>
+                                    <button
+                                        v-else-if="entry.type === 'color'"
+                                        class="color-swatch"
+                                        :class="{ open: openColorKey === entry.key }"
+                                        @click="toggleColorPicker(entry.key, $event)"
+                                    >
+                                        <span class="color-swatch-checker"></span>
+                                        <span class="color-swatch-fill" :style="{ background: colorValue(entry.key) }"></span>
+                                    </button>
                                 </div>
                             </div>
                         </template>
@@ -350,6 +390,22 @@ function getCombo(action: string): string {
                 </motion.div>
             </div>
         </motion.div>
+
+        <Teleport to="body">
+            <div
+                v-if="openColorKey"
+                class="color-popover-layer"
+                @mousedown.self="closeColorPicker"
+            >
+                <div class="color-popover" :style="{ left: colorPos.left + 'px', top: colorPos.top + 'px' }">
+                    <eColorPicker
+                        :model-value="colorValue(openColorKey)"
+                        :alpha="colorEntryAlpha(openColorKey)"
+                        @update:model-value="onColorInput(openColorKey, $event)"
+                    />
+                </div>
+            </div>
+        </Teleport>
     </div>
 </template>
 
@@ -637,6 +693,43 @@ function getCombo(action: string): string {
     font-family: var(--font-microcopy);
     font-size: var(--secondary-font-size-4);
     color: var(--text-muted);
+}
+
+.color-swatch {
+    position: relative;
+    width: 48px;
+    height: 24px;
+    padding: 0;
+    border: none;
+    cursor: pointer;
+    overflow: hidden;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14);
+    clip-path: polygon(4px 0%, 100% 0%, 100% calc(100% - 4px), calc(100% - 4px) 100%, 0% 100%, 0% 4px);
+}
+.color-swatch.open { box-shadow: inset 0 0 0 1px var(--light-green); }
+.color-swatch-checker {
+    position: absolute;
+    inset: 0;
+    background-image:
+        linear-gradient(45deg, #808080 25%, transparent 25%),
+        linear-gradient(-45deg, #808080 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, #808080 75%),
+        linear-gradient(-45deg, transparent 75%, #808080 75%);
+    background-size: 8px 8px;
+    background-position: 0 0, 0 4px, 4px -4px, -4px 0;
+    opacity: 0.4;
+}
+.color-swatch-fill { position: absolute; inset: 0; }
+
+.color-popover-layer {
+    position: fixed;
+    inset: 0;
+    z-index: 2000;
+}
+.color-popover {
+    position: fixed;
+    box-shadow: 0 10px 34px rgba(0, 0, 0, 0.6);
+    clip-path: polygon(6px 0%, 100% 0%, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0% 100%, 0% 6px);
 }
 
 .keybind-row {
