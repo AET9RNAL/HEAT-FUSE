@@ -1,0 +1,9 @@
+{
+  "plugin_id": "canvas_ui",
+  "name": "Canvas UI",
+  "version": "1.0.1",
+  "author": "AETERNAL",
+  "description": "Canvas-UI effects library",
+  "entry": "plugin:CanvasUiPlugin",
+  "runtime": "node"
+}

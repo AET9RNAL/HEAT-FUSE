@@ -1,12 +1,12 @@
 {
   "plugin_id": "cruise_control",
   "name": "Cruise Control",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "author": "AETERNAL",
   "description": "Simple cruise control functionality",
   "entry": "plugin:CruiseControlPlugin",
   "runtime": "node",
-  "dependencies": [],
+  "dependencies": ["accessors"],
   "hotkeys": {
     "toggle": "c"
   },

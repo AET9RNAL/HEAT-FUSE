@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, watch, onMounted } from "vue";
+import { computed, ref, watch, onMounted, type ComputedRef } from "vue";
 import {
   motion,
   useMotionValue,
@@ -10,6 +10,7 @@ import {
   animate,
 } from "motion-v";
 import "fuse_ui/ui/tokens.css";
+import FlameWrap from "canvas_ui/ui/FlameWrap.vue";
 
 interface Overtime {
   progress: number;
@@ -20,6 +21,7 @@ interface Board {
   inMatch: boolean;
   isControl?: boolean;
   enhanced?: boolean;
+  flames?: boolean;
   ally?: string;
   enemy?: string;
   allyFill?: number;
@@ -135,6 +137,98 @@ const projEtaStr = computed(() => {
 });
 
 const overtime = computed(() => board.value.overtime ?? null);
+
+// FlameWrap on the leading team's bar
+// Flames mark a decisive lead, not merely being ahead: nothing burns until the
+// gap clears FLAME_MIN_GAP, then it ramps to full blaze at FLAME_FULL_GAP.
+const FLAME_MIN_GAP = 0.3;
+const FLAME_FULL_GAP = 0.5;
+const FLAME_MIN = 0.5;
+const FLAME_MAX = 2;
+
+const flameGap = computed(() => {
+  const b = board.value;
+  return Math.abs((b.allyFill ?? 0) - (b.enemyFill ?? 0));
+});
+const flamesEnabled = computed(() => board.value.flames !== false);
+const flameWorthy = computed(() => flamesEnabled.value && flameGap.value >= FLAME_MIN_GAP);
+
+const allyLeading = computed(() => enhanced.value && flameWorthy.value && leader.value === "ally");
+const enemyLeading = computed(() => enhanced.value && flameWorthy.value && leader.value === "enemy");
+
+const flameIntensity = computed(() => {
+  const span = Math.max(FLAME_FULL_GAP - FLAME_MIN_GAP, 1e-6);
+  const t = Math.min(Math.max((flameGap.value - FLAME_MIN_GAP) / span, 0), 1);
+  return FLAME_MIN + (FLAME_MAX - FLAME_MIN) * t;
+});
+const allyFlameColor: [number, number, number] = [0.48, 0.74, 0.86]; // --woth-ally #7abfdf
+const enemyFlameColor: [number, number, number] = [1.0, 0.43, 0.28]; // --woth-enemy #ff6d46
+
+// In/Outs
+const FLAME_IN_MS = 100;
+const FLAME_OUT_MS = 200;
+const FLAME_IN_EASE = [0.16, 1, 0.3, 1] as const; // easeOutExpo - explosive attack
+const FLAME_OUT_EASE = [0.33, 1, 0.68, 1] as const; // easeOutCubic - smooth settle
+
+function useFlameFade(leading: ComputedRef<boolean>) {
+  const fade = useMotionValue(0);
+  watch(
+    leading,
+    (on) => {
+      animate(fade, on ? 1 : 0, {
+        duration: (on ? FLAME_IN_MS : FLAME_OUT_MS) / 1000,
+        ease: on ? [...FLAME_IN_EASE] : [...FLAME_OUT_EASE],
+      });
+    },
+    { immediate: true },
+  );
+  const intensity = useTransform(
+    [fade, useMotionValue(0)] as const,
+    ([f]: number[]) => f,
+  );
+  const active = useTransform(fade, (f) => f > 0.001);
+  return { fade, intensity, active };
+}
+
+const allyFlame = useFlameFade(allyLeading);
+const enemyFlame = useFlameFade(enemyLeading);
+// Convert fade MotionValues to plain refs for prop/conditional use.
+const allyFlameOn = ref(false);
+const enemyFlameOn = ref(false);
+const allyFlameLevel = ref(0);
+const enemyFlameLevel = ref(0);
+allyFlame.fade.on("change", (v) => { allyFlameLevel.value = v; allyFlameOn.value = v > 0.001; });
+enemyFlame.fade.on("change", (v) => { enemyFlameLevel.value = v; enemyFlameOn.value = v > 0.001; });
+const allyFlameIntensity = computed(() => flameIntensity.value * allyFlameLevel.value);
+const enemyFlameIntensity = computed(() => flameIntensity.value * enemyFlameLevel.value);
+
+// Flame shape driven by intensity
+
+const FLAME_SHAPE_MIN = { height: 50, sparks: 0.5, sparkDensity: 0.4 };
+const FLAME_SHAPE_MAX = { height: 170, sparks: 1.8, sparkDensity: 1 };
+
+const FLAME_SPREAD = 3;
+const FLAME_TURBULENCE = 0.5;
+// Per-property response so ignition/collapse lloks like combustion instead of
+// a uniform scale, sparks arrive last on the way in and are the first thing to die on the way out.
+const FLAME_SHAPE_CURVE = { height: 0.55, sparks: 1.7, sparkDensity: 1.3 };
+
+type FlameShape = typeof FLAME_SHAPE_MAX;
+const FLAME_SHAPE_KEYS = Object.keys(FLAME_SHAPE_MAX) as (keyof FlameShape)[];
+
+/** Map the lit intensity back onto 0..1 so it can drive the shape lerp. */
+function flameShapeFor(intensity: number): FlameShape {
+  const t = Math.min(Math.max((intensity - FLAME_MIN) / (FLAME_MAX - FLAME_MIN), 0), 1);
+  const out = {} as FlameShape;
+  for (const k of FLAME_SHAPE_KEYS) {
+    const min = FLAME_SHAPE_MIN[k];
+    out[k] = min + (FLAME_SHAPE_MAX[k] - min) * Math.pow(t, FLAME_SHAPE_CURVE[k]);
+  }
+  return out;
+}
+
+const allyFlameShape = computed(() => flameShapeFor(allyFlameIntensity.value));
+const enemyFlameShape = computed(() => flameShapeFor(enemyFlameIntensity.value));
 </script>
 
 <template>
@@ -157,6 +251,16 @@ const overtime = computed(() => board.value.overtime ?? null);
           <feColorMatrix type="matrix" values="0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 1 0" />
           <feBlend mode="normal" in2="SourceGraphic" />
         </filter>
+        <clipPath id="mphBarClipAlly" clipPathUnits="objectBoundingBox">
+          <!-- Asset 12.svg bar polygon + extended rect above the bar so flame
+               licks aren't clipped at the top. Coords normalized (x/261.01,
+               y/66.22); out-of-range values extend past the bounding box. -->
+          <path d="M -12 -12 L 13 -12 L 1 0.0424 L 1 0.9570 L 0.9891 0.9998 L 0.8091 1.0 L 0.7605 0.8839 L 0.0535 0.8837 L 0 0 L -12 -12 Z" />
+        </clipPath>
+        <clipPath id="mphBarClipEnemy" clipPathUnits="objectBoundingBox">
+          <!-- Horizontal mirror of mphBarClipAlly (x → 1 - x). -->
+          <path d="M 13 -12 L -12 -12 L 0 0.0424 L 0 0.9570 L 0.0109 0.9998 L 0.1909 1.0 L 0.2395 0.8839 L 0.9465 0.8837 L 1 0 L 13 -12 Z" />
+        </clipPath>
       </defs>
     </svg>
 
@@ -165,11 +269,36 @@ const overtime = computed(() => board.value.overtime ?? null);
 
       <div
         class="mph-bar mph-bar--ally"
-        :class="{ trailing: enhanced && leader === 'enemy', near: enhanced && board.allyNear }"
+        :class="{ trailing: enhanced && leader === 'enemy', near: enhanced && board.allyNear, 'mph-bar--flamed': allyFlameOn }"
       >
         <svg class="mph-svg" viewBox="0 0 271 20" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
           <path :d="ALLY_PATH" fill="#0b0b0b" fill-opacity="0.5" stroke="#8abddc" stroke-width="0.25" />
         </svg>
+        <FlameWrap
+          v-if="allyFlameOn"
+          :color="allyFlameColor"
+          :intensity="allyFlameIntensity"
+          trace-only
+          v-bind="allyFlameShape"
+          :spread="FLAME_SPREAD"
+          :turbulence="FLAME_TURBULENCE"
+          :reserve-height="FLAME_SHAPE_MAX.height"
+          :radius="0"
+          :speed="1.2"
+          :scale="0.6"
+          :spark-size="0.4"
+          :rim="1.2"
+          :melt="4"
+          :distortion="3"
+          :smoke="0"
+          :ember="0.8"
+          :scorch="0.2"
+          class="mph-flame"
+        >
+          <svg class="mph-svg" viewBox="0 0 271 20" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+            <path :d="ALLY_PATH" fill="var(--woth-ally)" />
+          </svg>
+        </FlameWrap>
         <motion.div v-if="enhanced" class="mph-ghost" :style="{ clipPath: ally.projClip }">
           <svg class="mph-svg" viewBox="0 0 271 20" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
             <path :d="ALLY_PATH" fill="var(--woth-ally)" />
@@ -189,11 +318,36 @@ const overtime = computed(() => board.value.overtime ?? null);
 
       <div
         class="mph-bar mph-bar--enemy"
-        :class="{ trailing: enhanced && leader === 'ally', near: enhanced && board.enemyNear }"
+        :class="{ trailing: enhanced && leader === 'ally', near: enhanced && board.enemyNear, 'mph-bar--flamed': enemyFlameOn }"
       >
         <svg class="mph-svg" viewBox="0 0 271 20" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
           <path :d="ENEMY_PATH" fill="#0b0b0b" fill-opacity="0.5" stroke="#ff6d46" stroke-width="0.25" />
         </svg>
+        <FlameWrap
+          v-if="enemyFlameOn"
+          :color="enemyFlameColor"
+          :intensity="enemyFlameIntensity"
+          trace-only
+          v-bind="enemyFlameShape"
+          :spread="FLAME_SPREAD"
+          :turbulence="FLAME_TURBULENCE"
+          :reserve-height="FLAME_SHAPE_MAX.height"
+          :radius="2"
+          :speed="1.2"
+          :scale="0.6"
+          :spark-size="0.4"
+          :rim="1.2"
+          :melt="4"
+          :distortion="3"
+          :smoke="0"
+          :ember="0.8"
+          :scorch="0.2"
+          class="mph-flame"
+        >
+          <svg class="mph-svg" viewBox="0 0 271 20" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+            <path :d="ENEMY_PATH" fill="var(--woth-enemy)" />
+          </svg>
+        </FlameWrap>
         <motion.div v-if="enhanced" class="mph-ghost" :style="{ clipPath: enemy.projClip }">
           <svg class="mph-svg" viewBox="0 0 271 20" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
             <path :d="ENEMY_PATH" fill="var(--woth-enemy)" />
@@ -224,9 +378,11 @@ const overtime = computed(() => board.value.overtime ?? null);
       </div>
     </div>
 
-    <div v-if="overtime" class="mph-ot">
+    <!-- Always in flow, toggled by visibility: `.mph` is a centred column, so
+         mounting this on demand would grow it and shove the bars up mid-match. -->
+    <div class="mph-ot" :style="{ visibility: overtime ? 'visible' : 'hidden' }">
       <div class="mph-ot-label">Overtime</div>
-      <div class="mph-ot-bar"><span :style="{ width: clamp01(overtime.frac) * 100 + '%' }" /></div>
+      <div class="mph-ot-bar"><span :style="{ width: clamp01(overtime?.frac) * 100 + '%' }" /></div>
     </div>
   </div>
 </template>
@@ -247,7 +403,7 @@ const overtime = computed(() => board.value.overtime ?? null);
   color: var(--text-main);
   container-type: size;
   user-select: none;
-  overflow: hidden;
+  overflow: visible;
 }
 .mph-defs {
   position: absolute;
@@ -268,6 +424,22 @@ const overtime = computed(() => board.value.overtime ?? null);
   height: 100%;
   aspect-ratio: 271 / 20;
   transition: opacity 0.2s;
+}
+/* FlameWrap: sibling before fill, wraps the bar shape so flames trace it. */
+.mph-flame {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+}
+/* Ally: clip to the Asset 12 bar shape; the path extends above the bar so
+   top flames aren't cut, but bottom/side glow follows the parallelogram. */
+.mph-bar--ally .mph-flame {
+  clip-path: url(#mphBarClipAlly);
+}
+.mph-bar--enemy .mph-flame {
+  clip-path: url(#mphBarClipEnemy);
 }
 .mph-bar--ally {
   --glow: var(--woth-ally);

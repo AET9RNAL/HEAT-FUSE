@@ -37,6 +37,29 @@ export const LOGS_DIR: string = path.join(DATA_DIR, "logs");
 
 export const PLUGINS_CACHE_DIR: string = path.join(DATA_DIR, "plugins-cache");
 
+
+export const DEV_PLUGINS_SRC: string = process.env.FUSE_DEV_PLUGINS_SRC
+  ? path.resolve(process.env.FUSE_DEV_PLUGINS_SRC)
+  : path.join(REPO_ROOT, "plugins-src");
+
+// Unset: every plugin is live-edited whenever the source tree is present, which
+// is true in a checkout and false in a packaged install. Set to a comma-separated
+// list (or `*`) to narrow it; set to empty to turn it off.
+const devEnv = process.env.FUSE_DEV_PLUGINS?.trim();
+const devPluginList = (devEnv ?? "")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+
+export const DEV_PLUGINS_ALL: boolean =
+  devPluginList.includes("*") || (devEnv === undefined && existsSync(DEV_PLUGINS_SRC));
+export const DEV_PLUGINS: ReadonlySet<string> = new Set(devPluginList);
+
+/** True when `pluginId` should have its assets read from `plugins-src`. */
+export function isDevPlugin(pluginId: string): boolean {
+  return DEV_PLUGINS_ALL || DEV_PLUGINS.has(pluginId);
+}
+
 export function resolveConfig(filename: string): string {
   if (path.isAbsolute(filename) || filename.includes("/") || filename.includes("\\")) {
     return filename;

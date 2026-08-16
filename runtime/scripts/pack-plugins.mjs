@@ -40,7 +40,10 @@ async function packOne(id) {
     platform: "node",
     target: "node20",
     write: false,
-    sourcemap: false,
+    // Plugins run from an extracted cache dir, so an external .map never resolves;
+    // inline is the only form a debugger can follow back to plugins-src.
+    sourcemap: process.env.RELEASE === "true" ? false : "inline",
+    sourcesContent: true,
     alias: { "@fuse/plugin-sdk": SDK_ENTRY },
     // Native/optional deps a plugin might use stay external (resolved at runtime).
     external: ["uiohook-napi", "chrome-remote-interface"],

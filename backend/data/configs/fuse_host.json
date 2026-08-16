@@ -4,15 +4,17 @@
     "game_memory",
     "heat_ailos_torc",
     "rive_animation",
-    "cruise_control",
-    "combat_reboot_plus",
-    "heat_stats",
-    "noui",
     "rive_dev",
     "energy_bar",
-    "fuse_ui",
+    "combat_reboot_plus",
+    "heat_stats",
     "hud_scoreboard",
-    "match_progress_overhaul"
+    "leaderboard_fix",
+    "match_progress_overhaul",
+    "prism",
+    "canvas_ui",
+    "fuse_ui",
+    "noui"
   ],
   "hotkey_overrides": {
     "host": {

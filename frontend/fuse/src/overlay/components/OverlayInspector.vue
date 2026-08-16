@@ -269,13 +269,13 @@ const SNAP_MODES: { value: SnapMode; label: string }[] = [
 .ins-title-group { display: flex; flex-direction: column; min-width: 0; }
 
 .ins-title {
-  font-size: var(--main-font-size-3);
+  font-size: var(--main-font-size-2);
   font-weight: var(--font-weight-2);
 }
 
 .ins-sub {
   font-family: var(--font-microcopy);
-  font-size: var(--main-font-size-5);
+  font-size: var(--main-font-size-4);
   color: var(--text-muted);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -301,7 +301,7 @@ const SNAP_MODES: { value: SnapMode; label: string }[] = [
 
 .ins-section-label {
   font-family: var(--font-microcopy);
-  font-size: var(--main-font-size-5);
+  font-size: var(--main-font-size-4);
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--text-muted);

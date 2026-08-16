@@ -4,14 +4,13 @@
   "vue_overlay_pos": {
     "x": 17,
     "y": 76,
-    "w": 396,
-    "h": 420
+    "w": 402,
+    "h": 507
   },
   "vue_width": 280,
   "vue_height": 180,
   "api_key": "fuse_Qlj84POyYh4xHy8YkUeV0AuADlRnLgboJRSVIl8sjUY",
   "player_name": "AET3RNAL",
-  "api_refresh_interval_s": 60,
   "session_started_at": 0,
   "mode": "default",
   "scene_time_s": 8,
@@ -26,5 +25,6 @@
     "h": 20
   },
   "anim_width": 200,
-  "anim_height": 20
+  "anim_height": 20,
+  "api_refresh_interval_s": 60
 }

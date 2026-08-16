@@ -662,7 +662,7 @@ if (!app.requestSingleInstanceLock()) {
     }
   })
 }
-
+app.commandLine.appendSwitch('enable-features', 'CanvasDrawElement')
 app.whenReady().then(() => {
   createWindow()
 
@@ -718,7 +718,16 @@ app.whenReady().then(() => {
       return { success: false, error: `runtime not built: ${PATHS.runtimeEntry} (run "npm run build:runtime")` }
     }
     const executable = process.execPath
-    const args = [PATHS.runtimeEntry]
+    // Dev always opens the sidecar's Node inspector; FUSE_INSPECT=brk additionally
+    // pauses it at the first line so early setup() code can be stepped.
+    const args: string[] = []
+    if (IS_DEV) {
+      const brk = (process.env.FUSE_INSPECT ?? '').toLowerCase().startsWith('brk')
+      const port = Number(process.env.FUSE_INSPECT_PORT) || 9229
+      args.push(`--${brk ? 'inspect-brk' : 'inspect'}=${port}`)
+      console.log(`[fuse:spawn] runtime inspector on ws://127.0.0.1:${port}${brk ? ' (paused at start)' : ''}`)
+    }
+    args.push(PATHS.runtimeEntry)
     const spawnEnv: NodeJS.ProcessEnv = {
       ...process.env,
       ELECTRON_RUN_AS_NODE: '1',

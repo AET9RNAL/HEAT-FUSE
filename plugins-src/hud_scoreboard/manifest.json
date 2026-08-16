@@ -1,12 +1,12 @@
 {
   "plugin_id": "hud_scoreboard",
   "name": "Hud Scoreboard",
-  "version": "1.3.0",
+  "version": "1.4.1",
   "author": "AETERNAL",
   "description": "See the Ally and enemy roster without having to TAB every time.",
   "entry": "plugin:HudScoreboardPlugin",
   "runtime": "node",
-  "dependencies": ["accessors", "fuse_ui"],
+  "dependencies": ["accessors", "fuse_ui", "canvas_ui"],
   "hotkeys": {},
   "default_config": {
     "vue_overlay_pos": null,

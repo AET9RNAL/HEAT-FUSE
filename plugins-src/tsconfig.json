@@ -9,12 +9,19 @@
     "skipLibCheck": true,
     "esModuleInterop": true,
     "resolveJsonModule": true,
-    "baseUrl": ".",
+    "allowJs": true,
+    "checkJs": false,
     "paths": {
-      "@fuse/plugin-sdk": ["../runtime/src/sdk/index.ts"]
+      "@fuse/plugin-sdk": ["../runtime/src/sdk/index.ts"],
+      "vue": ["../frontend/fuse/node_modules/vue"],
+      "motion-v": ["../frontend/fuse/node_modules/motion-v"],
+      "@rive-app/canvas": ["../frontend/fuse/node_modules/@rive-app/canvas"],
+      "chart.js": ["../frontend/fuse/node_modules/chart.js"],
+      "chart.js/auto": ["../frontend/fuse/node_modules/chart.js/auto"],
+      "*": ["./*"]
     },
     "typeRoots": ["../runtime/node_modules/@types"],
     "types": ["node"]
   },
-  "include": ["**/*.ts"]
+  "include": ["**/*.ts", "**/*.vue", "shims.d.ts"]
 }

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, shallowRef, onBeforeUnmount, watch, computed } from "vue";
-import { overlayBus, assetBase, hostState, sendAction } from "../overlayClient";
+import { overlayBus, assetBase, hostState, sendAction, sourceRev } from "../overlayClient";
 import type { OverlayDescriptor } from "../types";
 import type { OverlayInput } from "../rive";
 
@@ -10,7 +10,13 @@ const data = ref<Record<string, unknown>>({});
 const comp = shallowRef<any>(null);
 const loadError = ref<string | null>(null);
 
-const fullUrl = computed(() => assetBase() + props.descriptor.assetUrl);
+// Dev source revision for plugins
+function withRev(url: string): string {
+  if (!sourceRev.value) return url;
+  return url + (url.includes("?") ? "&" : "?") + `v=${sourceRev.value}`;
+}
+
+const fullUrl = computed(() => withRev(assetBase() + props.descriptor.assetUrl));
 
 // Absolute base for this plugin's served assets (the overlay's own asset dir,
 // minus the component filename). Handed to the mounted component so overlays can
@@ -28,11 +34,20 @@ function emitAction(action: string, payload?: unknown): void {
 // - so a plugin can ship a reusable component library with no app changes.
 const HOST_MODULES = new Set(["vue", "motion-v", "@rive-app/canvas", "chart.js", "chart.js/auto"]);
 // De-duped stylesheet injection (e.g. a UI library's tokens imported by many
-// overlays).
-const injectedCss = new Set<string>();
+// overlays), keyed by URL without the dev revision so a reload updates the one
+// existing <style> in place rather than appending another.
+const injectedCss = new Map<string, { url: string; el: HTMLStyleElement }>();
+
+/**
+ * <style> elements this overlay's own SFCs produced, dropped once a newer
+ * compile of the same overlay has succeeded. Without this a dev reload stacks
+ * another copy of every scoped block, and the stale rules keep applying.
+ */
+let ownStyles: HTMLStyleElement[] = [];
 
 async function loadComponent(url: string): Promise<void> {
   loadError.value = null;
+  const pendingStyles: HTMLStyleElement[] = [];
   try {
     const [{ loadModule }, vue, motion, rive, chart] = await Promise.all([
       import("vue3-sfc-loader"),
@@ -56,10 +71,13 @@ async function loadComponent(url: string): Promise<void> {
         const rel = String(relPath);
         if (HOST_MODULES.has(rel)) return rel;
         if (/^https?:\/\//.test(rel)) return rel;
-        if (rel.startsWith(".") && refPath) return new URL(rel, String(refPath)).href;
+        // Every plugin-served URL carries the revision too, or a reload would
+        // recompile the entry against stale children. `new URL` drops the
+        // referrer's query, so it is re-applied here rather than inherited.
+        if (rel.startsWith(".") && refPath) return withRev(new URL(rel, String(refPath)).href);
         const lastSeg = rel.split("/").pop() ?? "";
         const suffix = lastSeg.includes(".") ? "" : "/index.js";
-        return `${overlayAssetRoot}/${rel}${suffix}`;
+        return withRev(`${overlayAssetRoot}/${rel}${suffix}`);
       },
       // Lazy fetch: content is only pulled when a handler actually reads it, so
       // asset-URL imports (below) don't download the file twice.
@@ -74,13 +92,21 @@ async function loadComponent(url: string): Promise<void> {
       },
       async handleModule(type: string, getContentData: (asBinary: boolean) => Promise<string | ArrayBuffer>, path: string) {
         if (type === ".css") {
-          const key = String(path);
-          if (!injectedCss.has(key)) {
-            injectedCss.add(key);
-            const el = document.createElement("style");
-            el.textContent = String(await getContentData(false));
-            document.head.appendChild(el);
+          const url_ = String(path);
+          const key = url_.split("?")[0];
+          const prev = injectedCss.get(key);
+          // Same URL means same revision — already injected, nothing to do.
+          if (prev && prev.url === url_) return {};
+          const text = String(await getContentData(false));
+          if (prev) {
+            prev.el.textContent = text;
+            prev.url = url_;
+            return {};
           }
+          const el = document.createElement("style");
+          el.textContent = text;
+          document.head.appendChild(el);
+          injectedCss.set(key, { url: url_, el });
           return {};
         }
         if (type === ".vue" || type === ".js" || type === ".mjs") return undefined;
@@ -90,10 +116,15 @@ async function loadComponent(url: string): Promise<void> {
         const el = document.createElement("style");
         el.textContent = styleText;
         document.head.appendChild(el);
+        pendingStyles.push(el);
       },
     });
     comp.value = mod.default ?? mod;
+    for (const el of ownStyles) el.remove();
+    ownStyles = pendingStyles;
   } catch (e) {
+    // The previous component stays mounted, so its styles must stay too.
+    for (const el of pendingStyles) el.remove();
     loadError.value = String(e instanceof Error ? e.message : e);
   }
 }
@@ -139,6 +170,8 @@ overlayBus.on(props.descriptor.overlayId, onData);
 
 onBeforeUnmount(() => {
   overlayBus.off(props.descriptor.overlayId, onData);
+  for (const el of ownStyles) el.remove();
+  ownStyles = [];
 });
 </script>
 

@@ -1,12 +1,12 @@
 {
   "plugin_id": "match_progress_overhaul",
   "name": "Match Progress Overhaul",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "AETERNAL",
   "description": "Redesigned match progress bar",
   "entry": "plugin:MatchProgressOverhaulPlugin",
   "runtime": "node",
-  "dependencies": ["accessors", "fuse_ui"],
+  "dependencies": ["accessors", "fuse_ui", "canvas_ui"],
   "hotkeys": {},
   "default_config": {
     "vue_overlay_pos": null,

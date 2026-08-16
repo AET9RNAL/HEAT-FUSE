@@ -1,7 +1,7 @@
 {
   "plugin_id": "heat_stats",
   "name": "HEATStats",
-  "version": "4.2.0",
+  "version": "4.3.0",
   "author": "AETERNAL",
   "description": "Records per-match performance data.",
   "entry": "plugin:HeatStatsPlugin",
@@ -15,7 +15,6 @@
     "vue_height": 300,
     "api_key": "fuse_Qlj84POyYh4xHy8YkUeV0AuADlRnLgboJRSVIl8sjUY",
     "player_name": "",
-    "api_refresh_interval_s": 60,
     "session_started_at": 0,
     "mode": "default",
     "scene_time_s": 8.0,

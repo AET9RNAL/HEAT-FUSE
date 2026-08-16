@@ -10,6 +10,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { logger } from "../log.js";
+import { DEV_PLUGINS_SRC, isDevPlugin } from "../utils/paths.js";
 import type { WsServer } from "../server/WsServer.js";
 import type { PluginConfig } from "./config.js";
 import type {
@@ -107,9 +108,30 @@ export class OverlayHub {
   resolveAsset(pluginId: string, relPath: string): string | null {
     const reg = this.plugins.get(pluginId);
     if (!reg) return null;
+    // Dev override: read live sources from `plugins-src/<id>`
+    const dev = this.resolveDevAsset(pluginId, relPath);
+    if (dev) return dev;
     const fromAssets = path.join(reg.assetsRoot, relPath);
     if (fs.existsSync(fromAssets)) return fromAssets;
     return path.join(reg.packageRoot, relPath);
+  }
+
+  /**
+   * Same `assets/` -then-root lookup order as the packed tree, rooted at the
+   * plugin's source dir. Returns null unless the plugin is opted into dev mode
+   * and the file actually exists there.
+   */
+  private resolveDevAsset(pluginId: string, relPath: string): string | null {
+    if (!isDevPlugin(pluginId)) return null;
+    const srcRoot = path.join(DEV_PLUGINS_SRC, pluginId);
+    for (const candidate of [path.join(srcRoot, "assets", relPath), path.join(srcRoot, relPath)]) {
+      // Containment check: `relPath` arrives from an HTTP path, and a symlink
+      // or odd separator could still walk out of the source dir.
+      const resolved = path.resolve(candidate);
+      if (resolved !== srcRoot && !resolved.startsWith(srcRoot + path.sep)) continue;
+      if (fs.existsSync(resolved) && fs.statSync(resolved).isFile()) return resolved;
+    }
+    return null;
   }
 
   overlayHydration(): Array<Record<string, unknown>> {

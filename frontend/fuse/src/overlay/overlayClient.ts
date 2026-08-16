@@ -31,6 +31,15 @@ export const viewport = ref<{ x: number; y: number; w: number; h: number } | nul
 /** True while an overlay is being dragged (suppresses hover click-through toggling). */
 export const dragging = ref(false);
 
+/**
+ * Dev source revision, bumped when the runtime's watcher reports an edit under
+ * `plugins-src`. Overlays fold it into fetched URLs so the change recompiles
+ * rather than reusing the cached module. Global rather than per-plugin because
+ * overlays import components across plugins - editing a shared UI library has
+ * to invalidate its importers too. Stays 0 outside dev mode.
+ */
+export const sourceRev = ref(0);
+
 type IpcSend = { ipcRenderer?: { send(ch: string, ...a: unknown[]): void } };
 
 /** Ask Electron main to make the stage window click-through (true) or interactive (false). */
@@ -164,6 +173,9 @@ function handle(m: Record<string, unknown>): void {
     }
     case "overlay:removed":
       overlays.delete(String(m.overlayId));
+      break;
+    case "overlay:reload":
+      sourceRev.value = Number(m.rev) || Date.now();
       break;
     case "host:state_changed": {
       hostState.value =

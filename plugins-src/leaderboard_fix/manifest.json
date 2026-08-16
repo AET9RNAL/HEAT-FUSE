@@ -1,0 +1,12 @@
+{
+  "plugin_id": "leaderboard_fix",
+  "name": "Leaderboard Fix",
+  "version": "1.0.0",
+  "author": "AETERNAL",
+  "description": "Sortable columns on the in-game leaderboard",
+  "entry": "plugin:LeaderboardFixPlugin",
+  "runtime": "node",
+  "dependencies": [],
+  "hotkeys": {},
+  "default_config": {}
+}

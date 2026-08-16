@@ -47,8 +47,8 @@ Violations of these terms automatically terminate your rights under GPLv3 with r
 ![Logo](https://img.shields.io/badge/-VUE-f3f2f4?style=for-the-badge&logo=vue.js&logoColor=f3f2f4&labelColor=1D1D1D&color=1D1D1D)
 
 
-![Static Badge](https://img.shields.io/badge/RUNTIME_VERSION-4.5.0-1D1D1D?style=for-the-badge&labelColor=1D1D1D&color=434343)
-![Static Badge](https://img.shields.io/badge/LAUNCHER_VERSION-1.7.0-1D1D1D?style=for-the-badge&labelColor=1D1D1D&color=434343)
+![Static Badge](https://img.shields.io/badge/RUNTIME_VERSION-4.6.0-1D1D1D?style=for-the-badge&labelColor=1D1D1D&color=434343)
+![Static Badge](https://img.shields.io/badge/LAUNCHER_VERSION-1.7.2-1D1D1D?style=for-the-badge&labelColor=1D1D1D&color=434343)
 
 Get In Touch
 [![Discord](https://img.shields.io/badge/-DISCORD-f3f2f4?style=for-the-badge&logo=discord&logoColor=f3f2f4&labelColor=1D1D1D&color=1D1D1D)](https://discord.com/users/678198830767931431)
@@ -87,6 +87,7 @@ Get In Touch
 
 FUSE runs alongside WoT:HEAT and displays real-time HUD overlays driven by live game data: energy bars, stat cards, cooldown trackers, and more. Plugins are distributed as single `.fuse` files and managed from the FUSE launcher.
 
+[![Watch the FUSE demo on YouTube](https://img.youtube.com/vi/T4n21eZ9uuY/maxresdefault.jpg)](https://www.youtube.com/watch?v=T4n21eZ9uuY)
 ## Getting Started
 
 1. Install FUSE using the latest installer in Releases.

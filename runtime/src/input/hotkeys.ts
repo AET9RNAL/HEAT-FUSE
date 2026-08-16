@@ -71,8 +71,15 @@ function modsFromEvent(e: UiohookKeyboardEvent): Set<string> {
   return s;
 }
 
+/** How long an injected key-down may take to echo back through the global hook. */
+const SYNTHETIC_TTL_MS = 300;
+
 export class KeyboardInput {
   private held = new Set<string>();
+  // Key-downs we injected, awaiting their echo through the hook: char -> send times.
+  // Only downs are matched; every key-up clears `held`, ours included, so a key can
+  // never be stuck "physically down" in our books.
+  private syntheticDown = new Map<string, number[]>();
 
   markPressed(char: string): void {
     this.held.add(char);
@@ -80,6 +87,7 @@ export class KeyboardInput {
   markReleased(char: string): void {
     this.held.delete(char);
   }
+  /** Physical state only - key-downs we simulated are not counted. */
   isHeld(char: string): boolean {
     return this.held.has(char);
   }
@@ -87,10 +95,28 @@ export class KeyboardInput {
     this.held.clear();
   }
 
+  /** True if this key-down is the echo of one we injected (and drops it). */
+  consumeSyntheticDown(char: string): boolean {
+    const q = this.syntheticDown.get(char);
+    if (!q?.length) return false;
+    const now = Date.now();
+    while (q.length && now - (q[0] ?? 0) > SYNTHETIC_TTL_MS) q.shift();
+    if (!q.length) return false;
+    q.shift();
+    return true;
+  }
+
+  private markSyntheticDown(char: string): void {
+    const q = this.syntheticDown.get(char) ?? [];
+    q.push(Date.now());
+    this.syntheticDown.set(char, q);
+  }
+
   // --- simulation (nut-js, fire-and-forget) ------------------------------
   press(char: string): void {
     const k = nutKeyFor(char);
     if (k == null) return;
+    this.markSyntheticDown(char);
     void keyboard.pressKey(k).catch((e) => logger.warning(`key press '${char}' failed: ${String(e)}`));
   }
   release(char: string): void {
@@ -101,6 +127,7 @@ export class KeyboardInput {
   tap(char: string): void {
     const k = nutKeyFor(char);
     if (k == null) return;
+    this.markSyntheticDown(char);
     void keyboard
       .pressKey(k)
       .then(() => keyboard.releaseKey(k))
@@ -148,11 +175,12 @@ export class HotkeyInput {
       this.cb.onKey(mods, null, true);
       return;
     }
-    if (this.heldKeycodes.has(e.keycode)) return; // suppress auto-repeat
     const char = resolveChar(e.keycode);
     if (char == null) return; // non-latin / non-actionable
+    // Before the repeat guard: typematic repeats also re-affirm a physical hold.
+    if (!this.keyboard.consumeSyntheticDown(char)) this.keyboard.markPressed(char);
+    if (this.heldKeycodes.has(e.keycode)) return; // suppress auto-repeat
     this.heldKeycodes.add(e.keycode);
-    this.keyboard.markPressed(char);
     this.cb.onKey(mods, char, true);
   }
 

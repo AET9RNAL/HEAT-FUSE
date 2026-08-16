@@ -1,5 +1,5 @@
 {
-  "hide_all": false,
+  "hide_all": true,
   "hide_hp": false,
   "hide_energy": false,
   "hide_ability_1": false,
@@ -28,6 +28,7 @@
   "hide_action_hints": false,
   "hide_timer": false,
   "hide_score": false,
+  "hide_objective_progress": false,
   "hide_capture": false,
   "hide_objective_banner": false,
   "hide_module_buffs": false,

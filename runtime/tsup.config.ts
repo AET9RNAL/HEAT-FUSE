@@ -6,7 +6,12 @@ export default defineConfig({
   target: "node20",
   platform: "node",
   outDir: "dist",
-  clean: true,
+  // tsup globs `["**/*", ...clean]` under outDir, so the negation spares
+  // dist/node_modules — staged separately by stage-native-deps.cjs, never built
+  // here, and holding the native .node addons. On Windows a running sidecar has
+  // uiohook-napi.node mapped, and unlinking a mapped image fails EPERM, which
+  // would abort the whole build.
+  clean: ["!node_modules/**"],
   sourcemap: true,
   dts: false,
   // Bundled CJS deps (ws, chrome-remote-interface) do dynamic require()s of node

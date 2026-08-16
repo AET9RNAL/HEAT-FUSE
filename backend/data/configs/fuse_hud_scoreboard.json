@@ -1,9 +1,9 @@
 {
   "vue_overlay_pos": {
-    "x": 399,
-    "y": 66,
-    "w": 1762,
-    "h": 50
+    "x": 460,
+    "y": 237,
+    "w": 1640,
+    "h": 53
   },
   "vue_width": 1500,
   "vue_height": 90,
@@ -25,6 +25,7 @@
     "53": "a08_m3_bradley",
     "56": "r08_object_287",
     "97": "a05_m551a1_sheridan",
+    "98": "a17_m1150_abv",
     "100": "g07_marder1a3",
     "101": "a20_m60a2",
     "102": "a13_chrysler_xm1_ares_90_dummy"

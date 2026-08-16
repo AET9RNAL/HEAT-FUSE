@@ -160,7 +160,7 @@ function onScrubUp(): void {
 
 .num-label {
   font-family: var(--font-microcopy);
-  font-size: var(--main-font-size-5);
+  font-size: var(--main-font-size-4);
   color: var(--text-muted);
   cursor: ew-resize;
   user-select: none;

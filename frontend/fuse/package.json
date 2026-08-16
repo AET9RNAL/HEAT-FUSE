@@ -1,7 +1,7 @@
 {
   "name": "fuse",
   "private": true,
-  "version": "1.7.0",
+  "version": "1.7.2",
   "description": "FUSE modding runtime for WoT HEAT",
   "author": "AET3RNAL",
   "license": "GPL-3.0-only",
@@ -9,10 +9,12 @@
   "scripts": {
     "dev": "npm run build:runtime && npm run pack:plugins && vite",
     "build": "vue-tsc && npm run build:runtime && npm run pack:plugins && vite build && electron-builder",
+    "build:linux": "vue-tsc && npm run build:runtime && npm run pack:plugins && vite build && electron-builder --linux",
     "preview": "vite preview",
     "build:runtime": "node scripts/build-runtime.cjs",
     "pack:plugins": "node scripts/pack-node-plugins.cjs",
-    "release": "dotenv -e .env -- cross-env vue-tsc && npm run build:runtime && npm run pack:plugins && vite build && dotenv -e .env -- electron-builder --publish always"
+    "release": "dotenv -e .env -- cross-env vue-tsc && npm run build:runtime && npm run pack:plugins && vite build && dotenv -e .env -- electron-builder --publish always",
+    "release:linux": "dotenv -e .env -- cross-env vue-tsc && npm run build:runtime && npm run pack:plugins && vite build && dotenv -e .env -- electron-builder --linux --publish always"
   },
   "dependencies": {
     "@rive-app/canvas": "^2.38.2",
@@ -102,6 +104,29 @@
           ]
         }
       ]
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "deb",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "category": "Game",
+      "maintainer": "AET3RNAL",
+      "desktop": {
+        "entry": {
+          "MimeType": "x-scheme-handler/fuse"
+        }
+      }
     },
     "nsis": {
       "oneClick": false,

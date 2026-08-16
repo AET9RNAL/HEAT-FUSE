@@ -14,6 +14,7 @@ import { ConfigManager, PluginConfig } from "./config.js";
 import { EventBus } from "./EventBus.js";
 import { ServiceRegistry } from "./ServiceRegistry.js";
 import { OverlayHub } from "./OverlayManager.js";
+import { DevWatcher } from "./devWatch.js";
 import { discover } from "./discovery.js";
 import { resolveLoadOrder } from "./resolver.js";
 import { PluginState } from "./types.js";
@@ -32,7 +33,7 @@ import { PluginAssets } from "../sdk/assets.js";
 import { HotkeyInput, type MouseCallback } from "../input/hotkeys.js";
 import type { PluginHydration, RuntimeBridge, WsServer } from "../server/WsServer.js";
 
-export const HOST_VERSION = "4.5.0";
+export const HOST_VERSION = "4.6.0";
 const HOST_CONFIG_FILENAME = "fuse_host.json";
 
 interface HostConfigState {
@@ -76,6 +77,7 @@ export class FuseHost implements RuntimeBridge, HostView {
   private overlayHub: OverlayHub;
   private server: WsServer;
   private input: HotkeyInput;
+  private devWatcher: DevWatcher;
 
   private hostConfig = new ConfigManager(HOST_CONFIG_FILENAME);
   private hostCfgState!: HostConfigState;
@@ -107,6 +109,7 @@ export class FuseHost implements RuntimeBridge, HostView {
   constructor(server: WsServer) {
     this.server = server;
     this.overlayHub = new OverlayHub(server);
+    this.devWatcher = new DevWatcher(server);
     this.input = new HotkeyInput({
       onKey: (mods, key, pressed) => this.onKeyEvent(mods, key, pressed),
       onMouse: (x, y, button, pressed) => this.onMouseEvent(x, y, button, pressed),
@@ -197,6 +200,7 @@ export class FuseHost implements RuntimeBridge, HostView {
     cfg.defaults(spec.manifest.default_config ?? {});
 
     const overlays = this.overlayHub.registerPlugin(spec.pluginId, assetsRoot, spec.packageRoot, cfg);
+    this.devWatcher.watch(spec.pluginId);
     const manifestHotkeys = { ...(spec.manifest.hotkeys ?? {}) };
 
     const ctx: FuseContext = {
@@ -608,6 +612,7 @@ export class FuseHost implements RuntimeBridge, HostView {
     this.quitting = true;
     if (this.tickTimer) clearInterval(this.tickTimer);
     this.input.stop();
+    this.devWatcher.stop();
     for (const plugin of this.plugins) {
       try {
         plugin.teardown();

@@ -145,6 +145,21 @@ export const useAppStore = defineStore('app', () => {
 
     // Load / init
 
+    // `auth:success` starts the profile load out-of-band, so startup code that reads
+    // a synced setting must await this or it sees the pre-load default instead.
+    let settingsLoaded: Promise<void> = Promise.resolve()
+    let finishSettingsLoad: (() => void) | null = null
+
+    function beginSettingsLoad() {
+        if (finishSettingsLoad) return
+        settingsLoaded = new Promise<void>(resolve => { finishSettingsLoad = resolve })
+    }
+
+    function endSettingsLoad() {
+        finishSettingsLoad?.()
+        finishSettingsLoad = null
+    }
+
     function loadDefaults() {
         isLoading = true
         try {
@@ -201,17 +216,24 @@ export const useAppStore = defineStore('app', () => {
     }
 
     eventBus.on('auth:success', async () => {
+        beginSettingsLoad()
         // Capture consent the user may have toggled on the sign-in screen
         // before they had an account — loadSettings() will overwrite these with
         // DB defaults (false) unless we re-apply them afterward.
         const preAuthAnalytics    = analyticsConsent.value
         const preAuthDiagnostics  = diagnosticsConsent.value
 
-        await initUserProfile()
+        try {
+            await initUserProfile()
 
-        // isLoading is now false; watchers will queue saves normally.
-        if (preAuthAnalytics)   analyticsConsent.value   = true
-        if (preAuthDiagnostics) diagnosticsConsent.value = true
+            // isLoading is now false; watchers will queue saves normally.
+            if (preAuthAnalytics)   analyticsConsent.value   = true
+            if (preAuthDiagnostics) diagnosticsConsent.value = true
+        } finally {
+            endSettingsLoad()
+        }
+
+        void checkReleaseNotes()
     })
 
     eventBus.on('auth:logout', () => {
@@ -302,6 +324,8 @@ export const useAppStore = defineStore('app', () => {
     async function checkReleaseNotes() {
         const version = appVersion.value
         if (!version) return
+
+        await settingsLoaded
 
         const forced = forceReleaseNotes()
         logger.info('[release-notes] check', { version, lastSeen: lastSeenVersion.value, forced })

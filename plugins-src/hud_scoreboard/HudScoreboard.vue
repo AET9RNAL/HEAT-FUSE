@@ -2,6 +2,7 @@
 import { computed, ref, watch, onBeforeUnmount } from "vue";
 import "fuse_ui/ui/tokens.css";
 import eCell from "./eCell.vue";
+import eCellSimplified from "./eCellSimplified.vue";
 
 const FRAME_CUT = 8;
 
@@ -17,6 +18,7 @@ interface Cell {
   hasBomb: boolean;
   isSelf: boolean;
   squad: number;
+  leader: boolean;
 }
 interface ClassGroup {
   role: string;
@@ -25,7 +27,7 @@ interface ClassGroup {
 interface Board {
   inMatch: boolean;
   showNames?: boolean;
-  layout?: "scoreboard" | "columns";
+  layout?: "scoreboard" | "columns" | "simplified";
   allies: ClassGroup[];
   enemies: ClassGroup[];
 }
@@ -39,11 +41,13 @@ const board = computed<Board>(() => props.data?.board ?? { inMatch: false, allie
 const inMatch = computed(() => !!board.value.inMatch);
 const showNames = computed(() => !!board.value.showNames);
 const isColumns = computed(() => board.value.layout === "columns");
+const isSimple = computed(() => board.value.layout === "simplified");
+const allyCells = computed(() => board.value.allies.flatMap((g) => g.cells));
+const enemyCells = computed(() => board.value.enemies.flatMap((g) => g.cells));
 
-const CLASS_EXT: Record<string, string> = { assault: "svg", defender: "svg", marksman: "png" };
+const CLASS_ROLES = new Set(["assault", "defender", "marksman"]);
 function classIconUrl(role: string): string | undefined {
-  const ext = CLASS_EXT[role];
-  return ext ? `${assetRoot.value}/icons/class/${role}.${ext}` : undefined;
+  return CLASS_ROLES.has(role) ? `${assetRoot.value}/icons/class/${role}.svg` : undefined;
 }
 
 const frameEl = ref<HTMLElement | null>(null);
@@ -75,15 +79,34 @@ const framePoints = computed(() => {
 </script>
 
 <template>
-  <div v-if="inMatch" ref="frameEl" class="hsb" :class="isColumns ? 'hsb--columns' : 'hsb--strip'">
-    <template v-if="!isColumns">
+  <div
+    v-if="inMatch"
+    ref="frameEl"
+    class="hsb"
+    :class="isColumns ? 'hsb--columns' : isSimple ? 'hsb--simple' : 'hsb--strip'"
+  >
+    <template v-if="isSimple">
+      <div class="hsb-side hsb-ally">
+        <div v-for="(c, i) in allyCells" :key="'a' + i" class="hsb-icon">
+          <eCellSimplified :cell="c" :asset-base="assetBase ?? ''" side="ally" />
+        </div>
+      </div>
+      <div class="hsb-centre" />
+      <div class="hsb-side hsb-enemy">
+        <div v-for="(c, i) in enemyCells" :key="'e' + i" class="hsb-icon">
+          <eCellSimplified :cell="c" :asset-base="assetBase ?? ''" side="enemy" />
+        </div>
+      </div>
+    </template>
+
+    <template v-else-if="!isColumns">
       <div class="hsb-side hsb-ally">
         <div v-for="(g, gi) in board.allies" :key="'a' + gi" class="hsb-group" :style="{ flexGrow: g.cells.length }">
-          <img v-if="classIconUrl(g.role)" class="hsb-class" :src="classIconUrl(g.role)" :alt="g.role" />
           <div v-for="(c, ci) in g.cells" :key="'a' + gi + '-' + ci" class="hsb-slot">
             <eCell :cell="c" :asset-base="assetBase ?? ''" side="ally" />
             <div v-if="showNames" class="hsb-name">{{ c.name }}</div>
           </div>
+          <img v-if="classIconUrl(g.role)" class="hsb-class" :src="classIconUrl(g.role)" :alt="g.role" />
         </div>
       </div>
 
@@ -91,11 +114,11 @@ const framePoints = computed(() => {
 
       <div class="hsb-side hsb-enemy">
         <div v-for="(g, gi) in board.enemies" :key="'e' + gi" class="hsb-group hsb-group--mirror" :style="{ flexGrow: g.cells.length }">
+          <img v-if="classIconUrl(g.role)" class="hsb-class" :src="classIconUrl(g.role)" :alt="g.role" />
           <div v-for="(c, ci) in g.cells" :key="'e' + gi + '-' + ci" class="hsb-slot">
             <eCell :cell="c" :asset-base="assetBase ?? ''" side="enemy" />
             <div v-if="showNames" class="hsb-name">{{ c.name }}</div>
           </div>
-          <img v-if="classIconUrl(g.role)" class="hsb-class" :src="classIconUrl(g.role)" :alt="g.role" />
         </div>
       </div>
     </template>
@@ -147,7 +170,10 @@ const framePoints = computed(() => {
 
 /* Strip layout */
 .hsb--strip {
-  align-items: stretch;
+  /* Cells track overlay height but stop growing past the cap, so a tall
+     overlay adds breathing room instead of scaling the tiles up forever. */
+  --cell-h: clamp(20px, 100cqh, 72px);
+  align-items: center;
   gap: clamp(4px, 1cqw, 12px);
 }
 .hsb-side {
@@ -180,19 +206,24 @@ const framePoints = computed(() => {
 }
 
 .hsb-class {
-  height: clamp(20px, 48cqh, 54px);
+  height: calc(var(--cell-h) * 0.355);
   width: auto;
   opacity: 0.85;
-  margin: 0 clamp(2px, 0.7cqw, 7px);
+  margin-right: clamp(2px, 0.7cqw, 7px);
   flex: none;
+  align-self: flex-start;
+}
+.hsb-group--mirror .hsb-class {
+  margin-right: 0;
+  margin-left: clamp(2px, 0.7cqw, 7px);
 }
 
 .hsb-slot {
   position: relative;
-  height: 100cqh;
+  height: var(--cell-h);
   flex: 1 1 0;
   min-width: clamp(14px, 2.5cqw, 34px);
-  max-width: calc(100cqh * 2.1);
+  max-width: calc(var(--cell-h) * 2.1);
 }
 
 .hsb-name {
@@ -203,7 +234,7 @@ const framePoints = computed(() => {
   z-index: 5;
   text-align: center;
   font-family: var(--font-microcopy);
-  font-size: clamp(6px, 9cqh, 11px);
+  font-size: clamp(6px, calc(var(--cell-h) * 0.2), 11px);
   color: var(--text-main);
   text-shadow: 0 1px 2px var(--black-1);
   white-space: nowrap;
@@ -211,6 +242,28 @@ const framePoints = computed(() => {
   text-overflow: ellipsis;
   padding: 0 3px;
   pointer-events: none;
+}
+
+/* Simplified layout: class icons only, HP encoded by their fill level. */
+.hsb--simple {
+  --icon-h: clamp(14px, 80cqh, 40px);
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+}
+/* Sides hug their icons instead of stretching, so the centre split is the
+   clamped gap below rather than whatever width the overlay happens to be. */
+.hsb--simple .hsb-side {
+  flex: 0 0 auto;
+  gap: clamp(3px, 1cqw, 10px);
+}
+.hsb--simple .hsb-centre {
+  flex: 0 0 clamp(16px, 4cqw, 64px);
+}
+.hsb-icon {
+  flex: none;
+  height: var(--icon-h);
+  aspect-ratio: 1;
 }
 
 .hsb--columns {

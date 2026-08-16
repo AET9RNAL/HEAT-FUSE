@@ -48,16 +48,47 @@ function collectClosure(roots) {
 
 const closure = collectClosure(ROOTS)
 
-fs.rmSync(DEST_NM, { recursive: true, force: true })
+// A running sidecar keeps the .node addons mapped, and Windows refuses to
+// unlink or overwrite a mapped image (EPERM/EBUSY, or EIO once a delete is
+// already pending). A locked staged file is by definition the one in use, so
+// keeping it is correct — warn and carry on instead of failing the build.
+// Copying is per-file rather than per-package for the same reason: one locked
+// addon must not skip the rest of its package's JS.
+const LOCK_CODES = new Set(['EPERM', 'EBUSY', 'EIO'])
+const locked = []
+
+function tolerateLock(what, fn) {
+  try {
+    fn()
+  } catch (e) {
+    if (!LOCK_CODES.has(e.code)) throw e
+    locked.push(`${what} (${e.code})`)
+  }
+}
+
+/** Recursive copy, skipping nested node_modules; per-file lock tolerance. */
+function copyTree(src, dest) {
+  for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
+    if (entry.name === 'node_modules') continue
+    const from = path.join(src, entry.name)
+    const to = path.join(dest, entry.name)
+    if (entry.isDirectory()) {
+      fs.mkdirSync(to, { recursive: true })
+      copyTree(from, to)
+    } else {
+      tolerateLock(path.relative(DEST_NM, to), () => fs.copyFileSync(from, to))
+    }
+  }
+}
+
+tolerateLock('<clean dist/node_modules>', () => fs.rmSync(DEST_NM, { recursive: true, force: true }))
 for (const [name, src] of closure) {
   const dest = path.join(DEST_NM, ...name.split('/'))
-  fs.mkdirSync(path.dirname(dest), { recursive: true })
-  // Copy the package but drop its nested node_modules — everything is collected
-  // flat into DEST_NM, so nested trees would just duplicate the closure.
-  fs.cpSync(src, dest, {
-    recursive: true,
-    filter: (s) => path.basename(s) !== 'node_modules',
-  })
+  fs.mkdirSync(dest, { recursive: true })
+  copyTree(src, dest)
+}
+for (const what of locked) {
+  console.warn(`[stage-native-deps] WARN: locked by a running process, kept existing copy: ${what}`)
 }
 
 console.log(`[stage-native-deps] staged ${closure.size} packages -> runtime/dist/node_modules`)

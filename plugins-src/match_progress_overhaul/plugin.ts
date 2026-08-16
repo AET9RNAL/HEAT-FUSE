@@ -24,6 +24,10 @@ export class MatchProgressOverhaulPlugin extends FusePlugin {
   private nativeHidden = false;
   // Fill-rate tracking for prediction (P3): EMA of d(fill)/dt per team.
   private lastT = 0;
+  // Calibration animation
+  // `g` is a free-running clock for the lead-gap wave: unlike `t` it never
+  // resets on phase change, so the gap keeps sweeping across up/down turnarounds.
+  private calibAnim: { t: number; g: number; phase: "up" | "down" } | null = null;
   private lastAllyFill = 0;
   private lastEnemyFill = 0;
   private allyRate = 0;
@@ -42,7 +46,7 @@ export class MatchProgressOverhaulPlugin extends FusePlugin {
     this.acc = ctx.services.get<Accessors>("accessors");
 
     ctx.config
-      .defaults({ vue_overlay_pos: null, vue_width: 1100, vue_height: 100, hide_native: true, enhanced: true })
+      .defaults({ vue_overlay_pos: null, vue_width: 1100, vue_height: 100, hide_native: true, enhanced: true, flames: true })
       .load();
     ctx.config.schema([
       new ConfigCategory("Enhancements", [
@@ -51,6 +55,12 @@ export class MatchProgressOverhaulPlugin extends FusePlugin {
           label: "Lead / Proximity Cues",
           type: "bool",
           description: "Advanced UX cues",
+        }),
+        new ConfigEntry({
+          key: "flames",
+          label: "Flames VFX",
+          type: "bool",
+          description: "Set the leading team's bar alight once the score gap becomes decisive",
         }),
       ]),
       new ConfigCategory("Native HUD", [
@@ -78,9 +88,11 @@ export class MatchProgressOverhaulPlugin extends FusePlugin {
   }
 
   override enterCalibrate(_stage = 1): void {
-    this.pushPlaceholder();
+    this.calibAnim = { t: 0, g: 0, phase: "up" };
+    this.lastJson = "";
   }
   override enterLocked(): void {
+    this.calibAnim = null;
     this.lastJson = "";
     this.resetRates();
   }
@@ -121,8 +133,86 @@ export class MatchProgressOverhaulPlugin extends FusePlugin {
     this.lastConnected = connected;
     this.applyNativeHide();
 
+    if (this.ctx.state === "calibrate") {
+      this.pushCalibrationFrame(_dt);
+      return;
+    }
     if (this.ctx.state !== "locked" || !connected) return;
     this.pushMatch();
+  }
+
+  /** Animated calibration */
+  private pushCalibrationFrame(dt: number): void {
+    const a = this.calibAnim;
+    if (!a) return;
+    a.t += dt;
+    a.g += dt;
+    const DESIRED = 2000;
+    const UP_DUR = 15;
+    const DOWN_DUR = 10;
+    let frac: number;
+    if (a.phase === "up") {
+      frac = Math.min(a.t / UP_DUR, 1);
+      if (a.t >= UP_DUR) { a.phase = "down"; a.t = 0; }
+    } else {
+      frac = Math.max(1 - a.t / DOWN_DUR, 0);
+      if (a.t >= DOWN_DUR) { a.phase = "up"; a.t = 0; }
+    }
+
+    // Sweep the lead gap across everything the overlay reacts to: under the
+    // flame threshold (nothing burns), through the ramp, and past full blaze -
+    // in both directions, so each side's flames are exercised. GAP_AMP must stay
+    // above the overlay's FLAME_FULL_GAP or calibration never shows a full fire.
+    const GAP_AMP = 0.62;
+    const GAP_RATE = 0.8; // rad/s -> ~7.9s per full swing
+    const gap = Math.sin(a.g * GAP_RATE) * GAP_AMP;
+    // The leader sits at `frac` and the trailer is held below it, so the gap is
+    // never squashed by clamping at the top of the sweep (where NEAR also fires).
+    const lead0 = frac;
+    const trail = Math.max(0, frac - Math.abs(gap));
+    const allyFill = gap >= 0 ? lead0 : trail;
+    const enemyFill = gap >= 0 ? trail : lead0;
+    const allyScore = allyFill * DESIRED;
+    const enemyScore = enemyFill * DESIRED;
+
+    const OT_PERIOD = 20;
+    const OT_TOTAL = 120;
+    const otPhase = (a.g % OT_PERIOD) / OT_PERIOD;
+    const otActive = otPhase < 0.5;
+    const otFrac = otActive ? otPhase * 2 : 0;
+    const overtime = otActive
+      ? { progress: Math.round(otFrac * OT_TOTAL), total: OT_TOTAL, frac: otFrac }
+      : null;
+    const rawLead = allyFill - enemyFill;
+    const lead = Math.sign(rawLead) * Math.pow(Math.min(1, Math.abs(rawLead)), 0.6);
+    const leader = rawLead > 0.02 ? "ally" : rawLead < -0.02 ? "enemy" : "tie";
+    const NEAR = 0.9;
+    this.pushData({
+      inMatch: true,
+      isControl: false,
+      enhanced: Boolean(this.ctx.config.get("enhanced", true)),
+      flames: Boolean(this.ctx.config.get("flames", true)),
+      flameFadeIn: Number(this.ctx.config.get("flame_fade_in", 600)),
+      flameFadeOut: Number(this.ctx.config.get("flame_fade_out", 400)),
+      ally: String(Math.round(allyScore)),
+      enemy: String(Math.round(enemyScore)),
+      allyFill,
+      enemyFill,
+      allyTeamScore: null,
+      enemyTeamScore: null,
+      lead,
+      leader,
+      allyNear: allyFill >= NEAR,
+      enemyNear: enemyFill >= NEAR,
+      allyProj: allyFill,
+      enemyProj: enemyFill,
+      projWinner: leader,
+      allyEta: -1,
+      enemyEta: -1,
+      time: "15:05",
+      leads: 0,
+      overtime,
+    });
   }
 
   private applyNativeHide(): void {
@@ -139,6 +229,7 @@ export class MatchProgressOverhaulPlugin extends FusePlugin {
   }
 
   override teardown(): void {
+    this.calibAnim = null;
     this.ov?.remove();
     try {
       if (this.acc?.connected) this.acc.injectStylesheet("", NATIVE_STYLE_ID);
@@ -237,6 +328,7 @@ export class MatchProgressOverhaulPlugin extends FusePlugin {
       inMatch: true,
       isControl,
       enhanced: Boolean(this.ctx.config.get("enhanced", true)),
+      flames: Boolean(this.ctx.config.get("flames", true)),
       ally: allyText,
       enemy: enemyText,
       allyFill,
@@ -255,32 +347,6 @@ export class MatchProgressOverhaulPlugin extends FusePlugin {
       time: this.fmtTime(this.num("battle_countdown")),
       leads: this.num("team_leads") ?? 0,
       overtime,
-    });
-  }
-
-  private pushPlaceholder(): void {
-    this.pushData({
-      inMatch: true,
-      isControl: false,
-      enhanced: Boolean(this.ctx.config.get("enhanced", true)),
-      ally: "2000",
-      enemy: "1900",
-      allyFill: 1,
-      enemyFill: 0.68,
-      allyTeamScore: 1,
-      enemyTeamScore: 0,
-      lead: Math.pow(0.32, 0.6),
-      leader: "ally",
-      allyNear: true,
-      enemyNear: false,
-      allyProj: 1,
-      enemyProj: 0.82,
-      projWinner: "ally",
-      allyEta: 45,
-      enemyEta: -1,
-      time: "15:05",
-      leads: 0,
-      overtime: { progress: 50, total: 100, frac: 0.5 },
     });
   }
 

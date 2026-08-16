@@ -70,6 +70,8 @@ function sign(payload: Record<string, unknown>): string {
 
 // Session / trend helpers
 const GRAPH_MAX = 60;
+// Temp solution need to figure out a better way to handle this
+const MAX_PAGES = 20;
 
 /** Epoch seconds, epoch ms, or an ISO string -> ms. */
 function toMs(t: unknown): number {
@@ -106,6 +108,40 @@ function prettyVehicle(v: unknown): string {
   return s ? s.toUpperCase() : "-";
 }
 
+/** A parked battle older than this cannot belong to whatever is starting now. */
+const RESUME_MAX_AGE_S = 2 * 3600;
+/** Consecutive unreadable match_state ticks before the battle is parked. */
+const STALE_TICKS = 3;
+/** Snapshot cadence, in samples, for the crash-resume record. */
+const PARK_EVERY_SAMPLES = 6;
+/** Identity fields filled lazily - on a rejoin the accessors hydrate late. */
+const IDENTITY: ReadonlyArray<[string, string]> = [
+  ["map_slug", "map_slug"],
+  ["map_name", "sb_map_name"],
+  ["game_mode", "game_mode"],
+  ["player_name", "player_name"],
+  ["player_vehicle", "player_vehicle"],
+  ["player_role", "player_role"],
+  ["player_agent_id", "player_agent_id"],
+];
+
+/** Everything needed to pick a battle back up after a crash, quit or rejoin. */
+interface Parked {
+  session_id: string;
+  started_at: number;
+  saved_at: number;
+  session: Record<string, unknown>;
+  samples: Sample[];
+  prev: Record<string, Num>;
+  snap: Record<string, Num>;
+  hpDeathCount: number;
+  peakPing: number;
+  pingSum: number;
+  fpsSum: number;
+  perfCount: number;
+  elapsed: number;
+}
+
 type Phase = "idle" | "waiting" | "recording" | "summarizing" | "finalizing";
 type State = "IDLE" | "WAITING" | "RECORDING" | "SUMMARIZING";
 
@@ -129,7 +165,6 @@ export class HeatStatsPlugin extends FusePlugin {
 
   private summarizeTimer = 0;
   private sampleTimer = 0;
-  private apiRefreshTimer: ReturnType<typeof setInterval> | null = null;
   private elapsed = 0;
   private pingSum = 0;
   private fpsSum = 0;
@@ -144,10 +179,10 @@ export class HeatStatsPlugin extends FusePlugin {
   private lastHp: Num = null;
   private hostVisible = true;
   private lastVueVisible: boolean | null = null;
-  private sawFinish = false;
   private pmCaptured = false;
   private roster: { ally: unknown[]; enemy: unknown[] } | null = null;
   private debugMs: unknown = undefined;
+  private staleTicks = 0;
 
   private rd(name: string): unknown {
     return this.acc ? this.acc.read(name) : undefined;
@@ -177,8 +212,9 @@ export class HeatStatsPlugin extends FusePlugin {
         //TO-DO: don't ship the key you dumbell
         api_key: "",
         player_name: "",
-        api_refresh_interval_s: 60,
         session_started_at: 0,
+        // In-flight battle held across a crash/quit/rejoin; not user-facing.
+        parked_battle: null,
         mode: "default",
         scene_time_s: 8.0,
         hide_in_battle: false,
@@ -238,7 +274,6 @@ export class HeatStatsPlugin extends FusePlugin {
       new ConfigCategory("API", [
         new ConfigEntry({ key: "api_key", label: "API Key", type: "str", description: "HEAT Stats API key (fuse_...)" }),
         new ConfigEntry({ key: "player_name", label: "Player Name", type: "str", description: "Player name to fetch stats for" }),
-        new ConfigEntry({ key: "api_refresh_interval_s", label: "API Refresh Interval (s)", type: "int", min: 10, max: 3600, description: "How often to refresh stats from the API (0 to disable)" }),
       ]),
       new ConfigCategory("Recording", [
         new ConfigEntry({ key: "sample_interval_s", label: "Sample Interval (s)", type: "int", min: 1, max: 30 }),
@@ -309,7 +344,6 @@ export class HeatStatsPlugin extends FusePlugin {
 
     this.pushDisplayConfig();
     void this.fetchAndPushStats();
-    if (this.ctx.state === "locked") this.startApiRefresh();
 
     this.pushPhase();
   }
@@ -331,12 +365,11 @@ export class HeatStatsPlugin extends FusePlugin {
   override enterCalibrate(_stage = 1): void {
     this.ov?.setBool("isSetupComplete", false);
     this.vueOv?.setBool("isSetupComplete", false);
-    this.stopApiRefresh();
   }
   override enterLocked(): void {
     this.ov?.setBool("isSetupComplete", true);
     this.vueOv?.setBool("isSetupComplete", true);
-    this.startApiRefresh();
+    void this.fetchAndPushStats();
   }
   override setOverlayVisible(visible: boolean): void {
     this.hostVisible = visible;
@@ -369,9 +402,12 @@ export class HeatStatsPlugin extends FusePlugin {
     if (this.state === "IDLE") {
       const msNow = this.rd("match_state");
       const bsNow = this.rd("battle_state");
-      if (bsNow === 8 && msNow !== MS_FINISH) {
-        // Same skip as checkMatchStart(): never record FiringRange etc.
+      // msNow must be readable: an unreadable state is what park() just reacted
+      // to, and resuming on it would flap between park and resume.
+      if (bsNow === 8 && msNow != null && msNow !== MS_FINISH) {
+        // Same skips as checkMatchStart(): FiringRange, and a lingering postmatch.
         if (SKIP_GAME_MODES.has(String(this.rd("game_mode")))) return;
+        if (this.rd("pm_available") === 1) return;
         this.debugMs = undefined;
         this.ctx.logger.info(`heat_stats: mid-match recovery - ms=${String(msNow)} bs=${String(bsNow)}`);
         this.beginSession();
@@ -391,19 +427,38 @@ export class HeatStatsPlugin extends FusePlugin {
           return;
         }
       }
+      this.fillIdentity();
       this.pollDeaths();
       this.sampleTimer += dt;
       const interval = Number(this.ctx.config.get("sample_interval_s"));
       if (this.sampleTimer >= interval) {
         this.sampleTimer -= interval;
         this.takeSample();
+        // park() writes the file synchronously, so snapshot every few samples
+        // rather than every one.
+        if (this.samples.length % PARK_EVERY_SAMPLES === 0) this.park();
       }
       this.checkMatchEnd();
     } else if (this.state === "SUMMARIZING") {
       this.summarizeTimer += dt;
       if (this.summarizeTimer >= Number(this.ctx.config.get("summarize_hold_s"))) {
         this.setPhase("finalizing");
-        this.finalize("end");
+        this.submit();
+      }
+    }
+  }
+
+  /**
+   * Identity reads are empty for the first ticks after a rejoin, which is how
+   * fragments ended up with null map_slug / player_vehicle. Backfill until set.
+   */
+  private fillIdentity(): void {
+    const sess = this.session;
+    if (!sess) return;
+    for (const [col, accessor] of IDENTITY) {
+      if (sess[col] == null) {
+        const v = this.rd(accessor);
+        if (v != null) sess[col] = v;
       }
     }
   }
@@ -416,10 +471,9 @@ export class HeatStatsPlugin extends FusePlugin {
   }
 
   override teardown(): void {
-    this.stopApiRefresh();
-    if (this.session && (this.state === "RECORDING" || this.state === "SUMMARIZING")) {
-      this.finalize(this.sawFinish || this.pmCaptured ? "end" : "abandoned");
-    }
+    // Never submit on the way out: if postmatch was already captured the battle
+    // is complete and can go, otherwise park it so a restart can resume.
+    if (this.session) this.pmCaptured ? this.submit() : this.park();
     this.ov?.remove();
     this.vueOv?.remove();
   }
@@ -428,15 +482,19 @@ export class HeatStatsPlugin extends FusePlugin {
     if (this.state === "IDLE") {
       this.state = "WAITING";
       this.setPhase("waiting");
-      this.sawFinish = false;
       this.debugMs = undefined;
       this.ctx.logger.info("heat_stats: CDP connected - waiting for active match");
+      // player_name only resolves from accessors once CDP is up, so a lock-time
+      // fetch with no configured name would have bailed - retry here.
+      void this.fetchAndPushStats();
     }
   }
 
   private onDisconnected(): void {
-    if (this.session && (this.state === "RECORDING" || this.state === "SUMMARIZING")) {
-      this.finalize(this.sawFinish || this.pmCaptured ? "end" : "abandoned");
+    if (this.session) {
+      // A disconnect is not a result. Only an already-captured postmatch is.
+      if (this.pmCaptured) this.submit();
+      else this.park("CDP disconnected");
     } else if (this.state === "WAITING") {
       this.state = "IDLE";
       this.setPhase("idle");
@@ -451,19 +509,131 @@ export class HeatStatsPlugin extends FusePlugin {
       this.debugMs = ms;
       this.ctx.logger.info(`heat_stats: waiting - ms=${String(ms)} bs=${String(bs)}`);
     }
-    if (bs === 8 && ms !== MS_FINISH) {
+    if (bs === 8 && ms != null && ms !== MS_FINISH) {
       if (SKIP_GAME_MODES.has(String(this.rd("game_mode")))) return;
+      // The previous battle's postmatch panel is still up - starting here would
+      // record a phantom battle and submit it a second time off the same panel.
+      if (this.rd("pm_available") === 1) return;
       this.beginSession();
     }
   }
 
+  /**
+   * An unreadable match_state means the game went away (crash, quit, page
+   * teardown) - it is NOT a finished match. Submitting there is what produced
+   * fragments carrying a fabricated win/loss/draw. Park instead, and let the
+   * postmatch panel be the only thing that ends a battle.
+   */
   private checkMatchEnd(): void {
     const ms = this.rd("match_state");
-    if (ms === MS_FINISH) this.sawFinish = true;
-    if (ms === null || ms === undefined) this.finalize("end");
+    if (ms === null || ms === undefined) {
+      if (++this.staleTicks >= STALE_TICKS) this.park("match_state unreadable");
+      return;
+    }
+    this.staleTicks = 0;
+  }
+
+  /** Parked battle from a crash/quit/disconnect, if one is still resumable. */
+  private takeParked(): Parked | null {
+    const raw = this.ctx.config.get("parked_battle", null) as Parked | null;
+    if (!raw || !raw.session_id) return null;
+    const ageS = Date.now() / 1000 - Number(raw.saved_at ?? 0);
+    if (!(ageS >= 0 && ageS < RESUME_MAX_AGE_S)) {
+      this.ctx.logger.info(`heat_stats: parked battle too old (${Math.round(ageS)}s) - discarding`);
+      this.clearParked();
+      return null;
+    }
+    // Only reject on a readable, genuinely different map - identity reads are
+    // still empty this early on a rejoin.
+    const mapNow = this.rd("map_slug");
+    const mapWas = raw.session?.map_slug;
+    if (mapNow != null && mapWas != null && String(mapNow) !== String(mapWas)) {
+      this.ctx.logger.info(`heat_stats: parked battle is a different map (${String(mapWas)}) - discarding`);
+      this.clearParked();
+      return null;
+    }
+    // In-game counters are battle-cumulative, so they only ever go up within one
+    // battle. A confident read below what was parked means this is a new battle
+    // on the same map, not the old one resuming.
+    const killsNow = this.rd("player_kills");
+    const killsWas = Number(raw.snap?.ki ?? 0);
+    if (typeof killsNow === "number" && killsWas > 0 && killsNow < killsWas) {
+      this.ctx.logger.info(`heat_stats: counters reset (${killsNow} < ${killsWas}) - new battle, discarding parked`);
+      this.clearParked();
+      return null;
+    }
+    return raw;
+  }
+
+  private clearParked(): void {
+    if (this.ctx.config.get("parked_battle", null) != null) this.ctx.config.set("parked_battle", null);
+  }
+
+  /** Snapshot the in-flight battle so a crash or rejoin can pick it back up. */
+  private park(reason?: string): void {
+    if (!this.session) return;
+    const rec: Parked = {
+      session_id: String(this.session.session_id),
+      started_at: this.startedAt,
+      saved_at: Date.now() / 1000,
+      session: this.session,
+      samples: this.samples,
+      prev: this.prev,
+      snap: this.snap,
+      hpDeathCount: this.hpDeathCount,
+      peakPing: this.peakPing,
+      pingSum: this.pingSum,
+      fpsSum: this.fpsSum,
+      perfCount: this.perfCount,
+      elapsed: this.elapsed,
+    };
+    this.ctx.config.set("parked_battle", rec as unknown as null);
+    if (!reason) return;
+    // An explicit park ends recording; the battle stays on disk, unsubmitted.
+    this.ctx.logger.info(
+      `heat_stats: battle parked (${reason}) - ${this.samples.length} samples held, nothing submitted`,
+    );
+    this.session = null;
+    this.samples = [];
+    this.pmCaptured = false;
+    this.roster = null;
+    this.staleTicks = 0;
+    this.state = "IDLE";
+    this.setPhase("idle");
+  }
+
+  private resumeSession(rec: Parked): void {
+    this.startedAt = Number(rec.started_at) || Date.now() / 1000;
+    this.session = rec.session;
+    this.samples = Array.isArray(rec.samples) ? rec.samples : [];
+    this.prev = rec.prev as typeof this.prev;
+    this.snap = rec.snap as typeof this.snap;
+    this.hpDeathCount = Number(rec.hpDeathCount) || 0;
+    this.peakPing = Number(rec.peakPing) || 0;
+    this.pingSum = Number(rec.pingSum) || 0;
+    this.fpsSum = Number(rec.fpsSum) || 0;
+    this.perfCount = Number(rec.perfCount) || 0;
+    this.elapsed = Number(rec.elapsed) || 0;
+    this.lastHp = this.numOrNull("health");
+    this.pmCaptured = false;
+    this.roster = null;
+    this.sampleTimer = 0;
+    this.staleTicks = 0;
+    this.state = "RECORDING";
+    this.setPhase("recording");
+    this.fillIdentity();
+    this.ctx.logger.info(
+      `heat_stats: resumed battle ${rec.session_id} on ${String(this.session.map_slug ?? "?")} ` +
+        `- ${this.samples.length} samples carried over`,
+    );
   }
 
   private beginSession(): void {
+    const parked = this.takeParked();
+    if (parked) {
+      this.resumeSession(parked);
+      return;
+    }
     this.startedAt = Date.now() / 1000;
     this.session = {
       session_id: randomUUID(),
@@ -498,12 +668,14 @@ export class HeatStatsPlugin extends FusePlugin {
     this.fpsSum = 0;
     this.perfCount = 0;
     this.peakPing = 0;
+    this.staleTicks = 0;
     this.state = "RECORDING";
     this.setPhase("recording");
     this.ctx.logger.info(
       `heat_stats: match started - ${String(this.session.game_mode ?? "?")} on ${String(this.session.map_slug ?? "?")}`,
     );
     this.takeSample();
+    this.park();
   }
 
   private takeSample(): void {
@@ -603,9 +775,18 @@ export class HeatStatsPlugin extends FusePlugin {
     return true;
   }
 
-  private finalize(reason: string): void {
+  /**
+   * The ONLY path that uploads. Requires a captured postmatch panel, which is
+   * the game's own authoritative end-of-battle result; anything short of that
+   * is parked or dropped, never sent.
+   */
+  private submit(): void {
     if (!this.session) {
       this.state = "IDLE";
+      return;
+    }
+    if (!this.pmCaptured) {
+      this.park("submit without postmatch");
       return;
     }
     if (this.acc && this.rd("match_state") != null) this.takeSample();
@@ -615,18 +796,6 @@ export class HeatStatsPlugin extends FusePlugin {
     sess.ended_at = now;
     sess.duration_s = Math.round((now - this.startedAt) * 100) / 100;
 
-    if (!this.pmCaptured) {
-      sess.final_kills = this.snap.ki;
-      sess.final_deaths = this.hpDeathCount;
-      sess.final_assists = this.snap.as;
-      sess.final_damage = this.snap.da;
-      sess.final_ally_score = this.snap.al;
-      sess.final_enemy_score = this.snap.es;
-      sess.final_confirms = this.snap.co;
-      sess.final_denies = this.snap.dn;
-      sess.final_score = this.snap.sc;
-    }
-
     if (this.perfCount > 0) {
       sess.avg_ping = Math.round((this.pingSum / this.perfCount) * 10) / 10;
       sess.avg_fps = Math.round((this.fpsSum / this.perfCount) * 10) / 10;
@@ -634,8 +803,7 @@ export class HeatStatsPlugin extends FusePlugin {
 
     const allyScore = Number(sess.final_ally_score ?? 0);
     const enemyScore = Number(sess.final_enemy_score ?? 0);
-    if (reason === "abandoned") sess.outcome = "abandoned";
-    else if (allyScore > enemyScore) sess.outcome = "win";
+    if (allyScore > enemyScore) sess.outcome = "win";
     else if (allyScore < enemyScore) sess.outcome = "loss";
     else sess.outcome = "draw";
 
@@ -661,11 +829,14 @@ export class HeatStatsPlugin extends FusePlugin {
     this.pushStats();
     void this.fetchAndPushStats();
 
+    // Submitted battles must not linger as resumable, or the next match would
+    // pick this one back up instead of starting clean.
+    this.clearParked();
     this.session = null;
     this.samples = [];
-    this.sawFinish = false;
     this.pmCaptured = false;
     this.roster = null;
+    this.staleTicks = 0;
     this.state = "IDLE";
     if (this.acc && this.acc.connected) {
       this.state = "WAITING";
@@ -747,20 +918,6 @@ export class HeatStatsPlugin extends FusePlugin {
     ov.setJson("recentBattles", recent);
   }
 
-  private startApiRefresh(): void {
-    this.stopApiRefresh();
-    const interval = Number(this.ctx.config.get("api_refresh_interval_s", 60)) || 0;
-    if (interval <= 0) return;
-    this.apiRefreshTimer = setInterval(() => { void this.fetchAndPushStats(); }, interval * 1000);
-  }
-
-  private stopApiRefresh(): void {
-    if (this.apiRefreshTimer) {
-      clearInterval(this.apiRefreshTimer);
-      this.apiRefreshTimer = null;
-    }
-  }
-
   /** Fetch all sessions from the HEAT Stats API and push aggregated stats to the Vue overlay. */
   private async fetchAndPushStats(): Promise<void> {
     const apiKey = String(this.ctx.config.get("api_key", ""));
@@ -771,40 +928,50 @@ export class HeatStatsPlugin extends FusePlugin {
       return;
     }
 
+    // Session filter: drop everything recorded before the session marker.
+    const startedAt = Number(this.ctx.config.get("session_started_at", 0)) || 0;
+    const cutoffMs = startedAt > 0 ? startedAt * 1000 : 0;
+
     try {
+      // The API is newest-first and rate-limits well before a full history walk
+      // (1000+ matches = 11 pages = HTTP 429), so page only far enough back to
+      // cover the session, and never more than MAX_PAGES.
       const sessions: Array<Record<string, unknown>> = [];
       const pageSize = 100;
       let offset = 0;
-      while (true) {
+      for (let page = 0; page < MAX_PAGES; page++) {
         const url = `${API_BASE}/sessions?player_name=${encodeURIComponent(playerName)}&limit=${pageSize}&offset=${offset}`;
         const resp = await fetch(url, { headers: { "x-api-key": apiKey } });
         if (!resp.ok) {
           const body = await resp.json().catch(() => ({}));
-          throw new Error((body as Record<string, string>).error ?? `HTTP ${resp.status}`);
+          const msg = (body as Record<string, string>).error ?? `HTTP ${resp.status}`;
+          // Keep whatever pages already landed - a partial window still renders.
+          this.ctx.logger.warning(`heat_stats: page ${page} failed (${msg}) - using ${sessions.length} sessions`);
+          break;
         }
         const data = await resp.json() as { sessions?: Array<Record<string, unknown>>; total?: number };
         if (!data.sessions || data.sessions.length === 0) break;
         sessions.push(...data.sessions);
         offset += data.sessions.length;
+        if (data.sessions.length < pageSize) break;
         if (data.total != null && sessions.length >= data.total) break;
+        // Oldest row on this page predates the session - nothing further is in range.
+        if (cutoffMs > 0 && toMs(data.sessions[data.sessions.length - 1]!.started_at) < cutoffMs) break;
       }
 
       const ov = this.vueOv;
       if (!ov) return;
 
-      // Session filter: drop everything recorded before the session marker.
-      const startedAt = Number(this.ctx.config.get("session_started_at", 0)) || 0;
-      const cutoffMs = startedAt > 0 ? startedAt * 1000 : 0;
       const inSession = sessions.filter((s) => toMs(s.started_at) >= cutoffMs);
 
       // API returns newest-first; the graph reads left->right with latest right.
       const chrono = [...inSession].reverse();
       const total = chrono.length;
 
+      // EMA feeds the trend graph only - the headline tiles are session-wide totals.
       const emaKd = ema(chrono.map(kdOf));
       const emaWr = ema(chrono.map((s) => (String(s.outcome) === "win" ? 100 : 0)));
       const emaDmg = ema(chrono.map((s) => Number(s.final_damage ?? 0)));
-      const last = (a: number[]): number => (a.length ? a[a.length - 1]! : 0);
 
       const latest = inSession.slice(0, 5).map((s) => ({
         vehicle: prettyVehicle(s.player_vehicle),
@@ -822,6 +989,7 @@ export class HeatStatsPlugin extends FusePlugin {
       const sum = (f: (s: Record<string, unknown>) => number): number =>
         chrono.reduce((acc, s) => acc + f(s), 0);
       const totalKills = sum((s) => Number(s.final_kills ?? 0));
+      const totalDeaths = sum((s) => Number(s.final_deaths ?? 0));
       const totalDamage = sum((s) => Number(s.final_damage ?? 0));
       const totalScore = sum((s) => Number(s.final_score ?? 0));
       const totalMin = sum((s) => Number(s.duration_s ?? 0)) / 60;
@@ -850,9 +1018,10 @@ export class HeatStatsPlugin extends FusePlugin {
       ov.setJson("efficiency", efficiency);
       ov.setJson("byMode", byMode);
       ov.set("sessionStartedAt", startedAt);
-      ov.set("kd", Math.round(last(emaKd) * 100) / 100);
-      ov.set("winRate", Math.round(last(emaWr) * 10) / 10);
-      ov.set("damage", Math.round(last(emaDmg)));
+      const wins = chrono.filter((s) => String(s.outcome) === "win").length;
+      ov.set("kd", Math.round((totalDeaths > 0 ? totalKills / totalDeaths : totalKills) * 100) / 100);
+      ov.set("winRate", total > 0 ? Math.round((wins / total) * 1000) / 10 : 0);
+      ov.set("damage", total > 0 ? Math.round(totalDamage / total) : 0);
       // EMA is computed over the whole session, but only the most recent slice
       // is plotted - otherwise a long session collapses into unreadable noise.
       const tail = (a: number[]): number[] => a.slice(-GRAPH_MAX);
