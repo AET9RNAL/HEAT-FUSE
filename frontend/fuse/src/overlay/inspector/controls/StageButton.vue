@@ -1,23 +1,48 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { computed, onUnmounted, ref } from "vue";
 import { motion } from "motion-v";
 import Icons from "../../../components/Icons.vue";
+import type { ButtonMode } from "../../../components/eButton.vue";
 import { Dynamics } from "../../../composables/useMotion";
 
 const props = withDefaults(
   defineProps<{
     text: string;
     variant?: "default" | "accent" | "danger" | "ghost";
+    mode?: ButtonMode;
     icon?: string;
-    /** Second-click confirmation label; omit for a plain button. */
+    /** confirm: label while armed. On a default button it also turns confirm on. */
     confirm?: string;
+    /** hold: press duration before the click fires. */
+    holdMs?: number;
+    /** toggle: current state. */
+    modelValue?: boolean;
+    /** toggle: label while on. */
+    activeText?: string;
+    /** toggle: body while off */
+    offTone?: "clear" | "danger";
     disabled?: boolean;
   }>(),
-  { variant: "default", icon: "", confirm: "", disabled: false },
+  {
+    variant: "default",
+    mode: "default",
+    icon: "",
+    confirm: "",
+    holdMs: 600,
+    modelValue: false,
+    activeText: "",
+    offTone: "clear",
+    disabled: false,
+  },
 );
 
-const emit = defineEmits<{ click: [] }>();
+const emit = defineEmits<{ click: []; "update:modelValue": [value: boolean] }>();
 
+const CONFIRM_TIMEOUT_MS = 3000;
+
+const activeMode = computed<ButtonMode>(() => (props.mode === "default" && props.confirm ? "confirm" : props.mode));
+
+// confirm
 const armed = ref(false);
 let armTimer: number | null = null;
 
@@ -27,34 +52,94 @@ function disarm(): void {
   armTimer = null;
 }
 
-function onClick(): void {
-  if (!props.confirm) {
+// hold
+const holding = ref(false);
+let holdTimer: number | null = null;
+
+function startHold(e: PointerEvent): void {
+  if (activeMode.value !== "hold" || props.disabled || e.button !== 0) return;
+  holding.value = true;
+  holdTimer = window.setTimeout(() => {
+    holdTimer = null;
+    holding.value = false;
     emit("click");
-    return;
-  }
-  if (armed.value) {
-    disarm();
-    emit("click");
-    return;
-  }
-  armed.value = true;
-  armTimer = window.setTimeout(disarm, 3000);
+  }, props.holdMs);
 }
+
+function cancelHold(): void {
+  if (holdTimer !== null) window.clearTimeout(holdTimer);
+  holdTimer = null;
+  holding.value = false;
+}
+
+function onLeave(): void {
+  cancelHold();
+  disarm();
+}
+
+function onClick(): void {
+  if (props.disabled) return;
+  switch (activeMode.value) {
+    // Fires from the hold timer, never from the click itself.
+    case "hold":
+      return;
+    case "confirm":
+      if (!armed.value) {
+        armed.value = true;
+        armTimer = window.setTimeout(disarm, CONFIRM_TIMEOUT_MS);
+        return;
+      }
+      disarm();
+      emit("click");
+      return;
+    case "toggle":
+      emit("update:modelValue", !props.modelValue);
+      emit("click");
+      return;
+    default:
+      emit("click");
+  }
+}
+
+onUnmounted(() => {
+  disarm();
+  cancelHold();
+});
+
+const toggleOn = computed(() => activeMode.value === "toggle" && props.modelValue);
+const toggleOffDanger = computed(() => activeMode.value === "toggle" && !props.modelValue && props.offTone === "danger");
+
+const label = computed(() => {
+  if (armed.value) return props.confirm || "Confirm";
+  if (toggleOn.value) return props.activeText || props.text;
+  return props.text;
+});
 </script>
 
 <template>
   <motion.button
     type="button"
     class="stage-button"
-    :class="[variant, { armed, disabled }]"
+    :class="[variant, `mode-${activeMode}`, { armed, disabled, 'toggle-on': toggleOn, 'toggle-off-danger': toggleOffDanger }]"
     :disabled="disabled"
+    :aria-pressed="activeMode === 'toggle' ? modelValue : undefined"
     :while-press="disabled ? {} : { scale: 0.97 }"
     :transition="Dynamics.quick"
     @click="onClick"
-    @pointerleave="disarm"
+    @pointerdown="startHold"
+    @pointerup="cancelHold"
+    @pointercancel="cancelHold"
+    @pointerleave="onLeave"
   >
+    <motion.span
+      v-if="activeMode === 'hold'"
+      class="hold-fill"
+      :initial="false"
+      :animate="{ scaleX: holding ? 1 : 0 }"
+      :transition="holding ? { duration: holdMs / 1000, ease: 'linear' } : { duration: 0.2 }"
+    />
     <Icons v-if="icon" :kind="icon as never" size="small" color="var(--ico)" />
-    <span v-if="text || armed">{{ armed ? confirm : text }}</span>
+    <span v-if="label" class="label">{{ label }}</span>
   </motion.button>
 </template>
 
@@ -70,6 +155,7 @@ function onClick(): void {
   height: 26px;
   padding: 0 var(--space-2);
   box-sizing: border-box;
+  overflow: hidden;
   background: var(--black-1-a);
   border: 1px solid var(--base-600);
   font-family: var(--font-primary);
@@ -78,9 +164,13 @@ function onClick(): void {
   color: var(--text-muted);
   cursor: pointer;
   white-space: nowrap;
-  transition: color 0.15s, background 0.15s, border-color 0.15s;
+  transition: color 0.15s, background 0.15s, border-color 0.15s, filter 0.15s;
   corner-shape: bevel;
   border-radius: 8px 0 8px 0;
+}
+
+.stage-button > :not(.hold-fill) {
+  position: relative;
 }
 
 .stage-button:hover:not(:disabled) {
@@ -119,6 +209,48 @@ function onClick(): void {
   background: var(--error-color);
   border-color: var(--error-base);
   color: var(--text-main);
+}
+
+.stage-button.toggle-on {
+  --ico: var(--base-1000);
+  background: var(--accent-200);
+  border-color: var(--accent-200);
+  color: var(--base-1000);
+}
+
+.stage-button.toggle-on:hover:not(:disabled) {
+  --ico: var(--base-1000);
+  color: var(--base-1000);
+  background: var(--tea-green);
+  border-color: var(--tea-green);
+}
+
+.stage-button.toggle-off-danger {
+  --ico: var(--base-1000);
+  background: var(--error-highlight);
+  border-color: var(--error-highlight);
+  color: var(--base-1000);
+}
+
+.stage-button.toggle-off-danger:hover:not(:disabled) {
+  --ico: var(--base-1000);
+  color: var(--base-1000);
+  border-color: var(--error-highlight);
+  filter: brightness(1.08);
+}
+
+.hold-fill {
+  position: absolute;
+  inset: 0;
+  transform-origin: left center;
+  background: rgba(132, 255, 177, 0.25);
+  pointer-events: none;
+}
+
+.label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .stage-button.disabled {

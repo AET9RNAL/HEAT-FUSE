@@ -23,6 +23,7 @@ export class PluginConfig {
   private _data: Record<string, Json> = {};
   private _defaults: Record<string, Json> = {};
   private _watchers = new Map<string, Watcher[]>();
+  private _changeListeners: Array<(key: string, value: Json) => void> = [];
   private _log: Logger;
   private _constraints = new Map<string, Constraint>();
   private _mtimeMs = 0;
@@ -49,6 +50,11 @@ export class PluginConfig {
     Object.assign(this._defaults, dict);
     this._log.debug(`Config: defaults registered (${Object.keys(this._defaults).join(", ")})`);
     return this;
+  }
+
+  /** Defaults registered so far. */
+  defaultsSnapshot(): Record<string, Json> {
+    return { ...this._defaults };
   }
 
   // --- Schema -------------------------------------------------------------
@@ -108,6 +114,15 @@ export class PluginConfig {
         : `Config: no file at ${this._path} - using ${Object.keys(this._defaults).length} default(s)`,
     );
     return this;
+  }
+
+  /** The file's contents without defaults; empty when there is no readable file. */
+  readDisk(): Record<string, Json> {
+    try {
+      return fs.existsSync(this._path) ? (JSON.parse(fs.readFileSync(this._path, "utf-8")) as Record<string, Json>) : {};
+    } catch {
+      return {};
+    }
   }
 
   save(): void {
@@ -255,12 +270,24 @@ export class PluginConfig {
     this._watchers.set(key, list);
   }
 
+  /** Every key change, however it happened: a set, a reload, an edit to the file. */
+  onAnyChange(cb: (key: string, value: Json) => void): void {
+    this._changeListeners.push(cb);
+  }
+
   private _notify(key: string, value: Json): void {
     for (const cb of this._watchers.get(key) ?? []) {
       try {
         cb(value);
       } catch (e) {
         this._log.exception(`Config: watcher for '${key}' raised`, e);
+      }
+    }
+    for (const cb of this._changeListeners) {
+      try {
+        cb(key, value);
+      } catch (e) {
+        this._log.exception(`Config: change listener for '${key}' raised`, e);
       }
     }
   }

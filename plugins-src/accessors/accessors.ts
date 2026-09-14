@@ -225,6 +225,19 @@ export class Accessors {
     return this.conns[page] !== null;
   }
 
+  /** What other plugins read synchronously; the plugin publishes it every tick. */
+  publicState(): Record<string, unknown> {
+    const pages: Record<string, boolean> = {};
+    for (const name of Object.keys(this.conns) as PageName[]) pages[name] = this.conns[name] !== null;
+    return {
+      values: Object.fromEntries(this.cache),
+      pages,
+      connected: this._connected,
+      connectedHangar: this._connectedHangar,
+      connectedBaseIndicators: this.connectedBaseIndicators,
+    };
+  }
+
   private async discoverTargets(): Promise<Partial<Record<PageName, string>> | null> {
     let targets: Array<Record<string, unknown>>;
     try {

@@ -94,7 +94,10 @@ export function sectionControls(item: ConfigSchemaItem): InspectorControl[] {
 
 export function serializeSchema(items: ConfigSchemaItem[] | null | undefined): Array<Record<string, unknown>> {
   if (!items) return [];
+  // A legacy category that already crossed the process boundary is a plain dict, without toDict().
   return items.map((item) =>
-    isLegacyCategory(item) ? item.toDict() : (JSON.parse(JSON.stringify(item)) as Record<string, unknown>),
+    isLegacyCategory(item) && typeof item.toDict === "function"
+      ? item.toDict()
+      : (JSON.parse(JSON.stringify(item)) as Record<string, unknown>),
   );
 }

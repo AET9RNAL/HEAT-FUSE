@@ -7,6 +7,9 @@
   "entry": "plugin:HeatStatsPlugin",
   "runtime": "node",
   "dependencies": ["accessors", "fuse_ui"],
+  "permissions": {
+    "network": { "reason": "Loads your match history from the HEAT Stats API." }
+  },
   "default_config": {
     "sample_interval_s": 5,
     "summarize_hold_s": 5.0,

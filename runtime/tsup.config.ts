@@ -1,7 +1,8 @@
 import { defineConfig } from "tsup";
 
 export default defineConfig({
-  entry: ["src/index.ts"],
+  // plugin-host.js is what each plugin process runs.
+  entry: { index: "src/index.ts", "plugin-host": "src/plugin-host/main.ts" },
   format: ["esm"],
   target: "node20",
   platform: "node",
@@ -18,6 +19,8 @@ export default defineConfig({
   // A data: URI rides in the script source over CDP and is allowed.
   sourcemap: "inline",
   dts: false,
+  // Keep `node:` prefixes: prefix-only builtins (node:sqlite for plugin storage) don't load without them.
+  removeNodeProtocol: false,
   // Bundled CJS deps (ws, chrome-remote-interface) do dynamic require()s of node
   // builtins ('events', 'net', …). esbuild's ESM output shims require() to throw
   // on dynamic calls — but it first delegates to a real `require` if one exists
@@ -37,5 +40,6 @@ export default defineConfig({
   //    and require()d in a try/catch, so a failed resolve is harmless. External
   //    so esbuild doesn't error trying to inline them.
   noExternal: ["ws", "fflate", "chrome-remote-interface", "zod"],
-  external: ["uiohook-napi", "@nut-tree-fork/nut-js", "bufferutil", "utf-8-validate"],
+  //  - koffi: native FFI for measuring plugin processes; loaded with require at runtime.
+  external: ["uiohook-napi", "@nut-tree-fork/nut-js", "koffi", "bufferutil", "utf-8-validate"],
 });

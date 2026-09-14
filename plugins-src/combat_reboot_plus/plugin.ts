@@ -9,11 +9,23 @@ import {
 interface Accessors {
   read(name: string): unknown;
   readonly connected: boolean;
+  readonly connectedHangar: boolean;
 }
 
 
 const BATTLE_ACTIVE = 8;
 const MS_FINISH = "ActiveFinish";
+
+/**
+ * The only vehicle with the module. `player_vehicle` is the art slug (hud_scoreboard's
+ * SLUG_SEED lists them), compared loosely so a variant suffix still matches.
+ */
+const XM1_90_SLUG = "a13_chrysler_xm1_ares_90";
+
+/** How long a confirmed vehicle survives out-of-battle reads (respawn transitions) before it's forgotten. */
+const VEHICLE_LATCH_GRACE_MS = 15_000;
+
+const HANGAR_SETTLE_MS = 3000;
 
 const POS_KEY_TP = "vue_overlay_pos";
 const POS_KEY_FP = "vue_overlay_pos_fp";
@@ -76,6 +88,19 @@ export class CombatRebootPlusPlugin extends FusePlugin {
   private curFp: boolean | null = null;
   private simPhase: Phase = "charge";
   private simT = 0;
+  private onVehicle = false;
+  private lastSeenVehicle = "";
+  private hostVisible = true;
+  private showInBattle = true;
+  private showInHangar = false;
+  private inHangar = false;
+  private hangarSince = 0;
+  private lastVisible: boolean | null = null;
+
+  // A respawn can rebuild the HUD page without re-sending the vehicle slug.
+  private vehicleLatched = false;
+  private latchedVehicleId: number | null = null;
+  private lastMatchAt = 0;
 
   private lastProgress = -1;
   private lastPhase: Phase | null = null;
@@ -103,6 +128,7 @@ export class CombatRebootPlusPlugin extends FusePlugin {
         vue_overlay_pos_fp: null,
         vue_width: DEFAULT_W,
         vue_height: DEFAULT_H,
+        show_in: ["battle"],
         threshold_damage: 2000,
         window_s: 20,
         cooldown_s: 60,
@@ -153,10 +179,29 @@ export class CombatRebootPlusPlugin extends FusePlugin {
   private sections(): InspectorSection[] {
     return [
       {
+        id: "crb.display",
+        label: "Display",
+        description: "Where the overlay shows. Both can be on.",
+        order: 10,
+        controls: [
+          {
+            type: "buttons",
+            id: "show_in",
+            key: "show_in",
+            mode: "multi",
+            label: "Show in",
+            options: [
+              { value: "battle", label: "Battle", tooltip: "Live charge and cooldown while driving the XM1-90." },
+              { value: "hangar", label: "Hangar", tooltip: "The overlay at rest while in the hangar." },
+            ],
+          },
+        ],
+      },
+      {
         id: "crb.trigger",
         label: "Trigger",
         description: "How much damage fires the module, how fast it must land, and how long it rests after.",
-        order: 10,
+        order: 11,
         controls: [
           {
             type: "number",
@@ -199,7 +244,7 @@ export class CombatRebootPlusPlugin extends FusePlugin {
         id: "crb.colors",
         label: "Colors",
         description: "The bar's fill, edge, tints and strokes all follow the phase colour.",
-        order: 11,
+        order: 12,
         controls: [
           {
             type: "color",
@@ -225,7 +270,7 @@ export class CombatRebootPlusPlugin extends FusePlugin {
         id: "crb.sound",
         label: "Sound",
         description: "Plays when the module activates. Calibration stays silent.",
-        order: 12,
+        order: 13,
         controls: [
           {
             type: "switch",
@@ -277,6 +322,10 @@ export class CombatRebootPlusPlugin extends FusePlugin {
   }
 
   private readConfig(): void {
+    const showIn = this.ctx.config.get<unknown>("show_in", ["battle"]);
+    const places = Array.isArray(showIn) ? showIn : ["battle"];
+    this.showInBattle = places.includes("battle");
+    this.showInHangar = places.includes("hangar");
     this.threshold = Number(this.ctx.config.get("threshold_damage", 2000)) || 2000;
     this.windowMs = (Number(this.ctx.config.get("window_s", 20)) || 20) * 1000;
     this.cooldownMs = (Number(this.ctx.config.get("cooldown_s", 60)) || 60) * 1000;
@@ -287,6 +336,65 @@ export class CombatRebootPlusPlugin extends FusePlugin {
     this.soundFile = SOUNDS.some((s) => s.value === file) ? String(file) : DEFAULT_SOUND;
     const vol = Number(this.ctx.config.get("sound_volume", 1));
     this.soundVolume = Number.isFinite(vol) ? Math.min(1, Math.max(0, vol)) : 1;
+  }
+
+  /** Local player's roster vehicle id - still readable when the slug isn't. */
+  private playerVehicleId(): number | null {
+    const roster = this.rd("sb_warriors");
+    if (!Array.isArray(roster)) return null;
+    for (const w of roster) {
+      const row = w as { is_player?: unknown; vehicle_id?: unknown } | null;
+      if (row?.is_player === 1 && typeof row.vehicle_id === "number") return row.vehicle_id;
+    }
+    return null;
+  }
+
+  /**
+   * Loose slug match: either side containing the other counts (see XM1_90_SLUG).
+   * A respawn can leave the slug unreadable, so a confirmed match holds until the
+   * roster shows a different vehicle or the battle is over.
+   */
+  private matchesVehicle(): boolean {
+    const v = this.rd("player_vehicle");
+    const slug = typeof v === "string" ? v.trim().toLowerCase() : "";
+    const vehicleId = this.playerVehicleId();
+    if (slug !== this.lastSeenVehicle) {
+      this.lastSeenVehicle = slug;
+      this.ctx.logger.info(
+        slug
+          ? `combat_reboot_plus: vehicle slug "${slug}" (roster id ${String(vehicleId)})`
+          : `combat_reboot_plus: vehicle slug unreadable (roster id ${String(vehicleId)}, match held: ${this.vehicleLatched})`,
+      );
+    }
+    if (slug) {
+      const ok = slug === XM1_90_SLUG || slug.includes(XM1_90_SLUG) || XM1_90_SLUG.includes(slug);
+      this.vehicleLatched = ok;
+      this.latchedVehicleId = ok ? vehicleId : null;
+      return ok;
+    }
+    if (!this.vehicleLatched) return false;
+    return vehicleId === null || this.latchedVehicleId === null || vehicleId === this.latchedVehicleId;
+  }
+
+  private forgetVehicle(): void {
+    this.vehicleLatched = false;
+    this.latchedVehicleId = null;
+  }
+
+  /** In battle on the vehicle and/or in the hangar, per config; hidden everywhere else. */
+  private applyVisibility(): void {
+    if (this.ctx.state === "calibrate") return;
+    const wanted = (this.showInBattle && this.active && this.onVehicle) || (this.showInHangar && this.inHangar);
+    const visible = this.hostVisible && wanted;
+    if (visible === this.lastVisible) return;
+    this.lastVisible = visible;
+    this.ctx.logger.info(
+      `combat_reboot_plus: ${visible ? "shown" : "hidden"} (show_battle=${this.showInBattle} show_hangar=${this.showInHangar}` +
+        ` in_hangar=${this.inHangar} match=${this.active} vehicle=${this.onVehicle} host=${this.hostVisible}` +
+        ` battle_state=${String(this.rd("battle_state"))} match_state=${String(this.rd("match_state"))}` +
+        ` slug="${this.lastSeenVehicle}" held=${this.vehicleLatched} roster_id=${String(this.latchedVehicleId)})`,
+    );
+    this.ov?.setVisible(visible);
   }
 
   private savedRect(key: string, w: number, h: number): Rect | undefined {
@@ -346,17 +454,20 @@ export class CombatRebootPlusPlugin extends FusePlugin {
     if (!rect && stage === 2) rect = this.savedRect(POS_KEY_TP, w, h);
     if (rect) this.ov.setRect(rect);
     this.curFp = null;
+    this.lastVisible = null;
     this.initSim();
   }
 
   override enterLocked(): void {
     this.curFp = null;
     this.resetPushed();
+    this.lastVisible = null;
+    this.applyVisibility();
   }
 
   override setOverlayVisible(visible: boolean): void {
-    if (this.ctx.state === "calibrate") return;
-    this.ov?.setVisible(visible);
+    this.hostVisible = visible;
+    this.applyVisibility();
   }
 
   /** Clear only the charge window (tumbling-window expiry / cooldown elapse). */
@@ -372,6 +483,39 @@ export class CombatRebootPlusPlugin extends FusePlugin {
     this.cooldownUntil = 0;
   }
 
+  /** Why the charge last wasn't counting; each change is logged once. */
+  private gate = "";
+
+  private logGate(reason: string): void {
+    if (reason === this.gate) return;
+    this.gate = reason;
+    this.ctx.logger.info(`combat_reboot_plus: ${reason}`);
+  }
+
+  private describe(name: string): string {
+    const v = this.rd(name);
+    return `${name}=${typeof v} ${JSON.stringify(v)}`;
+  }
+
+  /**
+   * Hangar = its page is up and the battle HUD's isn't. It has to hold for a moment
+   * first, so a HUD page reconnecting mid-battle isn't taken for a trip to the hangar.
+   */
+  private updateHangar(now: number): void {
+    const raw = Boolean(this.acc?.connectedHangar) && !this.acc?.connected;
+    if (!raw) {
+      this.hangarSince = 0;
+      this.inHangar = false;
+      return;
+    }
+    if (this.hangarSince === 0) this.hangarSince = now;
+    if (this.inHangar || now - this.hangarSince < HANGAR_SETTLE_MS) return;
+    this.inHangar = true;
+    this.active = false;
+    this.onVehicle = false;
+    this.resetAll();
+  }
+
   override tick(dt: number): void {
     this.ctx.config.checkReload();
     this.readConfig();
@@ -379,7 +523,18 @@ export class CombatRebootPlusPlugin extends FusePlugin {
       this.pushSimFrame(dt);
       return;
     }
-    if (this.ctx.state !== "locked" || !this.acc || !this.acc.connected) return;
+    if (this.ctx.state !== "locked" || !this.acc) {
+      this.logGate(!this.acc ? "idle: no accessors service" : `idle: host ${this.ctx.state}`);
+      return;
+    }
+    this.updateHangar(Date.now());
+    if (!this.acc.connected) {
+      this.logGate(this.inHangar ? "idle: in the hangar" : "idle: battle HUD not connected");
+      // Out of battle only the hangar can change what's shown; the charge rests at zero there.
+      this.applyVisibility();
+      this.pushData();
+      return;
+    }
 
     const fp = this.rd("multiplayer_is_fp_view");
     this.updateView(fp == null ? null : Boolean(Number(fp)));
@@ -388,12 +543,31 @@ export class CombatRebootPlusPlugin extends FusePlugin {
     const matchState = this.rd("match_state");
     const isActive = battle === BATTLE_ACTIVE && matchState !== MS_FINISH;
 
+    // Checked before refreshing, so a long spell out of battle (the hangar) also counts.
+    const nowMs = Date.now();
+    if (this.vehicleLatched && nowMs - this.lastMatchAt > VEHICLE_LATCH_GRACE_MS) this.forgetVehicle();
+    if (isActive) this.lastMatchAt = nowMs;
+
     if (isActive !== this.active) {
       this.active = isActive;
       this.resetAll();
     }
 
+    const onVehicle = isActive && this.matchesVehicle();
+    if (onVehicle !== this.onVehicle) {
+      this.onVehicle = onVehicle;
+      this.resetAll();
+    }
+    this.applyVisibility();
+
     if (!isActive) {
+      this.logGate(`idle: not an active battle (${this.describe("battle_state")}, ${this.describe("match_state")})`);
+      this.prevDead = false;
+      this.pushData();
+      return;
+    }
+    if (!onVehicle) {
+      this.logGate(`idle: not on the configured vehicle (slug "${this.lastSeenVehicle}")`);
       this.prevDead = false;
       this.pushData();
       return;
@@ -409,9 +583,11 @@ export class CombatRebootPlusPlugin extends FusePlugin {
 
     const cur = this.numOrNull("player_damage");
     if (cur === null) {
+      this.logGate(`waiting: damage unreadable (${this.describe("player_damage")})`);
       this.pushData();
       return;
     }
+    this.logGate("counting damage");
 
     if (this.prevDamage === null) {
       // First reading of the round: establish a baseline, no delta yet.
@@ -476,9 +652,11 @@ export class CombatRebootPlusPlugin extends FusePlugin {
       ? leftMs / this.cooldownMs
       : this.threshold > 0 ? this.windowSum / this.threshold : 0;
 
-    if (force || this.active !== this.lastInMatch) {
-      this.lastInMatch = this.active;
-      this.ov.setBool("inMatch", this.active);
+    // The overlay dims outside a match; the hangar counts as one.
+    const live = this.active || this.inHangar;
+    if (force || live !== this.lastInMatch) {
+      this.lastInMatch = live;
+      this.ov.setBool("inMatch", live);
     }
     this.pushFrame(
       onCooldown ? "cooldown" : "charge",

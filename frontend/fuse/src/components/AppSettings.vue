@@ -51,8 +51,8 @@ onMounted(async () => {
 // Toggles Chrome DevTools on the FUSE stage and runtime sidecar's Node inspector
 const overlayDevtoolsOpen = ref(false)
 watch(overlayDevtoolsOpen, () => {
-    window.ipcRenderer?.send('overlay:toggle-devtools')
-    window.ipcRenderer?.send('runtime:toggle-devtools')
+    window.appAPI?.toggleStageDevtools()
+    window.appAPI?.toggleRuntimeDevtools()
 })
 
 const platformOptions: eSwitchOption[] = [

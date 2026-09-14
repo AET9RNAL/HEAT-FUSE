@@ -1,5 +1,7 @@
-import { BrowserWindow, ipcMain, screen, session } from 'electron'
+import { BrowserWindow, screen, session } from 'electron'
+import { handleIpc, onIpc, trustSurface } from './ipcGuard'
 import path from 'node:path'
+import { pathToFileURL } from 'node:url'
 
 declare const __RELEASE__: boolean
 
@@ -22,6 +24,16 @@ interface StageEnv {
 
 let stageWindow: BrowserWindow | null = null
 let stageParams: { port: number; token: string } | null = null
+/** The stage page's own URL; the window may load nothing else. */
+let stageUrl = ''
+/** The current page load already took the connection params. */
+let connectionTaken = false
+/** While a consent card is up, main decides where the stage takes clicks; null leaves it to the stage page. */
+let inputOverride: boolean | null = null
+/** What the stage page last asked for, restored when the override lifts. */
+let requestedIgnore = true
+/** Last state sent to the window, so frequent requests don't repeat it. */
+let appliedIgnore: boolean | null = null
 let env: StageEnv | null = null
 
 /** Bounding box of the union of all displays (the virtual desktop). */
@@ -56,6 +68,17 @@ function applyVirtualBounds(win: BrowserWindow): void {
   if (!wasResizable) win.setResizable(false)
 }
 
+function applyIgnore(ignore: boolean, win: BrowserWindow | null = getStageWindow()): void {
+  if (!win || win.isDestroyed() || appliedIgnore === ignore) return
+  appliedIgnore = ignore
+  win.setIgnoreMouseEvents(ignore, { forward: true })
+}
+
+function isStagePage(url: string): boolean {
+  const bare = (u: string) => u.split(/[?#]/)[0].toLowerCase()
+  return !!stageUrl && bare(url) === bare(stageUrl)
+}
+
 function createStageWindow(): void {
   if (!stageParams || !env) return
   const b = virtualBounds()
@@ -74,6 +97,7 @@ function createStageWindow(): void {
     show: false,
     webPreferences: {
       preload: env.preload,
+      additionalArguments: ['--fuse-surface=stage'],
       partition: OVERLAY_PARTITION,
       contextIsolation: true,
       nodeIntegration: false,
@@ -81,15 +105,31 @@ function createStageWindow(): void {
       devTools: true,
     },
   })
+  trustSurface(win.webContents, 'stage')
   win.setAlwaysOnTop(true, 'screen-saver')
   // Click-through by default; the renderer flips this while hovering an overlay.
-  win.setIgnoreMouseEvents(true, { forward: true })
+  requestedIgnore = true
+  appliedIgnore = null
+  applyIgnore(inputOverride === null ? true : !inputOverride, win)
 
-  const query = { port: String(stageParams.port), token: stageParams.token }
+  // Plugin overlays run in this page: no popups, and no navigating it anywhere else.
+  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+  win.webContents.on('will-navigate', (e, url) => {
+    if (!isStagePage(url)) e.preventDefault()
+  })
+  win.webContents.on('did-start-navigation', (details) => {
+    if (details.isMainFrame && !details.isSameDocument) connectionTaken = false
+  })
+
+  // No token in the URL: the stage app asks for it over IPC before any plugin code loads.
+  connectionTaken = false
   if (env.devServerUrl) {
-    win.loadURL(`${env.devServerUrl}overlay.html?port=${query.port}&token=${query.token}`)
+    stageUrl = `${env.devServerUrl}overlay.html`
+    win.loadURL(stageUrl)
   } else {
-    win.loadFile(path.join(env.rendererDist, 'overlay.html'), { query })
+    const file = path.join(env.rendererDist, 'overlay.html')
+    stageUrl = pathToFileURL(file).href
+    win.loadFile(file)
   }
   win.once('ready-to-show', () => {
     win.showInactive()
@@ -118,16 +158,24 @@ export function initOverlayStage(stageEnv: StageEnv): void {
     })
   })
 
-  ipcMain.on('overlay:set-ignore', (_e, ignore: boolean) => {
-    if (stageWindow && !stageWindow.isDestroyed()) {
-      stageWindow.setIgnoreMouseEvents(!!ignore, { forward: true })
-    }
+  // Once per page load. The stage app takes it first, so plugin code that asks later gets null.
+  handleIpc('overlay:connection', (e) => {
+    const win = getStageWindow()
+    if (connectionTaken || !stageParams || !win || e.sender !== win.webContents) return null
+    if (!isStagePage(e.senderFrame?.url ?? '')) return null
+    connectionTaken = true
+    return { ...stageParams }
+  })
+
+  onIpc('overlay:set-ignore', (_e, ignore: boolean) => {
+    requestedIgnore = !!ignore
+    if (inputOverride === null) applyIgnore(requestedIgnore)
   })
 
   // Interactive state only: allow the stage to take keyboard focus so Vue
   // <input>s work. Otherwise the always-on-top stage stays non-focusable so it
   // never steals focus from the game.
-  ipcMain.on('overlay:set-focusable', (_e, focusable: boolean) => {
+  onIpc('overlay:set-focusable', (_e, focusable: boolean) => {
     if (stageWindow && !stageWindow.isDestroyed()) {
       stageWindow.setFocusable(!!focusable)
       if (!focusable) return
@@ -137,7 +185,7 @@ export function initOverlayStage(stageEnv: StageEnv): void {
     }
   })
 
-  ipcMain.on('overlay:toggle-devtools', () => {
+  onIpc('overlay:toggle-devtools', () => {
     if (stageWindow && !stageWindow.isDestroyed()) {
       const wc = stageWindow.webContents
       if (wc.isDevToolsOpened()) wc.closeDevTools()
@@ -162,4 +210,17 @@ export function stopOverlayStage(): void {
   }
   stageWindow = null
   stageParams = null
+}
+
+export function getStageWindow(): BrowserWindow | null {
+  return stageWindow && !stageWindow.isDestroyed() ? stageWindow : null
+}
+
+/**
+ * For the consent card: true takes clicks, false lets them through, whatever the
+ * stage page asks for. null hands control back to the stage page.
+ */
+export function setStageInputOverride(takeClicks: boolean | null): void {
+  inputOverride = takeClicks
+  applyIgnore(takeClicks === null ? requestedIgnore : !takeClicks)
 }

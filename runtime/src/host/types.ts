@@ -23,17 +23,15 @@ export interface Manifest {
   min_host_version?: string;
   runtime?: string;
   sdkVersion?: string;
+  /** Scope -> the author's reason, shown to the user. */
+  permissions?: Record<string, { reason?: string }>;
+  /** Services this plugin provides, and the scopes consumers need for them (`<service>.<scope>`). */
+  provides?: Record<
+    string,
+    { description?: string; scopes?: Record<string, { label?: string; description?: string; level?: "normal" | "dangerous" }> }
+  >;
   [key: string]: unknown;
 }
-
-/** Constructor type for a plugin's entry class. */
-export type PluginClass = (new () => FusePlugin) & {
-  pluginName: string;
-  version: string;
-  description: string;
-  requiresCalibration: boolean;
-  calibrationStages: number;
-};
 
 export interface DiscoveredPlugin {
   pluginId: string;
@@ -47,7 +45,13 @@ export interface DiscoveredPlugin {
   archivePath: string;
   packageRoot: string;
   checksum: string;
-  cls: PluginClass;
+  /** Entry module inside the extracted package; only the plugin's own process imports it. */
+  entryPath: string;
+  /** Exported class named by `manifest.entry`. */
+  entryClass: string;
+  /** Reported by the plugin process once its class is loaded. */
+  requiresCalibration: boolean;
+  calibrationStages: number;
   manifest: Manifest;
 }
 

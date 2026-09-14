@@ -1,37 +1,33 @@
 /**
  * Plugin host
  *
- * Owns the hotkey registry, event bus, service registry, overlay hub, the
+ * Owns the hotkey registry, event bus, service hub, overlay hub, the
  * calibrate/locked state machine (Ctrl+L toggle, Ctrl+P quit, Ctrl+R reload),
- * per-plugin config, and PluginState tracking. Plugin setup is sequential and
- * queue-driven, kicked off after the first authenticated WS client connects.
- *
- * Node is single-threaded, so `root.after(0, fn)` => `setImmediate`
- * and `root.after(50, tick)` => a 50 ms interval.
+ * per-plugin config, and PluginState tracking. Every plugin runs in its own
+ * process (PluginProcess). Setup is sequential and queue-driven, kicked off
+ * after the first authenticated WS client connects.
  */
+import os from "node:os";
 import { logger } from "../log.js";
 import { ConfigManager, PluginConfig } from "./config.js";
 import { EventBus } from "./EventBus.js";
-import { ServiceRegistry } from "./ServiceRegistry.js";
 import { OverlayHub } from "./OverlayManager.js";
 import { NotificationHub } from "./NotificationHub.js";
 import { AudioHub } from "./AudioHub.js";
+import { PermissionManager } from "./permissions.js";
+import { PluginProcess, type HostAudio, type ProcessMetrics } from "./PluginProcess.js";
+import { ServiceHub } from "./ServiceHub.js";
+import { StorageHub } from "./StorageHub.js";
+import { ElectronBridge } from "./ElectronBridge.js";
+import { resolvePluginNode, type PluginNode } from "./pluginNode.js";
 import { DevWatcher } from "./devWatch.js";
 import { discover } from "./discovery.js";
 import { resolveLoadOrder } from "./resolver.js";
 import { PluginState } from "./types.js";
 import type { DiscoveredPlugin } from "./types.js";
-import { HotkeyRegistry, HotkeyRegistryView } from "../sdk/hotkeys.js";
+import { HotkeyRegistry } from "../sdk/hotkeys.js";
 import { serializeSchema } from "../sdk/configSchema.js";
-import {
-  pluginCalibrationStages,
-  pluginRequiresCalibration,
-  type FuseContext,
-  type FusePlugin,
-  type HostState,
-  type HostView,
-} from "../sdk/plugin.js";
-import { PluginAssets } from "../sdk/assets.js";
+import type { HostState, TeardownReason } from "../sdk/plugin.js";
 import { HotkeyInput, type MouseCallback } from "../input/hotkeys.js";
 import type { PluginHydration, RuntimeBridge, WsServer } from "../server/WsServer.js";
 
@@ -40,6 +36,19 @@ const HOST_CONFIG_FILENAME = "fuse_host.json";
 // Also the action names the app's keybind settings and hotkey_overrides use.
 const LOCK_HOTKEY_LABEL = "Toggle Calibrate/Lock";
 const INTERACTIVE_HOTKEY_LABEL = "Toggle Interactive";
+/** Unexpected exits allowed within CRASH_WINDOW_MS before a plugin is left stopped. */
+const MAX_RESTARTS = 3;
+const CRASH_WINDOW_MS = 120_000;
+const RESTART_DELAY_MS = 2_000;
+const METRICS_EVERY_MS = 1_000;
+const SECRET_KEY_RE = /^[A-Za-z0-9._-]{1,128}$/;
+const MAX_SECRET_BYTES = 16 * 1024;
+const MAX_LINK_LENGTH = 2048;
+const CORES = os.availableParallelism();
+/** Resource warnings, once per plugin per session: half a core for 30 s, or 1 GB. */
+const HOG_CORE_SHARE = 0.5;
+const HOG_CPU_SECONDS = 30;
+const HOG_RAM_BYTES = 1024 ** 3;
 
 interface HostConfigState {
   enabled_plugins: string[] | null;
@@ -74,6 +83,20 @@ function compatIssue(manifest: Record<string, unknown>, name: string): string | 
   return null;
 }
 
+/** Plain https only; throws with the reason otherwise. */
+function parseLink(raw: string): URL {
+  if (raw.length > MAX_LINK_LENGTH) throw new Error(`links are limited to ${MAX_LINK_LENGTH} characters`);
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    throw new Error(`'${raw.slice(0, 80)}' isn't a valid URL`);
+  }
+  if (url.protocol !== "https:") throw new Error("only https links can be opened");
+  if (url.username || url.password) throw new Error("links can't carry a user name or password");
+  return url;
+}
+
 /** "ctrl+l" -> "Ctrl+L", matching the app's shortcut hints. */
 function formatCombo(combo: string): string {
   return combo
@@ -82,28 +105,36 @@ function formatCombo(combo: string): string {
     .join("+");
 }
 
-export class FuseHost implements RuntimeBridge, HostView {
+export class FuseHost implements RuntimeBridge {
   readonly hostVersion = HOST_VERSION;
 
   readonly hotkeys = new HotkeyRegistry();
   readonly events = new EventBus();
-  readonly services = new ServiceRegistry();
+  readonly permissions: PermissionManager;
+  private services: ServiceHub;
+  private storage = new StorageHub();
+  private bridge: ElectronBridge;
+  private warnedScopes = new Set<string>();
+  /** Consecutive seconds each plugin has been over the CPU threshold. */
+  private busySeconds = new Map<string, number>();
+  private resourceWarned = new Set<string>();
   private overlayHub: OverlayHub;
   private notificationHub: NotificationHub;
   private audioHub: AudioHub;
   private server: WsServer;
   private input: HotkeyInput;
   private devWatcher: DevWatcher;
+  private pluginNode: PluginNode;
 
   private hostConfig = new ConfigManager(HOST_CONFIG_FILENAME);
   private hostCfgState!: HostConfigState;
 
-  private plugins: FusePlugin[] = [];
-  private contexts: FuseContext[] = [];
-  private pluginMap = new Map<string, FusePlugin>();
-  private contextMap = new Map<string, FuseContext>();
+  /** Running plugin processes, in load order. */
+  private procs = new Map<string, PluginProcess>();
   private pluginStates = new Map<string, PluginState>();
   private discovered = new Map<string, DiscoveredPlugin>();
+  /** Unexpected exit times per plugin, for the restart budget. */
+  private crashes = new Map<string, number[]>();
 
   private _state: HostState = "calibrate";
   private lastLockToggle = 0;
@@ -111,6 +142,7 @@ export class FuseHost implements RuntimeBridge, HostView {
   private lastTick = performance.now() / 1000;
   private quitting = false;
   private capturingRebind = false;
+  private networkNoticeShown = false;
 
   private mouseSubscribers: MouseCallback[] = [];
 
@@ -121,19 +153,37 @@ export class FuseHost implements RuntimeBridge, HostView {
   private calibStage = 1;
   private dequeueStarted = false;
   private tickTimer: NodeJS.Timeout | null = null;
+  private metricsTimer: NodeJS.Timeout | null = null;
   private lastStateNotice: string | null = null;
 
-  constructor(server: WsServer) {
+  constructor(server: WsServer, send: ((msg: Record<string, unknown>) => void) | null = null) {
     this.server = server;
     this.overlayHub = new OverlayHub(server);
     this.notificationHub = new NotificationHub(server);
+    this.permissions = new PermissionManager(this.notificationHub, send);
+    this.permissions.onChange((pluginId) => this.onPermissionsChanged(pluginId));
+    this.bridge = new ElectronBridge(send);
+    this.services = new ServiceHub((consumer, service, scope, owner) =>
+      this.authorizeService(consumer, service, scope, owner),
+    );
     this.audioHub = new AudioHub(server, (pluginId, rel) => this.overlayHub.resolveAsset(pluginId, rel));
     this.devWatcher = new DevWatcher(server);
     this.input = new HotkeyInput({
       onKey: (mods, key, pressed) => this.onKeyEvent(mods, key, pressed),
       onMouse: (x, y, button, pressed) => this.onMouseEvent(x, y, button, pressed),
     });
-    this.services.register("keyboard", this.input.keyboard, "host");
+
+    this.pluginNode = resolvePluginNode();
+    logger.info(
+      `Plugins run on Node ${this.pluginNode.version} (network permission ${this.pluginNode.netFlag ? "enforced" : "NOT enforced"})`,
+    );
+
+    const keyboard = this.input.keyboard;
+    this.services.provideHost("keyboard", keyboard, {
+      reads: { isHeld: "held" },
+      methods: ["press", "release", "tap"],
+      state: () => ({ held: Object.fromEntries(keyboard.heldKeys().map((k) => [k, true])) }),
+    });
 
     this.hostCfgState = this.hostConfig.load<HostConfigState>({
       enabled_plugins: null,
@@ -156,23 +206,6 @@ export class FuseHost implements RuntimeBridge, HostView {
   }
 
   // ======================================================================
-  // HostView (plugin-facing)
-  // ======================================================================
-
-  getPlugin(pluginId: string): FusePlugin | undefined {
-    return this.pluginMap.get(pluginId);
-  }
-  getService<T = unknown>(name: string): T | undefined {
-    return this.services.get<T>(name);
-  }
-  get state(): HostState {
-    return this._state;
-  }
-  broadcast(message: Record<string, unknown>): void {
-    this.server.broadcastControl(message);
-  }
-
-  // ======================================================================
   // Lifecycle
   // ======================================================================
 
@@ -183,9 +216,14 @@ export class FuseHost implements RuntimeBridge, HostView {
     const rawSpecs = await discover((file, reason) =>
       this.notifyLoadError(`archive-${file}`, `${file} couldn't be loaded`, reason),
     );
+    this.permissions.resetRegistrations();
     for (const spec of rawSpecs) {
       this.discovered.set(spec.pluginId, spec);
       this.pluginStates.set(spec.pluginId, PluginState.PENDING);
+      this.permissions.register(spec);
+    }
+    if (!this.pluginNode.netFlag && rawSpecs.some((s) => s.manifest.permissions?.network)) {
+      this.notifyNetworkUnenforced();
     }
 
     const eligible: DiscoveredPlugin[] = [];
@@ -220,58 +258,181 @@ export class FuseHost implements RuntimeBridge, HostView {
   }
 
   private async instantiate(spec: DiscoveredPlugin): Promise<void> {
-    const plugin = new spec.cls();
+    if (this.procs.has(spec.pluginId)) return;
     const pluginLogger = logger.bind(spec.pluginId);
-    const assetsRoot = `${spec.packageRoot}/assets`;
-    const assets = new PluginAssets(assetsRoot);
-
     const cfg = new PluginConfig(spec.pluginId);
     cfg.defaults(spec.manifest.default_config ?? {});
 
-    const overlays = this.overlayHub.registerPlugin(spec.pluginId, assetsRoot, spec.packageRoot, cfg);
+    const overlays = this.overlayHub.registerPlugin(spec.pluginId, `${spec.packageRoot}/assets`, spec.packageRoot, cfg);
     this.devWatcher.watch(spec.pluginId);
-    const manifestHotkeys = { ...(spec.manifest.hotkeys ?? {}) };
 
-    const ctx: FuseContext = {
-      config: cfg,
-      hotkeys: new HotkeyRegistryView(this.hotkeys, spec.pluginId),
-      assets,
-      services: this.services,
-      events: this.events,
-      overlays,
-      notifications: this.notificationHub.scoped(spec.pluginId),
-      audio: this.audioHub.scoped(spec.pluginId),
-      host: this,
-      logger: pluginLogger,
-      state: this._state,
-      packageRoot: spec.packageRoot,
-      manifestHotkeys,
-      extras: new Map(),
-      hotkeyFor: (name, fallback = "") => manifestHotkeys[name] ?? fallback,
-    };
+    const proc = new PluginProcess(
+      spec,
+      {
+        node: this.pluginNode,
+        config: cfg,
+        overlays,
+        hotkeys: this.hotkeys,
+        events: this.events,
+        notifications: this.notificationHub.scoped(spec.pluginId),
+        audio: this.hostAudio(spec.pluginId),
+        permissions: this.permissions,
+        services: this.services,
+        storage: (op, collection, args) => this.brokerStorage(spec.pluginId, op, collection, args),
+        secrets: (op, key, value) => this.brokerSecrets(spec.pluginId, op, key, value),
+        openLink: (url) => this.openLink(spec.pluginId, url),
+        broadcast: (message) => this.server.broadcastControl(message),
+        onUnexpectedExit: (p, detail) => this.onPluginExited(p, detail),
+      },
+      this._state,
+    );
 
     this.pluginStates.set(spec.pluginId, PluginState.LOADING);
     try {
-      await plugin.setup(ctx);
+      await proc.start();
+      spec.requiresCalibration = proc.requiresCalibration;
+      spec.calibrationStages = proc.calibrationStages;
+      await proc.setup();
     } catch (e) {
       pluginLogger.exception("setup failed", e);
       this.notifyLoadError(spec.pluginId, `${spec.name} failed to start`, e);
+      proc.kill();
       this.pluginStates.set(spec.pluginId, PluginState.ERROR);
-      this.overlayHub.removePlugin(spec.pluginId);
-      this.audioHub.removePlugin(spec.pluginId);
+      this.releasePlugin(spec.pluginId);
       this.notifyPluginStatusChanged(spec.pluginId, PluginState.ERROR);
       return;
     }
 
-    if (!cfg.loaded) cfg.load();
-
     this.pluginStates.set(spec.pluginId, PluginState.ACTIVE);
-    this.plugins.push(plugin);
-    this.contexts.push(ctx);
-    this.pluginMap.set(spec.pluginId, plugin);
-    this.contextMap.set(spec.pluginId, ctx);
-    pluginLogger.info(`Loaded v${spec.version}`);
+    this.procs.set(spec.pluginId, proc);
+    pluginLogger.info(`Loaded v${spec.version} in process ${proc.pid ?? "?"}${proc.sandboxed ? "" : " (not sandboxed)"}`);
     this.notifyPluginRegistered(spec, PluginState.ACTIVE);
+  }
+
+  /** `ctx.audio` for one plugin, refused unless it declared the `audio` scope. */
+  private hostAudio(pluginId: string): HostAudio {
+    const allowed = (): boolean => this.permissions.check(pluginId, "audio");
+    return {
+      preload: (assets) => {
+        if (allowed()) this.audioHub.preload(pluginId, assets);
+      },
+      play: (asset, opts, id) => {
+        if (allowed()) this.audioHub.play(pluginId, asset, opts, id);
+      },
+      stop: (id) => this.audioHub.stop(pluginId, id),
+      stopAll: () => this.audioHub.stopAll(pluginId),
+    };
+  }
+
+  /** Stage-side resources a plugin leaves behind when its process stops. */
+  private releasePlugin(pluginId: string): void {
+    this.overlayHub.removePlugin(pluginId);
+    this.audioHub.removePlugin(pluginId);
+    this.storage.close(pluginId);
+  }
+
+  // ======================================================================
+  // Brokered services: storage, secrets, links
+  // ======================================================================
+
+  /** Messages from Electron main: answers to bridge requests, link callbacks, permission decisions. */
+  onElectronMessage(msg: Record<string, unknown>): void {
+    if (this.bridge.onMessage(msg)) return;
+    if (msg.type === "links:callback") {
+      const pluginId = String(msg.pluginId ?? "");
+      const proc = this.procs.get(pluginId);
+      if (proc) proc.linkCallback(String(msg.url ?? ""));
+      else logger.warning(`links: a callback for '${pluginId}', which isn't running - dropped`);
+      return;
+    }
+    this.permissions.onMessage(msg);
+  }
+
+  private authorizeService(consumerId: string, service: string, scope: string, owner: string): boolean {
+    const id = `${service}.${scope}`;
+    if (!this.permissions.isServiceScope(id, owner)) {
+      if (!this.warnedScopes.has(id)) {
+        this.warnedScopes.add(id);
+        logger.warning(`services: '${owner}' guards '${service}' with '${id}', which its manifest doesn't declare - refused`);
+      }
+      return false;
+    }
+    return this.permissions.check(consumerId, id);
+  }
+
+  private async brokerStorage(pluginId: string, op: string, collection: string, args: unknown[]): Promise<unknown> {
+    if (!this.permissions.check(pluginId, "storage")) throw new Error("storage needs the 'storage' permission");
+    return this.storage.handle(pluginId, op, collection, args);
+  }
+
+  private async brokerSecrets(pluginId: string, op: string, key: unknown, value: unknown): Promise<unknown> {
+    if (!this.permissions.check(pluginId, "secrets")) throw new Error("secrets need the 'secrets' permission");
+    if (!["get", "set", "delete", "has"].includes(op)) throw new Error(`unknown secrets operation '${op}'`);
+    if (typeof key !== "string" || !SECRET_KEY_RE.test(key)) {
+      throw new Error("secret keys are 1-128 letters, digits, '.', '_' or '-'");
+    }
+    if (op === "set") {
+      if (typeof value !== "string") throw new Error("secret values must be strings");
+      if (Buffer.byteLength(value, "utf8") > MAX_SECRET_BYTES) {
+        throw new Error(`secret values are limited to ${MAX_SECRET_BYTES} bytes`);
+      }
+    }
+    return this.bridge.request("secrets", { op, pluginId, key, ...(op === "set" ? { value } : {}) });
+  }
+
+  /** Invalid links throw; a valid one without a recent user action returns false. */
+  private async openLink(pluginId: string, url: string): Promise<boolean> {
+    const target = parseLink(url);
+    if (!this.permissions.consumeUserAction(pluginId)) {
+      logger.warning(`links: ${pluginId} tried to open ${target.host} without a user action - ignored`);
+      return false;
+    }
+    await this.bridge.request("links:open", { pluginId, url: target.href });
+    const name = this.discovered.get(pluginId)?.name ?? pluginId;
+    this.notificationHub.notify("host", {
+      id: `link-${pluginId}`,
+      type: "info",
+      icon: "external",
+      title: `${name} opened a page`,
+      message: `${target.host} is open in your browser.`,
+      duration: 5000,
+    });
+    return true;
+  }
+
+  /** Per-plugin process resources for the stage's info bars, and the resource warnings. */
+  private broadcastMetrics(): void {
+    const metrics: Record<string, ProcessMetrics> = {};
+    for (const [pluginId, proc] of this.procs) {
+      if (!proc.metrics) continue;
+      metrics[pluginId] = proc.metrics;
+      this.watchResources(proc);
+    }
+    if (this.server.hasOverlayClient()) this.server.broadcastOverlay({ type: "plugin:metrics", metrics });
+  }
+
+  /** Warns, never stops: a plugin can be busy for a good reason. */
+  private watchResources(proc: PluginProcess): void {
+    const m = proc.metrics;
+    if (!m) return;
+    const busy = m.cpu !== null && m.cpu >= (HOG_CORE_SHARE * 100) / CORES;
+    const seconds = busy ? (this.busySeconds.get(proc.pluginId) ?? 0) + METRICS_EVERY_MS / 1000 : 0;
+    this.busySeconds.set(proc.pluginId, seconds);
+    const name = proc.spec.name;
+    if (seconds >= HOG_CPU_SECONDS && m.cpu !== null) {
+      this.warnResources(proc, "cpu", `${name} is using a lot of CPU`, `About ${Math.round(m.cpu * CORES)}% of one core for ${HOG_CPU_SECONDS} seconds. If your game stutters, disable it in the App.`);
+    }
+    if (m.ram >= HOG_RAM_BYTES) {
+      this.warnResources(proc, "memory", `${name} is using a lot of memory`, `${(m.ram / 1024 ** 3).toFixed(1)} GB. If your PC slows down, disable it in the App.`);
+    }
+  }
+
+  private warnResources(proc: PluginProcess, kind: "cpu" | "memory", title: string, message: string): void {
+    const key = `${proc.pluginId}:${kind}`;
+    if (this.resourceWarned.has(key)) return;
+    this.resourceWarned.add(key);
+    logger.warning(`${proc.pluginId}: ${title}. ${message}`);
+    this.notificationHub.notify("host", { id: `resources-${key}`, type: "warning", icon: kind, title, message, duration: 10_000 });
   }
 
   async reloadPlugins(): Promise<void> {
@@ -279,30 +440,26 @@ export class FuseHost implements RuntimeBridge, HostView {
     this.setupPending = [];
     this.setupActive = null;
 
-    for (const plugin of [...this.plugins].reverse()) {
-      try {
-        plugin.teardown();
-      } catch (e) {
-        logger.exception(`${describe(plugin)}: teardown during reload failed`, e);
-      }
-    }
-    for (const pid of this.pluginMap.keys()) {
-      this.overlayHub.removePlugin(pid);
-      this.audioHub.removePlugin(pid);
-    }
-
-    this.plugins = [];
-    this.contexts = [];
-    this.pluginMap.clear();
-    this.contextMap.clear();
+    await this.stopAll("restart");
     this.pluginStates.clear();
     this.discovered.clear();
 
     this._state = "locked";
     this.autoLockQueue = true;
+    await this.permissions.waitForDecisions(3000);
     await this.loadPlugins();
     setImmediate(() => void this.dequeueNextPlugin());
     logger.info("FUSE: plugin reload queued.");
+  }
+
+  /** Tear every plugin down, consumers before the providers they call. */
+  private async stopAll(reason: TeardownReason): Promise<void> {
+    const procs = [...this.procs.values()].reverse();
+    this.procs.clear();
+    for (const proc of procs) {
+      await proc.teardown(reason);
+      this.releasePlugin(proc.pluginId);
+    }
   }
 
   beginPluginInit(): void {
@@ -327,7 +484,7 @@ export class FuseHost implements RuntimeBridge, HostView {
       this.applyHotkeyOverrides();
       this._state = "locked";
       this.calibStage = 1;
-      this.syncContextStates();
+      this.syncStates();
       this.events.emit("host_state_changed", { state: this._state, calib_stage: 1 });
       this.events.emit("host_ready", {});
       return;
@@ -335,24 +492,18 @@ export class FuseHost implements RuntimeBridge, HostView {
 
     const spec = this.setupPending.shift()!;
     this._state = this.autoLockQueue ? "locked" : "calibrate";
+    await this.permissions.ensureConsent(spec.pluginId);
     await this.instantiate(spec);
 
-    if (this.pluginStates.get(spec.pluginId) !== PluginState.ACTIVE) {
+    const proc = this.procs.get(spec.pluginId);
+    if (!proc || this.pluginStates.get(spec.pluginId) !== PluginState.ACTIVE) {
       setImmediate(() => void this.dequeueNextPlugin());
       return;
     }
 
-    const plugin = this.pluginMap.get(spec.pluginId)!;
-    const ctx = this.contextMap.get(spec.pluginId)!;
-
     if (this.autoLockQueue) {
-      ctx.state = "locked";
-      try {
-        plugin.enterLocked();
-      } catch (e) {
-        logger.exception(`${spec.name}: enterLocked failed`, e);
-        this.notifyLoadError(spec.pluginId, `${spec.name} failed to lock`, e);
-      }
+      proc.setState("locked");
+      proc.enterLocked();
       this.events.emit("host_state_changed", { state: this._state, calib_stage: 1 });
       setImmediate(() => void this.dequeueNextPlugin());
       return;
@@ -360,22 +511,12 @@ export class FuseHost implements RuntimeBridge, HostView {
 
     this.setupActive = spec;
     this.setupCalibStage = 1;
-    ctx.state = "calibrate";
-    try {
-      plugin.enterCalibrate(1);
-    } catch (e) {
-      logger.exception(`${spec.name}: enterCalibrate failed`, e);
-      this.notifyLoadError(spec.pluginId, `${spec.name} failed to calibrate`, e);
-    }
+    proc.setState("calibrate");
+    proc.enterCalibrate(1);
 
-    if (!pluginRequiresCalibration(plugin)) {
-      try {
-        plugin.enterLocked();
-        ctx.state = "locked";
-      } catch (e) {
-        logger.exception(`${spec.name}: enterLocked failed`, e);
-        this.notifyLoadError(spec.pluginId, `${spec.name} failed to lock`, e);
-      }
+    if (!proc.requiresCalibration) {
+      proc.enterLocked();
+      proc.setState("locked");
       this.setupActive = null;
       setImmediate(() => void this.dequeueNextPlugin());
       return;
@@ -408,16 +549,10 @@ export class FuseHost implements RuntimeBridge, HostView {
   // ======================================================================
 
   setOverlaysVisible(visible: boolean): void {
-    for (const plugin of this.plugins) {
-      try {
-        plugin.setOverlayVisible(visible);
-      } catch (e) {
-        logger.exception(`${describe(plugin)}: setOverlayVisible failed`, e);
-      }
-    }
+    for (const proc of this.procs.values()) proc.setOverlayVisible(visible);
   }
 
-  disablePlugin(pluginId: string): void {
+  async disablePlugin(pluginId: string): Promise<void> {
     const disabled = [...(this.hostCfgState.disabled_plugins ?? [])];
     if (!disabled.includes(pluginId)) {
       disabled.push(pluginId);
@@ -427,22 +562,12 @@ export class FuseHost implements RuntimeBridge, HostView {
     this.pluginStates.set(pluginId, PluginState.DISABLED);
     this.notifyPluginStatusChanged(pluginId, PluginState.DISABLED);
 
-    const plugin = this.pluginMap.get(pluginId);
-    if (plugin) {
-      this.pluginMap.delete(pluginId);
-      const ctx = this.contextMap.get(pluginId);
-      this.contextMap.delete(pluginId);
-      this.plugins = this.plugins.filter((p) => p !== plugin);
-      this.contexts = this.contexts.filter((c) => c !== ctx);
-      try {
-        plugin.teardown();
-      } catch (e) {
-        logger.exception(`${pluginId}: teardown during disable failed`, e);
-      }
-      this.overlayHub.removePlugin(pluginId);
-      this.audioHub.removePlugin(pluginId);
-      logger.info(`Plugin '${pluginId}' disabled and torn down.`);
-    }
+    const proc = this.procs.get(pluginId);
+    if (!proc) return;
+    this.procs.delete(pluginId);
+    await proc.teardown("disable");
+    this.releasePlugin(pluginId);
+    logger.info(`Plugin '${pluginId}' disabled and torn down.`);
   }
 
   async enablePlugin(pluginId: string): Promise<void> {
@@ -460,26 +585,101 @@ export class FuseHost implements RuntimeBridge, HostView {
       logger.warning(`enablePlugin: '${pluginId}' not in discovered set.`);
       return;
     }
+    this.crashes.delete(pluginId);
+    await this.permissions.ensureConsent(pluginId);
     await this.instantiate(spec);
-    if (this.pluginStates.get(pluginId) !== PluginState.ACTIVE) return;
-
-    const plugin = this.pluginMap.get(pluginId)!;
-    const ctx = this.contextMap.get(pluginId)!;
-    ctx.state = this._state;
-    try {
-      if (this._state === "locked") plugin.enterLocked();
-      else plugin.enterCalibrate(this.calibStage);
-    } catch (e) {
-      logger.exception(`${pluginId}: state entry on enable failed`, e);
-      this.notifyLoadError(pluginId, `${spec.name} failed to start`, e);
-    }
+    const proc = this.procs.get(pluginId);
+    if (!proc) return;
+    this.enterCurrentState(proc);
     logger.info(`Plugin '${pluginId}' enabled at runtime (state=${this._state}).`);
     this.notifyPluginStatusChanged(pluginId, PluginState.ACTIVE);
+  }
+
+  /** Bring a plugin that started outside the setup queue into the host's current state. */
+  private enterCurrentState(proc: PluginProcess): void {
+    proc.setState(this._state);
+    if (this._state === "locked") proc.enterLocked();
+    else if (this._state === "interactive") proc.enterInteractive();
+    else proc.enterCalibrate(this.calibStage);
+  }
+
+  private async restartPlugin(pluginId: string): Promise<void> {
+    if (this.quitting || this.procs.has(pluginId)) return;
+    if ((this.hostCfgState.disabled_plugins ?? []).includes(pluginId)) return;
+    const spec = this.discovered.get(pluginId);
+    if (!spec) return;
+    await this.permissions.ensureConsent(pluginId);
+    await this.instantiate(spec);
+    const proc = this.procs.get(pluginId);
+    if (!proc) return;
+    this.enterCurrentState(proc);
+    this.notifyPluginStatusChanged(pluginId, PluginState.ACTIVE);
+  }
+
+  private onPluginExited(proc: PluginProcess, detail: string): void {
+    const { pluginId, spec } = proc;
+    if (this.procs.get(pluginId) !== proc) return;
+    this.procs.delete(pluginId);
+    this.releasePlugin(pluginId);
+    this.pluginStates.set(pluginId, PluginState.ERROR);
+    this.notifyPluginStatusChanged(pluginId, PluginState.ERROR);
+    if (this.setupActive?.pluginId === pluginId) {
+      this.setupActive = null;
+      setImmediate(() => void this.dequeueNextPlugin());
+    }
+    if (this.quitting) return;
+
+    const now = Date.now();
+    const recent = (this.crashes.get(pluginId) ?? []).filter((t) => now - t < CRASH_WINDOW_MS);
+    recent.push(now);
+    this.crashes.set(pluginId, recent);
+    if (recent.length > MAX_RESTARTS) {
+      this.notifyLoadError(
+        pluginId,
+        `${spec.name} stopped`,
+        `It exited ${recent.length} times in ${CRASH_WINDOW_MS / 60_000} minutes (${detail}). Re-enable it to try again.`,
+      );
+      return;
+    }
+    this.notificationHub.notify("host", {
+      id: `plugin-restart-${pluginId}`,
+      type: "warning",
+      title: `${spec.name} stopped unexpectedly`,
+      message: `Restarting it (${detail}).`,
+      duration: 6000,
+    });
+    setTimeout(() => void this.restartPlugin(pluginId), RESTART_DELAY_MS * recent.length);
+  }
+
+  private onPermissionsChanged(pluginId: string): void {
+    this.broadcastPluginList();
+    const proc = this.procs.get(pluginId);
+    if (!proc) return;
+    // Network is a spawn flag: a different answer needs a new process.
+    if (proc.netAllowed !== this.permissions.has(pluginId, "network")) {
+      logger.info(`${pluginId}: network permission changed - restarting its process`);
+      void this.restartForPermissions(proc);
+      return;
+    }
+    proc.pushPermissions();
+    this.services.refresh(proc);
+  }
+
+  private async restartForPermissions(proc: PluginProcess): Promise<void> {
+    if (this.procs.get(proc.pluginId) !== proc) return;
+    this.procs.delete(proc.pluginId);
+    await proc.teardown("restart");
+    this.releasePlugin(proc.pluginId);
+    await this.restartPlugin(proc.pluginId);
   }
 
   // ======================================================================
   // Calibrate / locked state machine
   // ======================================================================
+
+  private maxCalibrationStages(): number {
+    return Math.max(1, ...[...this.procs.values()].map((p) => p.calibrationStages));
+  }
 
   toggleLock(): void {
     const now = performance.now() / 1000;
@@ -493,17 +693,11 @@ export class FuseHost implements RuntimeBridge, HostView {
 
     // Normal mode: toggle all active plugins.
     if (this._state === "calibrate") {
-      const maxStages = Math.max(1, ...this.plugins.map((p) => pluginCalibrationStages(p)));
+      const maxStages = this.maxCalibrationStages();
       if (this.calibStage < maxStages) {
         this.calibStage += 1;
         logger.info(`FUSE calibration stage -> ${this.calibStage}/${maxStages}`);
-        for (const plugin of this.plugins) {
-          try {
-            plugin.enterCalibrate(this.calibStage);
-          } catch (e) {
-            logger.exception(`${describe(plugin)}: enterCalibrate(${this.calibStage}) failed`, e);
-          }
-        }
+        for (const proc of this.procs.values()) proc.enterCalibrate(this.calibStage);
         this.events.emit("host_state_changed", { state: this._state, calib_stage: this.calibStage });
         return;
       }
@@ -515,14 +709,10 @@ export class FuseHost implements RuntimeBridge, HostView {
     }
 
     logger.info(`FUSE host state -> ${this._state}`);
-    this.syncContextStates();
-    for (const plugin of this.plugins) {
-      try {
-        if (this._state === "locked") plugin.enterLocked();
-        else plugin.enterCalibrate(1);
-      } catch (e) {
-        logger.exception(`${describe(plugin)}: state change error`, e);
-      }
+    this.syncStates();
+    for (const proc of this.procs.values()) {
+      if (this._state === "locked") proc.enterLocked();
+      else proc.enterCalibrate(1);
     }
     this.events.emit("host_state_changed", { state: this._state, calib_stage: this.calibStage });
   }
@@ -545,67 +735,47 @@ export class FuseHost implements RuntimeBridge, HostView {
     this._state = entering ? "interactive" : "locked";
     this.calibStage = 1;
     logger.info(`FUSE host state -> ${this._state}`);
-    this.syncContextStates();
-    for (const plugin of this.plugins) {
-      try {
-        if (entering) plugin.enterInteractive();
-        else plugin.enterLocked();
-      } catch (e) {
-        logger.exception(`${describe(plugin)}: interactive toggle error`, e);
-      }
+    this.syncStates();
+    for (const proc of this.procs.values()) {
+      if (entering) proc.enterInteractive();
+      else proc.enterLocked();
     }
     this.events.emit("host_state_changed", { state: this._state, calib_stage: this.calibStage });
   }
 
   private toggleLockSetupMode(): void {
     const spec = this.setupActive!;
-    const plugin = this.pluginMap.get(spec.pluginId);
-    const ctx = this.contextMap.get(spec.pluginId);
-    if (!plugin || this.pluginStates.get(spec.pluginId) !== PluginState.ACTIVE) return;
+    const proc = this.procs.get(spec.pluginId);
+    if (!proc || this.pluginStates.get(spec.pluginId) !== PluginState.ACTIVE) return;
 
     if (this._state === "calibrate") {
-      const stages = pluginCalibrationStages(plugin);
+      const stages = proc.calibrationStages;
       if (this.setupCalibStage < stages) {
         this.setupCalibStage += 1;
         logger.info(`FUSE setup calibration stage -> ${this.setupCalibStage}/${stages}`);
-        try {
-          plugin.enterCalibrate(this.setupCalibStage);
-        } catch (e) {
-          logger.exception(`${spec.name}: enterCalibrate(${this.setupCalibStage}) failed`, e);
-          this.notifyLoadError(spec.pluginId, `${spec.name} failed to calibrate`, e);
-        }
+        proc.enterCalibrate(this.setupCalibStage);
         this.events.emit("host_state_changed", { state: this._state, calib_stage: this.setupCalibStage });
         return;
       }
       this._state = "locked";
       this.setupCalibStage = 1;
-      if (ctx) ctx.state = "locked";
+      proc.setState("locked");
       logger.info("FUSE host state -> locked");
-      try {
-        plugin.enterLocked();
-      } catch (e) {
-        logger.exception(`${spec.name}: enterLocked failed`, e);
-        this.notifyLoadError(spec.pluginId, `${spec.name} failed to lock`, e);
-      }
+      proc.enterLocked();
       this.setupActive = null;
       setImmediate(() => void this.dequeueNextPlugin());
     } else {
       this._state = "calibrate";
       this.setupCalibStage = 1;
-      if (ctx) ctx.state = "calibrate";
+      proc.setState("calibrate");
       logger.info("FUSE host state -> calibrate");
-      try {
-        plugin.enterCalibrate(1);
-      } catch (e) {
-        logger.exception(`${spec.name}: enterCalibrate(1) failed`, e);
-        this.notifyLoadError(spec.pluginId, `${spec.name} failed to calibrate`, e);
-      }
+      proc.enterCalibrate(1);
     }
     this.events.emit("host_state_changed", { state: this._state, calib_stage: this.setupCalibStage });
   }
 
-  private syncContextStates(): void {
-    for (const ctx of this.contexts) ctx.state = this._state;
+  private syncStates(): void {
+    for (const proc of this.procs.values()) proc.setState(this._state);
   }
 
   // ======================================================================
@@ -615,7 +785,7 @@ export class FuseHost implements RuntimeBridge, HostView {
   private registerGlobalHotkeys(): void {
     this.hotkeys.register("ctrl+l", () => this.toggleLock(), LOCK_HOTKEY_LABEL, "host");
     this.hotkeys.register("ctrl+i", () => this.toggleInteractive(), INTERACTIVE_HOTKEY_LABEL, "host");
-    this.hotkeys.register("ctrl+p", () => this.quit(), "Quit FUSE", "host");
+    this.hotkeys.register("ctrl+p", () => void this.quit(), "Quit FUSE", "host");
     this.hotkeys.register("ctrl+r", () => void this.reloadPlugins(), "Hot-Reload Plugins", "host");
   }
 
@@ -644,33 +814,26 @@ export class FuseHost implements RuntimeBridge, HostView {
     const now = performance.now() / 1000;
     const dt = now - this.lastTick;
     this.lastTick = now;
-    for (const plugin of this.plugins) {
-      try {
-        plugin.tick(dt);
-      } catch (e) {
-        logger.exception(`${describe(plugin)}: tick error`, e);
-      }
-    }
+    for (const proc of this.procs.values()) proc.tick(dt);
+    this.services.publishHost("keyboard");
   }
 
   start(): void {
     this.input.start();
     this.lastTick = performance.now() / 1000;
     this.tickTimer = setInterval(() => this.tick(), 50);
+    this.metricsTimer = setInterval(() => this.broadcastMetrics(), METRICS_EVERY_MS);
   }
 
-  quit(): void {
+  async quit(): Promise<void> {
+    if (this.quitting) return;
     this.quitting = true;
     if (this.tickTimer) clearInterval(this.tickTimer);
+    if (this.metricsTimer) clearInterval(this.metricsTimer);
     this.input.stop();
     this.devWatcher.stop();
-    for (const plugin of this.plugins) {
-      try {
-        plugin.teardown();
-      } catch (e) {
-        logger.exception(`${describe(plugin)}: teardown error`, e);
-      }
-    }
+    await this.stopAll("shutdown");
+    this.storage.closeAll();
     process.exit(0);
   }
 
@@ -736,17 +899,24 @@ export class FuseHost implements RuntimeBridge, HostView {
   onOverlayTransform(overlayId: string, rect: Record<string, number>): void {
     this.overlayHub.onOverlayTransform(overlayId, rect);
   }
+  // Stage input is what lets a plugin re-ask for a denied permission.
   onOverlayAction(overlayId: string, action: string, payload?: unknown): void {
+    this.permissions.noteUserAction(overlayId.split(":")[0] ?? "");
     this.overlayHub.dispatchAction(overlayId, action, payload);
   }
   onInspectorSet(overlayId: string, controlId: string, value: unknown, phase: "live" | "commit"): void {
+    if (phase === "commit") this.permissions.noteUserAction(overlayId.split(":")[0] ?? "");
     this.overlayHub.onInspectorSet(overlayId, controlId, value, phase);
   }
   onInspectorAction(overlayId: string, controlId: string, payload?: unknown): void {
+    this.permissions.noteUserAction(overlayId.split(":")[0] ?? "");
     this.overlayHub.onInspectorAction(overlayId, controlId, payload);
   }
   onHostRequest(state: string): void {
     this.requestState(state);
+  }
+  onPermissionReview(pluginId: string, scope: string): void {
+    this.permissions.review(pluginId, scope);
   }
 
   /**
@@ -764,14 +934,10 @@ export class FuseHost implements RuntimeBridge, HostView {
     if (state === this._state) return;
     this._state = state;
     this.calibStage = 1;
-    this.syncContextStates();
-    for (const plugin of this.plugins) {
-      try {
-        if (state === "locked") plugin.enterLocked();
-        else plugin.enterCalibrate(1);
-      } catch (e) {
-        logger.exception(`${describe(plugin)}: state change error`, e);
-      }
+    this.syncStates();
+    for (const proc of this.procs.values()) {
+      if (state === "locked") proc.enterLocked();
+      else proc.enterCalibrate(1);
     }
     logger.info(`FUSE host state -> ${this._state} (stage request)`);
     this.events.emit("host_state_changed", { state: this._state, calib_stage: this.calibStage });
@@ -790,12 +956,13 @@ export class FuseHost implements RuntimeBridge, HostView {
         version: spec.version,
         status: status.valueOf(),
         is_core: spec.isCore,
-        requires_calibration: spec.cls.requiresCalibration ?? false,
-        calibration_stages: spec.cls.calibrationStages ?? 1,
+        requires_calibration: spec.requiresCalibration,
+        calibration_stages: spec.calibrationStages,
         current_stage: calibrating ? stage : 0,
         state: active ? this._state : status.valueOf(),
         in_setup: this.setupActive?.pluginId === pluginId,
         overlay_ids: this.overlayHub.overlayIdsFor(pluginId),
+        permissions: this.permissions.summary(pluginId),
       };
     });
   }
@@ -826,11 +993,11 @@ export class FuseHost implements RuntimeBridge, HostView {
     const key = params.key as string | undefined;
     const value = params.value;
     if (pluginId && key != null) {
-      const ctx = this.contextMap.get(pluginId);
-      if (ctx) {
-        const accepted = ctx.config.accept(key, value);
+      const proc = this.procs.get(pluginId);
+      if (proc) {
+        const accepted = proc.config.accept(key, value);
         if (!accepted.ok) return { updated: {} };
-        ctx.config.set(key, accepted.value);
+        proc.config.set(key, accepted.value);
         return { updated: { [key]: accepted.value } };
       }
     }
@@ -838,17 +1005,19 @@ export class FuseHost implements RuntimeBridge, HostView {
   }
 
   rpcConfigAction(params: Record<string, unknown>): Record<string, unknown> {
-    const ctx = this.contextMap.get(String(params.plugin_id ?? ""));
+    const pluginId = String(params.plugin_id ?? "");
+    this.permissions.noteUserAction(pluginId);
+    const proc = this.procs.get(pluginId);
     const controlId = String(params.control_id ?? "");
-    if (!ctx || !controlId) return { ok: false };
-    return { ok: ctx.config.dispatchAction(controlId, params.payload) };
+    if (!proc || !controlId) return { ok: false };
+    return { ok: proc.config.dispatchAction(controlId, params.payload) };
   }
 
   async rpcSetEnabled(params: Record<string, unknown>): Promise<Record<string, unknown>> {
     const pluginId = params.plugin_id as string;
     const enabled = Boolean(params.enabled);
     if (enabled) await this.enablePlugin(pluginId);
-    else this.disablePlugin(pluginId);
+    else await this.disablePlugin(pluginId);
     return { ok: true, plugin_id: pluginId, enabled };
   }
 
@@ -893,6 +1062,21 @@ export class FuseHost implements RuntimeBridge, HostView {
     });
   }
 
+  /** Plugins are running on a Node without --allow-net, so a denied network permission can't be enforced. */
+  private notifyNetworkUnenforced(): void {
+    if (this.networkNoticeShown) return;
+    this.networkNoticeShown = true;
+    logger.warning(`Plugins run on Node ${this.pluginNode.version}: network permission can't be enforced`);
+    this.notificationHub.notify("host", {
+      id: "network-unenforced",
+      type: "warning",
+      icon: "cloud",
+      title: "Network access can't be blocked",
+      message: `Plugins run on Node ${this.pluginNode.version}, which has no network permission. Plugins you deny can still connect.`,
+      duration: 10_000,
+    });
+  }
+
   /** One replaceable toast per state change; calibration stage advances don't count. */
   private notifyStateChange(): void {
     // Locks between setup-queue plugins aren't a resting state: the next plugin calibrates straight away.
@@ -907,10 +1091,8 @@ export class FuseHost implements RuntimeBridge, HostView {
     const interactive = formatCombo(hk.interactive);
 
     if (this._state === "calibrate") {
-      const setupPlugin = setup ? this.pluginMap.get(setup.pluginId) : undefined;
-      const stages = setupPlugin
-        ? pluginCalibrationStages(setupPlugin)
-        : Math.max(1, ...this.plugins.map((p) => pluginCalibrationStages(p)));
+      const setupProc = setup ? this.procs.get(setup.pluginId) : undefined;
+      const stages = setupProc ? setupProc.calibrationStages : this.maxCalibrationStages();
       const steps = stages > 1 ? `${stages} stages, ${lock} advances.` : `${lock} to lock.`;
       this.notificationHub.notify("host", {
         id: "host-state",
@@ -964,10 +1146,10 @@ export class FuseHost implements RuntimeBridge, HostView {
   }
 
   private installConfigWatchers(pluginId: string): void {
-    const ctx = this.contextMap.get(pluginId);
-    if (!ctx) return;
-    for (const key of Object.keys(ctx.config.snapshot())) {
-      ctx.config.watch(key, (v) =>
+    const config = this.procs.get(pluginId)?.config;
+    if (!config) return;
+    for (const key of Object.keys(config.snapshot())) {
+      config.watch(key, (v) =>
         this.server.broadcastControl({ type: "config:value_changed", plugin_id: pluginId, key, value: v }),
       );
     }
@@ -991,13 +1173,8 @@ export class FuseHost implements RuntimeBridge, HostView {
   }
 
   private schemaAndValues(pluginId: string): [Array<Record<string, unknown>>, Record<string, unknown>] {
-    const ctx = this.contextMap.get(pluginId);
-    if (!ctx) return [[], {}];
-    const schema = serializeSchema(ctx.config.schemaCategories);
-    return [schema, ctx.config.snapshot()];
+    const config = this.procs.get(pluginId)?.config;
+    if (!config) return [[], {}];
+    return [serializeSchema(config.schemaCategories), config.snapshot()];
   }
-}
-
-function describe(p: FusePlugin): string {
-  return (p.constructor as { pluginName?: string }).pluginName ?? p.constructor.name;
 }

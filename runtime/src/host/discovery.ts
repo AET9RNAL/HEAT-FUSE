@@ -3,19 +3,17 @@
  *
  * Plugins ship as `.fuse` ZIP archives whose single top-level directory is the
  * `plugin_id` (e.g. `energy_bar/manifest.json`, `energy_bar/plugin.js`, ...).
- * Each archive is extracted to `data/plugins-cache/<plugin_id>-<checksum>/` 
- * and the entry class is loaded via dynamic `import()`. The extracted dir 
- * doubles as the asset root.
+ * Each archive is extracted to `data/plugins-cache/<plugin_id>-<checksum>/`,
+ * which doubles as the asset root. The runtime never imports plugin code: the
+ * entry module is loaded by the plugin's own process.
  */
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
 import { unzipSync, strFromU8 } from "fflate";
 import { logger } from "../log.js";
 import { PLUGINS_CACHE_DIR, REPO_ROOT } from "../utils/paths.js";
-import { FusePlugin } from "../sdk/plugin.js";
-import type { DiscoveredPlugin, Manifest, PluginClass } from "./types.js";
+import type { DiscoveredPlugin, Manifest } from "./types.js";
 
 export const USER_PLUGINS_DIR: string = process.env.FUSE_USER_PLUGINS_DIR
   ? path.resolve(process.env.FUSE_USER_PLUGINS_DIR)
@@ -71,32 +69,21 @@ function extractOnce(destRoot: string, files: Record<string, Uint8Array>): void 
   }
 }
 
-/** Resolve the entry export from an extracted package. */
-async function resolveEntry(packageRoot: string, entry: string): Promise<PluginClass> {
+/** The entry module named by `manifest.entry` ("module:Class"), inside the package. */
+function locateEntry(packageRoot: string, entry: string): { entryPath: string; entryClass: string } {
   const [moduleName, className] = entry.split(":");
   if (!moduleName || !className) {
     throw new Error(`manifest 'entry' must be 'module:Class', got '${entry}'`);
   }
-  let modPath = "";
+  const root = path.resolve(packageRoot);
   for (const ext of [".js", ".mjs", ".cjs", ""]) {
-    const candidate = path.join(packageRoot, moduleName + ext);
-    if (fs.existsSync(candidate)) {
-      modPath = candidate;
-      break;
+    const candidate = path.resolve(root, moduleName + ext);
+    if (!candidate.startsWith(root + path.sep)) break;
+    if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) {
+      return { entryPath: candidate, entryClass: className };
     }
   }
-  if (!modPath) throw new Error(`entry module '${moduleName}' not found under ${packageRoot}`);
-
-  const mod = await import(pathToFileURL(modPath).href);
-  const cls = mod[className] ?? mod.default?.[className] ?? (className === "default" ? mod.default : undefined);
-  // Duck-typed check: plugin bundles carry their own FusePlugin copy, so a
-  // cross-realm `instanceof` would fail. Check the inherited static marker and
-  // a `setup` method on the prototype instead.
-  const marked = typeof cls === "function" && (cls.isFusePlugin === true || cls.prototype instanceof FusePlugin);
-  if (!marked || typeof cls.prototype?.setup !== "function") {
-    throw new Error(`${moduleName}:${className} is not a FusePlugin`);
-  }
-  return cls as PluginClass;
+  throw new Error(`entry module '${moduleName}' not found under ${packageRoot}`);
 }
 
 async function scanFuseArchive(fusePath: string, onError?: DiscoveryErrorHandler): Promise<DiscoveredPlugin | null> {
@@ -164,10 +151,10 @@ async function scanFuseArchive(fusePath: string, onError?: DiscoveryErrorHandler
     return fail(`Extraction failed: ${e instanceof Error ? e.message : String(e)}`);
   }
 
-  let cls: PluginClass;
+  let located: { entryPath: string; entryClass: string };
   try {
     if (!manifest.entry) throw new Error("manifest missing 'entry'");
-    cls = await resolveEntry(packageRoot, manifest.entry);
+    located = locateEntry(packageRoot, manifest.entry);
   } catch (e) {
     logger.error(`Skipping .fuse plugin '${pluginId}': ${String(e)}`);
     return fail(e instanceof Error ? e.message : String(e));
@@ -175,16 +162,13 @@ async function scanFuseArchive(fusePath: string, onError?: DiscoveryErrorHandler
 
   const version = (manifest.version as string) ?? "0.0";
   const name = (manifest.name as string) ?? pluginId;
-  cls.pluginName = name;
-  cls.version = version;
-  cls.description = (manifest.description as string) ?? "";
 
   logger.info(`Discovered plugin (.fuse): ${name} [${pluginId}] v${version}`);
   return {
     pluginId,
     name,
     version,
-    description: cls.description,
+    description: (manifest.description as string) ?? "",
     author: (manifest.author as string) ?? "",
     homepage: (manifest.homepage as string) ?? "",
     tags: (manifest.tags as string[]) ?? [],
@@ -192,7 +176,10 @@ async function scanFuseArchive(fusePath: string, onError?: DiscoveryErrorHandler
     archivePath: fusePath,
     packageRoot,
     checksum,
-    cls,
+    entryPath: located.entryPath,
+    entryClass: located.entryClass,
+    requiresCalibration: false,
+    calibrationStages: 1,
     manifest,
   };
 }

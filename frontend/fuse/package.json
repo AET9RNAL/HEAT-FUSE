@@ -79,6 +79,11 @@
         "to": "runtime/node_modules"
       },
       {
+        "from": "build/node",
+        "to": "node",
+        "filter": ["node.exe"]
+      },
+      {
         "from": "../../backend/fuse/manifest.json",
         "to": "fuse/manifest.json"
       }

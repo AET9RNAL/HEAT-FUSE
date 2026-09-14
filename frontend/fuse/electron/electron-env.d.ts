@@ -23,7 +23,19 @@ declare namespace NodeJS {
 
 // Used in Renderer process, expose in `preload.ts`
 interface Window {
-  ipcRenderer: import('electron').IpcRenderer
+  /** Stage window only. */
+  stageAPI?: {
+    setIgnore: (ignore: boolean) => void
+    setFocusable: (focusable: boolean) => void
+    connection: () => Promise<{ port: number; token: string } | null>
+  }
+  /** Consent view only. */
+  consentAPI?: {
+    onRequest: (cb: (request: unknown) => void) => void
+    decide: (requestId: string, grants: Record<string, boolean>) => Promise<void>
+    closed: (requestId: string) => void
+    cardRect: (rect: { x: number; y: number; width: number; height: number } | null) => void
+  }
   splashAPI?: {
     done: () => void
   }
@@ -43,6 +55,8 @@ interface Window {
     closeWindow: () => Promise<void>
     minimizeWindow: () => Promise<void>
     maximizeWindow: () => Promise<void>
+    toggleStageDevtools: () => void
+    toggleRuntimeDevtools: () => void
     onDeepLink: (cb: (route: string, params: Record<string, string>) => void) => void
   }
   pluginsAPI: {

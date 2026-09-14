@@ -7,8 +7,8 @@
  * (keyed `data:<overlayId>`) so a single overlay updates without re-rendering
  * the whole stage. Drag results are sent back as `overlay:transform`.
  *
- * Connection params (port/token) come from `window.__FUSE_OVERLAY__` (injected
- * by the Electron overlay-window preload) or, in dev, from the URL query string.
+ * Connection params (port/token) come from `stageAPI.connection()` in the
+ * Electron stage, or from the URL query string in a plain browser tab.
  */
 import { reactive, ref, toRaw } from "vue";
 import mitt from "mitt";
@@ -19,7 +19,7 @@ let obsMode = false;
 import type { OverlayInput } from "./rive";
 import type { InputPhase, InspectorSchema } from "./inspector/types";
 import { clearNotifications, pushNotification, removeNotification, type StageNotification } from "./notifications";
-import type { HostState, OverlayDescriptor, OverlayRect, StagePlugin } from "./types";
+import type { HostState, OverlayDescriptor, OverlayRect, PluginMetrics, StagePlugin } from "./types";
 
 type DataEvents = Record<string, Record<string, OverlayInput>>;
 export const overlayBus = mitt<DataEvents>();
@@ -35,6 +35,8 @@ export const inspectorSchemas = reactive(new Map<string, InspectorSchema>());
 export const inspectorValues = reactive(new Map<string, Record<string, unknown>>());
 /** Plugin roster for the stage's plugin list. */
 export const stagePlugins = ref<StagePlugin[]>([]);
+/** Each running plugin's process resources, once a second. */
+export const pluginMetrics = ref<Record<string, PluginMetrics>>({});
 /** Host shortcuts as currently bound (user-rebindable), for on-stage hints. */
 export const hostHotkeys = reactive({ lock: "ctrl+l", interactive: "ctrl+i" });
 
@@ -64,16 +66,21 @@ export const dragging = ref(false);
  */
 export const sourceRev = ref(0);
 
-type IpcSend = { ipcRenderer?: { send(ch: string, ...a: unknown[]): void } };
+type StageApi = {
+  stageAPI?: {
+    setIgnore(ignore: boolean): void;
+    setFocusable(focusable: boolean): void;
+    connection(): Promise<FuseOverlayParams | null>;
+  };
+};
 
 /** Ask Electron main to make the stage window click-through (true) or interactive (false). */
 export function setWindowIgnore(ignore: boolean): void {
-  (window as unknown as IpcSend).ipcRenderer?.send("overlay:set-ignore", ignore);
+  (window as unknown as StageApi).stageAPI?.setIgnore(ignore);
 }
 
-
 export function setWindowFocusable(focusable: boolean): void {
-  (window as unknown as IpcSend).ipcRenderer?.send("overlay:set-focusable", focusable);
+  (window as unknown as StageApi).stageAPI?.setFocusable(focusable);
 }
 
 let ws: WebSocket | null = null;
@@ -84,9 +91,15 @@ interface FuseOverlayParams {
   token: string;
 }
 
-function resolveParams(): FuseOverlayParams | null {
-  const injected = (window as unknown as { __FUSE_OVERLAY__?: FuseOverlayParams }).__FUSE_OVERLAY__;
-  if (injected?.port && injected?.token) return injected;
+/** Taken once from Electron main and kept in this module, out of plugin code's reach, for reconnects. */
+let stageParams: FuseOverlayParams | null = null;
+
+async function resolveParams(): Promise<FuseOverlayParams | null> {
+  const api = (window as unknown as StageApi).stageAPI;
+  if (api) {
+    stageParams ??= await api.connection().catch(() => null);
+    return stageParams;
+  }
   const q = new URLSearchParams(location.search);
   const port = Number(q.get("port"));
   const token = q.get("token");
@@ -149,12 +162,13 @@ export function connectOverlay(): void {
     return;
   }
 
-  const params = resolveParams();
-  if (!params) {
-    console.error("[overlay] no connection params (window.__FUSE_OVERLAY__ or ?port&token)");
-    return;
-  }
-  openSocket(params);
+  void resolveParams().then((params) => {
+    if (!params) {
+      console.error("[overlay] no connection params (stageAPI.connection() or ?port&token)");
+      return;
+    }
+    openSocket(params);
+  });
 }
 
 function openSocket(params: FuseOverlayParams): void {
@@ -169,6 +183,7 @@ function openSocket(params: FuseOverlayParams): void {
     inspectorSchemas.clear();
     inspectorValues.clear();
     stagePlugins.value = [];
+    pluginMetrics.value = {};
     clearNotifications();
     stopAllAudio();
     setTimeout(connectOverlay, RECONNECT_MS); // simple auto-reconnect
@@ -259,6 +274,9 @@ function handle(m: Record<string, unknown>): void {
     case "plugin:list":
       stagePlugins.value = (m.plugins as StagePlugin[]) ?? [];
       break;
+    case "plugin:metrics":
+      pluginMetrics.value = (m.metrics as Record<string, PluginMetrics>) ?? {};
+      break;
     case "host:hotkeys":
       if (typeof m.lock === "string") hostHotkeys.lock = m.lock;
       if (typeof m.interactive === "string") hostHotkeys.interactive = m.interactive;
@@ -337,6 +355,16 @@ export function sendInspectorAction(overlayId: string, controlId: string, payloa
 export function sendHostRequest(state: HostState | "toggle"): void {
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify({ type: "host:request", state }));
+  }
+}
+
+/**
+ * Ask for the consent card for one of a plugin's permissions. Plugin overlays can
+ * send this too, but the card is drawn outside this page, so they can't answer it.
+ */
+export function sendPermissionReview(pluginId: string, scope: string): void {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: "permissions:review", pluginId, scope }));
   }
 }
 

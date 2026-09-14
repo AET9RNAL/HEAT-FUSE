@@ -10,12 +10,34 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import { FusePlugin, type FuseContext, type InspectorSection } from "@fuse/plugin-sdk";
+import { FusePlugin, type FuseContext, type InspectorSection, type ServiceHandle } from "@fuse/plugin-sdk";
 import { Accessors } from "./accessors.js";
+
+/** What other plugins may call. Everything else on Accessors stays internal. */
+const SERVICE_METHODS = [
+  "injectStylesheetOn",
+  "injectStylesheet",
+  "injectStylesheetMarkers",
+  "injectStylesheetBaseIndicators",
+  "injectStylesheetHangar",
+  "countMatches",
+  "setStyle",
+  "setStyleHangar",
+  "setStyles",
+  "setStylesHangar",
+  "resetStyle",
+  "resetStyleHangar",
+  "hide",
+  "show",
+  "hideHangar",
+  "showHangar",
+  "pollOpenUrl",
+];
 
 export class AccessorsPlugin extends FusePlugin {
   private acc!: Accessors;
   private ctx!: FuseContext;
+  private svc: ServiceHandle | null = null;
   private syncInterval = 5;
   private pollInterval = 0.1;
   private syncTimer = 0;
@@ -105,7 +127,16 @@ export class AccessorsPlugin extends FusePlugin {
     this.syncInterval = Number(ctx.config.get("reconnect_interval_s"));
     this.pollInterval = Number(ctx.config.get("poll_interval_s"));
 
-    ctx.services.register("accessors", this.acc, (this.constructor as typeof FusePlugin).pluginName);
+    // Consumers run in their own processes: read(), isConnected() and the connection flags
+    // come from this state, published every tick.
+    this.svc = ctx.services.provide("accessors", {
+      target: this.acc,
+      methods: SERVICE_METHODS,
+      reads: { read: "values", isConnected: "pages" },
+      // Anything that changes the game's interface needs accessors.ui.
+      scopes: Object.fromEntries(SERVICE_METHODS.filter((m) => m !== "countMatches").map((m) => [m, "ui"])),
+      state: () => this.acc.publicState(),
+    });
     this.startSync();
   }
 
@@ -124,6 +155,7 @@ export class AccessorsPlugin extends FusePlugin {
         this.startPoll();
       }
     }
+    this.svc?.publish();
   }
 
   teardown(): void {
@@ -158,6 +190,8 @@ export class AccessorsPlugin extends FusePlugin {
   }
 
   private onSyncResult(connected: boolean): void {
+    // Consumers see the new flag before the event that announces it.
+    this.svc?.publish();
     if (connected && !this.wasConnected) {
       this.ctx.logger.info("accessors: battle_hud connected");
       this.ctx.events.emit("accessors.connected");

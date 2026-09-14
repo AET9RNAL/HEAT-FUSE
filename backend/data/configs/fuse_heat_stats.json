@@ -2,29 +2,29 @@
   "sample_interval_s": 5,
   "summarize_hold_s": 5,
   "vue_overlay_pos": {
-    "x": 13,
-    "y": 218,
-    "w": 352,
-    "h": 438
+    "x": 47,
+    "y": 197,
+    "w": 440,
+    "h": 300
   },
   "vue_width": 440,
   "vue_height": 300,
   "api_key": "",
   "player_name": "",
   "session_started_at": 0,
-  "mode": "carousel",
-  "scene_time_s": 4,
-  "hide_in_battle": true,
+  "mode": "default",
+  "scene_time_s": 8,
+  "hide_in_battle": false,
   "graph_scale": "auto",
   "graph_points": 20,
   "graph_value_scale": 1,
   "overlay_pos": {
-    "x": 19,
-    "y": 149,
-    "w": 170,
+    "x": 47,
+    "y": 143,
+    "w": 150,
     "h": 20
   },
-  "anim_width": 170,
+  "anim_width": 150,
   "anim_height": 20,
   "parked_battle": null
 }

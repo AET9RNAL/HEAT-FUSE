@@ -7,6 +7,9 @@
   "entry": "plugin:LeaderboardFixPlugin",
   "runtime": "node",
   "dependencies": [],
+  "permissions": {
+    "network": { "reason": "Connects to the game's debugger on this PC to sort the leaderboard." }
+  },
   "hotkeys": {},
   "default_config": {}
 }

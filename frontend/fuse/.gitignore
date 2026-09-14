@@ -27,3 +27,6 @@ release
 
 supabase/
 backend/data/configs
+
+# Node binary for plugin processes, fetched by scripts/fetch-plugin-node.cjs
+build/node/

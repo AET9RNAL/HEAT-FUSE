@@ -1,32 +1,32 @@
 {
   "vue_overlay_pos": {
-    "x": 1119,
-    "y": 1298,
-    "w": 322,
-    "h": 63
+    "x": 1121,
+    "y": 1086,
+    "w": 319,
+    "h": 62
   },
   "vue_overlay_pos_fp": {
-    "x": 1119,
-    "y": 1298,
-    "w": 322,
-    "h": 63
+    "x": 1169,
+    "y": 1124,
+    "w": 225,
+    "h": 44
   },
-  "vue_width": 115,
-  "vue_height": 30,
+  "vue_width": 225,
+  "vue_height": 44,
   "show_in": [
-    "battle"
+    "battle",
+    "hangar"
   ],
   "threshold_damage": 4000,
   "duration_s": 30,
   "cooldown_s": 40,
   "charge_color": "#8FFFB8FF",
-  "active_color": "#ff6d46",
+  "active_color": "#FF6A62FF",
   "cooldown_color": "#F2F2F2FF",
   "sound_on_trigger": true,
   "sound_ten_left": true,
   "sound_volume": 1,
   "buff_tag": "",
   "log_buff_tags": false,
-  "vehicle_slug": "a02_m1e1_120",
-  "display_in": "hangar"
+  "vehicle_slug": "a02_m1e1_120"
 }

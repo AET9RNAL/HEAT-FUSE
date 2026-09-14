@@ -8,6 +8,9 @@
   "core": false,
   "runtime": "node",
   "dependencies": ["accessors", "fuse_ui", "canvas_ui"],
+  "permissions": {
+    "audio": { "reason": "Plays a sound when Wounded Fury activates and when 10 seconds are left." }
+  },
   "default_config": {
     "vue_overlay_pos": null,
     "vue_overlay_pos_fp": null,

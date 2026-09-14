@@ -91,6 +91,10 @@ export class KeyboardInput {
   isHeld(char: string): boolean {
     return this.held.has(char);
   }
+  /** Physically held keys, published to plugin processes as the keyboard service's state. */
+  heldKeys(): string[] {
+    return [...this.held];
+  }
   releaseAll(): void {
     this.held.clear();
   }

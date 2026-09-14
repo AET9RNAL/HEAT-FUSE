@@ -81,6 +81,10 @@ export type IconKind =
   | 'lock'
   | 'unlock'
   | 'interactive'
+  | 'permission'
+  | 'cpu'
+  | 'memory'
+  | 'sound'
 </script>
 
 <script setup lang="ts">

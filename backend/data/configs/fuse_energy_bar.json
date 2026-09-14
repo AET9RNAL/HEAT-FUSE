@@ -1,22 +1,21 @@
 {
   "bar_custom_pos": {
-    "x": 1123,
-    "y": 563,
+    "x": 1130,
+    "y": 372,
     "w": 300,
     "h": 300
   },
   "bar_custom_pos_fp": {
     "x": 1130,
-    "y": 702,
+    "y": 571,
     "w": 300,
     "h": 300
   },
   "anim_width": 300,
   "anim_height": 300,
   "color_high": "#84FFB1FF",
-  "color_mid": "#7abfdf",
-  "color_low": "#ff3935",
+  "color_mid": "#FF9800FF",
+  "color_low": "#FF3935FF",
   "stroke_weight": 3,
-  "rotation": 0,
-  "memory_chain": "multiplayer_vehicle_energy"
+  "rotation": 0
 }

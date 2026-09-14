@@ -7,6 +7,21 @@
   "entry": "plugin:AccessorsPlugin",
   "core": true,
   "runtime": "node",
+  "permissions": {
+    "network": { "reason": "Reads live match data from the game's debugger on this PC." }
+  },
+  "provides": {
+    "accessors": {
+      "description": "Live match data and the game's HUD.",
+      "scopes": {
+        "ui": {
+          "label": "Game HUD changes",
+          "description": "Hide, restyle or add styles to parts of the game's interface.",
+          "level": "normal"
+        }
+      }
+    }
+  },
   "default_config": {
     "cdp_port": 9222,
     "connect_timeout_s": 8.0,

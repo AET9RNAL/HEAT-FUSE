@@ -46,10 +46,11 @@ export class AudioHub {
     this.server.broadcastOverlay({ type: "audio:preload", urls });
   }
 
-  play(pluginId: string, asset: string, opts: PlayOptions = {}): string {
+  /** `requestedId` lets a plugin process name the sound up front; it must carry the plugin's prefix. */
+  play(pluginId: string, asset: string, opts: PlayOptions = {}, requestedId?: string): string {
     const url = this.urlFor(pluginId, asset);
     if (!url) return "";
-    const id = `${pluginId}:${randomUUID()}`;
+    const id = requestedId?.startsWith(`${pluginId}:`) ? requestedId : `${pluginId}:${randomUUID()}`;
     this.server.broadcastOverlay({
       type: "audio:play",
       id,

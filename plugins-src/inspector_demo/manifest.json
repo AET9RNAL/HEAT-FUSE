@@ -1,12 +1,30 @@
 {
   "plugin_id": "inspector_demo",
   "name": "Inspector Demo",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "author": "AETERNAL",
-  "description": "Exercises every overlay-inspector control type. Development aid, not a gameplay overlay.",
+  "description": "Exercises every overlay-inspector control type and the plugin APIs, with self-tests. Development aid, not a gameplay overlay.",
   "entry": "plugin:InspectorDemoPlugin",
   "runtime": "node",
-  "min_host_version": "4.7.0",
+  "min_host_version": "6.0.0",
+  "permissions": {
+    "storage": { "reason": "Keeps a click counter and the self-test's sample records." },
+    "secrets": { "reason": "Saves a sample token to test encrypted values." },
+    "network": { "reason": "Only there so you can test allowing and denying a dangerous permission." },
+    "inspector_demo.admin": { "reason": "Tests a permission this plugin defines for its own service." }
+  },
+  "provides": {
+    "inspector_demo": {
+      "description": "Test service for the self-test.",
+      "scopes": {
+        "admin": {
+          "label": "Demo admin",
+          "description": "Reset the demo's counter and read its state.",
+          "level": "dangerous"
+        }
+      }
+    }
+  },
   "hotkeys": {
     "demo_action": "ctrl+alt+d"
   },
@@ -28,6 +46,7 @@
     "accent": "#FFDB8CFF",
     "tint": "#84FFB1FF",
     "anchor": "center",
-    "combo": "ctrl+alt+d"
+    "combo": "ctrl+alt+d",
+    "last_teardown": ""
   }
 }

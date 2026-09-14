@@ -1,23 +1,26 @@
 {
   "vue_overlay_pos": {
-    "x": 1074,
-    "y": 1156,
-    "w": 413,
-    "h": 71
-  },
-  "vue_overlay_pos_fp": {
-    "x": 1222,
-    "y": 458,
-    "w": 315,
+    "x": 1121,
+    "y": 996,
+    "w": 319,
     "h": 62
   },
-  "vue_width": 115,
-  "vue_height": 30,
+  "vue_overlay_pos_fp": {
+    "x": 1168,
+    "y": 1197,
+    "w": 225,
+    "h": 44
+  },
+  "vue_width": 225,
+  "vue_height": 44,
+  "show_in": [
+    "battle"
+  ],
   "threshold_damage": 2000,
   "window_s": 20,
   "cooldown_s": 60,
-  "charge_color": "#7abfdf",
-  "cooldown_color": "#f2f2f2",
+  "charge_color": "#8FFFB8FF",
+  "cooldown_color": "#F2F2F2FF",
   "sound_on_trigger": true,
   "sound_choice": "magsToppedUp.wav",
   "sound_volume": 1

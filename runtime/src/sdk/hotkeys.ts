@@ -15,6 +15,14 @@ export interface BindingInfo {
   owner: string;
 }
 
+/** A plugin's hotkeys. Combos another plugin or the host already bound aren't taken over. */
+export interface PluginHotkeys {
+  register(combo: string, callback: () => void, label?: string): void;
+  unregister(combo: string): boolean;
+  reregister(oldMods: string[], oldKey: string, newCombo: string): boolean;
+  listBindings(owner?: string): BindingInfo[];
+}
+
 type ParsedCombo = { mods: string[]; key: string };
 
 function bindingKey(mods: string[], key: string): string {
@@ -59,6 +67,20 @@ export class HotkeyRegistry {
     const existed = this.bindings.has(bk);
     this.deleteBinding(bk);
     return existed;
+  }
+
+  /** Owner of the binding for `combo` ("" for unowned), or undefined when nothing is bound. */
+  ownerOf(combo: string): string | undefined {
+    const { mods, key } = HotkeyRegistry.parse(combo);
+    const bk = bindingKey(mods, key);
+    return this.bindings.has(bk) ? (this.owners.get(bk) ?? "") : undefined;
+  }
+
+  /** Drop every binding one owner registered, e.g. when a plugin's process stops. */
+  unregisterOwner(owner: string): void {
+    for (const [bk, o] of [...this.owners]) {
+      if (o === owner) this.deleteBinding(bk);
+    }
   }
 
   private deleteBinding(bk: string): void {
@@ -129,7 +151,7 @@ export class HotkeyRegistry {
 }
 
 /** Per-plugin proxy that pre-fills `owner` on every register call. */
-export class HotkeyRegistryView {
+export class HotkeyRegistryView implements PluginHotkeys {
   constructor(
     private registry: HotkeyRegistry,
     private owner: string,

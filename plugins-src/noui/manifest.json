@@ -7,6 +7,9 @@
   "entry": "plugin:NoUiPlugin",
   "runtime": "node",
   "dependencies": ["accessors"],
+  "permissions": {
+    "accessors.ui": { "reason": "Hides the HUD elements you pick." }
+  },
   "hotkeys": {
     "toggle": "ctrl+h"
   },

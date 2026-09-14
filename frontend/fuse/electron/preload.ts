@@ -1,29 +1,44 @@
 import { ipcRenderer, contextBridge } from 'electron'
 
-contextBridge.exposeInMainWorld('ipcRenderer', {
-  on(...args: Parameters<typeof ipcRenderer.on>) {
-    const [channel, listener] = args
-    return ipcRenderer.on(channel, (event, ...args) => listener(event, ...args))
-  },
-  off(...args: Parameters<typeof ipcRenderer.off>) {
-    const [channel, ...omit] = args
-    return ipcRenderer.off(channel, ...omit)
-  },
-  send(...args: Parameters<typeof ipcRenderer.send>) {
-    const [channel, ...omit] = args
-    return ipcRenderer.send(channel, ...omit)
-  },
-  invoke(...args: Parameters<typeof ipcRenderer.invoke>) {
-    const [channel, ...omit] = args
-    return ipcRenderer.invoke(channel, ...omit)
-  },
-})
+// Set by Electron main per window. The stage page also runs plugin Vue overlays,
+// so it gets only what the stage itself needs. A window without one gets nothing.
+const SURFACE = process.argv.find((a) => a.startsWith('--fuse-surface='))?.slice('--fuse-surface='.length) ?? 'none'
 
-contextBridge.exposeInMainWorld('splashAPI', {
-  done: (): void => ipcRenderer.send('splash:done'),
-})
+if (SURFACE === 'stage') {
+  contextBridge.exposeInMainWorld('stageAPI', {
+    setIgnore: (ignore: boolean): void => ipcRenderer.send('overlay:set-ignore', !!ignore),
+    setFocusable: (focusable: boolean): void => ipcRenderer.send('overlay:set-focusable', !!focusable),
+    /** The runtime socket's port and stage token, answered once per page load. */
+    connection: (): Promise<{ port: number; token: string } | null> => ipcRenderer.invoke('overlay:connection'),
+  })
+}
 
-contextBridge.exposeInMainWorld('safeStorageAPI', {
+if (SURFACE === 'splash') {
+  contextBridge.exposeInMainWorld('splashAPI', {
+    done: (): void => ipcRenderer.send('splash:done'),
+  })
+}
+
+if (SURFACE === 'consent') {
+  contextBridge.exposeInMainWorld('consentAPI', {
+    onRequest: (cb: (request: unknown) => void): void => {
+      ipcRenderer.on('consent:request', (_e, request) => cb(request))
+    },
+    decide: (requestId: string, grants: Record<string, boolean>): Promise<void> =>
+      ipcRenderer.invoke('consent:decide', requestId, grants),
+    /** The answered card has animated out. */
+    closed: (requestId: string): void => ipcRenderer.send('consent:closed', requestId),
+    /** Where the card is in the page, so only it takes clicks; null while there's none. */
+    cardRect: (rect: { x: number; y: number; width: number; height: number } | null): void =>
+      ipcRenderer.send('consent:card-rect', rect),
+  })
+}
+
+function exposeApp(key: string, api: Record<string, unknown>): void {
+  if (SURFACE === 'app') contextBridge.exposeInMainWorld(key, api)
+}
+
+exposeApp('safeStorageAPI', {
   isAvailable: (): Promise<boolean> =>
     ipcRenderer.invoke('safe-storage:is-available'),
   encrypt: (value: string): Promise<{ type: 'Buffer'; data: number[] }> =>
@@ -32,7 +47,7 @@ contextBridge.exposeInMainWorld('safeStorageAPI', {
     ipcRenderer.invoke('safe-storage:decrypt', buf),
 })
 
-contextBridge.exposeInMainWorld('appAPI', {
+exposeApp('appAPI', {
   onSuspended: (cb: () => void) => ipcRenderer.on('app:suspended', cb),
   onResumed: (cb: () => void) => ipcRenderer.on('app:resumed', cb),
   onDeepLink: (cb: (route: string, params: Record<string, string>) => void) =>
@@ -53,9 +68,11 @@ contextBridge.exposeInMainWorld('appAPI', {
     ipcRenderer.invoke('window:minimize'),
   maximizeWindow: (): Promise<void> =>
     ipcRenderer.invoke('window:maximize'),
+  toggleStageDevtools: (): void => ipcRenderer.send('overlay:toggle-devtools'),
+  toggleRuntimeDevtools: (): void => ipcRenderer.send('runtime:toggle-devtools'),
 })
 
-contextBridge.exposeInMainWorld('pluginsAPI', {
+exposeApp('pluginsAPI', {
   scan: () => ipcRenderer.invoke('plugins:scan'),
   showFile: (filePath: string) => ipcRenderer.invoke('plugins:show-file', filePath),
   deleteFile: (filePath: string): Promise<{ success: boolean; error?: string }> =>
@@ -66,11 +83,11 @@ contextBridge.exposeInMainWorld('pluginsAPI', {
     ipcRenderer.invoke('plugins:upload-to-r2', presignedUrl, fileBuffer, contentType),
 })
 
-contextBridge.exposeInMainWorld('dialogAPI', {
+exposeApp('dialogAPI', {
   selectDir: (): Promise<string | null> => ipcRenderer.invoke('dialog:select-dir'),
 })
 
-contextBridge.exposeInMainWorld('configAPI', {
+exposeApp('configAPI', {
   readHost: (): Promise<{ disabled_plugins: string[]; enabled_plugins: string[] | null }> =>
     ipcRenderer.invoke('config:host:read'),
   setPluginEnabled: (pluginId: string, enabled: boolean): Promise<{ success: boolean; error?: string }> =>
@@ -81,7 +98,7 @@ contextBridge.exposeInMainWorld('configAPI', {
     ipcRenderer.removeAllListeners('config:host:changed'),
 })
 
-contextBridge.exposeInMainWorld('pluginConfigAPI', {
+exposeApp('pluginConfigAPI', {
   readPlugin: (pluginId: string): Promise<Record<string, unknown>> =>
     ipcRenderer.invoke('config:plugin:read', pluginId),
   writeKey: (pluginId: string, key: string, value: unknown): Promise<{ success: boolean; error?: string }> =>
@@ -90,7 +107,7 @@ contextBridge.exposeInMainWorld('pluginConfigAPI', {
     ipcRenderer.invoke('hotkey:write-override', pluginId, action, combo),
 })
 
-contextBridge.exposeInMainWorld('updateAPI', {
+exposeApp('updateAPI', {
   check: (): Promise<{ success: boolean; updateInfo?: unknown; error?: string }> =>
     ipcRenderer.invoke('update:check'),
   download: (): Promise<{ success: boolean; error?: string }> =>
@@ -123,7 +140,7 @@ contextBridge.exposeInMainWorld('updateAPI', {
       .forEach(ch => ipcRenderer.removeAllListeners(ch)),
 })
 
-contextBridge.exposeInMainWorld('gameAPI', {
+exposeApp('gameAPI', {
   scanDir: (dirPath: string): Promise<{ version?: string; hasProject: boolean; error?: string }> =>
     ipcRenderer.invoke('game:scan-dir', dirPath),
   checkDebugger: (dirPath: string): Promise<{ success: boolean; enabled?: boolean; error?: string }> =>
@@ -134,7 +151,7 @@ contextBridge.exposeInMainWorld('gameAPI', {
     ipcRenderer.invoke('game:disable-debugger', dirPath),
 })
 
-contextBridge.exposeInMainWorld('discordAPI', {
+exposeApp('discordAPI', {
   setEnabled: (enabled: boolean): Promise<{ success: boolean }> =>
     ipcRenderer.invoke('discord:set-enabled', enabled),
   setActivity: (activity: {
@@ -155,7 +172,7 @@ contextBridge.exposeInMainWorld('discordAPI', {
     ipcRenderer.invoke('discord:status'),
 })
 
-contextBridge.exposeInMainWorld('fsAPI', {
+exposeApp('fsAPI', {
   getRoot: (): Promise<string> =>
     ipcRenderer.invoke('fs:get-root'),
   listDir: (dirPath: string): Promise<Array<{ name: string; isDir: boolean; size: number; created: number; modified: number }>> =>
@@ -166,7 +183,7 @@ contextBridge.exposeInMainWorld('fsAPI', {
     ipcRenderer.invoke('fs:write-file', filePath, content),
 })
 
-contextBridge.exposeInMainWorld('gameProcessAPI', {
+exposeApp('gameProcessAPI', {
   setWatchEnabled: (enabled: boolean): Promise<void> =>
     ipcRenderer.invoke('game:watch:set', enabled),
   setFocusWatchEnabled: (enabled: boolean): Promise<void> =>
@@ -179,7 +196,7 @@ contextBridge.exposeInMainWorld('gameProcessAPI', {
     ipcRenderer.on('game:focus:changed', (_e, inFocus: boolean) => cb(inFocus)),
 })
 
-contextBridge.exposeInMainWorld('fileAssocAPI', {
+exposeApp('fileAssocAPI', {
   isRegistered: (): Promise<boolean> =>
     ipcRenderer.invoke('fileassoc:is-registered'),
   register: (): Promise<{ success: boolean; error?: string }> =>
@@ -188,7 +205,7 @@ contextBridge.exposeInMainWorld('fileAssocAPI', {
     ipcRenderer.invoke('fileassoc:unregister'),
 })
 
-contextBridge.exposeInMainWorld('deviceAPI', {
+exposeApp('deviceAPI', {
   getFingerprint: (): Promise<string> =>
     ipcRenderer.invoke('device:fingerprint'),
   getName: (): Promise<string> =>
@@ -199,7 +216,7 @@ contextBridge.exposeInMainWorld('deviceAPI', {
     ipcRenderer.invoke('device:ip'),
 })
 
-contextBridge.exposeInMainWorld('fuseAPI', {
+exposeApp('fuseAPI', {
   spawn: (opts?: { autoLock?: boolean }): Promise<{ success: boolean; pid?: number; port?: number; connectionToken?: string; obsUrl?: string | null; error?: string }> =>
     ipcRenderer.invoke('fuse:spawn', opts),
   kill: (): Promise<{ success: boolean }> =>

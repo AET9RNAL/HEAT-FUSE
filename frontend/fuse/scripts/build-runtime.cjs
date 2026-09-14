@@ -19,4 +19,7 @@ console.log('[build-runtime] wrote dist/package.json (type:module)')
 // packaged sidecar can resolve uiohook-napi / nut-js and their transitive deps.
 execSync('node ' + JSON.stringify(path.join(__dirname, 'stage-native-deps.cjs')), { stdio: 'inherit' })
 
+// The Node binary plugin processes run on (Node 25+ can deny network per plugin).
+execSync('node ' + JSON.stringify(path.join(__dirname, 'fetch-plugin-node.cjs')), { stdio: 'inherit' })
+
 console.log('[build-runtime] done → runtime/dist/index.js')

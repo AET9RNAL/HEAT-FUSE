@@ -7,8 +7,17 @@ async function run(): Promise<void> {
   setLevel(level);
 
   const server = new WsServer();
-  const host = new FuseHost(server);
+  // Electron main spawns us with an IPC channel for permission decisions.
+  const send = process.send
+    ? (msg: Record<string, unknown>): void => {
+        if (process.connected) process.send!(msg);
+      }
+    : null;
+  const host = new FuseHost(server, send);
   server.attach(host);
+  process.on("message", (msg) => {
+    if (msg && typeof msg === "object") host.onElectronMessage(msg as Record<string, unknown>);
+  });
   host.setAutoLockOnStart(process.env.FUSE_AUTO_LOCK === "1");
 
   let port: number;
@@ -19,8 +28,16 @@ async function run(): Promise<void> {
     process.exit(1);
   }
 
-  process.stdout.write(JSON.stringify({ port, connectionToken: server.connectionToken }) + "\n");
+  process.stdout.write(
+    JSON.stringify({
+      port,
+      connectionToken: server.connectionToken,
+      stageToken: server.stageToken,
+      obsToken: server.obsToken,
+    }) + "\n",
+  );
 
+  await host.permissions.waitForDecisions(3000);
   await host.loadPlugins();
   host.start();
 
@@ -28,7 +45,7 @@ async function run(): Promise<void> {
   const shutdown = (): void => {
     if (quitting) return;
     quitting = true;
-    host.quit();
+    void host.quit();
   };
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
@@ -37,6 +54,7 @@ async function run(): Promise<void> {
   // end open for our whole lifetime. When the app exits — cleanly, on crash,
   // or hard-killed (no signal reaches us on Windows) — that pipe closes and we
   // get 'end'/'close'. Self-exit so we never linger as an orphan spewing errors.
+  process.on("disconnect", shutdown);
   process.stdin.on("end", shutdown);
   process.stdin.on("close", shutdown);
   process.stdin.on("error", shutdown);

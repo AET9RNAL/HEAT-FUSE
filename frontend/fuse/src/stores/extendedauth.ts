@@ -128,10 +128,10 @@ export const useExtendedAuthStore = defineStore('extendedauth', () => {
 
     async function fetchDeviceInfo() {
         const [fp, name, osInfo, ip] = await Promise.all([
-            window.ipcRenderer.invoke('device:fingerprint'),
-            window.ipcRenderer.invoke('device:name'),
-            window.ipcRenderer.invoke('device:os'),
-            window.ipcRenderer.invoke('device:ip'),
+            window.deviceAPI.getFingerprint(),
+            window.deviceAPI.getName(),
+            window.deviceAPI.getOS(),
+            window.deviceAPI.getIP(),
         ])
         deviceFingerprint.value = fp ?? null
         deviceName.value = name ?? null

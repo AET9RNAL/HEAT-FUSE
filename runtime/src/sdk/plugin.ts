@@ -2,41 +2,55 @@
  * Plugin contract.
  *
  * Every plugin subclasses `FusePlugin` and is handed a `FuseContext` during
- * `setup()`. The context owns shared infrastructure (config, hotkeys, assets,
- * events, services, overlays, logger) so plugins never create global state.  
+ * `setup()`. Plugins run in their own process: the context's reads come from
+ * local copies the runtime keeps current, and its changes go to the runtime.
  */
 import type { Logger } from "../log.js";
-import type { PluginConfig } from "../host/config.js";
-import type { EventBus } from "../host/EventBus.js";
-import type { ServiceRegistry } from "../host/ServiceRegistry.js";
-import type { HotkeyRegistryView } from "./hotkeys.js";
+import type { PluginConfigApi } from "./config.js";
+import type { PluginEvents } from "./events.js";
+import type { PluginServices } from "./services.js";
+import type { PluginHotkeys } from "./hotkeys.js";
 import type { PluginAssets } from "./assets.js";
 import type { OverlayManager } from "./overlay.js";
 import type { StageNotifier } from "./notifications.js";
 import type { PluginAudio } from "./audio.js";
+import type { PluginPermissions } from "./permissions.js";
+import type { PluginStorage } from "./storage.js";
+import type { PluginSecrets } from "./secrets.js";
+import type { PluginLinks } from "./links.js";
 
 export type HostState = "calibrate" | "locked" | "interactive";
 
-/** Minimal host surface exposed to plugins (avoids a hard dep on FuseHost). */
+/** Why a plugin is being torn down. A crash gets no teardown. */
+export type TeardownReason = "disable" | "restart" | "shutdown";
+
+/** Minimal host surface exposed to plugins. */
 export interface HostView {
-  getPlugin(pluginId: string): FusePlugin | undefined;
   getService<T = unknown>(name: string): T | undefined;
   readonly state: HostState;
-  /** Broadcast a custom typed message to connected control clients (the UI). */
+  /** Send a message to the App. Its `type` must start with the plugin's id and a dot. */
   broadcast(message: Record<string, unknown>): void;
 }
 
 export interface FuseContext {
-  config: PluginConfig;
-  hotkeys: HotkeyRegistryView;
+  config: PluginConfigApi;
+  hotkeys: PluginHotkeys;
   assets: PluginAssets;
-  services: ServiceRegistry;
-  events: EventBus;
+  services: PluginServices;
+  events: PluginEvents;
   overlays: OverlayManager;
   /** Toasts on the overlay stage, attributed to this plugin. */
   notifications: StageNotifier;
   /** Sounds from this plugin's assets, played on the stage window. */
   audio: PluginAudio;
+  /** What this plugin declared in its manifest, and what the user allowed. */
+  permissions: PluginPermissions;
+  /** Private database. Needs `storage`. */
+  storage: PluginStorage;
+  /** Encrypted values. Needs `secrets`. */
+  secrets: PluginSecrets;
+  /** Opening pages in the browser, and `fuse://plugin/<id>/...` callbacks. */
+  links: PluginLinks;
   host: HostView;
   logger: Logger;
 
@@ -51,7 +65,7 @@ export interface FuseContext {
 export abstract class FusePlugin {
   /**
    * Cross-realm marker. Plugin bundles carry their own copy of this base class,
-   * so `instanceof` fails across module realms; discovery checks this flag
+   * so `instanceof` fails across module realms; the loader checks this flag
    * (inherited by subclasses) instead.
    */
   static readonly isFusePlugin = true;
@@ -80,7 +94,7 @@ export abstract class FusePlugin {
   tick(_dt: number): void {}
 
   /** Persist state and release resources. */
-  teardown(): void {}
+  teardown(_reason?: TeardownReason): void {}
 
   /** Show or hide this plugin's overlays (host game-focus change). */
   setOverlayVisible(_visible: boolean): void {}

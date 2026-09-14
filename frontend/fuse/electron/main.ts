@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, safeStorage, powerMonitor, shell, dialog, protocol, net } from 'electron'
+import { app, BrowserWindow, Tray, Menu, nativeImage, safeStorage, powerMonitor, shell, dialog, protocol, net } from 'electron'
 import * as Sentry from '@sentry/electron/main'
 if (import.meta.env.VITE_SENTRY_DSN) {
   Sentry.init({ dsn: import.meta.env.VITE_SENTRY_DSN as string })
@@ -14,6 +14,10 @@ import path from 'node:path'
 import fs from 'node:fs'
 import { unzipSync, strFromU8 } from 'fflate'
 import { initOverlayStage, startOverlayStage, stopOverlayStage } from './overlayStage'
+import { handleIpc, onIpc, onceIpc, trustSurface } from './ipcGuard'
+import { PermissionStore } from './permissionStore'
+import { SecretStore } from './secretStore'
+import { initConsent, requestConsent, resetConsent, stageOpened, type ConsentRequest } from './consentView'
 import { startObsServer, stopObsServer, setObsParams, obsUrl, obsParamsUrl, listObsDisplays } from './obsServer'
 
 declare const __RELEASE__: boolean
@@ -35,8 +39,9 @@ const USER_DATA_DIR = IS_DEV ? path.join(REPO_ROOT, 'backend', 'data') : app.get
 const PATHS: Record<string, string> = {
   configs:     IS_DEV ? path.join(REPO_ROOT, 'backend', 'data', 'configs')
                       : path.join(USER_DATA_DIR, 'configs'),
+  // Never the install folder: it holds the runtime's own code.
   fileBrowser: IS_DEV ? path.join(REPO_ROOT, 'backend')
-                      : process.resourcesPath,
+                      : USER_DATA_DIR,
   pluginsCore: IS_DEV ? path.join(REPO_ROOT, 'backend', 'fuse', 'plugins')
                       : path.join(USER_DATA_DIR, 'plugins'),
   pluginsUser: IS_DEV ? path.join(REPO_ROOT, 'plugins-dist')
@@ -202,8 +207,50 @@ let minimizeToTrayOnClose = false
 
 let fuseProcess: ChildProcess | null = null
 let fusePort: number | null = null
-let fuseToken: string | null = null
+let obsToken: string | null = null
 let currentObsUrl: string | null = null
+let permissionStore: PermissionStore | null = null
+let secretStore: SecretStore | null = null
+
+const PLUGIN_ID_RE = /^[A-Za-z0-9_.-]{1,64}$/
+const SECRET_KEY_RE = /^[A-Za-z0-9._-]{1,128}$/
+
+/** Runtime requests only main can serve: OS encryption and the user's browser. */
+async function answerRuntime(proc: ChildProcess, msg: Record<string, unknown>): Promise<void> {
+  const reply = (result: { ok: true; value?: unknown } | { ok: false; error: string }) => {
+    if (proc.connected) proc.send({ type: 'bridge:result', requestId: msg.requestId, ...result })
+  }
+  try {
+    const pluginId = String(msg.pluginId ?? '')
+    if (!PLUGIN_ID_RE.test(pluginId)) throw new Error('invalid plugin id')
+    if (msg.type === 'links:open') {
+      const url = new URL(String(msg.url ?? ''))
+      if (url.protocol !== 'https:' || url.username || url.password || url.href.length > 2048) {
+        throw new Error('only plain https links can be opened')
+      }
+      await shell.openExternal(url.href)
+      reply({ ok: true, value: true })
+      return
+    }
+    if (!secretStore) throw new Error('secrets are unavailable')
+    const key = String(msg.key ?? '')
+    if (!SECRET_KEY_RE.test(key)) throw new Error('invalid secret key')
+    switch (msg.op) {
+      case 'get': reply({ ok: true, value: secretStore.get(pluginId, key) }); return
+      case 'has': reply({ ok: true, value: secretStore.has(pluginId, key) }); return
+      case 'delete': reply({ ok: true, value: secretStore.delete(pluginId, key) }); return
+      case 'set':
+        if (typeof msg.value !== 'string') throw new Error('secret values must be strings')
+        secretStore.set(pluginId, key, msg.value)
+        reply({ ok: true })
+        return
+      default:
+        throw new Error('unknown secrets operation')
+    }
+  } catch (e) {
+    reply({ ok: false, error: (e as Error).message })
+  }
+}
 
 /** Inspector port the sidecar was spawned with, and the DevTools window attached to it. */
 let runtimeInspectPort = 9229
@@ -219,8 +266,8 @@ let runtimeDevtoolsWindow: BrowserWindow | null = null
  */
 function buildObsUrl(display?: string | null): string | null {
   if (!VITE_DEV_SERVER_URL) return obsUrl(display)
-  if (fusePort === null || fuseToken === null) return null
-  const q = new URLSearchParams({ port: String(fusePort), token: fuseToken })
+  if (fusePort === null || obsToken === null) return null
+  const q = new URLSearchParams({ port: String(fusePort), token: obsToken })
   const paramsUrl = obsParamsUrl()
   if (paramsUrl) q.set('paramsUrl', paramsUrl)
   if (display) q.set('display', display)
@@ -522,9 +569,11 @@ function createSplash() {
       contextIsolation: true,
       devTools: !__RELEASE__,
       preload: PATHS.preload,
+      additionalArguments: ['--fuse-surface=splash'],
     },
   })
 
+  trustSurface(splash.webContents, 'splash')
   splash.setIgnoreMouseEvents(true)
   splash.once('ready-to-show', () => splash?.show())
 
@@ -546,12 +595,12 @@ function waitForSplash(): Promise<void> {
     if (!splash) { resolve(); return }
     const finish = () => {
       clearTimeout(timer)
-      ipcMain.removeListener('splash:done', finish)
+      stopListening()
       splash?.removeListener('closed', finish)
       resolve()
     }
     const timer = setTimeout(finish, 6_000)
-    ipcMain.once('splash:done', finish)
+    const stopListening = onceIpc('splash:done', finish)
     splash.once('closed', finish)
   })
 }
@@ -580,8 +629,11 @@ function createWindow() {
       contextIsolation: true,
       devTools: !__RELEASE__,
       preload: PATHS.preload,
+      additionalArguments: ['--fuse-surface=app'],
     },
   })
+
+  trustSurface(win.webContents, 'app')
 
   mainReady = new Promise<void>(resolve => {
     win!.once('ready-to-show', () => resolve())
@@ -722,8 +774,18 @@ if (process.defaultApp) {
 }
 
 const ALLOWED_DEEP_LINK_ROUTES = new Set(['reset-password'])
+const PLUGIN_LINK_RE = /^fuse:\/\/plugin\/([A-Za-z0-9_.-]{1,64})(?:[/?#]|$)/
+const MAX_PLUGIN_LINK = 4096
 
 function handleDeepLink(url: string) {
+  // fuse://plugin/<id>/... goes to that plugin's process, never the App.
+  const pluginLink = PLUGIN_LINK_RE.exec(url)
+  if (pluginLink) {
+    if (url.length <= MAX_PLUGIN_LINK && fuseProcess?.connected) {
+      fuseProcess.send({ type: 'links:callback', pluginId: pluginLink[1], url })
+    }
+    return
+  }
   const route = url.replace('fuse://', '').split(/[?#]/)[0].replace(/\/$/, '')
   if (!ALLOWED_DEEP_LINK_ROUTES.has(route)) return
   const fakeUrl = new URL(url.replace('fuse://', 'https://placeholder/'))
@@ -740,6 +802,8 @@ if (!app.requestSingleInstanceLock()) {
     // In dev argv is ['electron', 'script', 'fuse://...']; in prod ['app.exe', 'fuse://...']
     const url = argv.find(a => a.startsWith('fuse://'))
     if (url) handleDeepLink(url)
+    // A plugin's sign-in callback shouldn't pull the App over the game.
+    if (url && PLUGIN_LINK_RE.test(url)) return
     if (win) {
       if (win.isMinimized()) win.restore()
       win.focus()
@@ -760,6 +824,21 @@ app.whenReady().then(() => {
     preload: PATHS.preload,
   })
 
+  // Decisions live here, encrypted; the runtime asks and is told.
+  permissionStore = new PermissionStore(path.join(USER_DATA_DIR, 'permissions.bin'))
+  secretStore = new SecretStore(path.join(USER_DATA_DIR, 'secrets.bin'))
+  initConsent({
+    devServerUrl: VITE_DEV_SERVER_URL,
+    rendererDist: RENDERER_DIST,
+    preload: PATHS.preload,
+    onDecision: (req, grants) => {
+      permissionStore?.set(req.plugin.id, grants)
+      if (fuseProcess?.connected) {
+        fuseProcess.send({ type: 'permissions:decision', requestId: req.requestId, pluginId: req.plugin.id, grants })
+      }
+    },
+  })
+
   // Bind the OBS browser-source listener once, for the whole app lifetime, so
   // its URL never changes under a configured OBS source. Params are published
   // per FUSE launch via setObsParams(). Runs in dev too: Vite serves the overlay
@@ -777,17 +856,17 @@ app.whenReady().then(() => {
   powerMonitor.on('resume', () => { win?.webContents.send('app:resumed') })
 
 
-  ipcMain.handle('window:close', () => {
+  handleIpc('window:close', () => {
     const target = BrowserWindow.getFocusedWindow() || win
     target?.close()
   })
 
-  ipcMain.handle('window:minimize', () => {
+  handleIpc('window:minimize', () => {
     const target = BrowserWindow.getFocusedWindow() || win
     target?.minimize()
   })
 
-  ipcMain.handle('window:maximize', () => {
+  handleIpc('window:maximize', () => {
     const target = BrowserWindow.getFocusedWindow() || win
     if (!target) return
     target.isMaximized() ? target.unmaximize() : target.maximize()
@@ -796,7 +875,7 @@ app.whenReady().then(() => {
 
   // Opens a DevTools window attached to the sidecar's inspector. The frontend URL
   // has to be read off the inspector itself because it embeds the target's uuid.
-  ipcMain.on('runtime:toggle-devtools', async () => {
+  onIpc('runtime:toggle-devtools', async () => {
     if (runtimeDevtoolsWindow && !runtimeDevtoolsWindow.isDestroyed()) {
       runtimeDevtoolsWindow.close()
       runtimeDevtoolsWindow = null
@@ -831,7 +910,7 @@ app.whenReady().then(() => {
     }
   })
 
-  ipcMain.handle('fuse:spawn', async (_event, opts?: { autoLock?: boolean }) => {
+  handleIpc('fuse:spawn', async (_event, opts?: { autoLock?: boolean }) => {
     if (fuseProcess) return { success: false, error: 'already running' }
 
     // The runtime is a Node sidecar (runtime/dist/index.js). We run it with
@@ -852,8 +931,13 @@ app.whenReady().then(() => {
       console.log(`[fuse:spawn] runtime inspector on ws://127.0.0.1:${runtimeInspectPort}${brk ? ' (paused at start)' : ''}`)
     }
     args.push(PATHS.runtimeEntry)
+    // Plugin processes need Node 25+ to deny network per plugin; fetched by build:runtime.
+    const pluginNode = IS_DEV
+      ? path.join(__dirname, '..', 'build', 'node', process.platform === 'win32' ? 'node.exe' : 'node')
+      : path.join(process.resourcesPath, 'node', process.platform === 'win32' ? 'node.exe' : 'node')
     const spawnEnv: NodeJS.ProcessEnv = {
       ...process.env,
+      ...(fs.existsSync(pluginNode) ? { FUSE_PLUGIN_NODE: pluginNode } : {}),
       ELECTRON_RUN_AS_NODE: '1',
       FUSE_DATA_DIR: USER_DATA_DIR,
       FUSE_USER_PLUGINS_DIR: PATHS.pluginsUser,
@@ -862,9 +946,21 @@ app.whenReady().then(() => {
 
     return new Promise<{ success: boolean; pid?: number; port?: number; connectionToken?: string; obsUrl?: string | null; error?: string }>((resolve) => {
       const proc = spawn(executable, args, {
-        stdio: ['pipe', 'pipe', 'pipe'],
+        // fd 3: IPC channel for permission requests and decisions.
+        stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
         windowsHide: true,
         env: spawnEnv,
+      })
+
+      proc.on('message', (msg: Record<string, unknown>) => {
+        if (msg?.type === 'permissions:ready') {
+          permissionStore?.reload()
+          if (proc.connected) proc.send({ type: 'permissions:init', decisions: permissionStore?.all() ?? {} })
+        } else if (msg?.type === 'permissions:request') {
+          requestConsent(msg as unknown as ConsentRequest)
+        } else if (msg?.type === 'secrets' || msg?.type === 'links:open') {
+          void answerRuntime(proc, msg)
+        }
       })
 
       let settled = false
@@ -911,18 +1007,19 @@ app.whenReady().then(() => {
           if (!line) continue
           if (!settled) {
             try {
-              const { port, connectionToken } = JSON.parse(line)
-              if (port && connectionToken) {
+              const { port, connectionToken, stageToken, obsToken: viewToken } = JSON.parse(line)
+              if (port && connectionToken && stageToken && viewToken) {
                 settled = true
                 clearTimeout(timeout)
                 fuseProcess = proc
                 fusePort = port
-                fuseToken = connectionToken
+                obsToken = viewToken
                 proc.on('exit', (code, signal) => {
                   fuseProcess = null
                   fusePort = null
-                  fuseToken = null
+                  obsToken = null
                   stopOverlayStage()
+                  resetConsent()
                   // Leave the OBS listener bound (its URL must stay valid) and
                   // just clear the params - the captured page polls until FUSE
                   // is back, then reconnects on its own.
@@ -934,12 +1031,13 @@ app.whenReady().then(() => {
                 })
                 // Open the transparent overlay stage windows now that the
                 // sidecar is up (they connect over WS with role:overlay).
-                startOverlayStage(port, connectionToken)
+                startOverlayStage(port, stageToken)
+                stageOpened()
                 // Expose the overlay bundle to OBS as a Browser Source. In dev
                 // the bundle is served by Vite, so hand over that URL and point
                 // it at our params endpoint; in prod the (already bound) OBS
                 // server serves the page and injects that itself.
-                setObsParams({ wsPort: port, token: connectionToken })
+                setObsParams({ wsPort: port, token: viewToken })
                 currentObsUrl = buildObsUrl(null)
                 win?.webContents.send('fuse:obs-url', currentObsUrl)
                 // Also returned inline: the event above races the renderer's
@@ -963,10 +1061,11 @@ app.whenReady().then(() => {
     })
   })
 
-  ipcMain.handle('fuse:kill', async () => {
+  handleIpc('fuse:kill', async () => {
     stopOverlayStage()
+    resetConsent()
     setObsParams(null)
-    fuseToken = null
+    obsToken = null
     currentObsUrl = null
     if (!fuseProcess) return { success: true }
     return new Promise<{ success: boolean }>((resolve) => {
@@ -978,17 +1077,17 @@ app.whenReady().then(() => {
   })
 
   // Broadcast target picker: which monitor's region the OBS source should show.
-  ipcMain.handle('obs:displays', () => listObsDisplays())
-  ipcMain.handle('obs:url', (_event, display?: string | null) => buildObsUrl(display))
+  handleIpc('obs:displays', () => listObsDisplays())
+  handleIpc('obs:url', (_event, display?: string | null) => buildObsUrl(display))
 
-  ipcMain.handle('fuse:status', () => ({
+  handleIpc('fuse:status', () => ({
     running: !!fuseProcess,
     pid: fuseProcess?.pid ?? null,
     port: fusePort,
     obsUrl: currentObsUrl,
   }))
 
-  ipcMain.handle('plugins:scan', () => {
+  handleIpc('plugins:scan', () => {
     return scanPluginsDir(PATHS.pluginsUser)
   })
 
@@ -1012,14 +1111,14 @@ app.whenReady().then(() => {
     }
   }
 
-  ipcMain.handle('plugins:show-file', (_event, filePath: string) => {
+  handleIpc('plugins:show-file', (_event, filePath: string) => {
     try {
       assertInPluginsDir(filePath)
       shell.showItemInFolder(path.resolve(filePath))
     } catch { /* ignore - don't reveal why the path was rejected */ }
   })
 
-  ipcMain.handle('plugins:delete', (_event, filePath: string) => {
+  handleIpc('plugins:delete', (_event, filePath: string) => {
     try {
       assertInPluginsDir(filePath)
       fs.unlinkSync(path.resolve(filePath))
@@ -1029,7 +1128,7 @@ app.whenReady().then(() => {
     }
   })
 
-  ipcMain.handle('plugins:download-plugin', async (_event, url: string, filename: string) => {
+  handleIpc('plugins:download-plugin', async (_event, url: string, filename: string) => {
     try {
       assertR2Url(url)
       const safeFilename = path.basename(filename).replace(/[^a-zA-Z0-9._\-]/g, '_')
@@ -1048,7 +1147,7 @@ app.whenReady().then(() => {
     }
   })
 
-  ipcMain.handle('plugins:upload-to-r2', async (_event, presignedUrl: string, fileBuffer: ArrayBuffer, contentType: string) => {
+  handleIpc('plugins:upload-to-r2', async (_event, presignedUrl: string, fileBuffer: ArrayBuffer, contentType: string) => {
     try {
       assertR2Url(presignedUrl)
       const response = await net.fetch(presignedUrl, {
@@ -1066,12 +1165,12 @@ app.whenReady().then(() => {
     }
   })
 
-  ipcMain.handle('dialog:select-dir', async () => {
+  handleIpc('dialog:select-dir', async () => {
     const result = await dialog.showOpenDialog(win!, { properties: ['openDirectory'] })
     return result.canceled ? null : (result.filePaths[0] ?? null)
   })
 
-  ipcMain.handle('config:host:read', () => readHostConfig())
+  handleIpc('config:host:read', () => readHostConfig())
 
   // Watch fuse_host.json and push changes to renderer
   {
@@ -1086,7 +1185,7 @@ app.whenReady().then(() => {
     })
   }
 
-  ipcMain.handle('config:plugin:set-enabled', (_event, pluginId: string, enabled: boolean) => {
+  handleIpc('config:plugin:set-enabled', (_event, pluginId: string, enabled: boolean) => {
     try {
       const cfg = readHostConfig()
       const disabled = cfg.disabled_plugins ?? []
@@ -1101,39 +1200,39 @@ app.whenReady().then(() => {
   })
 
 
-  ipcMain.handle('safe-storage:is-available', () => safeStorage.isEncryptionAvailable())
+  handleIpc('safe-storage:is-available', () => safeStorage.isEncryptionAvailable())
 
-  ipcMain.handle('safe-storage:encrypt', (_event, value: string) =>
+  handleIpc('safe-storage:encrypt', (_event, value: string) =>
     safeStorage.encryptString(value).toJSON())
 
-  ipcMain.handle('safe-storage:decrypt', (_event, buf: { type: 'Buffer'; data: number[] }) =>
+  handleIpc('safe-storage:decrypt', (_event, buf: { type: 'Buffer'; data: number[] }) =>
     safeStorage.decryptString(Buffer.from(buf.data)))
 
 
-  ipcMain.handle('app:set-autostart', (_event, value: boolean) => {
+  handleIpc('app:set-autostart', (_event, value: boolean) => {
     app.setLoginItemSettings({ openAtLogin: value })
   })
 
-  ipcMain.handle('app:set-minimize-to-tray-on-start', (_event, enabled: boolean) => {
+  handleIpc('app:set-minimize-to-tray-on-start', (_event, enabled: boolean) => {
     minimizeToTrayOnStart = enabled
     if (enabled) createTray()
     else if (!minimizeToTrayOnClose) destroyTray()
   })
 
-  ipcMain.handle('app:apply-minimize-to-tray-on-start', () => {
+  handleIpc('app:apply-minimize-to-tray-on-start', () => {
     if (minimizeToTrayOnStart && win && app.getLoginItemSettings().wasOpenedAtLogin) {
       startHidden = true
       win.hide()
     }
   })
 
-  ipcMain.handle('app:set-minimize-to-tray-on-close', (_event, enabled: boolean) => {
+  handleIpc('app:set-minimize-to-tray-on-close', (_event, enabled: boolean) => {
     minimizeToTrayOnClose = enabled
     if (enabled) createTray()
     else if (!minimizeToTrayOnStart) destroyTray()
   })
 
-  ipcMain.handle('discord:set-enabled', (_event, enabled: boolean) => {
+  handleIpc('discord:set-enabled', (_event, enabled: boolean) => {
     discordEnabled = !!enabled
     if (discordEnabled) {
       connectDiscord()
@@ -1144,26 +1243,26 @@ app.whenReady().then(() => {
     return { success: true }
   })
 
-  ipcMain.handle('discord:set-activity', (_event, activity: DiscordActivity | null) => {
+  handleIpc('discord:set-activity', (_event, activity: DiscordActivity | null) => {
     applyDiscordActivity(activity)
     return { success: true, connected: discordReady }
   })
 
-  ipcMain.handle('discord:clear-activity', () => {
+  handleIpc('discord:clear-activity', () => {
     applyDiscordActivity(null)
     return { success: true }
   })
 
-  ipcMain.handle('discord:status', () => ({
+  handleIpc('discord:status', () => ({
     enabled: discordEnabled,
     connected: discordReady,
   }))
 
-  ipcMain.handle('app:open-backend-dir', () => shell.openPath(PATHS.fileBrowser))
+  handleIpc('app:open-backend-dir', () => shell.openPath(PATHS.fileBrowser))
 
-  ipcMain.handle('fs:get-root', () => PATHS.fileBrowser)
+  handleIpc('fs:get-root', () => PATHS.fileBrowser)
 
-  ipcMain.handle('fs:list-dir', async (_event, dirPath: string) => {
+  handleIpc('fs:list-dir', async (_event, dirPath: string) => {
     assertWithinRoot(dirPath, PATHS.fileBrowser)
     const names = await fs.promises.readdir(dirPath)
     const entries = await Promise.all(names.map(async (name) => {
@@ -1176,20 +1275,20 @@ app.whenReady().then(() => {
     return entries.filter(Boolean)
   })
 
-  ipcMain.handle('fs:read-file', async (_event, filePath: string) => {
+  handleIpc('fs:read-file', async (_event, filePath: string) => {
     assertWithinRoot(filePath, PATHS.fileBrowser)
     const stat = await fs.promises.stat(filePath)
     if (stat.size > 1024 * 1024) throw new Error('File too large to preview (>1 MB)')
     return fs.promises.readFile(filePath, 'utf-8')
   })
 
-  ipcMain.handle('fs:write-file', async (_event, filePath: string, content: string) => {
+  handleIpc('fs:write-file', async (_event, filePath: string, content: string) => {
     assertWithinRoot(filePath, PATHS.fileBrowser)
     await fs.promises.writeFile(filePath, content, 'utf-8')
   })
 
 
-  ipcMain.handle('config:plugin:read', (_event, pluginId: string): Record<string, unknown> => {
+  handleIpc('config:plugin:read', (_event, pluginId: string): Record<string, unknown> => {
     try {
       const p = path.join(PATHS.configs, `fuse_${pluginId}.json`)
       if (!fs.existsSync(p)) return {}
@@ -1197,7 +1296,7 @@ app.whenReady().then(() => {
     } catch { return {} }
   })
 
-  ipcMain.handle('config:plugin:write-key', (_event, pluginId: string, key: string, value: unknown) => {
+  handleIpc('config:plugin:write-key', (_event, pluginId: string, key: string, value: unknown) => {
     try {
       if (!fs.existsSync(PATHS.configs)) fs.mkdirSync(PATHS.configs, { recursive: true })
       const p = path.join(PATHS.configs, `fuse_${pluginId}.json`)
@@ -1212,7 +1311,7 @@ app.whenReady().then(() => {
     }
   })
 
-  ipcMain.handle('hotkey:write-override', (_event, pluginId: string, action: string, combo: string) => {
+  handleIpc('hotkey:write-override', (_event, pluginId: string, action: string, combo: string) => {
     try {
       const cfg = readHostConfig()
       cfg.hotkey_overrides ??= {}
@@ -1272,7 +1371,7 @@ app.whenReady().then(() => {
     })
   }
 
-  ipcMain.handle('update:check', async () => {
+  handleIpc('update:check', async () => {
     if (VITE_DEV_SERVER_URL) {
       setTimeout(() => {
         win?.webContents.send('update:available', {
@@ -1291,7 +1390,7 @@ app.whenReady().then(() => {
     }
   })
 
-  ipcMain.handle('update:download', async () => {
+  handleIpc('update:download', async () => {
     if (VITE_DEV_SERVER_URL) {
       let progress = 0
       const interval = setInterval(() => {
@@ -1322,7 +1421,7 @@ app.whenReady().then(() => {
     }
   })
 
-  ipcMain.handle('update:release-notes', async (_event, version: string, opts?: { refresh?: boolean }) => {
+  handleIpc('update:release-notes', async (_event, version: string, opts?: { refresh?: boolean }) => {
     if (typeof version !== 'string' || !VERSION_RE.test(version)) {
       return { success: false, error: 'invalid_version' }
     }
@@ -1366,7 +1465,7 @@ app.whenReady().then(() => {
     return { success: true, entry: null }
   })
 
-  ipcMain.handle('update:install', () => {
+  handleIpc('update:install', () => {
     if (VITE_DEV_SERVER_URL) return { success: true }
     setImmediate(() => autoUpdater.quitAndInstall(false, true))
     return { success: true }
@@ -1374,7 +1473,7 @@ app.whenReady().then(() => {
 
   // Game process / focus watchers
 
-  ipcMain.handle('game:watch:set', (_event, enabled: boolean) => {
+  handleIpc('game:watch:set', (_event, enabled: boolean) => {
     if (gameWatcher) { clearInterval(gameWatcher); gameWatcher = null }
     if (!enabled) { gameDetected = false; return }
 
@@ -1389,7 +1488,7 @@ app.whenReady().then(() => {
     gameWatcher = setInterval(() => void poll(), 2_000)
   })
 
-  ipcMain.handle('game:focus:set', (_event, enabled: boolean) => {
+  handleIpc('game:focus:set', (_event, enabled: boolean) => {
     if (focusWatcher) { clearInterval(focusWatcher); focusWatcher = null }
     if (!enabled) { gameFocused = false; return }
 
@@ -1413,7 +1512,7 @@ app.whenReady().then(() => {
 
   //
 
-  ipcMain.handle('game:scan-dir', (_event, dirPath: string) => {
+  handleIpc('game:scan-dir', (_event, dirPath: string) => {
     try {
       let version: string | undefined 
       const gameInfoPath = path.join(dirPath, 'game_info.xml')
@@ -1429,7 +1528,7 @@ app.whenReady().then(() => {
     }
   })
 
-  ipcMain.handle('game:check-debugger', (_event, dirPath: string) => {
+  handleIpc('game:check-debugger', (_event, dirPath: string) => {
     try {
       const projectPath = path.join(dirPath, 'coldwar.project')
       const content = fs.readFileSync(projectPath, 'utf-8')
@@ -1440,7 +1539,7 @@ app.whenReady().then(() => {
     }
   })
 
-  ipcMain.handle('game:enable-debugger', (_event, dirPath: string) => {
+  handleIpc('game:enable-debugger', (_event, dirPath: string) => {
     try {
       const projectPath = path.join(dirPath, 'coldwar.project')
       let content = fs.readFileSync(projectPath, 'utf-8')
@@ -1453,7 +1552,7 @@ app.whenReady().then(() => {
     }
   })
 
-  ipcMain.handle('game:disable-debugger', (_event, dirPath: string) => {
+  handleIpc('game:disable-debugger', (_event, dirPath: string) => {
     try {
       const projectPath = path.join(dirPath, 'coldwar.project')
       let content = fs.readFileSync(projectPath, 'utf-8')
@@ -1465,13 +1564,13 @@ app.whenReady().then(() => {
     }
   })
 
-  ipcMain.handle('fileassoc:is-registered', () => _isFileAssocRegistered())
-  ipcMain.handle('fileassoc:register',      () => _setFileAssoc(true))
-  ipcMain.handle('fileassoc:unregister',    () => _setFileAssoc(false))
+  handleIpc('fileassoc:is-registered', () => _isFileAssocRegistered())
+  handleIpc('fileassoc:register',      () => _setFileAssoc(true))
+  handleIpc('fileassoc:unregister',    () => _setFileAssoc(false))
 
   // Device info
-  ipcMain.handle('device:fingerprint', () => getDeviceFingerprint())
-  ipcMain.handle('device:name',        () => os.hostname())
-  ipcMain.handle('device:os',          () => `${os.platform()} ${os.release()}`)
-  ipcMain.handle('device:ip',          () => getLocalIP())
+  handleIpc('device:fingerprint', () => getDeviceFingerprint())
+  handleIpc('device:name',        () => os.hostname())
+  handleIpc('device:os',          () => `${os.platform()} ${os.release()}`)
+  handleIpc('device:ip',          () => getLocalIP())
 })

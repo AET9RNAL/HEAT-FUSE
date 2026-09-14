@@ -60,20 +60,28 @@ export interface RuntimeBridge {
   onInspectorAction(overlayId: string, controlId: string, payload?: unknown): void;
   /** The stage asked for a host state (the toolbar's Done button). */
   onHostRequest(state: string): void;
+  /** A permission picked in the stage's info bar: Electron shows the consent card for it. */
+  onPermissionReview(pluginId: string, scope: string): void;
 
   /** Resolve an overlay asset request to an absolute file path, or null. */
   resolveAsset(pluginId: string, relPath: string): string | null;
 }
 
-type Role = "control" | "overlay";
+/** control: the App. stage: the Electron stage window. view: OBS browser sources, receive-only. */
+type Role = "control" | "stage" | "view";
 
 export class WsServer {
   readonly connectionToken: string = randomBytes(32).toString("hex");
+  /** Plugin Vue overlays share the stage page, so this token never reaches control RPCs. */
+  readonly stageToken: string = randomBytes(32).toString("hex");
+  /** Served to OBS over unauthenticated localhost HTTP. */
+  readonly obsToken: string = randomBytes(32).toString("hex");
   private bridge!: RuntimeBridge;
   private httpServer: http.Server;
   private wss: WebSocketServer;
   private control = new Set<WebSocket>();
   private overlay = new Set<WebSocket>();
+  private stageClients = new Set<WebSocket>();
   private firstClientSeen = false;
   private lastHostState: string | null = null;
 
@@ -195,14 +203,16 @@ export class WsServer {
         return;
       }
       if (!authed) {
-        if (msg.type !== "auth" || msg.token !== this.connectionToken) {
+        const granted = this.roleForAuth(msg);
+        if (!granted) {
           ws.close(4401);
           return;
         }
         authed = true;
         clearTimeout(authTimer);
-        role = msg.role === "overlay" ? "overlay" : "control";
-        (role === "overlay" ? this.overlay : this.control).add(ws);
+        role = granted;
+        (role === "control" ? this.control : this.overlay).add(ws);
+        if (role === "stage") this.stageClients.add(ws);
         ws.send(JSON.stringify({ type: "auth:ok", version: this.bridge.hostVersion }));
 
         if (!this.firstClientSeen) {
@@ -219,11 +229,21 @@ export class WsServer {
       clearTimeout(authTimer);
       this.control.delete(ws);
       this.overlay.delete(ws);
+      this.stageClients.delete(ws);
     });
     ws.on("error", () => {
       this.control.delete(ws);
       this.overlay.delete(ws);
+      this.stageClients.delete(ws);
     });
+  }
+
+  private roleForAuth(msg: Record<string, unknown>): Role | null {
+    if (msg.type !== "auth" || typeof msg.token !== "string") return null;
+    if (msg.token === this.connectionToken) return "control";
+    if (msg.token === this.stageToken) return "stage";
+    if (msg.token === this.obsToken) return "view";
+    return null;
   }
 
   private hydrate(ws: WebSocket, role: Role): void {
@@ -261,41 +281,47 @@ export class WsServer {
       send(ws, { type: "heartbeat_ack" });
       return;
     }
-    if (role === "overlay" && msg.type === "overlay:transform") {
+    if (role === "stage" &&msg.type === "overlay:transform") {
       const overlayId = String(msg.overlayId ?? "");
       const rect = (msg.rect as Record<string, number>) ?? {};
       if (overlayId) this.bridge.onOverlayTransform(overlayId, rect);
       return;
     }
-    if (role === "overlay" && msg.type === "overlay:action") {
+    if (role === "stage" &&msg.type === "overlay:action") {
       const overlayId = String(msg.overlayId ?? "");
       const action = String(msg.action ?? "");
       if (overlayId && action) this.bridge.onOverlayAction(overlayId, action, msg.payload);
       return;
     }
-    if (role === "overlay" && msg.type === "inspector:set") {
+    if (role === "stage" &&msg.type === "inspector:set") {
       const overlayId = String(msg.overlayId ?? "");
       const controlId = String(msg.controlId ?? "");
       const phase = msg.phase === "live" ? "live" : "commit";
       if (overlayId && controlId) this.bridge.onInspectorSet(overlayId, controlId, msg.value, phase);
       return;
     }
-    if (role === "overlay" && msg.type === "inspector:action") {
+    if (role === "stage" &&msg.type === "inspector:action") {
       const overlayId = String(msg.overlayId ?? "");
       const controlId = String(msg.controlId ?? "");
       if (overlayId && controlId) this.bridge.onInspectorAction(overlayId, controlId, msg.payload);
       return;
     }
-    if (role === "overlay" && msg.type === "stage:dismiss") {
+    if (role === "stage" &&msg.type === "stage:dismiss") {
       const id = String(msg.id ?? "");
       if (id) this.bridge.onStageNotificationDismissed(id);
       return;
     }
-    if (role === "overlay" && msg.type === "host:request") {
+    if (role === "stage" &&msg.type === "host:request") {
       this.bridge.onHostRequest(String(msg.state ?? ""));
       return;
     }
-    if (msg.jsonrpc === "2.0") await this.dispatchRpc(ws, msg);
+    if (role === "stage" && msg.type === "permissions:review") {
+      const pluginId = String(msg.pluginId ?? "");
+      const scope = String(msg.scope ?? "");
+      if (pluginId && scope) this.bridge.onPermissionReview(pluginId, scope);
+      return;
+    }
+    if (role === "control" && msg.jsonrpc === "2.0") await this.dispatchRpc(ws, msg);
   }
 
   private async dispatchRpc(ws: WebSocket, msg: Record<string, unknown>): Promise<void> {
@@ -349,8 +375,9 @@ export class WsServer {
     for (const ws of this.overlay) trySend(ws, text, this.overlay);
   }
 
+  /** A stage window is connected; OBS views don't count. */
   hasOverlayClient(): boolean {
-    return this.overlay.size > 0;
+    return this.stageClients.size > 0;
   }
 
   /** Deduped host-state broadcast (to both channels). Mirrors notify_host_state_changed. */

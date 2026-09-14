@@ -1,13 +1,8 @@
 {
   "enabled_plugins": null,
   "disabled_plugins": [
-    "rive_dev"
+    "rive_dev",
+    "inspector_demo"
   ],
-  "hotkey_overrides": {
-    "host": {
-      "Hot-Reload Plugins": "ctrl+r",
-      "Toggle Calibrate/Lock": "ctrl+l",
-      "Toggle Interactive": "ctrl+i"
-    }
-  }
+  "hotkey_overrides": {}
 }

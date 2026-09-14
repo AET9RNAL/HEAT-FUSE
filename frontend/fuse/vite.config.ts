@@ -20,6 +20,8 @@ export default defineConfig({
         main: path.join(__dirname, 'index.html'),
         overlay: path.join(__dirname, 'overlay.html'),
         splash: path.join(__dirname, 'splash.html'),
+        // Permission consent card, drawn in its own view over the stage.
+        consent: path.join(__dirname, 'consent.html'),
       },
     },
   },

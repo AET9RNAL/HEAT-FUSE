@@ -7,6 +7,9 @@
   "entry": "plugin:PrismPlugin",
   "runtime": "node",
   "dependencies": ["accessors"],
+  "permissions": {
+    "accessors.ui": { "reason": "Recolors and restyles the HUD." }
+  },
   "hotkeys": {},
   "default_config": {}
 }

@@ -29,6 +29,30 @@ export interface OverlayDescriptor {
 
 export type HostState = "calibrate" | "locked" | "interactive";
 
+/** A permission the plugin declares. Mirrors `ScopeSummary` in runtime/src/host/permissions.ts. */
+export interface StageScope {
+  id: string;
+  label: string;
+  description: string;
+  level: "normal" | "dangerous" | "core";
+  icon: string;
+  state: "granted" | "denied" | "prompt" | "undeclared";
+  reason: string;
+  editable: boolean;
+}
+
+/** Mirrors `ProcessMetrics` in runtime/src/host/PluginProcess.ts. */
+export interface PluginMetrics {
+  /** Bytes. */
+  ram: number;
+  /** Percent of all cores; null until two samples. */
+  cpu: number | null;
+  /** Heartbeat round trip, ms. */
+  ping: number;
+  /** host: measured by the runtime. plugin: reported by the plugin itself. */
+  source: "host" | "plugin";
+}
+
 /** One row of the stage's plugin list (read-only mirror of the host's roster). */
 export interface StagePlugin {
   plugin_id: string;
@@ -43,4 +67,5 @@ export interface StagePlugin {
   state: string;
   in_setup: boolean;
   overlay_ids: string[];
+  permissions: StageScope[];
 }

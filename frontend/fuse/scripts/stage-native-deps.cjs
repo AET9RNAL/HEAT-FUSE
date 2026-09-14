@@ -8,7 +8,7 @@ const DEST_NM = path.join(RUNTIME_DIR, 'dist', 'node_modules')
 // External packages from tsup.config.ts. bufferutil / utf-8-validate are ws's
 // optional native speedups: not installed and require()d in a try/catch, so
 // they are intentionally omitted here.
-const ROOTS = ['uiohook-napi', '@nut-tree-fork/nut-js']
+const ROOTS = ['uiohook-napi', '@nut-tree-fork/nut-js', 'koffi']
 
 /** Node-resolution: walk node_modules up from `startDir`, then the root. */
 function findPkgDir(name, startDir) {
@@ -26,21 +26,23 @@ function findPkgDir(name, startDir) {
 
 function collectClosure(roots) {
   const found = new Map() // name -> source dir
-  const queue = [...roots.map((name) => ({ name, from: RUNTIME_DIR }))]
+  const queue = [...roots.map((name) => ({ name, from: RUNTIME_DIR, optional: false }))]
   while (queue.length) {
-    const { name, from } = queue.shift()
+    const { name, from, optional } = queue.shift()
     if (found.has(name)) continue
     const dir = findPkgDir(name, from)
     if (!dir) {
-      console.warn(`[stage-native-deps] WARN: '${name}' not found — skipping`)
+      // Optional deps for other platforms (koffi ships one per platform) are expected to be absent.
+      if (!optional) console.warn(`[stage-native-deps] WARN: '${name}' not found — skipping`)
       continue
     }
     found.set(name, dir)
     const pkg = JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf8'))
-    const deps = { ...(pkg.dependencies || {}), ...(pkg.optionalDependencies || {}) }
+    const optionalDeps = pkg.optionalDependencies || {}
+    const deps = { ...(pkg.dependencies || {}), ...optionalDeps }
     for (const depName of Object.keys(deps)) {
       // Resolve optional deps relative to the requiring package; skip absent ones.
-      if (!found.has(depName)) queue.push({ name: depName, from: dir })
+      if (!found.has(depName)) queue.push({ name: depName, from: dir, optional: depName in optionalDeps })
     }
   }
   return found

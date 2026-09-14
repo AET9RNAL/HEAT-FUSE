@@ -24,7 +24,7 @@ const radius = computed(() => `${props.cut}px 0 ${props.cut}px 0`);
 }
 
 .stage-panel.blur {
-  backdrop-filter: blur(35px);
-  -webkit-backdrop-filter: blur(35px);
+  backdrop-filter: blur(45px);
+  -webkit-backdrop-filter: blur(45px);
 }
 </style>

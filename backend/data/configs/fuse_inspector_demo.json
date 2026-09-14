@@ -1,25 +1,29 @@
 {
   "demo_pos": {
-    "x": 309,
-    "y": 277,
-    "w": 342,
-    "h": 282
+    "x": 1631,
+    "y": 337,
+    "w": 460,
+    "h": 560
   },
-  "opacity_pct": 100,
-  "offset": 50,
-  "count": 64,
-  "nudge_x": -15,
+  "opacity_pct": 62,
+  "offset": 0,
+  "count": 10,
+  "nudge_x": 0,
   "nudge_y": 0,
   "enabled": true,
-  "compact": true,
+  "compact": false,
   "density": "medium",
-  "phase": "active",
-  "corners": [],
+  "phase": "charge",
+  "corners": [
+    "tl",
+    "br"
+  ],
   "font_family": "WGNormalidad",
   "title": "Inspector Demo",
-  "notes": "rgrgrfrf",
-  "accent": "#ff3935ff",
+  "notes": "",
+  "accent": "#FFDB8CFF",
   "tint": "#84FFB1FF",
-  "anchor": "start",
-  "combo": "alt+shift+s"
+  "anchor": "center",
+  "combo": "ctrl+alt+d",
+  "last_teardown": "disable at 5:04:30 PM"
 }

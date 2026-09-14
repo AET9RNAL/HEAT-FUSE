@@ -7,6 +7,9 @@
   "entry": "plugin:MatchProgressOverhaulPlugin",
   "runtime": "node",
   "dependencies": ["accessors", "fuse_ui", "canvas_ui"],
+  "permissions": {
+    "accessors.ui": { "reason": "Hides the game's own match progress bar when the enhanced one is on." }
+  },
   "hotkeys": {},
   "default_config": {
     "vue_overlay_pos": null,
