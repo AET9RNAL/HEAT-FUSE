@@ -54,13 +54,15 @@ const EXTRA_KEYS: readonly string[] = [
 
 type Logger = { debug(m: string): void; info(m: string): void; warning(m: string): void };
 
-type PageName = "battle_hud" | "markers" | "battle_app" | "hangar";
+export type PageName = "battle_hud" | "markers" | "base_indicators" | "battle_app" | "hangar";
 const PAGE_MATCH: ReadonlyArray<[PageName, string]> = [
   ["battle_hud", "battle_hud"],
   ["markers", "markers"],
+  ["base_indicators", "base_indicators"],
   ["battle_app", "battle_app"],
   ["hangar", "meta/index.html"],
 ];
+const ALL_PAGES: readonly PageName[] = ["battle_hud", "markers", "base_indicators", "battle_app", "hangar"];
 
 /** One CDP WebSocket connection to a single Gameface page. */
 class CdpConn {
@@ -180,11 +182,13 @@ export class Accessors {
   private conns: Record<PageName, CdpConn | null> = {
     battle_hud: null,
     markers: null,
+    base_indicators: null,
     battle_app: null,
     hangar: null,
   };
   private _connected = false;
   private _connectedHangar = false;
+  private _connectedBaseIndicators = false;
   private cache = new Map<string, CacheValue>();
 
   private jsReadAll: string;
@@ -212,6 +216,13 @@ export class Accessors {
   }
   get connectedHangar(): boolean {
     return this._connectedHangar;
+  }
+  /** The `base_indicators` page exists only while spawned - it is recreated on respawn. */
+  get connectedBaseIndicators(): boolean {
+    return this._connectedBaseIndicators;
+  }
+  isConnected(page: PageName): boolean {
+    return this.conns[page] !== null;
   }
 
   private async discoverTargets(): Promise<Partial<Record<PageName, string>> | null> {
@@ -254,7 +265,7 @@ export class Accessors {
       return false;
     }
     const changed: string[] = [];
-    for (const name of ["battle_hud", "markers", "battle_app", "hangar"] as PageName[]) {
+    for (const name of ALL_PAGES) {
       const wantUrl = targets[name];
       const conn = this.conns[name];
       if (wantUrl && (conn === null || conn.dead || conn.url !== wantUrl)) {
@@ -274,6 +285,7 @@ export class Accessors {
     }
     this._connected = this.conns.battle_hud !== null;
     this._connectedHangar = this.conns.hangar !== null;
+    this._connectedBaseIndicators = this.conns.base_indicators !== null;
     if (changed.length) this.log.info(`Accessors: CDP connections updated [${changed.join(" ")}]`);
     return this._connected || this._connectedHangar;
   }
@@ -285,6 +297,7 @@ export class Accessors {
     }
     this._connected = false;
     this._connectedHangar = false;
+    this._connectedBaseIndicators = false;
     this.cache.clear();
   }
 
@@ -293,6 +306,7 @@ export class Accessors {
     this.conns[name] = null;
     if (name === "battle_hud") this._connected = false;
     if (name === "hangar") this._connectedHangar = false;
+    if (name === "base_indicators") this._connectedBaseIndicators = false;
   }
 
   /** Poll battle_hud, markers, and battle_app. Returns false on primary failure. */
@@ -403,29 +417,80 @@ export class Accessors {
     }
   }
 
+  /** Injection expression; evaluates to "ok" or "err:<message>" so the caller can tell. */
   private static styleExpr(styleId: string, css: string | null): string {
     const sid = styleId.replace(/'/g, "\\'");
     if (css === null) {
-      return `(function(){var el=document.getElementById('${sid}');if(el)el.remove();})();null`;
+      return `(function(){try{var el=document.getElementById('${sid}');if(el)el.remove();return 'ok';}catch(e){return 'err:'+e.message;}})()`;
     }
     const safe = css.replace(/\\/g, "\\\\").replace(/`/g, "\\`").replace(/\$\{/g, "\\${");
     return (
-      "(function(){" +
+      "(function(){try{" +
       `var el=document.getElementById('${sid}');` +
       `if(!el){el=document.createElement('style');el.id='${sid}';document.head.appendChild(el);}` +
       "el.textContent=`" + safe + "`;" +
-      "})();null"
+      `return document.getElementById('${sid}')?'ok':'err:style tag missing after append';` +
+      "}catch(e){return 'err:'+e.message;}})()"
     );
   }
 
-  injectStylesheet(css: string | null, styleId = "__fuse__"): Promise<void> {
-    return this.exec("battle_hud", Accessors.styleExpr(styleId, css));
+  /**
+   * Inject (or clear, with `css === null`) a stylesheet on any page. Resolves false
+   * and logs why when the page is not connected or the page-side eval failed.
+   */
+  async injectStylesheetOn(page: PageName, css: string | null, styleId = "__fuse__"): Promise<boolean> {
+    const conn = this.conns[page];
+    if (!conn) {
+      this.log.warning(`Accessors: '${styleId}' not injected - page '${page}' has no CDP connection`);
+      return false;
+    }
+    try {
+      const raw = await conn.evaluate(Accessors.styleExpr(styleId, css), true, this.recvTimeout);
+      const res = String(raw ?? "");
+      if (res !== "ok") {
+        this.log.warning(`Accessors: '${styleId}' injection on '${page}' failed - ${res || "no result"}`);
+        return false;
+      }
+      return true;
+    } catch (e) {
+      this.log.warning(`Accessors: '${styleId}' injection on '${page}' failed - ${String(e)}`);
+      this.drop(page);
+      return false;
+    }
   }
-  injectStylesheetMarkers(css: string | null, styleId = "__fuse__"): Promise<void> {
-    return this.exec("markers", Accessors.styleExpr(styleId, css));
+
+  injectStylesheet(css: string | null, styleId = "__fuse__"): Promise<boolean> {
+    return this.injectStylesheetOn("battle_hud", css, styleId);
   }
-  injectStylesheetHangar(css: string | null, styleId = "__fuse__"): Promise<void> {
-    return this.exec("hangar", Accessors.styleExpr(styleId, css));
+  injectStylesheetMarkers(css: string | null, styleId = "__fuse__"): Promise<boolean> {
+    return this.injectStylesheetOn("markers", css, styleId);
+  }
+  injectStylesheetBaseIndicators(css: string | null, styleId = "__fuse__"): Promise<boolean> {
+    return this.injectStylesheetOn("base_indicators", css, styleId);
+  }
+  injectStylesheetHangar(css: string | null, styleId = "__fuse__"): Promise<boolean> {
+    return this.injectStylesheetOn("hangar", css, styleId);
+  }
+
+  /**
+   * Element count per selector on `page`. -1 marks a selector the page rejected as
+   * invalid syntax; null means the page is not connected or the eval failed.
+   */
+  async countMatches(page: PageName, selectors: readonly string[]): Promise<Record<string, number> | null> {
+    const conn = this.conns[page];
+    if (!conn || selectors.length === 0) return null;
+    const list = JSON.stringify(selectors);
+    const expr =
+      "(function(){var out={};var sels=" + list + ";" +
+      "for(var i=0;i<sels.length;i++){try{out[sels[i]]=document.querySelectorAll(sels[i]).length;}catch(e){out[sels[i]]=-1;}}" +
+      "return JSON.stringify(out);})()";
+    try {
+      const raw = await conn.evaluate(expr, true, this.recvTimeout);
+      return raw ? (JSON.parse(String(raw)) as Record<string, number>) : null;
+    } catch (e) {
+      this.log.debug(`Accessors: countMatches('${page}') failed - ${String(e)}`);
+      return null;
+    }
   }
 
   private setStyleOn(

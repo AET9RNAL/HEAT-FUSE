@@ -16,6 +16,8 @@ const fuseState = ref<FuseState>('idle')
 const fuseError = ref<string | null>(null)
 const fusePid = ref<number | null>(null)
 const runtimeState = ref<FuseRuntimeState>(null)
+// Host shortcuts as the runtime has them bound, overrides included.
+const hostHotkeys = ref({ lock: 'ctrl+l', interactive: 'ctrl+i' })
 // OBS Browser Source URL for the overlay bundle, set once the runtime is up.
 const obsUrl = ref<string | null>(null)
 
@@ -30,6 +32,14 @@ function _setState(s: FuseState, err: string | null = null) {
     fuseError.value = err
 }
 
+/** The runtime relays the master level to the stage window; it holds no copy between launches. */
+function _sendAudioMaster() {
+    if (fuseState.value !== 'running') return
+    const appStore = useAppStore()
+    const { send } = useFuseConnection()
+    void send('audio.setMaster', { volume: appStore.audioVolume / 100, muted: appStore.audioMuted }).catch(() => {})
+}
+
 // ── Start / stop ───────────────────────────────────────────────────────────
 
 async function startFuse(): Promise<boolean> {
@@ -42,7 +52,7 @@ async function startFuse(): Promise<boolean> {
         eventBus.emit('agent:spawning')
         logger.info('FUSE: spawning process')
 
-        const result = await window.fuseAPI.spawn()
+        const result = await window.fuseAPI.spawn({ autoLock: useAppStore().autoLockOverlays })
 
         if (!result.success || !result.port || !result.connectionToken) {
             const msg = result.error ?? 'spawn failed'
@@ -79,6 +89,11 @@ async function startFuse(): Promise<boolean> {
             } else if (type === 'host:state_changed') {
                 const state = msg['state'] as string
                 runtimeState.value = state === 'locked' ? 'locked' : state === 'calibrate' ? 'calibrate' : null
+            } else if (type === 'host:hotkeys') {
+                hostHotkeys.value = {
+                    lock: typeof msg['lock'] === 'string' ? msg['lock'] : hostHotkeys.value.lock,
+                    interactive: typeof msg['interactive'] === 'string' ? msg['interactive'] : hostHotkeys.value.interactive,
+                }
             }
         })
 
@@ -96,6 +111,7 @@ async function startFuse(): Promise<boolean> {
         if (connectResult.version) useAppStore().backendVersion = connectResult.version
 
         _setState('running')
+        _sendAudioMaster()
         eventBus.emit('agent:connected')
         logger.info('FUSE: connected', { port: result.port })
 
@@ -181,6 +197,8 @@ export function useFuseControl() {
             void send('overlay.setVisible', { visible: true }).catch(() => {})
         })
 
+        watch(() => [appStore.audioVolume, appStore.audioMuted], _sendAudioMaster)
+
         watch(() => appStore.enableFuse, async (enabled) => {
             if (enabled) {
                 const ok = await startFuse()
@@ -196,6 +214,7 @@ export function useFuseControl() {
         fuseError: readonly(fuseError),
         fusePid: readonly(fusePid),
         runtimeState: readonly(runtimeState),
+        hostHotkeys: readonly(hostHotkeys),
         obsUrl: readonly(obsUrl),
         startFuse,
         stopFuse,

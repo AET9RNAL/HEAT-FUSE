@@ -1,19 +1,42 @@
 import {
   FusePlugin,
-  ConfigCategory,
-  ConfigEntry,
   type FuseContext,
+  type InspectorSection,
   type OverlayHandle,
   type Rect,
 } from "@fuse/plugin-sdk";
+
+/** The stage can't resize Rive overlays; `anim_width` / `anim_height` size the canvas instead, live. */
+function renderSizeSection(idPrefix: string): InspectorSection {
+  return {
+    id: `${idPrefix}.size`,
+    label: "Size",
+    order: 90,
+    controls: [
+      {
+        type: "vec2",
+        id: "render_size",
+        keys: ["anim_width", "anim_height"],
+        labels: ["W", "H"],
+        label: "Render size",
+        min: 10,
+        max: 3000,
+        step: 10,
+        tooltip: "Canvas size. Rive overlays can't be resized on the stage, so this is how to scale them.",
+      },
+    ],
+  };
+}
 
 interface Accessors {
   read(name: string): number | string | boolean | unknown[] | null | undefined;
 }
 
-const DEFAULT_COLOR_HIGH = "84FFB1";
-const DEFAULT_COLOR_MID = "FF9800";
-const DEFAULT_COLOR_LOW = "FF3935";
+const DEFAULT_COLOR_HIGH = "#84FFB1FF";
+const DEFAULT_COLOR_MID = "#FF9800FF";
+const DEFAULT_COLOR_LOW = "#FF3935FF";
+/** The defaults plus brand colours, offered in the pickers. */
+const COLOR_SWATCHES = [DEFAULT_COLOR_HIGH, DEFAULT_COLOR_MID, DEFAULT_COLOR_LOW, "#F2F2F2FF", "#7ABFDFFF", "#FFF87AFF"];
 
 const POS_KEY_TP = "bar_custom_pos";
 const POS_KEY_FP = "bar_custom_pos_fp";
@@ -22,7 +45,8 @@ function hexToArgb(hexStr: unknown, fallback: number): number {
   try {
     const s = String(hexStr).trim().replace(/^#/, "");
     if (s.length === 6) return (0xff000000 | parseInt(s, 16)) >>> 0;
-    if (s.length === 8) return parseInt(s, 16) >>> 0;
+    // Config colours are #RRGGBBAA; Rive wants ARGB.
+    if (s.length === 8) return ((parseInt(s.slice(6, 8), 16) << 24) | parseInt(s.slice(0, 6), 16)) >>> 0;
   } catch {
     /* ignore */
   }
@@ -55,6 +79,78 @@ export class EnergyBarPlugin extends FusePlugin {
     return this.colorLow;
   }
 
+  private sections(): InspectorSection[] {
+    return [
+      {
+        id: "eb.colors",
+        label: "Colors",
+        description: "Bar colour by how much energy is left.",
+        order: 11,
+        controls: [
+          {
+            type: "color",
+            id: "color_high",
+            key: "color_high",
+            label: "High",
+            alpha: false,
+            swatches: COLOR_SWATCHES,
+            tooltip: "Above 60% energy.",
+          },
+          {
+            type: "color",
+            id: "color_mid",
+            key: "color_mid",
+            label: "Mid",
+            alpha: false,
+            swatches: COLOR_SWATCHES,
+            tooltip: "Above 30% energy.",
+          },
+          {
+            type: "color",
+            id: "color_low",
+            key: "color_low",
+            label: "Low",
+            alpha: false,
+            swatches: COLOR_SWATCHES,
+            tooltip: "30% energy and below.",
+          },
+        ],
+      },
+      {
+        id: "eb.style",
+        label: "Style",
+        order: 12,
+        controls: [
+          {
+            type: "slider",
+            id: "stroke_weight",
+            key: "stroke_weight",
+            label: "Stroke",
+            min: 0.5,
+            max: 3,
+            step: 0.1,
+            default: 1.5,
+            tooltip: "Outline weight. Double-click to reset.",
+          },
+          {
+            type: "slider",
+            id: "rotation",
+            key: "rotation",
+            label: "Rotation",
+            min: -360,
+            max: 360,
+            step: 1,
+            unit: "°",
+            default: 0,
+            bipolar: true,
+            tooltip: "Double-click to reset.",
+          },
+        ],
+      },
+      renderSizeSection("eb"),
+    ];
+  }
+
   setup(ctx: FuseContext): void {
     this.ctx = ctx;
     this.acc = ctx.services.get<Accessors>("accessors");
@@ -64,47 +160,30 @@ export class EnergyBarPlugin extends FusePlugin {
       .defaults({
         bar_custom_pos: null,
         bar_custom_pos_fp: null,
-        memory_chain: "multiplayer_vehicle_energy",
         anim_width: 300,
         anim_height: 300,
         color_high: DEFAULT_COLOR_HIGH,
         color_mid: DEFAULT_COLOR_MID,
         color_low: DEFAULT_COLOR_LOW,
-        stroke_weight: "1.5",
-        rotation: "0.0",
+        stroke_weight: 1.5,
+        rotation: 0,
       })
       .load();
 
-    ctx.config.schema([
-      new ConfigCategory("Memory Source", [
-        new ConfigEntry({
-          key: "memory_chain",
-          label: "Pointer Chain",
-          type: "choice",
-          choices: ["multiplayer_vehicle_energy", "training_vehicle_energy"],
-          description: "Which source to read energy from",
-        }),
-      ]),
-      new ConfigCategory("Colors", [
-        new ConfigEntry({ key: "color_high", label: "High Energy >60% (hex RGB)", type: "str", description: "e.g. 84FFB1" }),
-        new ConfigEntry({ key: "color_mid", label: "Mid Energy >30% (hex RGB)", type: "str", description: "e.g. FF9800" }),
-        new ConfigEntry({ key: "color_low", label: "Low Energy ≤30% (hex RGB)", type: "str", description: "e.g. FF3935" }),
-      ]),
-      new ConfigCategory("Style", [
-        new ConfigEntry({ key: "stroke_weight", label: "Stroke Weight", type: "float", min: 0.5, max: 3.0, description: "0.5 – 3.0" }),
-      ]),
-      new ConfigCategory("Animation", [
-        new ConfigEntry({ key: "anim_width", label: "Render Width", type: "int", min: 10, max: 3000 }),
-        new ConfigEntry({ key: "anim_height", label: "Render Height", type: "int", min: 10, max: 3000 }),
-      ]),
-      new ConfigCategory("Rotation", [
-        new ConfigEntry({ key: "rotation", label: "Rotation (degrees)", type: "float", min: -360.0, max: 360.0 }),
-      ]),
-      new ConfigCategory("Position", [
-        new ConfigEntry({ key: "bar_custom_pos", label: "3rd Person Position", type: "position" }),
-        new ConfigEntry({ key: "bar_custom_pos_fp", label: "1st Person Position", type: "position" }),
-      ]),
-    ]);
+    // Older saves kept colours as bare hex ("84FFB1") and numbers as strings ("1.5");
+    // the pickers and sliders work in #RRGGBBAA and real numbers.
+    for (const key of ["color_high", "color_mid", "color_low"]) {
+      const v = ctx.config.get<unknown>(key, "");
+      if (typeof v === "string" && /^[0-9a-f]{6}$/i.test(v.trim())) ctx.config.set(key, `#${v.trim().toUpperCase()}FF`);
+    }
+    for (const key of ["stroke_weight", "rotation"]) {
+      const v = ctx.config.get<unknown>(key, null);
+      if (typeof v === "string" && v.trim() !== "" && Number.isFinite(Number(v))) ctx.config.set(key, Number(v));
+    }
+
+    // One declaration for both surfaces: the App panel and the stage inspector.
+    const sections = this.sections();
+    ctx.config.schema(sections);
 
     this.colorHigh = hexToArgb(ctx.config.get("color_high"), 0xff84ffb1);
     this.colorMid = hexToArgb(ctx.config.get("color_mid"), 0xffff9800);
@@ -125,6 +204,7 @@ export class EnergyBarPlugin extends FusePlugin {
       defaultRect: this.savedRect(POS_KEY_TP, w, h),
       positionConfigKey: POS_KEY_TP,
     });
+    this.ov.inspector.sections(sections);
 
     // Seed initial view-model state (retained for late-joining stage clients).
     this.ov.set("energyValue", 0.5);
@@ -145,6 +225,10 @@ export class EnergyBarPlugin extends FusePlugin {
       this.rotation = num(v, this.rotation);
       this.ov?.set("rotation", this.rotation);
     });
+    const applySize = (): void =>
+      this.ov?.setSize({ w: num(ctx.config.get("anim_width"), 300), h: num(ctx.config.get("anim_height"), 300) });
+    ctx.config.watch("anim_width", applySize);
+    ctx.config.watch("anim_height", applySize);
   }
 
   private savedRect(key: string, w: number, h: number): Rect | undefined {
@@ -183,7 +267,7 @@ export class EnergyBarPlugin extends FusePlugin {
     let pct = 0;
     let fpFlag: boolean | null = null;
     if (this.acc) {
-      const val = this.acc.read(this.ctx.config.get("memory_chain", "multiplayer_vehicle_energy"));
+      const val = this.acc.read("multiplayer_vehicle_energy");
       if (val != null) pct = Math.max(0, Math.min(100, Math.trunc(Number(val))));
       const fp = this.acc.read("multiplayer_is_fp_view");
       fpFlag = fp == null ? null : Boolean(Number(fp));

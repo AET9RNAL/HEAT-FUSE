@@ -10,17 +10,41 @@
  * Connection params (port/token) come from `window.__FUSE_OVERLAY__` (injected
  * by the Electron overlay-window preload) or, in dev, from the URL query string.
  */
-import { reactive, ref } from "vue";
+import { reactive, ref, toRaw } from "vue";
 import mitt from "mitt";
+import { playAudio, preloadAudio, setAudioMaster, stopAllAudio, stopAudio } from "./audio";
+
+/** This page is an OBS browser source rather than the Electron stage window. */
+let obsMode = false;
 import type { OverlayInput } from "./rive";
-import type { HostState, OverlayDescriptor, OverlayRect } from "./types";
+import type { InputPhase, InspectorSchema } from "./inspector/types";
+import { clearNotifications, pushNotification, removeNotification, type StageNotification } from "./notifications";
+import type { HostState, OverlayDescriptor, OverlayRect, StagePlugin } from "./types";
 
 type DataEvents = Record<string, Record<string, OverlayInput>>;
 export const overlayBus = mitt<DataEvents>();
 
 export const overlays = reactive(new Map<string, OverlayDescriptor>());
 export const hostState = ref<HostState>("locked");
+/** Calibration stage the host is on, 1-based. */
+export const calibStage = ref(1);
 export const connected = ref(false);
+/** Per-overlay inspector schema declared by the owning plugin. */
+export const inspectorSchemas = reactive(new Map<string, InspectorSchema>());
+/** Per-overlay control values, authoritative copy from the runtime. */
+export const inspectorValues = reactive(new Map<string, Record<string, unknown>>());
+/** Plugin roster for the stage's plugin list. */
+export const stagePlugins = ref<StagePlugin[]>([]);
+/** Host shortcuts as currently bound (user-rebindable), for on-stage hints. */
+export const hostHotkeys = reactive({ lock: "ctrl+l", interactive: "ctrl+i" });
+
+/** "ctrl+shift+f5" -> "Ctrl+Shift+F5" */
+export function formatCombo(combo: string): string {
+  return combo
+    .split("+")
+    .map((part) => (part ? part[0].toUpperCase() + part.slice(1) : part))
+    .join("+");
+}
 /**
  * Region of the virtual desktop this client renders, when broadcasting a single
  * display to OBS. Overlay rects are in virtual-desktop coordinates, so the stage
@@ -116,6 +140,7 @@ export function connectOverlay(): void {
     (window as unknown as { __FUSE_OVERLAY_PARAMS_URL__?: string }).__FUSE_OVERLAY_PARAMS_URL__ ??
     new URLSearchParams(location.search).get("paramsUrl");
   if (typeof paramsUrl === "string") {
+    obsMode = true;
     void fetchParams(paramsUrl).then((p) => {
       // FUSE not running yet (or still booting) - keep polling until it is.
       if (!p) setTimeout(connectOverlay, RECONNECT_MS);
@@ -141,6 +166,11 @@ function openSocket(params: FuseOverlayParams): void {
     // Drop descriptors from the dead session; the next auth re-hydrates them.
     // Without this a reconnect to a restarted runtime leaves ghost overlays.
     overlays.clear();
+    inspectorSchemas.clear();
+    inspectorValues.clear();
+    stagePlugins.value = [];
+    clearNotifications();
+    stopAllAudio();
     setTimeout(connectOverlay, RECONNECT_MS); // simple auto-reconnect
   };
   ws.onmessage = (ev) => handle(JSON.parse(ev.data));
@@ -158,7 +188,16 @@ function handle(m: Record<string, unknown>): void {
     }
     case "overlay:data": {
       const id = String(m.overlayId);
-      overlayBus.emit(id, (m.inputs as Record<string, OverlayInput>) ?? {});
+      const inputs = (m.inputs as Record<string, OverlayInput>) ?? {};
+      // Keep the retained snapshot current for late mounts; raw write, so per-frame data doesn't trigger renders.
+      const d = overlays.get(id);
+      if (d) {
+        const retained = toRaw(d).inputs;
+        for (const [path, input] of Object.entries(inputs)) {
+          if (input.t !== "trigger") retained[path] = input;
+        }
+      }
+      overlayBus.emit(id, inputs);
       break;
     }
     case "overlay:visibility": {
@@ -171,8 +210,71 @@ function handle(m: Record<string, unknown>): void {
       if (d) d.rect = m.rect as OverlayRect;
       break;
     }
+    case "overlay:size": {
+      const d = overlays.get(String(m.overlayId));
+      if (d) d.size = m.size as OverlayDescriptor["size"];
+      break;
+    }
+    // Audio plays on the stage window only; OBS browser sources stay silent.
+    case "audio:master":
+      setAudioMaster(Number(m.volume), Boolean(m.muted));
+      break;
+    case "audio:preload":
+      if (!obsMode && Array.isArray(m.urls)) preloadAudio(m.urls.map((u) => assetBase() + String(u)));
+      break;
+    case "audio:play":
+      if (!obsMode) {
+        void playAudio({
+          id: String(m.id),
+          source: String(m.source),
+          url: assetBase() + String(m.url),
+          volume: Number(m.volume),
+          loop: Boolean(m.loop),
+          rate: Number(m.rate) || 1,
+        });
+      }
+      break;
+    case "audio:stop":
+      stopAudio(String(m.id));
+      break;
+    case "audio:stop_all":
+      stopAllAudio(String(m.source));
+      break;
+    case "overlay:inspector": {
+      const overlayId = String(m.overlayId);
+      inspectorSchemas.set(overlayId, {
+        overlayId,
+        rev: Number(m.rev) || 0,
+        sections: (m.sections as InspectorSchema["sections"]) ?? [],
+      });
+      inspectorValues.set(overlayId, { ...((m.values as Record<string, unknown>) ?? {}) });
+      break;
+    }
+    case "inspector:values": {
+      const overlayId = String(m.overlayId);
+      const prev = inspectorValues.get(overlayId) ?? {};
+      inspectorValues.set(overlayId, { ...prev, ...((m.values as Record<string, unknown>) ?? {}) });
+      break;
+    }
+    case "plugin:list":
+      stagePlugins.value = (m.plugins as StagePlugin[]) ?? [];
+      break;
+    case "host:hotkeys":
+      if (typeof m.lock === "string") hostHotkeys.lock = m.lock;
+      if (typeof m.interactive === "string") hostHotkeys.interactive = m.interactive;
+      break;
+    case "stage:notify": {
+      const n = m.notification as Omit<StageNotification, "rev"> | undefined;
+      if (n?.id) pushNotification(n);
+      break;
+    }
+    case "stage:dismiss":
+      removeNotification(String(m.id));
+      break;
     case "overlay:removed":
       overlays.delete(String(m.overlayId));
+      inspectorSchemas.delete(String(m.overlayId));
+      inspectorValues.delete(String(m.overlayId));
       break;
     case "overlay:reload":
       sourceRev.value = Number(m.rev) || Date.now();
@@ -180,6 +282,7 @@ function handle(m: Record<string, unknown>): void {
     case "host:state_changed": {
       hostState.value =
         m.state === "calibrate" ? "calibrate" : m.state === "interactive" ? "interactive" : "locked";
+      calibStage.value = Number(m.calib_stage) || 1;
       // Locked => fully click-through. Calibrate/interactive => start
       // click-through; the hover hit-test (StageApp) enables interaction only
       // over an overlay or the editor UI. Both states need a focusable window:
@@ -202,5 +305,44 @@ export function sendTransform(overlayId: string, rect: OverlayRect): void {
 export function sendAction(overlayId: string, action: string, payload?: unknown): void {
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify({ type: "overlay:action", overlayId, action, payload }));
+  }
+}
+
+/**
+ * Push an inspector control value. `live` keeps the runtime write in memory for
+ * a drag in flight; `commit` (pointer-up, blur, Enter) persists it to config.
+ */
+export function sendInspectorSet(
+  overlayId: string,
+  controlId: string,
+  value: unknown,
+  phase: InputPhase,
+): void {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: "inspector:set", overlayId, controlId, value, phase }));
+  }
+}
+
+/** Fire an inspector button back to the owning plugin. */
+export function sendInspectorAction(overlayId: string, controlId: string, payload?: unknown): void {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: "inspector:action", overlayId, controlId, payload }));
+  }
+}
+
+/**
+ * Ask the host to change state. "toggle" runs the same cycle as Ctrl+L
+ * (advance a calibration stage, then lock), which is what the toolbar uses.
+ */
+export function sendHostRequest(state: HostState | "toggle"): void {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: "host:request", state }));
+  }
+}
+
+/** The user closed a notification here; the runtime stops replaying it and closes it elsewhere. */
+export function sendNotificationDismissed(id: string): void {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: "stage:dismiss", id }));
   }
 }

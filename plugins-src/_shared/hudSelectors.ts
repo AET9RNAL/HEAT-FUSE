@@ -121,6 +121,7 @@ export const HUD = {
   BATTLE_LOG_KILL: "[class*=\"LogItemKill_base\"]",
   COMM_WHEEL: "[class*=\"CommWheel_base\"]",
   COMM_WHEEL_SECTOR: "[class*=\"CommWheel_sector\"]",
+  // Skill activation banner - renders on the base_indicators page since 2026-09.
   TEXT_NOTIFICATION: "[class*=\"TextNotification_base\"]",
   TEXT_NOTIF_CAPTION: "[class*=\"TextNotification_captionText\"]",
   TEXT_NOTIF_ICON: "[class*=\"TextNotification_icon\"]",

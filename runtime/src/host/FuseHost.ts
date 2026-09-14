@@ -14,6 +14,8 @@ import { ConfigManager, PluginConfig } from "./config.js";
 import { EventBus } from "./EventBus.js";
 import { ServiceRegistry } from "./ServiceRegistry.js";
 import { OverlayHub } from "./OverlayManager.js";
+import { NotificationHub } from "./NotificationHub.js";
+import { AudioHub } from "./AudioHub.js";
 import { DevWatcher } from "./devWatch.js";
 import { discover } from "./discovery.js";
 import { resolveLoadOrder } from "./resolver.js";
@@ -33,8 +35,11 @@ import { PluginAssets } from "../sdk/assets.js";
 import { HotkeyInput, type MouseCallback } from "../input/hotkeys.js";
 import type { PluginHydration, RuntimeBridge, WsServer } from "../server/WsServer.js";
 
-export const HOST_VERSION = "4.6.0";
+export const HOST_VERSION = "5.0.0";
 const HOST_CONFIG_FILENAME = "fuse_host.json";
+// Also the action names the app's keybind settings and hotkey_overrides use.
+const LOCK_HOTKEY_LABEL = "Toggle Calibrate/Lock";
+const INTERACTIVE_HOTKEY_LABEL = "Toggle Interactive";
 
 interface HostConfigState {
   enabled_plugins: string[] | null;
@@ -58,14 +63,23 @@ function cmpTuple(a: number[], b: number[]): number {
   return 0;
 }
 
-function checkCompat(manifest: Record<string, unknown>, name: string): boolean {
+/** Null when the host satisfies the manifest, otherwise the user-facing reason it doesn't. */
+function compatIssue(manifest: Record<string, unknown>, name: string): string | null {
   const minVer = manifest.min_host_version as string | undefined;
-  if (!minVer) return true;
+  if (!minVer) return null;
   if (cmpTuple(versionTuple(String(minVer)), versionTuple(HOST_VERSION)) > 0) {
     logger.error(`Plugin '${name}' requires host v${minVer} but FUSE is v${HOST_VERSION} - skipping.`);
-    return false;
+    return `Requires FUSE runtime v${minVer}, this is v${HOST_VERSION}.`;
   }
-  return true;
+  return null;
+}
+
+/** "ctrl+l" -> "Ctrl+L", matching the app's shortcut hints. */
+function formatCombo(combo: string): string {
+  return combo
+    .split("+")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join("+");
 }
 
 export class FuseHost implements RuntimeBridge, HostView {
@@ -75,6 +89,8 @@ export class FuseHost implements RuntimeBridge, HostView {
   readonly events = new EventBus();
   readonly services = new ServiceRegistry();
   private overlayHub: OverlayHub;
+  private notificationHub: NotificationHub;
+  private audioHub: AudioHub;
   private server: WsServer;
   private input: HotkeyInput;
   private devWatcher: DevWatcher;
@@ -105,10 +121,13 @@ export class FuseHost implements RuntimeBridge, HostView {
   private calibStage = 1;
   private dequeueStarted = false;
   private tickTimer: NodeJS.Timeout | null = null;
+  private lastStateNotice: string | null = null;
 
   constructor(server: WsServer) {
     this.server = server;
     this.overlayHub = new OverlayHub(server);
+    this.notificationHub = new NotificationHub(server);
+    this.audioHub = new AudioHub(server, (pluginId, rel) => this.overlayHub.resolveAsset(pluginId, rel));
     this.devWatcher = new DevWatcher(server);
     this.input = new HotkeyInput({
       onKey: (mods, key, pressed) => this.onKeyEvent(mods, key, pressed),
@@ -127,7 +146,11 @@ export class FuseHost implements RuntimeBridge, HostView {
 
     this.events.subscribe(
       "host_state_changed",
-      (p) => this.server.notifyHostStateChanged(String(p.state), Number(p.calib_stage ?? 1)),
+      (p) => {
+        this.server.notifyHostStateChanged(String(p.state), Number(p.calib_stage ?? 1));
+        this.broadcastPluginList();
+        this.notifyStateChange();
+      },
       "core",
     );
   }
@@ -157,7 +180,9 @@ export class FuseHost implements RuntimeBridge, HostView {
     const enabled = this.hostCfgState.enabled_plugins;
     const disabledSet = new Set(this.hostCfgState.disabled_plugins ?? []);
 
-    const rawSpecs = await discover();
+    const rawSpecs = await discover((file, reason) =>
+      this.notifyLoadError(`archive-${file}`, `${file} couldn't be loaded`, reason),
+    );
     for (const spec of rawSpecs) {
       this.discovered.set(spec.pluginId, spec);
       this.pluginStates.set(spec.pluginId, PluginState.PENDING);
@@ -175,14 +200,18 @@ export class FuseHost implements RuntimeBridge, HostView {
         this.pluginStates.set(spec.pluginId, PluginState.DISABLED);
         continue;
       }
-      if (!checkCompat(spec.manifest, spec.name)) {
+      const incompatible = compatIssue(spec.manifest, spec.name);
+      if (incompatible) {
         this.pluginStates.set(spec.pluginId, PluginState.SKIPPED);
+        this.notifyLoadError(spec.pluginId, `${spec.name} skipped`, incompatible);
         continue;
       }
       eligible.push(spec);
     }
 
-    const ordered = resolveLoadOrder(eligible);
+    const ordered = resolveLoadOrder(eligible, (spec, reason) =>
+      this.notifyLoadError(spec.pluginId, `${spec.name} skipped`, reason),
+    );
     const orderedIds = new Set(ordered.map((s) => s.pluginId));
     for (const spec of eligible) {
       if (!orderedIds.has(spec.pluginId)) this.pluginStates.set(spec.pluginId, PluginState.SKIPPED);
@@ -210,6 +239,8 @@ export class FuseHost implements RuntimeBridge, HostView {
       services: this.services,
       events: this.events,
       overlays,
+      notifications: this.notificationHub.scoped(spec.pluginId),
+      audio: this.audioHub.scoped(spec.pluginId),
       host: this,
       logger: pluginLogger,
       state: this._state,
@@ -224,8 +255,10 @@ export class FuseHost implements RuntimeBridge, HostView {
       await plugin.setup(ctx);
     } catch (e) {
       pluginLogger.exception("setup failed", e);
+      this.notifyLoadError(spec.pluginId, `${spec.name} failed to start`, e);
       this.pluginStates.set(spec.pluginId, PluginState.ERROR);
       this.overlayHub.removePlugin(spec.pluginId);
+      this.audioHub.removePlugin(spec.pluginId);
       this.notifyPluginStatusChanged(spec.pluginId, PluginState.ERROR);
       return;
     }
@@ -253,7 +286,10 @@ export class FuseHost implements RuntimeBridge, HostView {
         logger.exception(`${describe(plugin)}: teardown during reload failed`, e);
       }
     }
-    for (const pid of this.pluginMap.keys()) this.overlayHub.removePlugin(pid);
+    for (const pid of this.pluginMap.keys()) {
+      this.overlayHub.removePlugin(pid);
+      this.audioHub.removePlugin(pid);
+    }
 
     this.plugins = [];
     this.contexts = [];
@@ -273,6 +309,13 @@ export class FuseHost implements RuntimeBridge, HostView {
     if (this.dequeueStarted) return;
     this.dequeueStarted = true;
     setImmediate(() => void this.dequeueNextPlugin());
+  }
+
+  /** Launch straight to locked, skipping every plugin's calibration walk (Ctrl+L until locked). */
+  setAutoLockOnStart(on: boolean): void {
+    if (this.dequeueStarted) return;
+    this.autoLockQueue = on;
+    if (on) this._state = "locked";
   }
 
   private async dequeueNextPlugin(): Promise<void> {
@@ -308,6 +351,7 @@ export class FuseHost implements RuntimeBridge, HostView {
         plugin.enterLocked();
       } catch (e) {
         logger.exception(`${spec.name}: enterLocked failed`, e);
+        this.notifyLoadError(spec.pluginId, `${spec.name} failed to lock`, e);
       }
       this.events.emit("host_state_changed", { state: this._state, calib_stage: 1 });
       setImmediate(() => void this.dequeueNextPlugin());
@@ -321,6 +365,7 @@ export class FuseHost implements RuntimeBridge, HostView {
       plugin.enterCalibrate(1);
     } catch (e) {
       logger.exception(`${spec.name}: enterCalibrate failed`, e);
+      this.notifyLoadError(spec.pluginId, `${spec.name} failed to calibrate`, e);
     }
 
     if (!pluginRequiresCalibration(plugin)) {
@@ -329,6 +374,7 @@ export class FuseHost implements RuntimeBridge, HostView {
         ctx.state = "locked";
       } catch (e) {
         logger.exception(`${spec.name}: enterLocked failed`, e);
+        this.notifyLoadError(spec.pluginId, `${spec.name} failed to lock`, e);
       }
       this.setupActive = null;
       setImmediate(() => void this.dequeueNextPlugin());
@@ -394,6 +440,7 @@ export class FuseHost implements RuntimeBridge, HostView {
         logger.exception(`${pluginId}: teardown during disable failed`, e);
       }
       this.overlayHub.removePlugin(pluginId);
+      this.audioHub.removePlugin(pluginId);
       logger.info(`Plugin '${pluginId}' disabled and torn down.`);
     }
   }
@@ -424,6 +471,7 @@ export class FuseHost implements RuntimeBridge, HostView {
       else plugin.enterCalibrate(this.calibStage);
     } catch (e) {
       logger.exception(`${pluginId}: state entry on enable failed`, e);
+      this.notifyLoadError(pluginId, `${spec.name} failed to start`, e);
     }
     logger.info(`Plugin '${pluginId}' enabled at runtime (state=${this._state}).`);
     this.notifyPluginStatusChanged(pluginId, PluginState.ACTIVE);
@@ -524,6 +572,7 @@ export class FuseHost implements RuntimeBridge, HostView {
           plugin.enterCalibrate(this.setupCalibStage);
         } catch (e) {
           logger.exception(`${spec.name}: enterCalibrate(${this.setupCalibStage}) failed`, e);
+          this.notifyLoadError(spec.pluginId, `${spec.name} failed to calibrate`, e);
         }
         this.events.emit("host_state_changed", { state: this._state, calib_stage: this.setupCalibStage });
         return;
@@ -536,6 +585,7 @@ export class FuseHost implements RuntimeBridge, HostView {
         plugin.enterLocked();
       } catch (e) {
         logger.exception(`${spec.name}: enterLocked failed`, e);
+        this.notifyLoadError(spec.pluginId, `${spec.name} failed to lock`, e);
       }
       this.setupActive = null;
       setImmediate(() => void this.dequeueNextPlugin());
@@ -548,6 +598,7 @@ export class FuseHost implements RuntimeBridge, HostView {
         plugin.enterCalibrate(1);
       } catch (e) {
         logger.exception(`${spec.name}: enterCalibrate(1) failed`, e);
+        this.notifyLoadError(spec.pluginId, `${spec.name} failed to calibrate`, e);
       }
     }
     this.events.emit("host_state_changed", { state: this._state, calib_stage: this.setupCalibStage });
@@ -562,8 +613,8 @@ export class FuseHost implements RuntimeBridge, HostView {
   // ======================================================================
 
   private registerGlobalHotkeys(): void {
-    this.hotkeys.register("ctrl+l", () => this.toggleLock(), "Toggle Calibrate/Lock", "host");
-    this.hotkeys.register("ctrl+i", () => this.toggleInteractive(), "Toggle Interactive", "host");
+    this.hotkeys.register("ctrl+l", () => this.toggleLock(), LOCK_HOTKEY_LABEL, "host");
+    this.hotkeys.register("ctrl+i", () => this.toggleInteractive(), INTERACTIVE_HOTKEY_LABEL, "host");
     this.hotkeys.register("ctrl+p", () => this.quit(), "Quit FUSE", "host");
     this.hotkeys.register("ctrl+r", () => void this.reloadPlugins(), "Hot-Reload Plugins", "host");
   }
@@ -655,17 +706,116 @@ export class FuseHost implements RuntimeBridge, HostView {
   }
 
   hostState(): { state: string; calib_stage: number } {
-    return { state: this._state, calib_stage: 1 };
+    return { state: this._state, calib_stage: this.currentStage() };
+  }
+
+  /** Stage the calibrate cycle is on - the setup queue's while a plugin owns it. */
+  private currentStage(): number {
+    return this.setupActive ? this.setupCalibStage : this.calibStage;
   }
 
   overlayHydration(): Array<Record<string, unknown>> {
     return this.overlayHub.overlayHydration();
+  }
+  inspectorHydration(): Array<Record<string, unknown>> {
+    return this.overlayHub.inspectorHydration();
+  }
+  notificationHydration(): unknown[] {
+    return this.notificationHub.hydration();
+  }
+  onStageNotificationDismissed(id: string): void {
+    this.notificationHub.onStageDismissed(id);
+  }
+  audioHydration(): { master: { volume: number; muted: boolean }; preload: string[] } {
+    return this.audioHub.hydration();
+  }
+  rpcAudioSetMaster(params: Record<string, unknown>): Record<string, unknown> {
+    this.audioHub.setMaster(params.volume, params.muted);
+    return { ok: true };
   }
   onOverlayTransform(overlayId: string, rect: Record<string, number>): void {
     this.overlayHub.onOverlayTransform(overlayId, rect);
   }
   onOverlayAction(overlayId: string, action: string, payload?: unknown): void {
     this.overlayHub.dispatchAction(overlayId, action, payload);
+  }
+  onInspectorSet(overlayId: string, controlId: string, value: unknown, phase: "live" | "commit"): void {
+    this.overlayHub.onInspectorSet(overlayId, controlId, value, phase);
+  }
+  onInspectorAction(overlayId: string, controlId: string, payload?: unknown): void {
+    this.overlayHub.onInspectorAction(overlayId, controlId, payload);
+  }
+  onHostRequest(state: string): void {
+    this.requestState(state);
+  }
+
+  /**
+   * State entry for the stage toolbar. "toggle" is the Ctrl+L cycle - advance a
+   * calibration stage, then lock - so the toolbar and the hotkey agree; the
+   * explicit states are there for callers that want one specific state.
+   */
+  requestState(state: string): void {
+    if (state === "toggle") {
+      this.toggleLock();
+      return;
+    }
+    if (this.setupActive) return;
+    if (state !== "locked" && state !== "calibrate") return;
+    if (state === this._state) return;
+    this._state = state;
+    this.calibStage = 1;
+    this.syncContextStates();
+    for (const plugin of this.plugins) {
+      try {
+        if (state === "locked") plugin.enterLocked();
+        else plugin.enterCalibrate(1);
+      } catch (e) {
+        logger.exception(`${describe(plugin)}: state change error`, e);
+      }
+    }
+    logger.info(`FUSE host state -> ${this._state} (stage request)`);
+    this.events.emit("host_state_changed", { state: this._state, calib_stage: this.calibStage });
+  }
+
+  /** Plugin roster for the stage's plugin list - read-only metadata. */
+  pluginListForStage(): Array<Record<string, unknown>> {
+    const stage = this.currentStage();
+    return [...this.discovered].map(([pluginId, spec]) => {
+      const status = this.pluginStates.get(pluginId) ?? PluginState.PENDING;
+      const active = status === PluginState.ACTIVE;
+      const calibrating = active && this._state === "calibrate";
+      return {
+        plugin_id: pluginId,
+        name: spec.name,
+        version: spec.version,
+        status: status.valueOf(),
+        is_core: spec.isCore,
+        requires_calibration: spec.cls.requiresCalibration ?? false,
+        calibration_stages: spec.cls.calibrationStages ?? 1,
+        current_stage: calibrating ? stage : 0,
+        state: active ? this._state : status.valueOf(),
+        in_setup: this.setupActive?.pluginId === pluginId,
+        overlay_ids: this.overlayHub.overlayIdsFor(pluginId),
+      };
+    });
+  }
+
+  private broadcastPluginList(): void {
+    this.server.broadcastOverlay({ type: "plugin:list", plugins: this.pluginListForStage() });
+  }
+
+  /** Host shortcut combos as bound right now, overrides included - the source for on-screen hints. */
+  hostHotkeys(): { lock: string; interactive: string } {
+    const bindings = this.hotkeys.listBindings("host");
+    const combo = (label: string, fallback: string): string =>
+      bindings.find((b) => b.label === label)?.combo ?? fallback;
+    return { lock: combo(LOCK_HOTKEY_LABEL, "ctrl+l"), interactive: combo(INTERACTIVE_HOTKEY_LABEL, "ctrl+i") };
+  }
+
+  private broadcastHostHotkeys(): void {
+    const payload = { type: "host:hotkeys", ...this.hostHotkeys() };
+    this.server.broadcastControl(payload);
+    this.server.broadcastOverlay(payload);
   }
   resolveAsset(pluginId: string, relPath: string): string | null {
     return this.overlayHub.resolveAsset(pluginId, relPath);
@@ -678,11 +828,20 @@ export class FuseHost implements RuntimeBridge, HostView {
     if (pluginId && key != null) {
       const ctx = this.contextMap.get(pluginId);
       if (ctx) {
-        ctx.config.set(key, value);
-        return { updated: { [key]: value } };
+        const accepted = ctx.config.accept(key, value);
+        if (!accepted.ok) return { updated: {} };
+        ctx.config.set(key, accepted.value);
+        return { updated: { [key]: accepted.value } };
       }
     }
     return { updated: {} };
+  }
+
+  rpcConfigAction(params: Record<string, unknown>): Record<string, unknown> {
+    const ctx = this.contextMap.get(String(params.plugin_id ?? ""));
+    const controlId = String(params.control_id ?? "");
+    if (!ctx || !controlId) return { ok: false };
+    return { ok: ctx.config.dispatchAction(controlId, params.payload) };
   }
 
   async rpcSetEnabled(params: Record<string, unknown>): Promise<Record<string, unknown>> {
@@ -711,6 +870,7 @@ export class FuseHost implements RuntimeBridge, HostView {
     this.hostConfig.save(this.hostCfgState as unknown as Record<string, unknown>);
 
     this.server.broadcastControl({ type: "hotkey:rebound", plugin_id: pluginId, action, combo: newCombo });
+    if (pluginId === "host") this.broadcastHostHotkeys();
     return { ok: true };
   }
 
@@ -721,6 +881,69 @@ export class FuseHost implements RuntimeBridge, HostView {
   }
 
   // --- notification helpers ----------------------------------------------
+
+  /** Error toast for a plugin or archive that failed to load; the latest failure per key wins. */
+  private notifyLoadError(key: string, title: string, err: unknown): void {
+    this.notificationHub.notify("host", {
+      id: `load-error-${key}`,
+      type: "error",
+      title,
+      message: err instanceof Error ? err.message : String(err),
+      duration: 10_000,
+    });
+  }
+
+  /** One replaceable toast per state change; calibration stage advances don't count. */
+  private notifyStateChange(): void {
+    // Locks between setup-queue plugins aren't a resting state: the next plugin calibrates straight away.
+    if (this._state === "locked" && this.setupPending.length > 0) return;
+    const setup = this._state === "calibrate" ? this.setupActive : null;
+    const key = `${this._state}:${setup?.pluginId ?? ""}`;
+    if (key === this.lastStateNotice) return;
+    this.lastStateNotice = key;
+
+    const hk = this.hostHotkeys();
+    const lock = formatCombo(hk.lock);
+    const interactive = formatCombo(hk.interactive);
+
+    if (this._state === "calibrate") {
+      const setupPlugin = setup ? this.pluginMap.get(setup.pluginId) : undefined;
+      const stages = setupPlugin
+        ? pluginCalibrationStages(setupPlugin)
+        : Math.max(1, ...this.plugins.map((p) => pluginCalibrationStages(p)));
+      const steps = stages > 1 ? `${stages} stages, ${lock} advances.` : `${lock} to lock.`;
+      this.notificationHub.notify("host", {
+        id: "host-state",
+        type: "warning",
+        icon: "unlock",
+        title: setup ? `Calibrating ${setup.name}` : "Calibrating",
+        message: setup ? `First-time setup. ${steps}` : `Arrange overlays. ${steps}`,
+        duration: 4000,
+      });
+      return;
+    }
+
+    if (this._state === "interactive") {
+      this.notificationHub.notify("host", {
+        id: "host-state",
+        type: "success",
+        icon: "interactive",
+        title: "Interactive",
+        message: `Overlays take clicks. ${interactive} to lock.`,
+        duration: 4000,
+      });
+      return;
+    }
+
+    this.notificationHub.notify("host", {
+      id: "host-state",
+      type: "info",
+      icon: "lock",
+      title: "Locked",
+      message: `${lock} to calibrate, ${interactive} for interactive.`,
+      duration: 4000,
+    });
+  }
 
   private notifyPluginRegistered(spec: DiscoveredPlugin, status: PluginState): void {
     const [configSchema, configValues] = this.schemaAndValues(spec.pluginId);
@@ -737,6 +960,7 @@ export class FuseHost implements RuntimeBridge, HostView {
       hotkeys: this.hotkeysFor(spec.pluginId),
     });
     this.installConfigWatchers(spec.pluginId);
+    this.broadcastPluginList();
   }
 
   private installConfigWatchers(pluginId: string): void {
@@ -751,6 +975,7 @@ export class FuseHost implements RuntimeBridge, HostView {
 
   private notifyPluginStatusChanged(pluginId: string, status: PluginState): void {
     this.server.broadcastControl({ type: "plugin:status_changed", plugin_id: pluginId, status: status.valueOf() });
+    this.broadcastPluginList();
   }
 
   private hotkeysFor(pluginId: string): Array<{ action: string; combo: string; label: string }> {

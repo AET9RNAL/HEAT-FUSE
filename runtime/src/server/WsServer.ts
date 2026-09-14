@@ -28,16 +28,38 @@ export interface RuntimeBridge {
   hostState(): { state: string; calib_stage: number };
 
   rpcConfigUpdate(params: Record<string, unknown>): Record<string, unknown>;
+  /** A button pressed in the App's plugin config panel. */
+  rpcConfigAction(params: Record<string, unknown>): Record<string, unknown>;
+  /** The App's master volume and mute for plugin audio. */
+  rpcAudioSetMaster(params: Record<string, unknown>): Record<string, unknown>;
+  /** Master volume and the sounds to warm, for a newly-connected stage. */
+  audioHydration(): { master: { volume: number; muted: boolean }; preload: string[] };
   rpcSetEnabled(params: Record<string, unknown>): Promise<Record<string, unknown>>;
   rpcHotkeyRebind(params: Record<string, unknown>): Record<string, unknown>;
   rpcOverlaySetVisible(params: Record<string, unknown>): Promise<Record<string, unknown>>;
 
   /** Current overlay descriptors (hydration for a newly-connected overlay client). */
   overlayHydration(): Array<Record<string, unknown>>;
+  /** Per-overlay inspector schemas + values (hydration for the stage). */
+  inspectorHydration(): Array<Record<string, unknown>>;
+  /** Stage notifications still showing, for a newly-connected stage. */
+  notificationHydration(): unknown[];
+  /** A stage client closed a notification. */
+  onStageNotificationDismissed(id: string): void;
+  /** Plugin roster for the stage's plugin list. */
+  pluginListForStage(): Array<Record<string, unknown>>;
+  /** Host shortcut combos after user overrides, for on-screen hints. */
+  hostHotkeys(): { lock: string; interactive: string };
   /** A stage window dragged an overlay - persist + propagate. */
   onOverlayTransform(overlayId: string, rect: Record<string, number>): void;
   /** An interactive overlay emitted an action (button/input) - route to plugin. */
   onOverlayAction(overlayId: string, action: string, payload?: unknown): void;
+  /** The stage inspector changed a control's value. */
+  onInspectorSet(overlayId: string, controlId: string, value: unknown, phase: "live" | "commit"): void;
+  /** The stage inspector fired a button. */
+  onInspectorAction(overlayId: string, controlId: string, payload?: unknown): void;
+  /** The stage asked for a host state (the toolbar's Done button). */
+  onHostRequest(state: string): void;
 
   /** Resolve an overlay asset request to an absolute file path, or null. */
   resolveAsset(pluginId: string, relPath: string): string | null;
@@ -146,6 +168,9 @@ export class WsServer {
       ".gif": "image/gif",
       ".json": "application/json",
       ".vue": "text/plain",
+      ".mp3": "audio/mpeg",
+      ".wav": "audio/wav",
+      ".ogg": "audio/ogg",
     };
     const type = MIME[ext] ?? "application/octet-stream";
     res.writeHead(200, { "content-type": type, "cache-control": "no-cache" });
@@ -216,8 +241,16 @@ export class WsServer {
       }
       const hs = this.bridge.hostState();
       send(ws, { type: "host:state_changed", state: hs.state, calib_stage: hs.calib_stage });
+      send(ws, { type: "host:hotkeys", ...this.bridge.hostHotkeys() });
     } else {
       for (const desc of this.bridge.overlayHydration()) send(ws, { type: "overlay:declared", ...desc });
+      for (const ins of this.bridge.inspectorHydration()) send(ws, { type: "overlay:inspector", ...ins });
+      send(ws, { type: "plugin:list", plugins: this.bridge.pluginListForStage() });
+      send(ws, { type: "host:hotkeys", ...this.bridge.hostHotkeys() });
+      for (const n of this.bridge.notificationHydration()) send(ws, { type: "stage:notify", notification: n });
+      const audio = this.bridge.audioHydration();
+      send(ws, { type: "audio:master", ...audio.master });
+      if (audio.preload.length) send(ws, { type: "audio:preload", urls: audio.preload });
       const hs = this.bridge.hostState();
       send(ws, { type: "host:state_changed", state: hs.state, calib_stage: hs.calib_stage });
     }
@@ -240,6 +273,28 @@ export class WsServer {
       if (overlayId && action) this.bridge.onOverlayAction(overlayId, action, msg.payload);
       return;
     }
+    if (role === "overlay" && msg.type === "inspector:set") {
+      const overlayId = String(msg.overlayId ?? "");
+      const controlId = String(msg.controlId ?? "");
+      const phase = msg.phase === "live" ? "live" : "commit";
+      if (overlayId && controlId) this.bridge.onInspectorSet(overlayId, controlId, msg.value, phase);
+      return;
+    }
+    if (role === "overlay" && msg.type === "inspector:action") {
+      const overlayId = String(msg.overlayId ?? "");
+      const controlId = String(msg.controlId ?? "");
+      if (overlayId && controlId) this.bridge.onInspectorAction(overlayId, controlId, msg.payload);
+      return;
+    }
+    if (role === "overlay" && msg.type === "stage:dismiss") {
+      const id = String(msg.id ?? "");
+      if (id) this.bridge.onStageNotificationDismissed(id);
+      return;
+    }
+    if (role === "overlay" && msg.type === "host:request") {
+      this.bridge.onHostRequest(String(msg.state ?? ""));
+      return;
+    }
     if (msg.jsonrpc === "2.0") await this.dispatchRpc(ws, msg);
   }
 
@@ -252,6 +307,12 @@ export class WsServer {
       switch (method) {
         case "config.update":
           result = this.bridge.rpcConfigUpdate(params);
+          break;
+        case "config.action":
+          result = this.bridge.rpcConfigAction(params);
+          break;
+        case "audio.setMaster":
+          result = this.bridge.rpcAudioSetMaster(params);
           break;
         case "plugin.setEnabled":
           result = await this.bridge.rpcSetEnabled(params);
@@ -286,6 +347,10 @@ export class WsServer {
   broadcastOverlay(obj: Record<string, unknown>): void {
     const text = JSON.stringify(obj);
     for (const ws of this.overlay) trySend(ws, text, this.overlay);
+  }
+
+  hasOverlayClient(): boolean {
+    return this.overlay.size > 0;
   }
 
   /** Deduped host-state broadcast (to both channels). Mirrors notify_host_state_changed. */

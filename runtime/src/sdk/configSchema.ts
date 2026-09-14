@@ -1,13 +1,18 @@
 /**
  * Declarative config schema for the FUSE plugin-manager UI.
- * Serializes to the exact JSON shape the control app already consumes
- * (`frontend/fuse/src/stores/plugins.ts`).
  *
- * Entry types: bool | int | float | str | choice | position | color
+ * `ctx.config.schema()` takes the same `InspectorSection` objects a plugin gives
+ * `ov.inspector.sections()`, so the App panel and the stage render one
+ * declaration with the same inputs. The legacy `ConfigCategory` / `ConfigEntry`
+ * classes still work; the App maps their types onto the matching controls.
+ *
+ * Legacy entry types: bool | int | float | str | choice | position | color
  *   str    => "string"
  *   choice => "select"
  *   color  => "color"   (value is an "#RRGGBBAA" hex string)
  */
+import type { InspectorControl, InspectorSection } from "./inspector.js";
+
 export type ConfigEntryType = "bool" | "int" | "float" | "str" | "choice" | "position" | "color";
 
 const TYPE_MAP: Record<string, string> = { str: "string", choice: "select" };
@@ -74,6 +79,22 @@ export class ConfigCategory {
   }
 }
 
-export function serializeSchema(categories: ConfigCategory[] | null | undefined): Array<Record<string, unknown>> {
-  return categories ? categories.map((c) => c.toDict()) : [];
+/** What `ctx.config.schema()` takes: inspector sections, legacy categories, or a mix. */
+export type ConfigSchemaItem = InspectorSection | ConfigCategory;
+
+/** Duck-typed: a plugin bundle carries its own copy of `ConfigCategory`, so `instanceof` fails. */
+export function isLegacyCategory(item: ConfigSchemaItem): item is ConfigCategory {
+  return Array.isArray((item as ConfigCategory).entries);
+}
+
+/** A section's controls; legacy categories have none. */
+export function sectionControls(item: ConfigSchemaItem): InspectorControl[] {
+  return isLegacyCategory(item) ? [] : (item.controls ?? []);
+}
+
+export function serializeSchema(items: ConfigSchemaItem[] | null | undefined): Array<Record<string, unknown>> {
+  if (!items) return [];
+  return items.map((item) =>
+    isLegacyCategory(item) ? item.toDict() : (JSON.parse(JSON.stringify(item)) as Record<string, unknown>),
+  );
 }

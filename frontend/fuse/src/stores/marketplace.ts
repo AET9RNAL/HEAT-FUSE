@@ -14,6 +14,15 @@ export interface MarketplaceTag {
 
 export type ModerationStatus = 'draft' | 'pending_review' | 'approved' | 'rejected' | 'withdrawn'
 
+export type MarketplaceSort = 'views' | 'downloads' | 'updated' | 'name'
+
+const SORTERS: Record<MarketplaceSort, (a: MarketplaceProject, b: MarketplaceProject) => number> = {
+    views:     (a, b) => b.view_count - a.view_count,
+    downloads: (a, b) => b.total_download_count - a.total_download_count,
+    updated:   (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime(),
+    name:      (a, b) => a.name.localeCompare(b.name),
+}
+
 export interface MarketplaceProject {
     id: string
     owner_id: string
@@ -63,9 +72,13 @@ export interface MarketplaceDependency {
 
 const R2_PUBLIC_BASE = import.meta.env.VITE_R2_PUBLIC_URL as string | undefined
 
-function buildPublicUrl(objectKey: string): string {
+// Icon object keys are deterministic, so a re-upload keeps the same URL — the
+// version token busts the browser/CDN cache when the row changes.
+function buildPublicUrl(objectKey: string, version?: string | null): string {
     const base = R2_PUBLIC_BASE ?? 'https://pub-placeholder.r2.dev'
-    return `${base.replace(/\/$/, '')}/${objectKey}`
+    const url = `${base.replace(/\/$/, '')}/${objectKey}`
+    const stamp = version ? Date.parse(version) : NaN
+    return Number.isNaN(stamp) ? url : `${url}?v=${stamp}`
 }
 
 export const useMarketplaceStore = defineStore('marketplace', () => {
@@ -76,9 +89,12 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
     const tags = ref<MarketplaceTag[]>([])
     const myProjects = ref<MarketplaceProject[]>([])
 
+    const stats = ref<{ publishedProjects: number; totalDownloads: number } | null>(null)
+
     const loading = ref(false)
     const loadingVersions = ref(false)
     const loadingMyProjects = ref(false)
+    const loadingStats = ref(false)
 
     const installing = ref<Record<string, 'idle' | 'downloading' | 'done' | 'error'>>({})
     const installedFiles = ref<Record<string, string>>({})
@@ -95,6 +111,7 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
     const filters = ref({
         search: '',
         tagIds: [] as string[],
+        sort: 'views' as MarketplaceSort,
     })
 
     const filteredProjects = computed(() => {
@@ -109,7 +126,8 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
                 filters.value.tagIds.every(tid => p.tags.some(t => t.id === tid))
             )
         }
-        return list
+        const by = SORTERS[filters.value.sort]
+        return by ? [...list].sort(by) : list
     })
 
     async function fetchTags(): Promise<void> {
@@ -119,6 +137,23 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
             .order('label')
         if (error) { logger.error('fetchTags:', { error }); return }
         tags.value = data ?? []
+    }
+
+    // Aggregated in Postgres so the payload stays constant as the catalogue grows.
+    async function fetchMarketplaceStats(): Promise<void> {
+        loadingStats.value = true
+        try {
+            const { data, error } = await supabase.rpc('get_marketplace_stats').single()
+            if (error) throw error
+            stats.value = {
+                publishedProjects: (data as any)?.published_projects ?? 0,
+                totalDownloads: (data as any)?.total_downloads ?? 0,
+            }
+        } catch (err) {
+            logger.error('fetchMarketplaceStats:', { error: err })
+        } finally {
+            loadingStats.value = false
+        }
     }
 
     async function fetchProjects(): Promise<void> {
@@ -473,6 +508,12 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
                 .eq('id', projectId)
             if (error) throw error
 
+            // Refresh so the bumped updated_at reaches the cache-busting icon URLs
+            await fetchMyProjects()
+            if (selectedProject.value?.id === projectId) await fetchProject(projectId)
+            const listed = projects.value.find(p => p.id === projectId)
+            if (listed) listed.updated_at = new Date().toISOString()
+
             return { success: true, icon_key: urlResult.object_key }
         } catch (err: any) {
             return { success: false, error: err.message }
@@ -735,10 +776,12 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
         tags,
         myProjects,
         myVersions,
+        stats,
         loading,
         loadingVersions,
         loadingMyProjects,
         loadingMyVersions,
+        loadingStats,
         installing,
         filters,
         filteredProjects,
@@ -746,6 +789,7 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
         checksumToProject,
         fetchTags,
         fetchProjects,
+        fetchMarketplaceStats,
         fetchProject,
         fetchVersions,
         fetchDependencies,

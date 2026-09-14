@@ -1,21 +1,24 @@
 {
   "vue_overlay_pos": {
-    "x": 1225,
-    "y": 637,
-    "w": 110,
-    "h": 30,
-    "opacity": 0.8
+    "x": 1074,
+    "y": 1156,
+    "w": 413,
+    "h": 71
   },
   "vue_overlay_pos_fp": {
     "x": 1222,
-    "y": 854,
-    "w": 116,
-    "h": 30,
-    "opacity": 0.8
+    "y": 458,
+    "w": 315,
+    "h": 62
   },
-  "vue_width": 150,
-  "vue_height": 44,
+  "vue_width": 115,
+  "vue_height": 30,
   "threshold_damage": 2000,
   "window_s": 20,
-  "cooldown_s": 60
+  "cooldown_s": 60,
+  "charge_color": "#7abfdf",
+  "cooldown_color": "#f2f2f2",
+  "sound_on_trigger": true,
+  "sound_choice": "magsToppedUp.wav",
+  "sound_volume": 1
 }

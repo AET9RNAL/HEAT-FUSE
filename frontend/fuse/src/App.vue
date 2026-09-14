@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import Titlebar from './components/Titlebar.vue'
 import AppMain from './components/AppMain.vue'
-import AppAuth from './components/AppAuth.vue'
+import AppWelcome from './components/AppWelcome.vue'
 import AppResetPassword from './components/AppResetPassword.vue'
 import eNotification from './components/eNotification.vue'
 import ePluginConfig from './components/ePluginConfig.vue'
 import eSimpleModal from './components/eSimpleModal.vue'
 import eLicense from './components/eLicense.vue'
 import eReleaseNotes from './components/eReleaseNotes.vue'
+import eTooltip from './components/eTooltip.vue'
 import { useAppStore } from './stores/app'
 import { useAuthStore } from './stores/auth'
 import { useExtendedAuthStore } from './stores/extendedauth'
@@ -59,11 +60,13 @@ const activePlugin = computed(() =>
         : null
 )
 
-const showAuth = computed(() => ['welcome', 'auth', 'otp', 'forgot-password'].includes(authStore.screen))
+// The four sign-in/up variants, the OTP screen and onboarding all share the
+// welcome shell's split layout.
+const showWelcome = computed(() => authStore.inWelcomeFlow)
 const showResetPassword = computed(() => authStore.screen === 'reset-password')
 // Queues behind the license gate and the auth overlays, both full-screen.
 const showReleaseNotes = computed(() =>
-    appStore.releaseNotesOpen && appStore.licenseAccepted && !showAuth.value && !showResetPassword.value
+    appStore.releaseNotesOpen && appStore.licenseAccepted && !showWelcome.value && !showResetPassword.value
 )
 
 function showNotification(payload: { title?: string; message: string; type?: NotificationType }) {
@@ -125,7 +128,14 @@ watch(() => appStore.licenseAccepted, async (accepted) => {
     eventBus.on('update:error', handleUpdateError)
 
     try {
-        await authStore.initializeAuth()
+        // Logged-In? YES routes itself (main, or onboarding when incomplete).
+        const restored = await authStore.initializeAuth()
+        // Logged-In? NO -> Wish to log-in? Only worth asking once: a user who
+        // already went through onboarding answered it, so don't re-prompt on
+        // every launch. Signing in later is still available from the sidebar.
+        if (!restored.success) {
+            authStore.setScreen(appStore.onboardingComplete ? 'main' : 'welcome')
+        }
     } finally {
         // After auth: lastSeenVersion is the DB value, not just the local one.
         // Runs even if session restore failed - notes are not auth-gated.
@@ -151,9 +161,9 @@ onUnmounted(() => {
     <eLicense v-if="!appStore.licenseAccepted" @close="() => {}" />
   </AnimatePresence>
 
-  <!-- Auth overlay (sit above AppMain) -->
+  <!-- Welcome shell: auth, OTP and onboarding, above AppMain -->
   <AnimatePresence>
-    <AppAuth v-if="appStore.licenseAccepted && showAuth" key="auth" />
+    <AppWelcome v-if="appStore.licenseAccepted && showWelcome" key="welcome" />
   </AnimatePresence>
   <AnimatePresence>
     <AppResetPassword v-if="appStore.licenseAccepted && showResetPassword" key="reset" />
@@ -203,6 +213,9 @@ onUnmounted(() => {
 
   <!-- Unsaved changes bar -->
   <eSimpleModal />
+
+  <!-- Shared tooltip for every v-tip -->
+  <eTooltip />
 </template>
 
 <style scoped>

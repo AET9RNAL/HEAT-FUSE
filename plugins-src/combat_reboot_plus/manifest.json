@@ -1,7 +1,7 @@
 {
   "plugin_id": "combat_reboot_plus",
   "name": "Combat Reboot Plus",
-  "version": "1.1.0",
+  "version": "2.0.0",
   "author": "AETERNAL",
   "description": "Tracks XM1-90's PDU-1546S module status",
   "entry": "plugin:CombatRebootPlusPlugin",
@@ -11,10 +11,15 @@
   "default_config": {
     "vue_overlay_pos": null,
     "vue_overlay_pos_fp": null,
-    "vue_width": 150,
+    "vue_width": 225,
     "vue_height": 44,
     "threshold_damage": 2000,
     "window_s": 20,
-    "cooldown_s": 60
+    "cooldown_s": 60,
+    "charge_color": "#8FFFB8FF",
+    "cooldown_color": "#F2F2F2FF",
+    "sound_on_trigger": true,
+    "sound_choice": "magsToppedUp.wav",
+    "sound_volume": 1
   }
 }

@@ -1,4 +1,26 @@
-import { FusePlugin, ConfigCategory, ConfigEntry, type FuseContext, type OverlayHandle } from "@fuse/plugin-sdk";
+import { FusePlugin, type FuseContext, type InspectorSection, type OverlayHandle } from "@fuse/plugin-sdk";
+
+/** The stage can't resize Rive overlays; `anim_width` / `anim_height` size the canvas instead, live. */
+function renderSizeSection(idPrefix: string): InspectorSection {
+  return {
+    id: `${idPrefix}.size`,
+    label: "Size",
+    order: 90,
+    controls: [
+      {
+        type: "vec2",
+        id: "render_size",
+        keys: ["anim_width", "anim_height"],
+        labels: ["W", "H"],
+        label: "Render size",
+        min: 10,
+        max: 3000,
+        step: 10,
+        tooltip: "Canvas size. Rive overlays can't be resized on the stage, so this is how to scale them.",
+      },
+    ],
+  };
+}
 
 interface Keyboard {
   press(key: string): void;
@@ -28,6 +50,10 @@ export class CruiseControlPlugin extends FusePlugin {
   private inFocus = true;
   private toggleCombo = "c";
 
+  private sections(): InspectorSection[] {
+    return [renderSizeSection("cc")];
+  }
+
   setup(ctx: FuseContext): void {
     this.ctx = ctx;
     this.kbd = ctx.services.get<Keyboard>("keyboard");
@@ -37,15 +63,9 @@ export class CruiseControlPlugin extends FusePlugin {
 
     ctx.config.defaults({ overlay_pos: null, anim_width: 300, anim_height: 300 }).load();
 
-    ctx.config.schema([
-      new ConfigCategory("Animation", [
-        new ConfigEntry({ key: "anim_width", label: "Render Width", type: "int", min: 10, max: 3000 }),
-        new ConfigEntry({ key: "anim_height", label: "Render Height", type: "int", min: 10, max: 3000 }),
-      ]),
-      new ConfigCategory("Position", [
-        new ConfigEntry({ key: "overlay_pos", label: "Overlay Position", type: "position" }),
-      ]),
-    ]);
+    // One declaration for both surfaces: the App panel and the stage inspector.
+    const sections = this.sections();
+    ctx.config.schema(sections);
 
     const w = Number(ctx.config.get("anim_width", 300)) || 300;
     const h = Number(ctx.config.get("anim_height", 300)) || 300;
@@ -60,6 +80,14 @@ export class CruiseControlPlugin extends FusePlugin {
       viewModel: "VmCruiseControl",
       positionConfigKey: "overlay_pos",
     });
+    this.ov.inspector.sections(sections);
+    const applySize = (): void =>
+      this.ov?.setSize({
+        w: Number(ctx.config.get("anim_width", 300)) || 300,
+        h: Number(ctx.config.get("anim_height", 300)) || 300,
+      });
+    ctx.config.watch("anim_width", applySize);
+    ctx.config.watch("anim_height", applySize);
     this.ov.setBool("isSetupComplete", false);
     this.ov.setBool("isCruiseOn", false);
 

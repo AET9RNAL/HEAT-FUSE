@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
-import { cutClipPath, useClipStroke } from "../composables/useClipStroke";
-
-const CUT = 6;
+import { motion } from "motion-v";
+import { Dynamics } from "../../composables/useMotion";
 
 interface Props {
   label: string;
@@ -25,9 +24,6 @@ const props = withDefaults(defineProps<Props>(), {
 });
 
 const emit = defineEmits<{ "update:modelValue": [value: number] }>();
-
-const el = ref<HTMLElement | null>(null);
-const points = useClipStroke(el, CUT);
 
 const draft = ref(String(props.modelValue));
 const focused = ref(false);
@@ -99,11 +95,12 @@ function onScrubUp(): void {
 </script>
 
 <template>
-  <div
-    ref="el"
+  <motion.div
     class="num-field"
     :class="{ focused, disabled }"
-    :style="{ clipPath: cutClipPath(CUT) }"
+    :initial="false"
+    :animate="{ borderColor: focused ? 'var(--accent-200)' : 'var(--base-600)' }"
+    :transition="Dynamics.quick"
     :title="title"
   >
     <span
@@ -123,19 +120,7 @@ function onScrubUp(): void {
       @blur="commit"
       @keydown="onKeydown"
     />
-    <svg
-      v-if="points"
-      class="field-stroke"
-      viewBox="0 0 100 100"
-      preserveAspectRatio="none"
-      xmlns="http://www.w3.org/2000/svg"
-    >
-      <polygon
-        :points="points"
-        fill="none" stroke="#525252" stroke-width="0.4" vector-effect="non-scaling-stroke"
-      />
-    </svg>
-  </div>
+  </motion.div>
 </template>
 
 <style scoped>
@@ -144,11 +129,14 @@ function onScrubUp(): void {
   display: flex;
   align-items: center;
   gap: var(--space-1);
-  height: 32px;
+  height: 26px;
   padding: 0 var(--space-2);
   box-sizing: border-box;
   background: var(--black-1-a);
+  border: 1px solid var(--base-600);
   cursor: text;
+  corner-shape: bevel;
+  border-radius: 8px 0 8px 0;
 }
 
 .num-field.disabled {
@@ -156,7 +144,6 @@ function onScrubUp(): void {
   cursor: not-allowed;
 }
 
-.num-field.focused .field-stroke polygon { stroke: var(--accent-200); }
 
 .num-label {
   font-family: var(--font-microcopy);
@@ -179,12 +166,4 @@ function onScrubUp(): void {
 }
 
 .num-input:disabled { cursor: not-allowed; }
-
-.field-stroke {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-}
 </style>

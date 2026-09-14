@@ -9,6 +9,7 @@ async function run(): Promise<void> {
   const server = new WsServer();
   const host = new FuseHost(server);
   server.attach(host);
+  host.setAutoLockOnStart(process.env.FUSE_AUTO_LOCK === "1");
 
   let port: number;
   try {

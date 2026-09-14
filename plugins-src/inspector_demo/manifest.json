@@ -1,0 +1,33 @@
+{
+  "plugin_id": "inspector_demo",
+  "name": "Inspector Demo",
+  "version": "1.0.0",
+  "author": "AETERNAL",
+  "description": "Exercises every overlay-inspector control type. Development aid, not a gameplay overlay.",
+  "entry": "plugin:InspectorDemoPlugin",
+  "runtime": "node",
+  "min_host_version": "4.7.0",
+  "hotkeys": {
+    "demo_action": "ctrl+alt+d"
+  },
+  "default_config": {
+    "demo_pos": null,
+    "opacity_pct": 62,
+    "offset": 0,
+    "count": 10,
+    "nudge_x": 0,
+    "nudge_y": 0,
+    "enabled": true,
+    "compact": false,
+    "density": "medium",
+    "phase": "charge",
+    "corners": ["tl", "br"],
+    "font_family": "WGNormalidad",
+    "title": "Inspector Demo",
+    "notes": "",
+    "accent": "#FFDB8CFF",
+    "tint": "#84FFB1FF",
+    "anchor": "center",
+    "combo": "ctrl+alt+d"
+  }
+}

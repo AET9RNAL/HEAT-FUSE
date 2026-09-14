@@ -1,5 +1,27 @@
 import { createHmac, randomUUID } from "node:crypto";
-import { FusePlugin, ConfigCategory, ConfigEntry, type FuseContext, type OverlayHandle } from "@fuse/plugin-sdk";
+import { FusePlugin, type FuseContext, type InspectorSection, type OverlayHandle } from "@fuse/plugin-sdk";
+
+/** The stage can't resize Rive overlays; `anim_width` / `anim_height` size the canvas instead, live. */
+function renderSizeSection(idPrefix: string): InspectorSection {
+  return {
+    id: `${idPrefix}.size`,
+    label: "Size",
+    order: 90,
+    controls: [
+      {
+        type: "vec2",
+        id: "render_size",
+        keys: ["anim_width", "anim_height"],
+        labels: ["W", "H"],
+        label: "Render size",
+        min: 10,
+        max: 3000,
+        step: 10,
+        tooltip: "Canvas size. Rive overlays can't be resized on the stage, so this is how to scale them.",
+      },
+    ],
+  };
+}
 
 interface Accessors {
   read(name: string): unknown;
@@ -196,6 +218,143 @@ export class HeatStatsPlugin extends FusePlugin {
     return typeof v === "number" ? v : null;
   }
 
+  private sections(): InspectorSection[] {
+    return [
+      {
+        id: "hst.display",
+        label: "Display",
+        order: 10,
+        controls: [
+          {
+            type: "segmented",
+            id: "mode",
+            key: "mode",
+            label: "Mode",
+            options: [
+              { value: "default", label: "Single", tooltip: "One view." },
+              { value: "carousel", label: "Carousel", tooltip: "Loop through every scene." },
+            ],
+          },
+          {
+            type: "slider",
+            id: "scene_time_s",
+            key: "scene_time_s",
+            label: "Scene time",
+            min: 2,
+            max: 60,
+            step: 1,
+            unit: "s",
+            default: 8,
+            when: { key: "mode", eq: "carousel" },
+            tooltip: "How long each carousel scene is shown. Double-click to reset.",
+          },
+          {
+            type: "switch",
+            id: "hide_in_battle",
+            key: "hide_in_battle",
+            label: "Hangar only",
+            tooltip: "Hide the stats during battle.",
+          },
+        ],
+      },
+      {
+        id: "hst.graph",
+        label: "Trend graph",
+        order: 11,
+        controls: [
+          {
+            type: "segmented",
+            id: "graph_scale",
+            key: "graph_scale",
+            label: "Scale",
+            options: [
+              { value: "auto", label: "Auto", tooltip: "Fit the graph to the overlay size." },
+              { value: "manual", label: "Manual", tooltip: "Use the point count and label scale below." },
+            ],
+          },
+          {
+            type: "number",
+            id: "graph_points",
+            key: "graph_points",
+            label: "Points",
+            min: 4,
+            max: 60,
+            step: 1,
+            when: { key: "graph_scale", eq: "manual" },
+            tooltip: "How many recent matches the graph shows.",
+          },
+          {
+            type: "slider",
+            id: "graph_value_scale",
+            key: "graph_value_scale",
+            label: "Label scale",
+            min: 0.5,
+            max: 2.5,
+            step: 0.1,
+            unit: "×",
+            default: 1,
+            when: { key: "graph_scale", eq: "manual" },
+            tooltip: "Axis and label size multiplier. Double-click to reset.",
+          },
+        ],
+      },
+      {
+        id: "hst.api",
+        label: "API",
+        order: 12,
+        controls: [
+          {
+            type: "text",
+            id: "api_key",
+            key: "api_key",
+            label: "API key",
+            placeholder: "fuse_…",
+            tooltip: "Your HEAT Stats API key.",
+          },
+          {
+            type: "text",
+            id: "player_name",
+            key: "player_name",
+            label: "Player",
+            placeholder: "Player name",
+            tooltip: "Player name to fetch stats for.",
+          },
+        ],
+      },
+      {
+        id: "hst.recording",
+        label: "Recording",
+        order: 13,
+        controls: [
+          {
+            type: "number",
+            id: "sample_interval_s",
+            key: "sample_interval_s",
+            label: "Sample every",
+            min: 1,
+            max: 30,
+            step: 1,
+            unit: "s",
+            tooltip: "How often battle stats are sampled.",
+          },
+          {
+            type: "slider",
+            id: "summarize_hold_s",
+            key: "summarize_hold_s",
+            label: "Summary hold",
+            min: 0,
+            max: 20,
+            step: 0.5,
+            unit: "s",
+            default: 5,
+            tooltip: "How long the summary shows before uploading. Double-click to reset.",
+          },
+        ],
+      },
+      renderSizeSection("hst"),
+    ];
+  }
+
   setup(ctx: FuseContext): void {
     this.ctx = ctx;
     this.acc = ctx.services.get<Accessors>("accessors");
@@ -224,77 +383,9 @@ export class HeatStatsPlugin extends FusePlugin {
       })
       .load();
 
-    ctx.config.schema([
-      new ConfigCategory("Display", [
-        new ConfigEntry({
-          key: "mode",
-          label: "Mode",
-          type: "choice",
-          choices: ["default", "carousel"],
-          description: "Single view, or a looped carousel",
-        }),
-        new ConfigEntry({
-          key: "scene_time_s",
-          label: "Scene Time (s)",
-          type: "float",
-          min: 2.0,
-          max: 60.0,
-          description: "Carousel: how long each scene is shown",
-        }),
-        new ConfigEntry({
-          key: "hide_in_battle",
-          label: "Hide During Battle",
-          type: "bool",
-          description: "Only visible in hangar",
-        }),
-        new ConfigEntry({
-          key: "graph_scale",
-          label: "Graph Scale",
-          type: "choice",
-          choices: ["auto", "manual"],
-          description: "Auto fits the trend graph to the overlay size; manual uses the values below",
-        }),
-        new ConfigEntry({
-          key: "graph_points",
-          label: "Graph Points (manual)",
-          type: "int",
-          min: 4,
-          max: 60,
-          description: "Manual scale: how many recent matches the trend graph shows",
-        }),
-        new ConfigEntry({
-          key: "graph_value_scale",
-          label: "Graph Label Scale (manual)",
-          type: "float",
-          min: 0.5,
-          max: 2.5,
-          description: "Manual scale: axis + label size multiplier",
-        }),
-      ]),
-      new ConfigCategory("API", [
-        new ConfigEntry({ key: "api_key", label: "API Key", type: "str", description: "HEAT Stats API key (fuse_...)" }),
-        new ConfigEntry({ key: "player_name", label: "Player Name", type: "str", description: "Player name to fetch stats for" }),
-      ]),
-      new ConfigCategory("Recording", [
-        new ConfigEntry({ key: "sample_interval_s", label: "Sample Interval (s)", type: "int", min: 1, max: 30 }),
-        new ConfigEntry({
-          key: "summarize_hold_s",
-          label: "Summary Hold (s)",
-          type: "float",
-          min: 0.0,
-          max: 20.0,
-          description: "How long the summary overlay shows before uploading",
-        }),
-      ]),
-      new ConfigCategory("Animation", [
-        new ConfigEntry({ key: "anim_width", label: "Render Width", type: "int", min: 10, max: 3000 }),
-        new ConfigEntry({ key: "anim_height", label: "Render Height", type: "int", min: 10, max: 3000 }),
-      ]),
-      new ConfigCategory("Position", [
-        new ConfigEntry({ key: "overlay_pos", label: "Rive Overlay Position", type: "position" }),
-        new ConfigEntry({ key: "vue_overlay_pos", label: "Stats Overlay Position", type: "position" }),
-      ]),
-    ]);
+    // One declaration for every surface: the App panel and both overlays' inspectors.
+    const sections = this.sections();
+    ctx.config.schema(sections);
 
     ctx.events.subscribe("accessors.connected", () => this.onConnected());
     ctx.events.subscribe("accessors.disconnected", () => this.onDisconnected());
@@ -319,6 +410,14 @@ export class HeatStatsPlugin extends FusePlugin {
       viewModel: "VMStats",
       positionConfigKey: "overlay_pos",
     });
+    this.ov.inspector.sections(sections);
+    const applySize = (): void =>
+      this.ov?.setSize({
+        w: Number(ctx.config.get("anim_width", 300)) || 300,
+        h: Number(ctx.config.get("anim_height", 300)) || 300,
+      });
+    ctx.config.watch("anim_width", applySize);
+    ctx.config.watch("anim_height", applySize);
     this.ov.setBool("isSetupComplete", false);
 
     const vw = Number(ctx.config.get("vue_width", 440)) || 440;
@@ -329,7 +428,9 @@ export class HeatStatsPlugin extends FusePlugin {
       asset: "HeatStatsOverlay.vue",
       size: { w: vw, h: vh },
       positionConfigKey: "vue_overlay_pos",
+      interactive: true,
     });
+    this.vueOv.inspector.sections(sections);
     this.vueOv.setBool("isSetupComplete", false);
     // Interactive overlay button (Refresh stats) -> re-fetch on demand.
     this.vueOv.onAction((action) => {

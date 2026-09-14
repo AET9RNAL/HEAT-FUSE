@@ -72,14 +72,17 @@ function parseDeps(manifest: Manifest): [Record<string, string>, string[]] {
   return [required, optional];
 }
 
-export function resolveLoadOrder(specs: DiscoveredPlugin[]): DiscoveredPlugin[] {
+/** Called once per dropped plugin with a user-facing reason. */
+export type SkipHandler = (spec: DiscoveredPlugin, reason: string) => void;
+
+export function resolveLoadOrder(specs: DiscoveredPlugin[], onSkip?: SkipHandler): DiscoveredPlugin[] {
   const allById = new Map<string, DiscoveredPlugin>();
   for (const s of specs) allById.set(s.pluginId, s);
 
   const core = specs.filter((s) => s.isCore);
   const user = specs.filter((s) => !s.isCore);
 
-  const ordered = [...topoSort(core, allById), ...topoSort(user, allById)];
+  const ordered = [...topoSort(core, allById, onSkip), ...topoSort(user, allById, onSkip)];
   logger.debug(`Plugin load order: [${ordered.map((s) => s.pluginId).join(", ")}]`);
   return ordered;
 }
@@ -87,6 +90,7 @@ export function resolveLoadOrder(specs: DiscoveredPlugin[]): DiscoveredPlugin[] 
 function topoSort(
   specs: DiscoveredPlugin[],
   allById: Map<string, DiscoveredPlugin>,
+  onSkip?: SkipHandler,
 ): DiscoveredPlugin[] {
   // Phase 1 - filter plugins with unsatisfied required deps.
   const valid = new Map<string, DiscoveredPlugin>();
@@ -97,6 +101,7 @@ function topoSort(
       const dep = allById.get(depId);
       if (!dep) {
         logger.error(`Plugin '${spec.name}' skipped - missing required dependency: '${depId}'`);
+        onSkip?.(spec, `Missing required plugin '${depId}'.`);
         ok = false;
         break;
       }
@@ -104,6 +109,7 @@ function topoSort(
         logger.error(
           `Plugin '${spec.name}' skipped - '${depId}' v${dep.version} does not satisfy '${verSpec}'`,
         );
+        onSkip?.(spec, `Needs '${depId}' ${verSpec}, found v${dep.version}.`);
         ok = false;
         break;
       }
@@ -150,6 +156,10 @@ function topoSort(
 
   if (cycleMembers.size) {
     logger.error(`Dropping plugins involved in dependency cycles: ${[...cycleMembers].join(", ")}`);
+    for (const id of cycleMembers) {
+      const spec = valid.get(id);
+      if (spec) onSkip?.(spec, "Its dependencies form a cycle.");
+    }
     return ordered.filter((s) => !cycleMembers.has(s.pluginId));
   }
   return ordered;

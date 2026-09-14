@@ -14,6 +14,7 @@ import { useAppStore } from '../stores/app'
 import { useNavigationStore } from '../stores/navigation'
 import { useI18n } from '../composables/useI18n'
 import { eventBus } from '../events/eventBus'
+import { requestSettingAttention } from '../composables/useSettingAttention'
 
 const { t } = useI18n()
 // import Compositor from './effects/Compositor.vue'
@@ -58,6 +59,7 @@ async function handleLaunch() {
       type: 'warning',
     })
     navStore.selectOption('settings')
+    requestSettingAttention('gameDir')
     return
   }
 
@@ -69,6 +71,7 @@ async function handleLaunch() {
       type: 'warning',
     })
     navStore.selectOption('settings')
+    requestSettingAttention('gameDir')
     return
   }
   if (!result.enabled) {
@@ -79,6 +82,7 @@ async function handleLaunch() {
       type: 'warning',
     })
     navStore.selectOption('settings')
+    requestSettingAttention('gameConfig')
     return
   }
 
@@ -195,6 +199,8 @@ onUnmounted(() => {
 }
 
 .search-input {
+  user-select: none;
+  -webkit-user-select: none;
   flex: 1;
   height: 32px;
   padding: 0 var(--space-3);
@@ -205,12 +211,8 @@ onUnmounted(() => {
   font-family: var(--font-primary);
   font-size: var(--main-font-size-4);
   font-weight: var(--font-weight-2);
-  clip-path: polygon(
-    6px 0%, 100% 0%,
-    100% calc(100% - 6px),
-    calc(100% - 6px) 100%,
-    0% 100%, 0% 6px
-  );
+  corner-shape: bevel;
+  border-radius: 6px 0 6px 0;
 }
 
 .search-input::placeholder {
@@ -240,13 +242,7 @@ onUnmounted(() => {
 
 .plugin-compositor {
   width: 100%;
-  clip-path: polygon(
-    10px 0%,
-    100% 0%,
-    100% calc(100% - 10px),
-    calc(100% - 10px) 100%,
-    0% 100%,
-    0% 10px
-  );
+  corner-shape: bevel;
+  border-radius: 10px 0 10px 0;
 }
 </style>

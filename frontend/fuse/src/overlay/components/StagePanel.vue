@@ -1,35 +1,17 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
-import { cutClipPath, useClipStroke } from "../composables/useClipStroke";
+import { computed } from "vue";
 
 const props = withDefaults(defineProps<{ cut?: number; blur?: boolean }>(), {
   cut: 8,
   blur: false,
 });
 
-const el = ref<HTMLElement | null>(null);
-const points = useClipStroke(el, props.cut);
-const clip = computed(() => cutClipPath(props.cut));
+const radius = computed(() => `${props.cut}px 0 ${props.cut}px 0`);
 </script>
 
 <template>
-  <div ref="el" class="stage-panel" :class="{ blur }" :style="{ clipPath: clip }">
+  <div class="stage-panel" :class="{ blur }" :style="{ borderRadius: radius }">
     <slot />
-    <svg
-      v-if="points"
-      class="panel-stroke"
-      viewBox="0 0 100 100"
-      preserveAspectRatio="none"
-      xmlns="http://www.w3.org/2000/svg"
-    >
-      <polygon
-        :points="points"
-        fill="none"
-        stroke="#525252"
-        stroke-width="0.4"
-        vector-effect="non-scaling-stroke"
-      />
-    </svg>
   </div>
 </template>
 
@@ -37,20 +19,12 @@ const clip = computed(() => cutClipPath(props.cut));
 .stage-panel {
   position: relative;
   background: var(--black-1-a);
+  border: 1px solid var(--base-600);
+  corner-shape: bevel;
 }
 
 .stage-panel.blur {
   backdrop-filter: blur(35px);
   -webkit-backdrop-filter: blur(35px);
-}
-
-.panel-stroke {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-  overflow: visible;
-  z-index: 1;
 }
 </style>

@@ -11,6 +11,7 @@ export interface Guide {
 
 const GRID_KEY = "fuse.overlay.grid";
 const INSPECTOR_KEY = "fuse.overlay.inspector";
+const STAGE_KEY = "fuse.overlay.stage";
 const MIN_GRID = 2;
 const MAX_GRID = 512;
 
@@ -20,6 +21,11 @@ export const activeGuides = ref<Guide[]>([]);
 
 export const lockAspect = ref(false);
 export const inspectorPos = ref<{ x: number; y: number } | null>(null);
+
+/** Backdrop dim behind the overlays while calibrating, 0..1. */
+export const dim = ref(0);
+export const pluginListOpen = ref(false);
+export const pluginListPos = ref<{ x: number; y: number } | null>(null);
 
 export function selectOverlay(id: string): void {
   selectedId.value = id;
@@ -59,8 +65,37 @@ function loadGrid(): void {
   }
 }
 
+function loadStage(): void {
+  try {
+    const raw = localStorage.getItem(STAGE_KEY);
+    if (!raw) return;
+    const saved = JSON.parse(raw) as Partial<{ dim: number; pluginListPos: { x: number; y: number } }>;
+    if (typeof saved.dim === "number" && Number.isFinite(saved.dim)) {
+      dim.value = Math.min(1, Math.max(0, saved.dim));
+    }
+    if (saved.pluginListPos && Number.isFinite(saved.pluginListPos.x)) {
+      pluginListPos.value = saved.pluginListPos;
+    }
+  } catch {
+    // Corrupt or unavailable storage - defaults are fine.
+  }
+}
+
 loadGrid();
 loadInspectorPos();
+loadStage();
+
+watch(
+  [dim, pluginListPos],
+  () => {
+    try {
+      localStorage.setItem(STAGE_KEY, JSON.stringify({ dim: dim.value, pluginListPos: pluginListPos.value }));
+    } catch {
+      // Non-fatal: the stage just won't remember these.
+    }
+  },
+  { deep: true },
+);
 
 watch(
   grid,

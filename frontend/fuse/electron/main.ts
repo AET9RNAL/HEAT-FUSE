@@ -191,6 +191,9 @@ function scanPluginsDir(dir: string) {
 //
 
 let win: BrowserWindow | null = null
+let splash: BrowserWindow | null = null
+let mainReady: Promise<void> = Promise.resolve()
+let startHidden = false
 let tray: Tray | null = null
 let isQuitting = false
 let minimizeToTrayOnStart = false
@@ -201,6 +204,10 @@ let fuseProcess: ChildProcess | null = null
 let fusePort: number | null = null
 let fuseToken: string | null = null
 let currentObsUrl: string | null = null
+
+/** Inspector port the sidecar was spawned with, and the DevTools window attached to it. */
+let runtimeInspectPort = 9229
+let runtimeDevtoolsWindow: BrowserWindow | null = null
 
 /**
  * Browser Source URL for a display selection ('all' = whole virtual desktop,
@@ -491,8 +498,75 @@ function destroyTray() {
 }
 
 
+// splash screen
+function createSplash() {
+  splash = new BrowserWindow({
+    width: 210,
+    height: 210,
+    show: false,
+    frame: false,
+    transparent: true,
+    backgroundColor: '#00000000',
+    hasShadow: true,
+    resizable: false,
+    movable: false,
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    skipTaskbar: true,
+    alwaysOnTop: true,
+    focusable: false,
+    center: true,
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      devTools: !__RELEASE__,
+      preload: PATHS.preload,
+    },
+  })
+
+  splash.setIgnoreMouseEvents(true)
+  splash.once('ready-to-show', () => splash?.show())
+
+  if (VITE_DEV_SERVER_URL) {
+    splash.loadURL(new URL('splash.html', VITE_DEV_SERVER_URL).toString())
+  } else {
+    splash.loadFile(path.join(RENDERER_DIST, 'splash.html'))
+  }
+}
+
+function destroySplash() {
+  if (splash && !splash.isDestroyed()) splash.destroy()
+  splash = null
+}
+
+// Resolves when the splash reports playback finished, or on a hard timeout
+function waitForSplash(): Promise<void> {
+  return new Promise(resolve => {
+    if (!splash) { resolve(); return }
+    const finish = () => {
+      clearTimeout(timer)
+      ipcMain.removeListener('splash:done', finish)
+      splash?.removeListener('closed', finish)
+      resolve()
+    }
+    const timer = setTimeout(finish, 6_000)
+    ipcMain.once('splash:done', finish)
+    splash.once('closed', finish)
+  })
+}
+
+async function revealMainWindow() {
+  await Promise.all([mainReady, waitForSplash()])
+  destroySplash()
+  if (!win || win.isDestroyed() || startHidden) return
+  win.show()
+  win.focus()
+}
+
 function createWindow() {
   win = new BrowserWindow({
+    show: false,
     frame: false,
     minWidth: 800,
     minHeight: 600,
@@ -507,6 +581,12 @@ function createWindow() {
       devTools: !__RELEASE__,
       preload: PATHS.preload,
     },
+  })
+
+  mainReady = new Promise<void>(resolve => {
+    win!.once('ready-to-show', () => resolve())
+    // A failed load still has to release the splash gate.
+    win!.webContents.once('did-fail-load', () => resolve())
   })
 
   // Disable Ctrl+R in production
@@ -566,6 +646,7 @@ function createWindow() {
           " script-src 'self' 'wasm-unsafe-eval' https://us-assets.i.posthog.com;" +
           " style-src 'self' 'unsafe-inline';" +
           " img-src 'self' data: https:;" +
+          " media-src 'self' blob: data:;" +
           " font-src 'self';" +
           " connect-src 'self' http://127.0.0.1:* ws://127.0.0.1:*" +
           " https://*.supabase.co wss://*.supabase.co" +
@@ -621,7 +702,10 @@ app.on('before-quit', (event) => {
 })
 
 app.on('activate', () => {
-  if (BrowserWindow.getAllWindows().length === 0) createWindow()
+  if (BrowserWindow.getAllWindows().length === 0) {
+    createWindow()
+    win?.once('ready-to-show', () => { win?.show(); win?.focus() })
+  }
 })
 
 
@@ -665,6 +749,9 @@ if (!app.requestSingleInstanceLock()) {
 app.commandLine.appendSwitch('enable-features', 'CanvasDrawElement')
 app.whenReady().then(() => {
   createWindow()
+  createSplash()
+  // Main window stays hidden until it is painted AND the reveal has played out.
+  void revealMainWindow()
 
   // Register overlay-stage IPC + display listeners (windows open on fuse:spawn).
   initOverlayStage({
@@ -707,7 +794,44 @@ app.whenReady().then(() => {
   })
 
 
-  ipcMain.handle('fuse:spawn', async () => {
+  // Opens a DevTools window attached to the sidecar's inspector. The frontend URL
+  // has to be read off the inspector itself because it embeds the target's uuid.
+  ipcMain.on('runtime:toggle-devtools', async () => {
+    if (runtimeDevtoolsWindow && !runtimeDevtoolsWindow.isDestroyed()) {
+      runtimeDevtoolsWindow.close()
+      runtimeDevtoolsWindow = null
+      return
+    }
+    if (!fuseProcess) {
+      console.warn('[runtime:devtools] runtime is not running')
+      return
+    }
+    try {
+      const res = await fetch(`http://127.0.0.1:${runtimeInspectPort}/json/list`)
+      const targets = await res.json() as { devtoolsFrontendUrl?: string; id?: string }[]
+      const target = targets[0]
+      if (!target) throw new Error('inspector reported no targets')
+      const url = target.devtoolsFrontendUrl
+        ?? `devtools://devtools/bundled/js_app.html?experiments=true&v8only=true&ws=127.0.0.1:${runtimeInspectPort}/${target.id}`
+
+      runtimeDevtoolsWindow = new BrowserWindow({
+        width: 1200,
+        height: 800,
+        title: 'FUSE Runtime DevTools',
+        autoHideMenuBar: true,
+      })
+      runtimeDevtoolsWindow.on('closed', () => { runtimeDevtoolsWindow = null })
+      runtimeDevtoolsWindow.webContents.on('did-fail-load', (_e, code, desc) => {
+        console.error(`[runtime:devtools] could not load frontend (${code} ${desc}); attach manually via ${url}`)
+      })
+      await runtimeDevtoolsWindow.loadURL(url)
+    } catch (err) {
+      runtimeDevtoolsWindow = null
+      console.error('[runtime:devtools]', err instanceof Error ? err.message : err)
+    }
+  })
+
+  ipcMain.handle('fuse:spawn', async (_event, opts?: { autoLock?: boolean }) => {
     if (fuseProcess) return { success: false, error: 'already running' }
 
     // The runtime is a Node sidecar (runtime/dist/index.js). We run it with
@@ -718,14 +842,14 @@ app.whenReady().then(() => {
       return { success: false, error: `runtime not built: ${PATHS.runtimeEntry} (run "npm run build:runtime")` }
     }
     const executable = process.execPath
-    // Dev always opens the sidecar's Node inspector; FUSE_INSPECT=brk additionally
-    // pauses it at the first line so early setup() code can be stepped.
+    // binds 127.0.0.1 only. FUSE_INSPECT=brk (dev)
+    // pauses at the first line so early setup() code can be stepped.
     const args: string[] = []
-    if (IS_DEV) {
-      const brk = (process.env.FUSE_INSPECT ?? '').toLowerCase().startsWith('brk')
-      const port = Number(process.env.FUSE_INSPECT_PORT) || 9229
-      args.push(`--${brk ? 'inspect-brk' : 'inspect'}=${port}`)
-      console.log(`[fuse:spawn] runtime inspector on ws://127.0.0.1:${port}${brk ? ' (paused at start)' : ''}`)
+    {
+      const brk = IS_DEV && (process.env.FUSE_INSPECT ?? '').toLowerCase().startsWith('brk')
+      runtimeInspectPort = Number(process.env.FUSE_INSPECT_PORT) || 9229
+      args.push(`--${brk ? 'inspect-brk' : 'inspect'}=${runtimeInspectPort}`)
+      console.log(`[fuse:spawn] runtime inspector on ws://127.0.0.1:${runtimeInspectPort}${brk ? ' (paused at start)' : ''}`)
     }
     args.push(PATHS.runtimeEntry)
     const spawnEnv: NodeJS.ProcessEnv = {
@@ -733,6 +857,7 @@ app.whenReady().then(() => {
       ELECTRON_RUN_AS_NODE: '1',
       FUSE_DATA_DIR: USER_DATA_DIR,
       FUSE_USER_PLUGINS_DIR: PATHS.pluginsUser,
+      FUSE_AUTO_LOCK: opts?.autoLock ? '1' : '0',
     }
 
     return new Promise<{ success: boolean; pid?: number; port?: number; connectionToken?: string; obsUrl?: string | null; error?: string }>((resolve) => {
@@ -997,6 +1122,7 @@ app.whenReady().then(() => {
 
   ipcMain.handle('app:apply-minimize-to-tray-on-start', () => {
     if (minimizeToTrayOnStart && win && app.getLoginItemSettings().wasOpenedAtLogin) {
+      startHidden = true
       win.hide()
     }
   })

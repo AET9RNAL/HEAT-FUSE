@@ -6,6 +6,7 @@ import posthog from 'posthog-js'
 import './style.css'
 import App from './App.vue'
 import vTruncateTitle from './directives/vTruncateTitle'
+import { vTip } from './directives/vTip'
 
 if (import.meta.env.VITE_SENTRY_DSN) {
     Sentry.init({ dsn: import.meta.env.VITE_SENTRY_DSN as string })
@@ -23,5 +24,6 @@ const pinia = createPinia()
 pinia.use(piniaPluginPersistedstate)
 app.use(pinia)
 app.directive('truncate-title', vTruncateTitle)
+app.directive('tip', vTip)
 
 app.mount('#app')

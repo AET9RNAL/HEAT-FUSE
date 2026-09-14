@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed } from 'vue'
 import { motion } from 'motion-v'
 import { useAuthStore } from '../stores/auth'
 import { useI18n } from '../composables/useI18n'
@@ -29,31 +29,7 @@ async function handleSubmit() {
 }
 
 // SVG stroke
-const CUT = 8
-const cardEl = ref<HTMLElement | null>(null)
-const elW = ref(0)
-const elH = ref(0)
 
-const svgPoints = computed(() => {
-    const w = elW.value
-    const h = elH.value
-    if (!w || !h) return ''
-    const cx = (CUT / w) * 100
-    const cy = (CUT / h) * 100
-    return `${cx},0 100,0 100,${100 - cy} ${100 - cx},100 0,100 0,${cy}`
-})
-
-let ro: ResizeObserver | null = null
-onMounted(() => {
-    if (!cardEl.value) return
-    ro = new ResizeObserver(([entry]) => {
-        const box = entry.borderBoxSize?.[0]
-        elW.value = box ? box.inlineSize : entry.contentRect.width
-        elH.value = box ? box.blockSize  : entry.contentRect.height
-    })
-    ro.observe(cardEl.value)
-})
-onUnmounted(() => ro?.disconnect())
 </script>
 
 <template>
@@ -64,7 +40,7 @@ onUnmounted(() => ro?.disconnect())
             :animate="{ opacity: 1, scale: 1 }"
             :transition="{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }"
         >
-            <div ref="cardEl" class="reset-card">
+            <div class="reset-card">
                 <div class="card-blur" />
 
                 <div class="card-inner">
@@ -123,21 +99,6 @@ onUnmounted(() => ro?.disconnect())
                     </div>
                 </div>
 
-                <svg
-                    v-if="svgPoints"
-                    class="card-stroke"
-                    viewBox="0 0 100 100"
-                    preserveAspectRatio="none"
-                    xmlns="http://www.w3.org/2000/svg"
-                >
-                    <polygon
-                        :points="svgPoints"
-                        fill="none"
-                        stroke="#29302D"
-                        stroke-width="0.4"
-                        vector-effect="non-scaling-stroke"
-                    />
-                </svg>
             </div>
         </motion.div>
     </div>
@@ -166,13 +127,11 @@ onUnmounted(() => ro?.disconnect())
 .reset-card {
     position: relative;
     width: 100%;
+    box-sizing: border-box;
     background: hsla(142, 10%, 4%, 0.92);
-    clip-path: polygon(
-        8px 0%, 100% 0%,
-        100% calc(100% - 8px),
-        calc(100% - 8px) 100%,
-        0% 100%, 0% 8px
-    );
+    border: 1px solid var(--base-600);
+    corner-shape: bevel;
+    border-radius: 8px 0 8px 0;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
 }
 
@@ -182,12 +141,8 @@ onUnmounted(() => ro?.disconnect())
     z-index: 0;
     backdrop-filter: blur(35px);
     -webkit-backdrop-filter: blur(35px);
-    clip-path: polygon(
-        8px 0%, 100% 0%,
-        100% calc(100% - 8px),
-        calc(100% - 8px) 100%,
-        0% 100%, 0% 8px
-    );
+    corner-shape: bevel;
+    border-radius: 8px 0 8px 0;
     pointer-events: none;
 }
 
@@ -281,13 +236,4 @@ onUnmounted(() => ro?.disconnect())
     justify-content: flex-end;
 }
 
-.card-stroke {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    pointer-events: none;
-    overflow: visible;
-    z-index: 2;
-}
 </style>

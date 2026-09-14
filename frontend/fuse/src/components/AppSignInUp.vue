@@ -1,109 +1,255 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { AnimatePresence } from 'motion-v'
+import { AnimatePresence, motion } from 'motion-v'
 import { useAuthStore } from '../stores/auth'
 import { useAppStore } from '../stores/app'
 import { useI18n } from '../composables/useI18n'
 import eInputField from './eInputField.vue'
 import eButton from './eButton.vue'
 import eCheckbox from './eCheckbox.vue'
+import ePassStrength from './ePassStrength.vue'
 import eLegalModal from './eLegalModal.vue'
+import Icons from './Icons.vue'
+import combinationMark from '../assets/CombinationMark.svg'
 
 const auth = useAuthStore()
 const appStore = useAppStore()
 const { t } = useI18n()
 
-const isSignUp = computed(() => auth.state === 'signup')
+const PROVIDERS_ENABLED = false
+
+const isStage1 = computed(() => auth.screen === 'welcome')
+const isStage2 = computed(() => auth.screen === 'signin-password')
+const isSignUp = computed(() => auth.screen === 'signup')
+const isRecovery = computed(() => auth.screen === 'recovery')
+
+const showsLogo = computed(() => !isRecovery.value)
+const showsProviders = computed(() => isStage1.value || isSignUp.value)
+
+const recoverySent = ref(false)
 
 const activeLegal = ref<'tos' | 'privacy' | null>(null)
 function openLegal(which: 'tos' | 'privacy') { activeLegal.value = which }
 function closeLegal() { activeLegal.value = null }
 
-const passwordRules = computed(() => [
-    { label: t('appauth.passwordMinLength'), met: auth.password.length >= 6 },
-    { label: t('appauth.passwordUppercase'), met: /[A-Z]/.test(auth.password) },
-    { label: t('appauth.passwordNumber'), met: /[0-9]/.test(auth.password) },
-    { label: t('appauth.passwordSpecial'), met: /[^a-zA-Z0-9]/.test(auth.password) },
-])
-
-const passwordValid = computed(() => passwordRules.value.every(r => r.met))
-
-async function handleSubmit() {
-    if (auth.loading) return
-    if (isSignUp.value) {
-        await auth.signUp()
-    } else {
-        await auth.signIn()
+function handleContinue() {
+    if (!auth.email.trim()) {
+        auth.setError(t('appauth.emailRequired'))
+        return
     }
+    auth.goToPasswordStage()
+}
+
+function goToSignUp() {
+    auth.setPassword('')
+    auth.setError(null)
+    auth.setScreen('signup')
+}
+
+function goToRecovery() {
+    recoverySent.value = false
+    auth.setPassword('')
+    auth.setError(null)
+    auth.setScreen('recovery')
+}
+
+async function handleSignIn() {
+    if (auth.loading) return
+    await auth.signIn()
+}
+
+async function handleSignUp() {
+    if (auth.loading || !auth.passwordMeetsPolicy) return
+    await auth.signUp()
+}
+
+async function handleRecovery() {
+    if (auth.loading || !auth.email.trim()) return
+    const result = await auth.forgotPassword()
+    if (result.success) recoverySent.value = true
 }
 </script>
 
 <template>
-    <div class="sign-form">
-        <div class="fields">
-            <eInputField
-                :label="t('appauth.email')"
-                type="email"
-                orientation="default"
-                :modelValue="auth.email"
-                @update:modelValue="auth.setEmail($event)"
-            />
-            <eInputField
-                :label="t('appauth.password')"
-                type="password"
-                orientation="mirrored"
-                :modelValue="auth.password"
-                @update:modelValue="auth.setPassword($event)"
-                @keydown.enter="handleSubmit"
-            />
-        </div>
+    <div class="sign-column">
+        <img v-if="showsLogo" class="combination-mark" :src="combinationMark" alt="HEAT FUSE" />
 
-        <div v-if="isSignUp && auth.password.length > 0" class="password-rules">
-            <span class="rules-label">{{ t('appauth.passwordMustInclude') }}</span>
-            <div v-for="rule in passwordRules" :key="rule.label" class="rule-row">
-                <span class="rule-icon" :class="rule.met ? 'rule-met' : 'rule-unmet'">
-                    {{ rule.met ? '✓' : '✗' }}
-                </span>
-                <span class="rule-text" :class="rule.met ? 'rule-met' : 'rule-unmet'">{{ rule.label }}</span>
+        <!-- Back out of stage 2 / recovery -->
+        <button
+            v-if="isStage2 || isRecovery"
+            class="back-link"
+            @click="auth.backToEmailStage()"
+        >
+            <Icons kind="arrow-left" size="small" />
+            <span class="link-text">{{ isRecovery ? t('appauth.backToLogIn') : t('appauth.back') }}</span>
+        </button>
+
+        <div class="header">
+            <div v-if="isStage1" class="header-row">
+                <h1 class="title">{{ t('appauth.logIn') }}</h1>
+                <button class="skip-link" @click="auth.skipLogin()">{{ t('appauth.skipForNow') }}</button>
+            </div>
+            <h1 v-else-if="isStage2" class="title centered">{{ t('appauth.welcomeToFuse') }}</h1>
+            <h1 v-else-if="isSignUp" class="title centered">{{ t('appauth.createAccount') }}</h1>
+            <template v-else-if="isRecovery">
+                <h1 class="title centered">
+                    {{ t('appauth.recoveryTitleLine1') }}<br>{{ t('appauth.recoveryTitleLine2') }}
+                </h1>
+                <p class="recovery-body">{{ t('appauth.recoveryBody') }}</p>
+            </template>
+
+            <div v-if="isStage1" class="account-prompt">
+                <span>{{ t('appauth.noAccount') }}</span>
+                <button class="inline-link" @click="goToSignUp">{{ t('appauth.createOne') }}</button>
             </div>
         </div>
 
-        <button
-            v-if="!isSignUp"
-            class="forgot-btn"
-            @click="auth.setScreen('forgot-password')"
-        >
-            {{ t('appauth.forgotPassword') }}
-        </button>
+        <div v-if="showsProviders" class="providers">
+            <eButton
+                size="full"
+                :label="isSignUp ? t('appauth.signUpWithGoogle') : t('appauth.signInWithGoogle')"
+                icon="google"
+                :disabled="!PROVIDERS_ENABLED"
+            />
+            <eButton
+                size="full"
+                :label="isSignUp ? t('appauth.signUpWithWargaming') : t('appauth.signInWithWargaming')"
+                icon="wgc"
+                :disabled="!PROVIDERS_ENABLED"
+            />
+        </div>
 
-        <template v-if="isSignUp">
+        <div v-if="showsProviders" class="or-divider">
+            <span class="rule" />
+            <span class="or-label">{{ t('appauth.or') }}</span>
+            <span class="rule" />
+        </div>
+
+        <div class="fields">
+            <div class="field">
+                <div class="field-labels">
+                    <span class="micro">{{ t('appauth.emailLabel') }}</span>
+                    <button
+                        v-if="isStage2 || isRecovery"
+                        class="micro micro-link"
+                        @click="auth.backToEmailStage()"
+                    >{{ t('appauth.edit') }}</button>
+                </div>
+                <eInputField
+                    label=""
+                    type="email"
+                    orientation="default"
+                    :locked="isStage2"
+                    :autofocus="isStage1"
+                    :modelValue="auth.email"
+                    @update:modelValue="auth.setEmail($event)"
+                    @keydown.enter="isStage1 ? handleContinue() : undefined"
+                />
+            </div>
+
+            <div v-if="isStage2 || isSignUp" class="field">
+                <div class="field-labels">
+                    <span class="micro">{{ t('appauth.passwordLabel') }}</span>
+                    <button
+                        v-if="isStage2"
+                        class="micro micro-link"
+                        @click="goToRecovery"
+                    >{{ t('appauth.forgot') }}</button>
+                </div>
+                <eInputField
+                    label=""
+                    type="password"
+                    orientation="mirrored"
+                    :autofocus="isStage2"
+                    :modelValue="auth.password"
+                    @update:modelValue="auth.setPassword($event)"
+                    @keydown.enter="isSignUp ? handleSignUp() : handleSignIn()"
+                />
+                <ePassStrength
+                    v-if="isSignUp"
+                    :strength="auth.passwordStrength"
+                    :invalid="auth.password.length > 0 && !auth.passwordMeetsPolicy"
+                />
+            </div>
+        </div>
+
+        <AnimatePresence>
+            <motion.p
+                v-if="auth.error"
+                key="error"
+                class="error-inline"
+                :initial="{ opacity: 0, y: -4 }"
+                :animate="{ opacity: 1, y: 0 }"
+                :exit="{ opacity: 0 }"
+                :transition="{ duration: 0.15 }"
+            >{{ auth.error }}</motion.p>
+            <motion.p
+                v-else-if="isRecovery && recoverySent"
+                key="sent"
+                class="sent-inline"
+                :initial="{ opacity: 0, y: -4 }"
+                :animate="{ opacity: 1, y: 0 }"
+                :exit="{ opacity: 0 }"
+                :transition="{ duration: 0.15 }"
+            >{{ t('appauth.forgotPasswordSentSubtext') }}</motion.p>
+        </AnimatePresence>
+
+        <eButton
+            v-if="isStage1"
+            size="full"
+            variant="accent"
+            :label="t('appauth.logIn')"
+            :disabled="auth.loading"
+            @click="handleContinue"
+        />
+        <eButton
+            v-else-if="isStage2"
+            size="full"
+            variant="accent"
+            :label="t('appauth.logIn')"
+            :disabled="auth.loading || !auth.password"
+            @click="handleSignIn"
+        />
+        <eButton
+            v-else-if="isSignUp"
+            size="full"
+            variant="accent"
+            :label="t('appauth.signUp')"
+            :disabled="auth.loading || !auth.email.trim() || !auth.passwordMeetsPolicy"
+            @click="handleSignUp"
+        />
+        <eButton
+            v-else-if="isRecovery"
+            size="full"
+            variant="accent"
+            :label="t('appauth.verifyEmail')"
+            :disabled="auth.loading || !auth.email.trim()"
+            @click="handleRecovery"
+        />
+
+        <div v-if="isSignUp" class="account-prompt centered">
+            <span>{{ t('appauth.haveAccount') }}</span>
+            <button class="inline-link" @click="auth.backToEmailStage()">{{ t('appauth.logInLink') }}</button>
+        </div>
+
+        <div v-if="isSignUp" class="telemetry">
             <div class="consent-row">
-                <eCheckbox v-model="appStore.analyticsConsent" :width="16" :height="16" />
+                <eCheckbox v-model="appStore.analyticsConsent" :width="12" :height="12" />
                 <span class="consent-label">
                     Help improve <span class="brand-highlight">FUSE</span> for everyone
                 </span>
             </div>
             <div class="consent-row">
-                <eCheckbox v-model="appStore.diagnosticsConsent" :width="16" :height="16" />
-                <span class="consent-label">Send anonymous diagnostic reports</span>
+                <eCheckbox v-model="appStore.diagnosticsConsent" :width="12" :height="12" />
+                <span class="consent-label">{{ t('appauth.diagnosticsConsent') }}</span>
             </div>
-        </template>
+        </div>
 
-        <div v-if="auth.error" class="error-inline">{{ auth.error }}</div>
-
-        <eButton
-            size="full"
-            :label="isSignUp ? t('appauth.signUp') : t('appauth.signIn')"
-            :disabled="auth.loading || (isSignUp && auth.password.length > 0 && !passwordValid)"
-            @click="handleSubmit"
-        />
-
-        <p class="legal-disclaimer">
-            <template v-if="isSignUp">Creating an account means you're okay with FUSE's </template>
-            <template v-else>By signing in you agree to FUSE's </template>
-            <span class="legal-link" @click="openLegal('tos')">Terms of Service</span>
+        <p v-if="!isRecovery" class="legal-disclaimer">
+            <template v-if="isSignUp">Creating an account means you're okay with our<br></template>
+            <span class="legal-link" @click="openLegal('tos')">{{ t('appauth.termsOfService') }}</span>
             and
-            <span class="legal-link" @click="openLegal('privacy')">Privacy Policy</span>.
+            <span class="legal-link" @click="openLegal('privacy')">{{ t('appauth.privacyPolicy') }}</span>.
         </p>
     </div>
 
@@ -212,123 +358,286 @@ async function handleSubmit() {
 </template>
 
 <style scoped>
-.sign-form {
+.sign-column {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-5);
+    width: 280px;
+}
+
+.combination-mark {
+    user-select: none;
+    -webkit-user-select: none;
+    width: 100%;
+    height: auto;
+}
+
+.back-link,
+.skip-link,
+.inline-link,
+.micro-link {
+    user-select: none;
+    -webkit-user-select: none;
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    font-family: var(--font-microcopy);
+    color: var(--text-main);
+    transition: color 0.15s;
+}
+
+.back-link {
+    user-select: none;
+    -webkit-user-select: none;
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: var(--secondary-font-size-4);
+}
+
+.link-text,
+.skip-link,
+.inline-link,
+.micro-link {
+    user-select: none;
+    -webkit-user-select: none;
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 2px;
+}
+
+.back-link:hover,
+.skip-link:hover,
+.inline-link:hover,
+.micro-link:hover {
+    color: var(--accent-200);
+}
+
+.header {
+    user-select: none;
+    -webkit-user-select: none;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    width: 100%;
+}
+
+.header-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+}
+
+.title {
+    user-select: none;
+    -webkit-user-select: none;
+    margin: 0;
+    font-family: var(--font-primary);
+    font-weight: var(--font-weight-2);
+    font-size: var(--main-font-size-2);
+    line-height: 1;
+    color: var(--text-main);
+}
+
+.title.centered {
+    width: 100%;
+    text-align: center;
+}
+
+.skip-link {
+    user-select: none;
+    -webkit-user-select: none;
+    font-size: var(--secondary-font-size-5);
+}
+
+.account-prompt {
+    user-select: none;
+    -webkit-user-select: none;
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    font-family: var(--font-microcopy);
+    font-size: var(--secondary-font-size-4);
+    color: var(--text-main);
+}
+
+.account-prompt.centered {
+    width: 100%;
+    justify-content: center;
+    font-size: var(--secondary-font-size-5);
+}
+
+.account-prompt.centered .inline-link {
+    font-size: var(--secondary-font-size-5);
+}
+
+.inline-link {
+    user-select: none;
+    -webkit-user-select: none;
+    font-size: var(--secondary-font-size-4);
+}
+
+.recovery-body {
+    user-select: none;
+    -webkit-user-select: none;
+    margin: 0;
+    width: 100%;
+    font-family: var(--font-microcopy);
+    font-size: var(--secondary-font-size-4);
+    color: var(--text-muted);
+    text-align: center;
+    line-height: 1.3;
+}
+
+.providers {
+    user-select: none;
+    -webkit-user-select: none;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+}
+
+.or-divider {
+    user-select: none;
+    -webkit-user-select: none;
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    width: 100%;
+}
+
+.or-divider .rule {
+    flex: 1 0 0;
+    height: 1px;
+    background: var(--base-600);
+}
+
+.or-label {
+    user-select: none;
+    -webkit-user-select: none;
+    font-family: var(--font-microcopy);
+    font-size: var(--secondary-font-size-5);
+    color: var(--text-muted);
+}
+
+.fields {
+    user-select: none;
+    -webkit-user-select: none;
     display: flex;
     flex-direction: column;
     gap: var(--space-3);
     width: 100%;
 }
 
-.fields {
+.field {
+    user-select: none;
+    -webkit-user-select: none;
     display: flex;
     flex-direction: column;
     gap: var(--space-1);
+    width: 100%;
 }
 
-.password-rules {
+.field-labels {
+    user-select: none;
+    -webkit-user-select: none;
     display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-    padding: var(--space-2);
-    background: var(--black-2-a);
+    align-items: flex-start;
+    justify-content: space-between;
+    width: 100%;
 }
 
-.rules-label {
-    font-family: var(--font-primary);
-    font-size: var(--main-font-size-5);
-    color: var(--text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    margin-bottom: 2px;
-}
-
-.rule-row {
-    display: flex;
-    align-items: center;
-    gap: var(--space-1);
-}
-
-.rule-icon {
+.micro {
+    user-select: none;
+    -webkit-user-select: none;
     font-family: var(--font-microcopy);
-    font-size: var(--main-font-size-5);
-    font-weight: var(--font-weight-1);
-    width: 12px;
-    text-align: center;
-    flex-shrink: 0;
-}
-
-.rule-text {
-    font-family: var(--font-primary);
-    font-size: var(--main-font-size-4);
-}
-
-.rule-met { color: var(--accent-200); }
-.rule-unmet { color: var(--text-muted); }
-
-.forgot-btn {
-    background: none;
-    border: none;
-    padding: 0;
-    cursor: pointer;
-    font-family: var(--font-primary);
-    font-size: var(--main-font-size-4);
-    color: var(--text-muted);
-    text-align: left;
-    transition: color 0.15s;
-}
-
-.forgot-btn:hover {
+    font-size: var(--secondary-font-size-5);
     color: var(--text-main);
+    line-height: 1;
+}
+
+.micro-link {
+    user-select: none;
+    -webkit-user-select: none;
+    font-size: var(--secondary-font-size-5);
+}
+
+.error-inline,
+.sent-inline {
+    user-select: none;
+    -webkit-user-select: none;
+    margin: 0;
+    width: 100%;
+    font-family: var(--font-microcopy);
+    font-size: var(--secondary-font-size-5);
+    line-height: 1.3;
+    padding: var(--space-1) var(--space-2);
+    box-sizing: border-box;
 }
 
 .error-inline {
-    font-family: var(--font-microcopy);
-    font-size: var(--main-font-size-5);
     color: var(--error-highlight);
-    padding: var(--space-1) var(--space-2);
     background: var(--error-color);
 }
 
-.legal-disclaimer {
-    margin: 0;
-    font-family: var(--font-primary);
-    font-size: var(--main-font-size-4);
-    color: var(--text-muted);
-    line-height: 1.4;
-    text-align: center;
-}
-
-.legal-link {
+.sent-inline {
     color: var(--accent-200);
-    cursor: pointer;
-    text-decoration: underline;
-    text-decoration-color: rgba(100, 255, 150, 0.4);
-    text-underline-offset: 2px;
-    transition: color 0.15s, text-decoration-color 0.15s;
+    background: var(--success-muted);
 }
 
-.legal-link:hover {
-    color: var(--light-green);
-    text-decoration-color: var(--light-green);
+.telemetry {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    width: 100%;
 }
 
 .consent-row {
+    user-select: none;
+    -webkit-user-select: none;
     display: flex;
     align-items: center;
     gap: var(--space-2);
 }
 
 .consent-label {
-    font-family: var(--font-primary);
-    font-size: var(--main-font-size-4);
-    color: var(--text-muted);
-    line-height: 1.3;
     user-select: none;
     -webkit-user-select: none;
+    font-family: var(--font-microcopy);
+    font-size: var(--secondary-font-size-5);
+    color: var(--text-main);
+    line-height: 1.3;
 }
 
 .brand-highlight {
     color: var(--accent-200);
-    font-weight: var(--font-weight-1);
+}
+
+.legal-disclaimer {
+    user-select: none;
+    -webkit-user-select: none;
+    margin: 0;
+    width: 100%;
+    font-family: var(--font-microcopy);
+    font-size: var(--secondary-font-size-5);
+    color: var(--text-main);
+    line-height: 1.5;
+    text-align: center;
+}
+
+.legal-link {
+    user-select: none;
+    -webkit-user-select: none;
+    cursor: pointer;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    transition: color 0.15s;
+}
+
+.legal-link:hover {
+    color: var(--accent-200);
 }
 </style>

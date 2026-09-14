@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, onMounted, onUnmounted } from 'vue'
+import { computed } from 'vue'
 import Icons from './Icons.vue'
 import eProgress from './eProgress.vue'
 import { useI18n } from '../composables/useI18n'
@@ -15,56 +15,16 @@ const props = defineProps<Props>()
 const displayPct = computed(() => `${props.progress.toFixed(1)}%`)
 const riveProgress = computed(() => Math.min(1, Math.max(0, props.progress / 100)))
 
-const CUT = 8
-const containerEl = ref<HTMLElement | null>(null)
-const elW = ref(0)
-const elH = ref(0)
-
-const svgPoints = computed(() => {
-    const w = elW.value
-    const h = elH.value
-    if (!w || !h) return ''
-    const cx = (CUT / w) * 100
-    const cy = (CUT / h) * 100
-    return `${cx},0 100,0 100,${100 - cy} ${100 - cx},100 0,100 0,${cy}`
-})
-
-let ro: ResizeObserver | null = null
-onMounted(() => {
-    if (!containerEl.value) return
-    ro = new ResizeObserver(([entry]) => {
-        const box = entry.borderBoxSize?.[0]
-        elW.value = box ? box.inlineSize : entry.contentRect.width
-        elH.value = box ? box.blockSize  : entry.contentRect.height
-    })
-    ro.observe(containerEl.value)
-})
-onUnmounted(() => ro?.disconnect())
 </script>
 
 <template>
-    <div ref="containerEl" class="update-progress">
+    <div class="update-progress">
         <div class="info-row">
             <Icons kind="reload" size="small" class="spin-icon" />
             <span class="label">{{ t('components.updateProgress.updating') }}</span>
             <span class="pct">{{ displayPct }}</span>
         </div>
         <eProgress :progress="riveProgress" :width="176" :height="12" :fill="true" />
-        <svg
-            v-if="svgPoints"
-            class="stroke-overlay"
-            viewBox="0 0 100 100"
-            preserveAspectRatio="none"
-            xmlns="http://www.w3.org/2000/svg"
-        >
-            <polygon
-                :points="svgPoints"
-                fill="none"
-                stroke="#525252"
-                stroke-width="0.4"
-                vector-effect="non-scaling-stroke"
-            />
-        </svg>
     </div>
 </template>
 
@@ -77,14 +37,10 @@ onUnmounted(() => ro?.disconnect())
     gap: var(--space-1);
     padding: var(--space-1) var(--space-3);
     background-color: var(--black-1-a);
-    clip-path: polygon(
-        8px 0%,
-        100% 0%,
-        100% calc(100% - 8px),
-        calc(100% - 8px) 100%,
-        0% 100%,
-        0% 8px
-    );
+    box-sizing: border-box;
+    border: 1px solid var(--base-600);
+    corner-shape: bevel;
+    border-radius: 8px 0 8px 0;
     user-select: none;
 }
 

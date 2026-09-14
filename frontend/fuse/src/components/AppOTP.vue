@@ -209,7 +209,8 @@ onUnmounted(() => {
     font-weight: var(--font-weight-1);
     color: var(--text-main);
     text-align: center;
-    clip-path: polygon(4px 0%, 100% 0%, 100% calc(100% - 4px), calc(100% - 4px) 100%, 0% 100%, 0% 4px);
+    corner-shape: bevel;
+    border-radius: 4px 0 4px 0;
     caret-color: var(--accent-200);
     transition: background 0.12s;
 }

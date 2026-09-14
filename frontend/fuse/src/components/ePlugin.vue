@@ -34,7 +34,7 @@ const emit = defineEmits<{
 
 const mpIconUrl = computed(() =>
   props.marketplaceProject?.icon_key
-    ? marketplaceStore.buildPublicUrl(props.marketplaceProject.icon_key)
+    ? marketplaceStore.buildPublicUrl(props.marketplaceProject.icon_key, props.marketplaceProject.updated_at)
     : null
 )
 
@@ -162,6 +162,8 @@ const statusLabel = computed(() => t(`components.plugin.status.${props.plugin.st
 }
 
 .thumb-img {
+  user-select: none;
+  -webkit-user-select: none;
   width: 100%;
   height: 100%;
   object-fit: cover;

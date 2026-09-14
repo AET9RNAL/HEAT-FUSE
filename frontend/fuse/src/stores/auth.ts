@@ -1,15 +1,26 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { supabase, supabaseConfigured } from '../composables/supabase-client'
+import { useAppStore } from './app'
 import { eventBus } from '../events/eventBus'
 
 export type AuthState = 'login' | 'signup'
-export type ScreenState = 'welcome' | 'auth' | 'otp' | 'main' | 'reset-password' | 'forgot-password'
+export type ScreenState =
+    | 'welcome'          // SignInStage1 
+    | 'signin-password'  // SignInStage2
+    | 'signup'
+    | 'recovery'
+    | 'otp'
+    | 'onboarding'
+    | 'reset-password'
+    | 'main'
 export type Email = string
 export type Password = string
 export type Session = any
 
 export const ERROR_TIMEOUT = 5 // seconds
+
+export const MIN_PASSWORD_LENGTH = 6
 
 export const useAuthStore = defineStore('auth', () => {
     const state = ref<AuthState>('login')
@@ -67,6 +78,53 @@ export const useAuthStore = defineStore('auth', () => {
         screen.value = newScreen
     }
 
+
+    const WELCOME_SCREENS: ScreenState[] = [
+        'welcome', 'signin-password', 'signup', 'recovery', 'otp', 'onboarding',
+    ]
+    const inWelcomeFlow = computed(() => WELCOME_SCREENS.includes(screen.value))
+
+    const hasLetter = computed(() => /[a-zA-Z]/.test(password.value))
+    const hasDigit = computed(() => /[0-9]/.test(password.value))
+    const isLongEnough = computed(() => password.value.length >= MIN_PASSWORD_LENGTH)
+
+    const passwordMeetsPolicy = computed(() =>
+        hasLetter.value && hasDigit.value && isLongEnough.value
+    )
+
+    const passwordStrength = computed(() => {
+        if (!passwordMeetsPolicy.value) return 0
+        let score = 0.4
+        if (/[a-z]/.test(password.value) && /[A-Z]/.test(password.value)) score += 0.2
+        if (/[^a-zA-Z0-9]/.test(password.value)) score += 0.2
+        if (password.value.length >= 12) score += 0.2
+        return score
+    })
+
+    function goToPasswordStage() {
+        if (!email.value.trim()) return
+        password.value = ''
+        setError(null)
+        setScreen('signin-password')
+    }
+
+    function backToEmailStage() {
+        password.value = ''
+        setError(null)
+        setScreen('welcome')
+    }
+
+    // Routes past auth to wherever the boot flow should resume.
+    function resumeAfterAuth() {
+        const appStore = useAppStore()
+        setScreen(appStore.onboardingComplete ? 'main' : 'onboarding')
+    }
+
+    function skipLogin() {
+        clearForm()
+        resumeAfterAuth()
+    }
+
     async function signIn() {
         loading.value = true
         setError(null)
@@ -80,7 +138,7 @@ export const useAuthStore = defineStore('auth', () => {
             session.value = data.session
             success.value = true
             clearForm()
-            setScreen('main')
+            resumeAfterAuth()
             eventBus.emit('auth:success')
             return { success: true, data }
         } catch (err: any) {
@@ -258,7 +316,7 @@ export const useAuthStore = defineStore('auth', () => {
             if (updateError) throw updateError
             const { data: { session: refreshed } } = await supabase.auth.getSession()
             if (refreshed) session.value = refreshed
-            setScreen('main')
+            resumeAfterAuth()
             return { success: true }
         } catch (err: any) {
             setError(err.message || 'Failed to update password')
@@ -294,7 +352,7 @@ export const useAuthStore = defineStore('auth', () => {
 
     function finalizeLogin(newSession: Session) {
         session.value = newSession
-        setScreen('main')
+        resumeAfterAuth()
         eventBus.emit('auth:success')
     }
 
@@ -345,10 +403,11 @@ export const useAuthStore = defineStore('auth', () => {
             const { data: { session: existingSession } } = await supabase.auth.getSession()
             if (existingSession) {
                 session.value = existingSession
-                setScreen('main')
+                resumeAfterAuth()
                 eventBus.emit('auth:success')
                 return { success: true, session: existingSession }
             }
+            // Logged-In? NO - the boot flow decides between welcome and onboarding.
             return { success: false }
         } catch (err: any) {
             setError(err.message || err.error_description || 'Session restoration failed')
@@ -375,6 +434,13 @@ export const useAuthStore = defineStore('auth', () => {
         setScreen,
         setError,
         clearForm,
+        inWelcomeFlow,
+        passwordMeetsPolicy,
+        passwordStrength,
+        goToPasswordStage,
+        backToEmailStage,
+        resumeAfterAuth,
+        skipLogin,
         signIn,
         signUp,
         logOut,

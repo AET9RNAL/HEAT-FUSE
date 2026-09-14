@@ -8,7 +8,7 @@ const props = withDefaults(defineProps<{
   alpha?: boolean
 }>(), { alpha: true })
 
-const emit = defineEmits<{ 'update:modelValue': [string] }>()
+const emit = defineEmits<{ 'update:modelValue': [string]; change: [string] }>()
 
 function clamp01(n: number) { return Math.min(1, Math.max(0, n)) }
 
@@ -107,7 +107,22 @@ function syncFromModel(hex: string) {
   syncing = false
 }
 syncFromModel(props.modelValue)
-watch(() => props.modelValue, (nv) => { if (!syncing) syncFromModel(nv) })
+
+/** What the picker last sent up. Case and a trailing `ff` alpha don't make a colour different. */
+let lastEmitted: string | null = null
+function normHex(x: string | null | undefined) {
+  const str = (x ?? '').trim().toLowerCase()
+  return str.length === 7 ? `${str}ff` : str
+}
+
+// The parent hands every emitted colour straight back. Re-deriving HSV from that
+// rounded hex nudges the knobs, and a lagging echo (the stage round-trips through
+// the runtime) drags them backwards mid-gesture - so only a genuinely new colour
+// re-syncs, and never while a drag is in progress.
+watch(() => props.modelValue, (nv) => {
+  if (syncing || dragMove || normHex(nv) === normHex(lastEmitted)) return
+  syncFromModel(nv)
+})
 
 const rgb = computed(() => hsvToRgb(h.value, s.value, v.value))
 const hsl = computed(() => rgbToHsl(rgb.value.r, rgb.value.g, rgb.value.b))
@@ -121,7 +136,16 @@ const cssCurrent = computed(() => `rgba(${rgb.value.r}, ${rgb.value.g}, ${rgb.va
 const cssOpaque = computed(() => `rgb(${rgb.value.r}, ${rgb.value.g}, ${rgb.value.b})`)
 const hueCss = computed(() => { const c = hsvToRgb(h.value, 1, 1); return `rgb(${c.r}, ${c.g}, ${c.b})` })
 
-function emitColor() { emit('update:modelValue', hexOut.value) }
+function emitColor() {
+  if (hexOut.value === lastEmitted) return
+  lastEmitted = hexOut.value
+  emit('update:modelValue', hexOut.value)
+}
+/** A finished edit - a released drag or a typed value. `update:modelValue` alone is the live stream. */
+function commitColor() {
+  emitColor()
+  emit('change', hexOut.value)
+}
 watch([h, s, v, a], () => { if (!syncing) emitColor() })
 
 const svEl = ref<HTMLElement | null>(null)
@@ -141,10 +165,15 @@ function beginDrag(el: HTMLElement | null, onMove: (fx: number, fy: number) => v
   window.addEventListener('pointerup', endDrag, { once: true })
 }
 function endDrag() {
+  if (!dragMove) return
+  window.removeEventListener('pointermove', dragMove)
+  dragMove = null
+  commitColor()
+}
+onUnmounted(() => {
   if (dragMove) window.removeEventListener('pointermove', dragMove)
   dragMove = null
-}
-onUnmounted(endDrag)
+})
 
 function onSvDown(e: PointerEvent) {
   beginDrag(svEl.value, (fx, fy) => { s.value = fx; v.value = 1 - fy }, e)
@@ -178,16 +207,19 @@ function onHexInput(val: string) {
   if (!rgba) return
   setFromRgb(rgba.r, rgba.g, rgba.b)
   if (props.alpha) a.value = rgba.a
+  commitColor()
 }
 function onRgbInput(ch: 'r' | 'g' | 'b', val: string) {
   const c = { ...rgb.value }; c[ch] = clamp255(Number(val)); setFromRgb(c.r, c.g, c.b)
+  commitColor()
 }
 function onHslInput(ch: 'h' | 's' | 'l', val: string) {
   const c = { ...hsl.value }
   c[ch] = ch === 'h' ? clampDeg(Number(val)) : clampPct(Number(val))
   const rr = hslToRgb(c.h, c.s, c.l); setFromRgb(rr.r, rr.g, rr.b)
+  commitColor()
 }
-function onAlphaInput(val: string) { a.value = clamp01(clampPct(Number(val)) / 100) }
+function onAlphaInput(val: string) { a.value = clamp01(clampPct(Number(val)) / 100); commitColor() }
 const alphaPct = computed(() => Math.round(a.value * 100))
 
 // eyedropper
@@ -210,7 +242,7 @@ async function pickEyedropper() {
     </div>
 
     <div class="cp-sliders">
-      <button v-if="hasEyeDropper" class="cp-eyedrop" title="Pick from screen" @click="pickEyedropper">
+      <button v-if="hasEyeDropper" v-tip="'Pick from screen'" class="cp-eyedrop" @click="pickEyedropper">
         <Icons kind="eyedropper" size="small" />
       </button>
       <div class="cp-slider-col">

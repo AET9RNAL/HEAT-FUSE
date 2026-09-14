@@ -21,6 +21,9 @@ export const USER_PLUGINS_DIR: string = process.env.FUSE_USER_PLUGINS_DIR
   ? path.resolve(process.env.FUSE_USER_PLUGINS_DIR)
   : path.join(REPO_ROOT, "plugins");
 
+/** Called once per archive that couldn't be loaded, with a user-facing reason. */
+export type DiscoveryErrorHandler = (file: string, reason: string) => void;
+
 function sha256(buf: Buffer | Uint8Array): string {
   return createHash("sha256").update(buf).digest("hex");
 }
@@ -96,13 +99,18 @@ async function resolveEntry(packageRoot: string, entry: string): Promise<PluginC
   return cls as PluginClass;
 }
 
-async function scanFuseArchive(fusePath: string): Promise<DiscoveredPlugin | null> {
+async function scanFuseArchive(fusePath: string, onError?: DiscoveryErrorHandler): Promise<DiscoveredPlugin | null> {
+  const fail = (reason: string): null => {
+    onError?.(path.basename(fusePath), reason);
+    return null;
+  };
+
   let raw: Buffer;
   try {
     raw = fs.readFileSync(fusePath);
   } catch (e) {
     logger.warning(`Skipping ${path.basename(fusePath)}: ${String(e)}`);
-    return null;
+    return fail("The file couldn't be read.");
   }
 
   let files: Record<string, Uint8Array>;
@@ -110,7 +118,7 @@ async function scanFuseArchive(fusePath: string): Promise<DiscoveredPlugin | nul
     files = unzipSync(raw);
   } catch {
     logger.warning(`Skipping ${path.basename(fusePath)}: not a valid ZIP archive`);
-    return null;
+    return fail("Not a valid .fuse archive.");
   }
 
   const topDirs = new Set<string>();
@@ -122,21 +130,21 @@ async function scanFuseArchive(fusePath: string): Promise<DiscoveredPlugin | nul
     logger.warning(
       `Skipping ${path.basename(fusePath)}: expected 1 top-level dir, got ${topDirs.size}: ${[...topDirs].join(", ")}`,
     );
-    return null;
+    return fail(`Expected one top-level folder, found ${topDirs.size}.`);
   }
   const pluginId = [...topDirs][0]!;
 
   const manifestBytes = files[`${pluginId}/manifest.json`];
   if (!manifestBytes) {
     logger.error(`Bad manifest inside archive: ${pluginId}/manifest.json missing`);
-    return null;
+    return fail("manifest.json is missing.");
   }
   let manifest: Manifest;
   try {
     manifest = JSON.parse(strFromU8(manifestBytes));
   } catch (e) {
     logger.error(`Bad manifest inside ${path.basename(fusePath)}: ${String(e)}`);
-    return null;
+    return fail("manifest.json isn't valid JSON.");
   }
 
   const declaredId = (manifest.plugin_id as string) ?? pluginId;
@@ -153,7 +161,7 @@ async function scanFuseArchive(fusePath: string): Promise<DiscoveredPlugin | nul
     extractOnce(cacheDir, files);
   } catch (e) {
     logger.error(`Failed to extract ${path.basename(fusePath)}: ${String(e)}`);
-    return null;
+    return fail(`Extraction failed: ${e instanceof Error ? e.message : String(e)}`);
   }
 
   let cls: PluginClass;
@@ -162,7 +170,7 @@ async function scanFuseArchive(fusePath: string): Promise<DiscoveredPlugin | nul
     cls = await resolveEntry(packageRoot, manifest.entry);
   } catch (e) {
     logger.error(`Skipping .fuse plugin '${pluginId}': ${String(e)}`);
-    return null;
+    return fail(e instanceof Error ? e.message : String(e));
   }
 
   const version = (manifest.version as string) ?? "0.0";
@@ -190,7 +198,7 @@ async function scanFuseArchive(fusePath: string): Promise<DiscoveredPlugin | nul
 }
 
 /** Scan `USER_PLUGINS_DIR` and return every valid plugin found. */
-export async function discover(): Promise<DiscoveredPlugin[]> {
+export async function discover(onError?: DiscoveryErrorHandler): Promise<DiscoveredPlugin[]> {
   if (!fs.existsSync(USER_PLUGINS_DIR)) return [];
   const entries = fs
     .readdirSync(USER_PLUGINS_DIR)
@@ -198,7 +206,7 @@ export async function discover(): Promise<DiscoveredPlugin[]> {
     .sort();
   const out: DiscoveredPlugin[] = [];
   for (const name of entries) {
-    const spec = await scanFuseArchive(path.join(USER_PLUGINS_DIR, name));
+    const spec = await scanFuseArchive(path.join(USER_PLUGINS_DIR, name), onError);
     if (spec) out.push(spec);
   }
   return out;

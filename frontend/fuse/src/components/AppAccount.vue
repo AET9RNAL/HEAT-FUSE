@@ -308,6 +308,7 @@ function dismissNewKey() {
                     <eButton
                         size="slim"
                         icon="delete"
+                        v-tip="t('appaccount.apiKeyRevokeTip')"
                         :disabled="mintingKey"
                         @click="handleRevokeKey(key.id)"
                     />
@@ -352,6 +353,7 @@ function dismissNewKey() {
                     <eButton
                         size="slim"
                         icon="password"
+                        v-tip="t('appaccount.changePassword')"
                         :disabled="auth.loading"
                         @click="handleChangePassword"
                     />
@@ -365,6 +367,7 @@ function dismissNewKey() {
                     <eButton
                         size="slim"
                         icon="sign-out"
+                        v-tip="t('appaccount.signOutAllTip')"
                         :disabled="auth.loading"
                         @click="handleSignOutAll"
                     />
@@ -388,6 +391,7 @@ function dismissNewKey() {
                         v-if="!confirmingDelete"
                         size="slim"
                         icon="delete"
+                        v-tip="t('appaccount.deleteAccount')"
                         :disabled="auth.loading"
                         @click="confirmingDelete = true"
                     />
@@ -434,12 +438,8 @@ function dismissNewKey() {
     flex-direction: column;
     gap: 0;
     background: var(--black-1-a);
-    clip-path: polygon(
-        8px 0%, 100% 0%,
-        100% calc(100% - 8px),
-        calc(100% - 8px) 100%,
-        0% 100%, 0% 8px
-    );
+    corner-shape: bevel;
+    border-radius: 8px 0 8px 0;
 }
 
 .card-header {

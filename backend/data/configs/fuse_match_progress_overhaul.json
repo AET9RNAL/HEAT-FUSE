@@ -1,12 +1,13 @@
 {
   "vue_overlay_pos": {
-    "x": 782,
-    "y": 148,
-    "w": 996,
-    "h": 89
+    "x": 728,
+    "y": 33,
+    "w": 1049,
+    "h": 87
   },
   "vue_width": 1100,
   "vue_height": 100,
   "hide_native": true,
-  "enhanced": true
+  "enhanced": true,
+  "flames": true
 }

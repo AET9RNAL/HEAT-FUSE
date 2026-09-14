@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
+import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import Icons from './Icons.vue'
 import eMaterialButton from './eMaterialButton.vue'
 
@@ -271,34 +271,12 @@ function formatDate(ms: number): string {
 }
 
 // Polygon stroke
-const CUT = 10
-const containerEl = ref<HTMLElement | null>(null)
-const elW = ref(0)
-const elH = ref(0)
-const svgPoints = computed(() => {
-  const w = elW.value; const h = elH.value
-  if (!w || !h) return ''
-  const cx = (CUT / w) * 100; const cy = (CUT / h) * 100
-  return `${cx},0 100,0 100,${100 - cy} ${100 - cx},100 0,100 0,${cy}`
-})
-
-let ro: ResizeObserver | null = null
-onMounted(() => {
-  loadRoot()
-  if (!containerEl.value) return
-  ro = new ResizeObserver(([entry]) => {
-    const box = entry.borderBoxSize?.[0]
-    elW.value = box ? box.inlineSize : entry.contentRect.width
-    elH.value = box ? box.blockSize  : entry.contentRect.height
-  })
-  ro.observe(containerEl.value)
-})
-onUnmounted(() => ro?.disconnect())
+onMounted(loadRoot)
 </script>
 
 <template>
   <div class="e-files-glow">
-    <div ref="containerEl" class="e-files" :class="{ 'is-dirty': isDirty }">
+    <div class="e-files" :class="{ 'is-dirty': isDirty }">
 
       <!-- Toolbar -->
       <div class="toolbar">
@@ -332,6 +310,7 @@ onUnmounted(() => ro?.disconnect())
           <eMaterialButton
             v-if="!inFileView"
             :icon="'reload'"
+            v-tip="'Refresh'"
             variant="tertiary"
             :disabled="loading"
             @click="loadDir(currentPath)"
@@ -339,6 +318,7 @@ onUnmounted(() => ro?.disconnect())
           <eMaterialButton
             v-if="!isAtRoot || inFileView"
             :icon="'arrow-left'"
+            v-tip="'Back'"
             variant="tertiary"
             :disabled="isDirty"
             @click="goBack"
@@ -421,22 +401,6 @@ onUnmounted(() => ro?.disconnect())
         </div>
       </div>
 
-      <!-- Polygon stroke -->
-      <svg
-        v-if="svgPoints"
-        class="polygon-stroke"
-        viewBox="0 0 100 100"
-        preserveAspectRatio="none"
-        xmlns="http://www.w3.org/2000/svg"
-      >
-        <polygon
-          :points="svgPoints"
-          fill="none"
-          stroke="#525252"
-          stroke-width="0.4"
-          vector-effect="non-scaling-stroke"
-        />
-      </svg>
 
     </div>
   </div>
@@ -459,14 +423,10 @@ onUnmounted(() => ro?.disconnect())
   min-height: 0;
   display: flex;
   flex-direction: column;
-  clip-path: polygon(
-    10px 0%,
-    100% 0%,
-    100% calc(100% - 10px),
-    calc(100% - 10px) 100%,
-    0% 100%,
-    0% 10px
-  );
+  box-sizing: border-box;
+  border: 1px solid var(--base-600);
+  corner-shape: bevel;
+  border-radius: 10px 0 10px 0;
 }
 
 /* Toolbar */
@@ -714,13 +674,4 @@ onUnmounted(() => ro?.disconnect())
 }
 
 /* Polygon stroke */
-.polygon-stroke {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-  overflow: visible;
-  z-index: 1;
-}
 </style>

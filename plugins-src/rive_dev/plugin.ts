@@ -1,11 +1,32 @@
 import {
   FusePlugin,
-  ConfigCategory,
-  ConfigEntry,
   type FuseContext,
+  type InspectorSection,
   type OverlayHandle,
   type Rect,
 } from "@fuse/plugin-sdk";
+
+/** The stage can't resize Rive overlays; `anim_width` / `anim_height` size the canvas instead, live. */
+function renderSizeSection(idPrefix: string): InspectorSection {
+  return {
+    id: `${idPrefix}.size`,
+    label: "Size",
+    order: 90,
+    controls: [
+      {
+        type: "vec2",
+        id: "render_size",
+        keys: ["anim_width", "anim_height"],
+        labels: ["W", "H"],
+        label: "Render size",
+        min: 10,
+        max: 3000,
+        step: 10,
+        tooltip: "Canvas size. Rive overlays can't be resized on the stage, so this is how to scale them.",
+      },
+    ],
+  };
+}
 
 
 const POS_KEY = "rive_pos";
@@ -22,6 +43,10 @@ export class RiveDevPlugin extends FusePlugin {
   private ctx!: FuseContext;
   private ov: OverlayHandle | undefined;
 
+  private sections(): InspectorSection[] {
+    return [renderSizeSection("rd")];
+  }
+
   setup(ctx: FuseContext): void {
     this.ctx = ctx;
 
@@ -29,15 +54,9 @@ export class RiveDevPlugin extends FusePlugin {
       .defaults({ rive_pos: null, anim_width: 400, anim_height: 400 })
       .load();
 
-    ctx.config.schema([
-      new ConfigCategory("Animation", [
-        new ConfigEntry({ key: "anim_width", label: "Render Width", type: "int", min: 10, max: 3000 }),
-        new ConfigEntry({ key: "anim_height", label: "Render Height", type: "int", min: 10, max: 3000 }),
-      ]),
-      new ConfigCategory("Position", [
-        new ConfigEntry({ key: "rive_pos", label: "Overlay Position", type: "position" }),
-      ]),
-    ]);
+    // One declaration for both surfaces: the App panel and the stage inspector.
+    const sections = this.sections();
+    ctx.config.schema(sections);
 
     const w = num(ctx.config.get("anim_width"), 400);
     const h = num(ctx.config.get("anim_height"), 400);
@@ -53,6 +72,11 @@ export class RiveDevPlugin extends FusePlugin {
       defaultRect: this.savedRect(w, h),
       positionConfigKey: POS_KEY,
     });
+    this.ov.inspector.sections(sections);
+    const applySize = (): void =>
+      this.ov?.setSize({ w: num(ctx.config.get("anim_width"), 400), h: num(ctx.config.get("anim_height"), 400) });
+    ctx.config.watch("anim_width", applySize);
+    ctx.config.watch("anim_height", applySize);
   }
 
   private savedRect(w: number, h: number): Rect | undefined {

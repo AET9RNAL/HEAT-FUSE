@@ -1,16 +1,25 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, provide } from 'vue'
 import { motion } from 'motion-v'
 import Icons from './Icons.vue'
 import eToggle from './eToggle.vue'
-import eColorPicker from './eColorPicker.vue'
-import type { PluginRecord, ConfigEntry } from '../stores/plugins'
+// The stage inspector renders the same ControlInput, so both config surfaces
+// get identical inputs. Toggles stay the app's Rive eToggle.
+import ControlInput from '../overlay/inspector/ControlInput.vue'
+import { TIP_DIRECTIVE } from '../overlay/inspector/tooltip'
+import { evalWhen, type InspectorControl } from '../overlay/inspector/types'
+import { vTip } from '../directives/vTip'
+import type { PluginRecord, ConfigControl, ConfigSection } from '../stores/plugins'
 import { usePluginsStore } from '../stores/plugins'
+import { useFuseConnection } from '../composables/useFuseConnection'
 import { eventBus } from '../events/eventBus'
-import { useI18n } from '../composables/useI18n'
+import { useKeybindCapture } from '../composables/useKeybindCapture'
 
 const store = usePluginsStore()
-const { t } = useI18n()
+const { connected } = useFuseConnection()
+
+// Shared controls show the app's tooltip, not the stage's.
+provide(TIP_DIRECTIVE, vTip)
 
 const props = defineProps<{ plugin: PluginRecord }>()
 const emit = defineEmits<{ close: [] }>()
@@ -63,21 +72,12 @@ watch(isDirty, (dirty) => {
 
 onMounted(() => {
     document.addEventListener('keydown', onKeyDown)
-    if (panelEl.value) {
-        _ro = new ResizeObserver(([entry]) => {
-            const box = entry.borderBoxSize?.[0]
-            elW.value = box ? box.inlineSize : entry.contentRect.width
-            elH.value = box ? box.blockSize  : entry.contentRect.height
-        })
-        _ro.observe(panelEl.value)
-    }
 })
 
 onUnmounted(() => {
     if (isDirty.value) eventBus.emit('modal:dismiss')
     document.removeEventListener('keydown', onKeyDown)
     if (capturingAction.value) cancelCapture()
-    _ro?.disconnect()
 })
 
 function onKeyDown(e: KeyboardEvent) {
@@ -95,21 +95,7 @@ function onBackdropClick(e: MouseEvent) {
     }
 }
 
-// SVG polygon stroke
-const CUT = 8
-const elW = ref(0)
-const elH = ref(0)
-let _ro: ResizeObserver | null = null
-const svgPoints = computed(() => {
-    const w = elW.value
-    const h = elH.value
-    if (!w || !h) return ''
-    const cx = (CUT / w) * 100
-    const cy = (CUT / h) * 100
-    return `${cx},0 100,0 100,${100 - cy} ${100 - cx},100 0,100 0,${cy}`
-})
-
-// ── Config field helpers ───────────────────────────────────────────────
+// ── Config values ──────────────────────────────────────────────────────
 
 function getValue(key: string): unknown {
     return key in pendingConfig.value
@@ -121,118 +107,133 @@ function setValue(key: string, raw: unknown) {
     pendingConfig.value = { ...pendingConfig.value, [key]: raw }
 }
 
-function setNumber(entry: ConfigEntry, raw: string) {
-    let n = parseFloat(raw)
-    if (isNaN(n)) return
-    if (entry.min !== undefined) n = Math.max(entry.min, n)
-    if (entry.max !== undefined) n = Math.min(entry.max, n)
-    setValue(entry.key, n)
+/** A vec2 may span two keys; controls with no key hold nothing here. */
+function valueOf(c: ConfigControl): unknown {
+    if (c.type === 'vec2' && c.keys) return { x: getValue(c.keys[0]), y: getValue(c.keys[1]) }
+    return 'key' in c && c.key ? getValue(c.key) : undefined
 }
 
-// Colour picker popover 
-const openColorKey = ref<string | null>(null)
-const colorPos = ref<{ left: number; top: number }>({ left: 0, top: 0 })
-
-function colorValue(key: string): string {
-    const v = getValue(key)
-    return typeof v === 'string' && v ? v : '#FFFFFFFF'
-}
-function toggleColorPicker(key: string, e: MouseEvent) {
-    if (openColorKey.value === key) { openColorKey.value = null; return }
-    const btn = (e.currentTarget as HTMLElement).getBoundingClientRect()
-    const PW = 264, PH = 300
-    let left = btn.right - PW
-    let top = btn.bottom + 6
-    if (top + PH > window.innerHeight) top = Math.max(8, btn.top - PH - 6)
-    if (left < 8) left = 8
-    colorPos.value = { left, top }
-    openColorKey.value = key
-}
-function closeColorPicker() { openColorKey.value = null }
-function onColorInput(key: string, hex: string) { setValue(key, hex) }
-
-function colorEntryAlpha(key: string): boolean {
-    for (const cat of props.plugin.configSchema) {
-        const e = cat.entries.find(en => en.key === key)
-        if (e) return e.alpha !== false
+function onSet(c: ConfigControl, v: unknown) {
+    if (c.type === 'vec2' && c.keys) {
+        const pair = v as { x: number; y: number }
+        setValue(c.keys[0], pair.x)
+        setValue(c.keys[1], pair.y)
+        return
     }
-    return true
+    if ('key' in c && c.key) setValue(c.key, v)
+}
+
+/** Same id and payload the stage sends, so one plugin handler serves both. */
+function onAction(c: ConfigControl, payload?: unknown) {
+    if (c.type === 'divider' || !c.id) return
+    void store.configAction(props.plugin.plugin_id, c.id, payload)
+}
+
+// ── Sections ───────────────────────────────────────────────────────────
+
+/** Predicates read values by control id, as they do on the stage. */
+const valuesById = computed(() => {
+    const out: Record<string, unknown> = {}
+    for (const s of props.plugin.configSchema) {
+        for (const c of s.controls) {
+            if (c.type !== 'divider' && c.id) out[c.id] = valueOf(c)
+        }
+    }
+    return out
+})
+
+/** Unbound value controls are stage-only previews: they have nothing to save here. */
+function renderable(c: ConfigControl): boolean {
+    if (c.type === 'divider' || c.type === 'note' || c.type === 'button' || c.type === 'buttonRow') return true
+    if (c.type === 'vec2') return !!c.keys || !!c.key
+    return !!c.key
+}
+
+const sections = computed<ConfigSection[]>(() =>
+    [...props.plugin.configSchema]
+        .sort((a, b) => (a.order ?? 100) - (b.order ?? 100))
+        .filter(s => evalWhen(s.when, valuesById.value))
+        .map(s => ({
+            ...s,
+            controls: s.controls.filter(c =>
+                renderable(c) && (c.type === 'divider' || evalWhen(c.when, valuesById.value))),
+        }))
+        .filter(s => s.controls.some(c => c.type !== 'divider'))
+)
+
+const collapsed = ref(new Set<string>())
+const seenSections = new Set<string>()
+
+// Defaults apply once per section, so a schema refresh doesn't re-collapse what the user opened.
+watch(() => props.plugin.configSchema, (list) => {
+    const next = new Set(collapsed.value)
+    for (const s of list) {
+        if (seenSections.has(s.id)) continue
+        seenSections.add(s.id)
+        if (s.collapsible && s.defaultCollapsed) next.add(s.id)
+    }
+    collapsed.value = next
+}, { immediate: true })
+
+function toggleSection(s: ConfigSection) {
+    if (!s.collapsible) return
+    const next = new Set(collapsed.value)
+    if (next.has(s.id)) next.delete(s.id)
+    else next.add(s.id)
+    collapsed.value = next
+}
+
+function isDisabled(c: ConfigControl): boolean {
+    if (c.type === 'divider') return false
+    // Buttons reach the running plugin; offline there is nothing to press.
+    if ((c.type === 'button' || c.type === 'buttonRow') && !connected.value) return true
+    return c.disabledWhen ? evalWhen(c.disabledWhen, valuesById.value) : false
+}
+
+// ── Layout ─────────────────────────────────────────────────────────────
+
+/** Controls that take the row's full width under their label, as on the stage. */
+const FULL_ROW = new Set(['radio', 'button', 'buttonRow', 'note', 'segmented', 'buttons', 'vec2'])
+
+function isStacked(c: ConfigControl): boolean {
+    if (c.type === 'divider') return false
+    if (c.type === 'text' && c.multiline) return true
+    return c.width === 'full' || !c.label || FULL_ROW.has(c.type)
+}
+
+function widthClass(c: ConfigControl): string {
+    if (isStacked(c)) return 'ctl-full'
+    if (c.type === 'number') return 'ctl-narrow'
+    if (c.type === 'slider' || c.type === 'select' || c.type === 'text' || c.type === 'keybind') return 'ctl-wide'
+    return ''
+}
+
+function labelOf(c: ConfigControl): string | undefined {
+    return c.type === 'divider' ? undefined : c.label
+}
+
+function hintOf(c: ConfigControl): string | undefined {
+    return c.type === 'divider' ? undefined : c.hint
+}
+
+function tipOf(c: ConfigControl): string | undefined {
+    return c.type === 'divider' ? undefined : c.tooltip
+}
+
+function rowKey(c: ConfigControl, i: number): string {
+    return c.type === 'divider' || !c.id ? `row-${i}` : c.id
+}
+
+/** Positions are app-only; everything else is an inspector control. */
+function asInspector(c: ConfigControl): InspectorControl {
+    return c as InspectorControl
 }
 
 // ── Keybind capture ────────────────────────────────────────────────────
 
-const capturingAction = ref<string | null>(null)
-let captureListener: ((e: KeyboardEvent) => void) | null = null
-
-// Keys allowed to bind on their own (no modifier). Function/navigation keys only
-const STANDALONE_KEYS = new Set<string>([
-    ...Array.from({ length: 24 }, (_, i) => `f${i + 1}`),
-    'home', 'end', 'pageup', 'pagedown', 'insert', 'delete', 'enter', 'space',
-])
-
-function startCapture(action: string) {
-    if (capturingAction.value) cancelCapture()
-    capturingAction.value = action
-
-    captureListener = (e: KeyboardEvent) => {
-        e.preventDefault()
-        e.stopPropagation()
-
-        const mods: string[] = []
-        if (e.ctrlKey)  mods.push('ctrl')
-        if (e.altKey)   mods.push('alt')
-        if (e.shiftKey) mods.push('shift')
-
-        const ignored = ['Control', 'Alt', 'Shift', 'Meta', 'Escape']
-        if (ignored.includes(e.key)) {
-            if (e.key === 'Escape') cancelCapture()
-            return
-        }
-
-        // Reject non-Latin keys (e.g. Cyrillic layouts)
-        if (/[^\x00-\x7F]/.test(e.key)) {
-            cancelCapture()
-            eventBus.emit('notification', {
-                title: t('appsettings.keybindings.latinOnlyTitle'),
-                message: t('appsettings.keybindings.latinOnly'),
-                type: 'error',
-            })
-            return
-        }
-
-        // Enforce standard keybind shapes:
-        //  - with a modifier: key must be a letter or digit (Ctrl/Alt/Shift + a-z/0-9)
-        //  - without a modifier: only a function/navigation key (bare F5, Enter, Home…)
-        const key = e.key === ' ' ? 'space' : e.key.toLowerCase()
-        const hasMod = e.ctrlKey || e.altKey || e.shiftKey
-        const validShape = hasMod ? /^[a-z0-9]$/.test(key) : STANDALONE_KEYS.has(key)
-        if (!validShape) {
-            cancelCapture()
-            eventBus.emit('notification', {
-                title: t('appsettings.keybindings.latinOnlyTitle'),
-                message: t('appsettings.keybindings.invalidCombo'),
-                type: 'error',
-            })
-            return
-        }
-
-        const combo = [...mods, key].join('+')
-        pendingHotkeys.value = { ...pendingHotkeys.value, [action]: combo }
-        capturingAction.value = null
-        document.removeEventListener('keydown', captureListener!, true)
-        captureListener = null
-    }
-
-    document.addEventListener('keydown', captureListener, true)
-}
-
-function cancelCapture() {
-    if (captureListener) {
-        document.removeEventListener('keydown', captureListener, true)
-        captureListener = null
-    }
-    capturingAction.value = null
-}
+const { capturingAction, startCapture, cancelCapture } = useKeybindCapture((action, combo) => {
+    pendingHotkeys.value = { ...pendingHotkeys.value, [action]: combo }
+})
 
 function getCombo(action: string): string {
     if (action in pendingHotkeys.value) return pendingHotkeys.value[action]
@@ -265,7 +266,7 @@ function getCombo(action: string): string {
                             <span class="panel-name">{{ plugin.name }}</span>
                             <span class="panel-sub">{{ plugin.version }}</span>
                         </div>
-                        <button class="close-btn" @click="emit('close')">
+                        <button v-tip="'Close'" class="close-btn" @click="emit('close')">
                             <Icons kind="cross" size="small" />
                         </button>
                     </div>
@@ -288,65 +289,65 @@ function getCombo(action: string): string {
 
                     <!-- Config tab -->
                     <div v-if="activeTab === 'config'" class="panel-body">
-                        <template v-for="cat in plugin.configSchema" :key="cat.label">
-                            <div class="config-category-label">{{ cat.label }}</div>
-                            <div v-for="entry in cat.entries" :key="entry.key" class="config-row">
-                                <div class="config-row-label">
-                                    <span class="entry-label">{{ entry.label }}</span>
-                                    <span v-if="entry.description" class="entry-desc">{{ entry.description }}</span>
-                                </div>
-                                <div class="config-row-control">
-                                    <eToggle
-                                        v-if="entry.type === 'bool'"
-                                        :model-value="!!getValue(entry.key)"
-                                        :width="40"
-                                        :height="20"
-                                        @update:model-value="setValue(entry.key, $event)"
-                                    />
-                                    <div v-else-if="entry.type === 'int' || entry.type === 'float'" class="field-wrap">
-                                        <input
-                                            class="config-input"
-                                            type="number"
-                                            :value="getValue(entry.key) as number"
-                                            :min="entry.min"
-                                            :max="entry.max"
-                                            :step="entry.type === 'float' ? 0.01 : 1"
-                                            @change="setNumber(entry, ($event.target as HTMLInputElement).value)"
-                                        />
-                                    </div>
-                                    <div v-else-if="entry.type === 'string'" class="field-wrap">
-                                        <input
-                                            class="config-input"
-                                            type="text"
-                                            :value="getValue(entry.key) as string"
-                                            @change="setValue(entry.key, ($event.target as HTMLInputElement).value)"
-                                        />
-                                    </div>
-                                    <div v-else-if="entry.type === 'select'" class="field-wrap field-wrap--select">
-                                        <select
-                                            class="config-select"
-                                            :value="getValue(entry.key) as string"
-                                            @change="setValue(entry.key, ($event.target as HTMLSelectElement).value)"
-                                        >
-                                            <option v-for="opt in entry.choices" :key="opt" :value="opt">{{ opt }}</option>
-                                        </select>
-                                    </div>
-                                    <span v-else-if="entry.type === 'position'" class="position-display">
-                                        {{ JSON.stringify(getValue(entry.key)) }}
-                                    </span>
-                                    <button
-                                        v-else-if="entry.type === 'color'"
-                                        class="color-swatch"
-                                        :class="{ open: openColorKey === entry.key }"
-                                        @click="toggleColorPicker(entry.key, $event)"
-                                    >
-                                        <span class="color-swatch-checker"></span>
-                                        <span class="color-swatch-fill" :style="{ background: colorValue(entry.key) }"></span>
-                                    </button>
-                                </div>
+                        <template v-for="section in sections" :key="section.id">
+                            <div
+                                class="config-category-label"
+                                :class="{ collapsible: section.collapsible }"
+                                @click="toggleSection(section)"
+                            >
+                                <span>{{ section.label }}</span>
+                                <Icons
+                                    v-if="section.collapsible"
+                                    kind="chevron-down"
+                                    size="small"
+                                    class="section-chevron"
+                                    :class="{ collapsed: collapsed.has(section.id) }"
+                                />
                             </div>
+
+                            <template v-if="!collapsed.has(section.id)">
+                                <p v-if="section.description" class="section-desc">{{ section.description }}</p>
+
+                                <template v-for="(control, i) in section.controls" :key="rowKey(control, i)">
+                                    <div v-if="control.type === 'divider'" class="config-divider"></div>
+                                    <div
+                                        v-else
+                                        class="config-row"
+                                        :class="{ stacked: isStacked(control), disabled: isDisabled(control) }"
+                                    >
+                                        <div v-if="labelOf(control) || hintOf(control)" class="config-row-label">
+                                            <span v-if="labelOf(control)" v-tip="tipOf(control)" class="entry-label">{{ labelOf(control) }}</span>
+                                            <span v-if="hintOf(control)" class="entry-desc">{{ hintOf(control) }}</span>
+                                        </div>
+                                        <div
+                                            class="config-row-control"
+                                            v-tip="labelOf(control) ? undefined : tipOf(control)"
+                                        >
+                                            <eToggle
+                                                v-if="control.type === 'toggle' || control.type === 'switch'"
+                                                :model-value="!!valueOf(control)"
+                                                :width="40"
+                                                :height="20"
+                                                @update:model-value="onSet(control, $event)"
+                                            />
+                                            <span v-else-if="control.type === 'position'" class="position-display">
+                                                {{ JSON.stringify(valueOf(control)) }}
+                                            </span>
+                                            <ControlInput
+                                                v-else
+                                                :class="widthClass(control)"
+                                                :control="asInspector(control)"
+                                                :value="valueOf(control)"
+                                                :disabled="isDisabled(control)"
+                                                @set="(v) => onSet(control, v)"
+                                                @action="(p) => onAction(control, p)"
+                                            />
+                                        </div>
+                                    </div>
+                                </template>
+                            </template>
                         </template>
-                        <div v-if="plugin.configSchema.length === 0" class="empty-state">
+                        <div v-if="sections.length === 0" class="empty-state">
                             No configurable settings
                         </div>
                     </div>
@@ -371,41 +372,10 @@ function getCombo(action: string): string {
                     </div>
                 </div>
 
-                <!-- SVG stroke traces the clip-path boundary -->
-                <svg
-                    v-if="svgPoints"
-                    class="panel-stroke"
-                    viewBox="0 0 100 100"
-                    preserveAspectRatio="none"
-                    xmlns="http://www.w3.org/2000/svg"
-                >
-                    <polygon
-                        :points="svgPoints"
-                        fill="none"
-                        stroke="#29302D"
-                        stroke-width="0.4"
-                        vector-effect="non-scaling-stroke"
-                    />
-                </svg>
                 </motion.div>
             </div>
         </motion.div>
 
-        <Teleport to="body">
-            <div
-                v-if="openColorKey"
-                class="color-popover-layer"
-                @mousedown.self="closeColorPicker"
-            >
-                <div class="color-popover" :style="{ left: colorPos.left + 'px', top: colorPos.top + 'px' }">
-                    <eColorPicker
-                        :model-value="colorValue(openColorKey)"
-                        :alpha="colorEntryAlpha(openColorKey)"
-                        @update:model-value="onColorInput(openColorKey, $event)"
-                    />
-                </div>
-            </div>
-        </Teleport>
     </div>
 </template>
 
@@ -439,12 +409,10 @@ function getCombo(action: string): string {
     display: flex;
     flex-direction: column;
     background: hsla(142, 10%, 4%, 0.92); /* crank up transparency cuz for some unbeknownst fucking reason blur refuses to render in prod ffs. */
-    clip-path: polygon(
-        8px 0%, 100% 0%,
-        100% calc(100% - 8px),
-        calc(100% - 8px) 100%,
-        0% 100%, 0% 8px
-    );
+    box-sizing: border-box;
+    border: 1px solid var(--base-600);
+    corner-shape: bevel;
+    border-radius: 8px 0 8px 0;
     box-shadow: 0 8px 32px rgba(0,0,0,0.5);
 }
 
@@ -454,12 +422,8 @@ function getCombo(action: string): string {
     z-index: 0;
     backdrop-filter: blur(35px);
     -webkit-backdrop-filter: blur(35px);
-    clip-path: polygon(
-        8px 0%, 100% 0%,
-        100% calc(100% - 8px),
-        calc(100% - 8px) 100%,
-        0% 100%, 0% 8px
-    );
+    corner-shape: bevel;
+    border-radius: 8px 0 8px 0;
     pointer-events: none;
 }
 
@@ -481,15 +445,6 @@ function getCombo(action: string): string {
     min-height: 0;
 }
 
-.panel-stroke {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    pointer-events: none;
-    overflow: visible;
-    z-index: 2;
-}
 
 .panel-header {
     display: flex;
@@ -582,6 +537,9 @@ function getCombo(action: string): string {
 
 .config-category-label {
     flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
     font-family: var(--font-microcopy);
     font-size: var(--secondary-font-size-4);
     font-weight: var(--font-weight-2);
@@ -591,11 +549,37 @@ function getCombo(action: string): string {
     padding-top: var(--space-3);
     margin-top: var(--space-1);
     border-top: 1px solid rgba(255,255,255,0.05);
+    user-select: none;
+    -webkit-user-select: none;
 }
 .config-category-label:first-child {
     margin-top: 0;
     padding-top: 0;
     border-top: none;
+}
+.config-category-label.collapsible {
+    cursor: pointer;
+}
+.config-category-label.collapsible:hover {
+    color: var(--text-main);
+}
+
+.section-chevron {
+    transition: transform 0.15s;
+}
+.section-chevron.collapsed {
+    transform: rotate(-90deg);
+}
+
+.section-desc {
+    flex-shrink: 0;
+    margin: 0;
+    font-family: var(--font-microcopy);
+    font-size: var(--secondary-font-size-4);
+    color: var(--text-muted);
+    line-height: 1.35;
+    user-select: none;
+    -webkit-user-select: none;
 }
 
 .config-row {
@@ -606,6 +590,11 @@ function getCombo(action: string): string {
     column-gap: var(--space-4);
     min-height: 28px;
     padding: var(--space-2) 0;
+}
+
+.config-row.stacked {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: var(--space-2);
 }
 
 .config-row-label {
@@ -643,93 +632,38 @@ function getCombo(action: string): string {
     padding-top: 2px;
 }
 
-.field-wrap {
-    position: relative;
-    display: inline-flex;
-    clip-path: polygon(
-        4px 0%, 100% 0%,
-        100% calc(100% - 4px),
-        calc(100% - 4px) 100%,
-        0% 100%, 0% 4px
-    );
+.config-row.stacked .config-row-control {
+    justify-self: stretch;
+    padding-top: 0;
 }
 
-.field-wrap::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.12);
-    z-index: 1;
+.config-row.disabled .config-row-label {
+    opacity: 0.5;
 }
 
-.config-input {
+.config-divider {
+    flex-shrink: 0;
+    height: 1px;
+    background: rgba(255,255,255,0.05);
+}
+
+/* Sliders and text fields want the room; the scrub field is fine compact. */
+.ctl-wide {
+    width: 160px;
+}
+
+.ctl-narrow {
     width: 96px;
-    height: 24px;
-    padding: 0 var(--space-2);
-    background: var(--black-2-a);
-    border: none;
-    color: var(--text-main);
-    font-family: var(--font-microcopy);
-    font-size: var(--secondary-font-size-4);
-    outline: none;
-    box-sizing: border-box;
 }
 
-.config-select {
-    height: 24px;
-    min-width: 120px;
-    padding: 0 var(--space-2);
-    background: var(--black-2-a);
-    border: none;
-    color: var(--text-main);
-    font-family: var(--font-microcopy);
-    font-size: var(--secondary-font-size-4);
-    outline: none;
-    cursor: pointer;
+.ctl-full {
+    width: 100%;
 }
 
 .position-display {
     font-family: var(--font-microcopy);
     font-size: var(--secondary-font-size-4);
     color: var(--text-muted);
-}
-
-.color-swatch {
-    position: relative;
-    width: 48px;
-    height: 24px;
-    padding: 0;
-    border: none;
-    cursor: pointer;
-    overflow: hidden;
-    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14);
-    clip-path: polygon(4px 0%, 100% 0%, 100% calc(100% - 4px), calc(100% - 4px) 100%, 0% 100%, 0% 4px);
-}
-.color-swatch.open { box-shadow: inset 0 0 0 1px var(--light-green); }
-.color-swatch-checker {
-    position: absolute;
-    inset: 0;
-    background-image:
-        linear-gradient(45deg, #808080 25%, transparent 25%),
-        linear-gradient(-45deg, #808080 25%, transparent 25%),
-        linear-gradient(45deg, transparent 75%, #808080 75%),
-        linear-gradient(-45deg, transparent 75%, #808080 75%);
-    background-size: 8px 8px;
-    background-position: 0 0, 0 4px, 4px -4px, -4px 0;
-    opacity: 0.4;
-}
-.color-swatch-fill { position: absolute; inset: 0; }
-
-.color-popover-layer {
-    position: fixed;
-    inset: 0;
-    z-index: 2000;
-}
-.color-popover {
-    position: fixed;
-    box-shadow: 0 10px 34px rgba(0, 0, 0, 0.6);
-    clip-path: polygon(6px 0%, 100% 0%, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0% 100%, 0% 6px);
 }
 
 .keybind-row {
@@ -739,12 +673,8 @@ function getCombo(action: string): string {
     padding: var(--space-2) var(--space-3);
     cursor: pointer;
     transition: background 0.12s;
-    clip-path: polygon(
-        4px 0%, 100% 0%,
-        100% calc(100% - 4px),
-        calc(100% - 4px) 100%,
-        0% 100%, 0% 4px
-    );
+    corner-shape: bevel;
+    border-radius: 4px 0 4px 0;
 }
 .keybind-row:hover { background: rgba(255,255,255,0.04); }
 .keybind-row.capturing { background: rgba(132, 255, 177, 0.06); }

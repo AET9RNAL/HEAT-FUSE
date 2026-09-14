@@ -19,6 +19,10 @@ contextBridge.exposeInMainWorld('ipcRenderer', {
   },
 })
 
+contextBridge.exposeInMainWorld('splashAPI', {
+  done: (): void => ipcRenderer.send('splash:done'),
+})
+
 contextBridge.exposeInMainWorld('safeStorageAPI', {
   isAvailable: (): Promise<boolean> =>
     ipcRenderer.invoke('safe-storage:is-available'),
@@ -196,8 +200,8 @@ contextBridge.exposeInMainWorld('deviceAPI', {
 })
 
 contextBridge.exposeInMainWorld('fuseAPI', {
-  spawn: (): Promise<{ success: boolean; pid?: number; port?: number; connectionToken?: string; obsUrl?: string | null; error?: string }> =>
-    ipcRenderer.invoke('fuse:spawn'),
+  spawn: (opts?: { autoLock?: boolean }): Promise<{ success: boolean; pid?: number; port?: number; connectionToken?: string; obsUrl?: string | null; error?: string }> =>
+    ipcRenderer.invoke('fuse:spawn', opts),
   kill: (): Promise<{ success: boolean }> =>
     ipcRenderer.invoke('fuse:kill'),
   status: (): Promise<{ running: boolean; pid: number | null; port: number | null; obsUrl: string | null }> =>

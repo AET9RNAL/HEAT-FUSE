@@ -15,7 +15,7 @@ const auth  = useAuthStore()
 const { t } = useI18n()
 
 function iconUrl(project: MarketplaceProject): string | null {
-    return project.icon_key ? store.buildPublicUrl(project.icon_key) : null
+    return project.icon_key ? store.buildPublicUrl(project.icon_key, project.updated_at) : null
 }
 
 const installState = (project: MarketplaceProject) => store.projectInstallState(project)
@@ -101,7 +101,8 @@ function handleInstall(e: MouseEvent) {
     background: var(--black-1-a);
     cursor: pointer;
     transition: background 0.15s;
-    clip-path: polygon(8px 0%, 100% 0%, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0% 100%, 0% 8px);
+    corner-shape: bevel;
+    border-radius: 8px 0 8px 0;
 }
 
 .mp-card:hover { background: rgba(255,255,255,0.04); }
@@ -113,10 +114,13 @@ function handleInstall(e: MouseEvent) {
 }
 
 .card-icon {
+    user-select: none;
+    -webkit-user-select: none;
     width: 100%;
     height: 100%;
     object-fit: cover;
-    clip-path: polygon(4px 0%, 100% 0%, 100% calc(100% - 4px), calc(100% - 4px) 100%, 0% 100%, 0% 4px);
+    corner-shape: bevel;
+    border-radius: 4px 0 4px 0;
 }
 
 .card-icon-placeholder {
@@ -130,7 +134,8 @@ function handleInstall(e: MouseEvent) {
     font-size: var(--main-font-size-1);
     font-weight: var(--font-weight-2);
     color: var(--text-muted);
-    clip-path: polygon(4px 0%, 100% 0%, 100% calc(100% - 4px), calc(100% - 4px) 100%, 0% 100%, 0% 4px);
+    corner-shape: bevel;
+    border-radius: 4px 0 4px 0;
 }
 
 .card-body {
@@ -148,6 +153,8 @@ function handleInstall(e: MouseEvent) {
 }
 
 .card-name {
+    user-select: none;
+    -webkit-user-select: none;
     font-family: var(--font-primary);
     font-size: var(--main-font-size-3);
     font-weight: var(--font-weight-2);
@@ -159,6 +166,8 @@ function handleInstall(e: MouseEvent) {
 
 
 .card-summary {
+    user-select: none;
+    -webkit-user-select: none;
     font-family: var(--font-primary);
     font-size: var(--main-font-size-4);
     color: var(--text-muted);
@@ -169,6 +178,8 @@ function handleInstall(e: MouseEvent) {
 }
 
 .card-creator {
+    user-select: none;
+    -webkit-user-select: none;
     font-family: var(--font-primary);
     font-size: var(--main-font-size-3);
     color: var(--text-muted);
@@ -199,11 +210,15 @@ function handleInstall(e: MouseEvent) {
 }
 
 .stat-icon {
+    user-select: none;
+    -webkit-user-select: none;
     opacity: 0.45;
     flex-shrink: 0;
 }
 
 .stat {
+    user-select: none;
+    -webkit-user-select: none;
     font-family: var(--font-primary);
     font-size: var(--main-font-size-4);
     color: var(--text-muted);
@@ -211,6 +226,8 @@ function handleInstall(e: MouseEvent) {
 }
 
 .stat-sep {
+    user-select: none;
+    -webkit-user-select: none;
     font-family: var(--font-primary);
     font-size: var(--main-font-size-4);
     color: var(--text-muted);

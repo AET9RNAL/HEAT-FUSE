@@ -1,23 +1,11 @@
 {
   "enabled_plugins": null,
   "disabled_plugins": [
-    "game_memory",
-    "heat_ailos_torc",
-    "rive_animation",
-    "rive_dev",
-    "energy_bar",
-    "combat_reboot_plus",
-    "heat_stats",
-    "hud_scoreboard",
-    "leaderboard_fix",
-    "match_progress_overhaul",
-    "prism",
-    "canvas_ui",
-    "fuse_ui",
-    "noui"
+    "rive_dev"
   ],
   "hotkey_overrides": {
     "host": {
+      "Hot-Reload Plugins": "ctrl+r",
       "Toggle Calibrate/Lock": "ctrl+l",
       "Toggle Interactive": "ctrl+i"
     }

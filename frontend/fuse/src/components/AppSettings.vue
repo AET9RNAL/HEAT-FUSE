@@ -1,14 +1,14 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
-import eCheckbox from './eCheckbox.vue'
-import eSwitch from './eSwitch.vue'
-import eDirSelector from './eDirSelector.vue'
-import eButton from './eButton.vue'
+import { ref, computed, watch, onMounted } from 'vue'
+import eSetting, { type SettingStatus } from './eSetting.vue'
+import eKeybind from './eKeybind.vue'
+import StageSlider from '../overlay/inspector/controls/StageSlider.vue'
 import type { SystemState } from './eButton.vue'
 import type { eSwitchOption } from './eSwitch.vue'
 import { useAppStore } from '../stores/app'
 import { eventBus } from '../events/eventBus'
 import { useI18n } from '../composables/useI18n'
+import { useSettingAttention } from '../composables/useSettingAttention'
 
 const store = useAppStore()
 const { t } = useI18n()
@@ -16,98 +16,28 @@ const { t } = useI18n()
 interface FuseHotkey {
     action: string
     label: string
+    description: string
     defaultCombo: string
 }
 
-const FUSE_HOTKEYS: FuseHotkey[] = [
-    { action: 'Hot-Reload Plugins',    label: 'Hot-Reload Plugins',    defaultCombo: 'ctrl+r' },
-    { action: 'Quit FUSE',             label: 'Quit FUSE',             defaultCombo: 'ctrl+p' },
-    { action: 'Toggle Calibrate/Lock', label: 'Toggle Calibrate/Lock', defaultCombo: 'ctrl+l' },
-    { action: 'Toggle Interactive',    label: 'Toggle Interactive',    defaultCombo: 'ctrl+i' },
-]
-
-const hotkeyOverrides = ref<Record<string, string>>({})
-const capturingAction = ref<string | null>(null)
-let captureListener: ((e: KeyboardEvent) => void) | null = null
-
-function getCombo(action: string): string {
-    return hotkeyOverrides.value[action] ?? FUSE_HOTKEYS.find(h => h.action === action)?.defaultCombo ?? ''
-}
-
-// Toggle Chrome DevTools on the transparent overlay stage window (main process
-// handles the IPC in overlayStage.ts). Only way to inspect overlays in prod.
-const overlayDevtoolsOpen = ref(false)
-watch(overlayDevtoolsOpen, () => {
-    window.ipcRenderer?.send('overlay:toggle-devtools')
-})
-
-// Keys allowed to bind on their own (no modifier). Function/navigation keys only
-const STANDALONE_KEYS = new Set<string>([
-    ...Array.from({ length: 24 }, (_, i) => `f${i + 1}`),
-    'home', 'end', 'pageup', 'pagedown', 'insert', 'delete', 'enter', 'space',
+const FUSE_HOTKEYS = computed<FuseHotkey[]>(() => [
+    { action: 'Hot-Reload Plugins',    label: 'Hot-Reload Plugins',    description: t('appsettings.hotkeys.reloadDesc'),     defaultCombo: 'ctrl+r' },
+    { action: 'Quit FUSE',             label: 'Quit FUSE',             description: t('appsettings.hotkeys.quitDesc'),       defaultCombo: 'ctrl+p' },
+    { action: 'Toggle Calibrate/Lock', label: 'Toggle Calibrate/Lock', description: t('appsettings.hotkeys.calibrateDesc'),  defaultCombo: 'ctrl+l' },
+    { action: 'Toggle Interactive',    label: 'Toggle Interactive',    description: t('appsettings.hotkeys.interactiveDesc'), defaultCombo: 'ctrl+i' },
 ])
 
-function startCapture(action: string) {
-    if (capturingAction.value) cancelCapture()
-    capturingAction.value = action
+const hotkeyOverrides = ref<Record<string, string>>({})
 
-    captureListener = (e: KeyboardEvent) => {
-        e.preventDefault()
-        e.stopPropagation()
-
-        if (['Control', 'Alt', 'Shift', 'Meta'].includes(e.key)) return
-        if (e.key === 'Escape') { cancelCapture(); return }
-
-        // Reject non-Latin keys (e.g. Cyrillic layouts
-        if (/[^\x00-\x7F]/.test(e.key)) {
-            cancelCapture()
-            eventBus.emit('notification', {
-                title: t('appsettings.keybindings.latinOnlyTitle'),
-                message: t('appsettings.keybindings.latinOnly'),
-                type: 'error',
-            })
-            return
-        }
-
-        // Enforce standard keybind shapes:
-        //  - with a modifier: key must be a letter or digit (Ctrl/Alt/Shift + a-z/0-9)
-        //  - without a modifier: only a function/navigation key (bare F5, Enter, Home…)
-        const key = e.key === ' ' ? 'space' : e.key.toLowerCase()
-        const hasMod = e.ctrlKey || e.altKey || e.shiftKey
-        const validShape = hasMod ? /^[a-z0-9]$/.test(key) : STANDALONE_KEYS.has(key)
-        if (!validShape) {
-            cancelCapture()
-            eventBus.emit('notification', {
-                title: t('appsettings.keybindings.latinOnlyTitle'),
-                message: t('appsettings.keybindings.invalidCombo'),
-                type: 'error',
-            })
-            return
-        }
-
-        const mods: string[] = []
-        if (e.ctrlKey)  mods.push('ctrl')
-        if (e.altKey)   mods.push('alt')
-        if (e.shiftKey) mods.push('shift')
-        const combo = [...mods, key].join('+')
-
-        hotkeyOverrides.value = { ...hotkeyOverrides.value, [action]: combo }
-        capturingAction.value = null
-        document.removeEventListener('keydown', captureListener!, true)
-        captureListener = null
-
-        window.pluginConfigAPI?.writeHotkeyOverride('host', action, combo)
-    }
-
-    document.addEventListener('keydown', captureListener, true)
+function getCombo(action: string): string {
+    return hotkeyOverrides.value[action]
+        ?? FUSE_HOTKEYS.value.find(h => h.action === action)?.defaultCombo
+        ?? ''
 }
 
-function cancelCapture() {
-    if (captureListener) {
-        document.removeEventListener('keydown', captureListener, true)
-        captureListener = null
-    }
-    capturingAction.value = null
+function setCombo(action: string, combo: string) {
+    hotkeyOverrides.value = { ...hotkeyOverrides.value, [action]: combo }
+    window.pluginConfigAPI?.writeHotkeyOverride('host', action, combo)
 }
 
 onMounted(async () => {
@@ -118,431 +48,386 @@ onMounted(async () => {
     } catch { /* no host config yet */ }
 })
 
-onUnmounted(() => cancelCapture())
+// Toggles Chrome DevTools on the FUSE stage and runtime sidecar's Node inspector
+const overlayDevtoolsOpen = ref(false)
+watch(overlayDevtoolsOpen, () => {
+    window.ipcRenderer?.send('overlay:toggle-devtools')
+    window.ipcRenderer?.send('runtime:toggle-devtools')
+})
 
 const platformOptions: eSwitchOption[] = [
-  { icon: 'steam', value: 'steam' },
-  { icon: 'wgc',   value: 'wgc' },
+    { icon: 'steam', value: 'steam' },
+    { icon: 'wgc',   value: 'wgc' },
 ]
 
 const gameDirPath = computed({
-  get: () => store.gameDirPaths[store.gamePlatform] ?? '',
-  set: (val) => store.setGameDirPath(store.gamePlatform, val),
+    get: () => store.gameDirPaths[store.gamePlatform] ?? '',
+    set: (val) => store.setGameDirPath(store.gamePlatform, val),
 })
 
 const debuggerEnabled = ref<boolean | null>(null)
 const debuggerBtnState = ref<SystemState>('idle')
 
 async function refreshDebuggerState(dir: string, notifyOnInvalid = false) {
-  if (!dir) { debuggerEnabled.value = null; return }
-  const result = await store.checkDebugger(dir)
-  if (result.success) {
-    debuggerEnabled.value = result.enabled ?? false
-  } else {
-    debuggerEnabled.value = null
-    if (notifyOnInvalid) {
-      eventBus.emit('notification', {
-        title: t('appsettings.notifications.invalidPathTitle'),
-        message: t('appsettings.notifications.invalidPathMessage'),
-        type: 'warning',
-      })
+    if (!dir) { debuggerEnabled.value = null; return }
+    const result = await store.checkDebugger(dir)
+    if (result.success) {
+        debuggerEnabled.value = result.enabled ?? false
+    } else {
+        debuggerEnabled.value = null
+        if (notifyOnInvalid) {
+            eventBus.emit('notification', {
+                title: t('appsettings.notifications.invalidPathTitle'),
+                message: t('appsettings.notifications.invalidPathMessage'),
+                type: 'warning',
+            })
+        }
     }
-  }
 }
 
 // oldDir === undefined only on the immediate mount run - don't nag about a
 // previously-saved path; only notify when the user actively picks a bad folder.
 watch(gameDirPath, (dir, oldDir) => {
-  store.scanGameDir(dir)
-  refreshDebuggerState(dir, oldDir !== undefined)
+    store.scanGameDir(dir)
+    refreshDebuggerState(dir, oldDir !== undefined)
 }, { immediate: true })
 
 async function handleDebuggerToggle() {
-  const dir = gameDirPath.value
-  if (!dir || debuggerBtnState.value !== 'idle') return
-  debuggerBtnState.value = 'processing'
-  const result = debuggerEnabled.value
-    ? await store.disableDebugger(dir)
-    : await store.enableDebugger(dir)
-  if (result.success) {
-    debuggerEnabled.value = !debuggerEnabled.value
-    debuggerBtnState.value = 'success'
-    eventBus.emit('notification', {
-      title: t('appsettings.notifications.gameConfigChangedTitle'),
-      message: t('appsettings.notifications.gameConfigChangedMessage'),
-      type: 'success',
-    })
-  } else {
-    debuggerBtnState.value = 'error'
-  }
-  setTimeout(() => { debuggerBtnState.value = 'idle' }, 2000)
+    const dir = gameDirPath.value
+    if (!dir || debuggerBtnState.value !== 'idle') return
+    debuggerBtnState.value = 'processing'
+    const result = debuggerEnabled.value
+        ? await store.disableDebugger(dir)
+        : await store.enableDebugger(dir)
+    if (result.success) {
+        debuggerEnabled.value = !debuggerEnabled.value
+        debuggerBtnState.value = 'success'
+        eventBus.emit('notification', {
+            title: t('appsettings.notifications.gameConfigChangedTitle'),
+            message: t('appsettings.notifications.gameConfigChangedMessage'),
+            type: 'success',
+        })
+    } else {
+        debuggerBtnState.value = 'error'
+    }
+    setTimeout(() => { debuggerBtnState.value = 'idle' }, 2000)
 }
 
-const CUT = 10
-const panelEl = ref<HTMLElement | null>(null)
-const elW = ref(0)
-const elH = ref(0)
+// Something elsewhere was blocked by a setting, replay animation
+const attention = ref<Record<string, number>>({})
+const { pending: pendingAttention, clear: clearAttention } = useSettingAttention()
 
-const svgPoints = computed(() => {
-  const w = elW.value
-  const h = elH.value
-  if (!w || !h) return ''
-  const cx = (CUT / w) * 100
-  const cy = (CUT / h) * 100
-  return `${cx},0 100,0 100,${100 - cy} ${100 - cx},100 0,100 0,${cy}`
+watch(pendingAttention, (requests) => {
+    const ids = Object.keys(requests)
+    if (!ids.length) return
+    const next = { ...attention.value }
+    for (const id of ids) next[id] = (next[id] ?? 0) + 1
+    attention.value = next
+    clearAttention()
+}, { immediate: true })
+
+// Corner notch states for the core row
+const gameDirStatus = computed<SettingStatus>(() => {
+    if (!gameDirPath.value) return 'warning'          
+    if (debuggerEnabled.value === null) return 'error'
+    return 'success'
 })
 
-let ro: ResizeObserver | null = null
-onMounted(() => {
-  if (!panelEl.value) return
-  ro = new ResizeObserver(([entry]) => {
-    const box = entry.borderBoxSize?.[0]
-    elW.value = box ? box.inlineSize : entry.contentRect.width
-    elH.value = box ? box.blockSize  : entry.contentRect.height
-  })
-  ro.observe(panelEl.value)
+// Anything depending on the config being applied is blocked until it is
+const gameConfigStatus = computed<SettingStatus>(() => {
+    if (!gameDirPath.value) return 'warning'
+    if (debuggerEnabled.value === null) return 'warning'
+    return debuggerEnabled.value ? 'success' : 'error'
 })
-onUnmounted(() => ro?.disconnect())
+
 </script>
 
 <template>
-  <div class="app-settings">
-    <div class="settings-glow">
-      <div ref="panelEl" class="settings-panel">
+    <div class="app-settings">
+        <div class="settings-stack">
 
-        <div class="section">
-          <h2 class="section-header">{{ t('appsettings.gameInstallation.title') }}</h2>
-          <div class="section-body">
+            <!-- Core Functionality -->
+            <section class="panel panel-core">
+                <h2 class="panel-title">{{ t('appsettings.core.title') }}</h2>
+                <div class="core-row">
+                    <eSetting
+                        class="core-item"
+                        icon="platform"
+                        :label="t('appsettings.core.platform')"
+                        :description="t('appsettings.core.platformDesc')"
+                        type="switch"
+                        :options="platformOptions"
+                        :value="store.gamePlatform"
+                        @update:value="store.gamePlatform = $event as 'steam' | 'wgc'"
+                    />
+                    <eSetting
+                        class="core-item"
+                        icon="folder"
+                        :label="t('appsettings.core.gameDir')"
+                        :description="t('appsettings.core.gameDirDesc')"
+                        type="dir"
+                        :status="gameDirStatus"
+                        :attention="attention.gameDir"
+                        :value="gameDirPath"
+                        @update:value="gameDirPath = $event as string"
+                    />
+                    <eSetting
+                        class="core-item"
+                        icon="settings"
+                        :label="t('appsettings.core.gameConfig')"
+                        :description="t('appsettings.core.gameConfigDesc')"
+                        type="toggle"
+                        :status="gameConfigStatus"
+                        :attention="attention.gameConfig"
+                        :value="debuggerEnabled === true"
+                        :disabled="debuggerEnabled === null || !gameDirPath || debuggerBtnState !== 'idle'"
+                        @update:value="handleDebuggerToggle"
+                    />
+                </div>
+            </section>
 
-            <div class="setting-row">
-              <span class="setting-label">{{ t('appsettings.gameInstallation.platform') }}</span>
-              <eSwitch :options="platformOptions" v-model="store.gamePlatform" />
+            <!-- General | Quality of Life + Privacy -->
+            <div class="columns">
+                <section class="panel column">
+                    <h2 class="panel-title">{{ t('appsettings.sections.general') }}</h2>
+                    <div class="options">
+                        <eSetting
+                            icon="launch"
+                            modelValue="secondary"
+                            :label="t('appsettings.general.launchAtStartup')"
+                            :value="store.autostart"
+                            @update:value="store.autostart = $event as boolean"
+                        />
+                        <eSetting
+                            icon="minimizeWindow"
+                            modelValue="secondary"
+                            :label="t('appsettings.general.closeMinimizes')"
+                            :value="store.minimizeToTrayOnClose"
+                            @update:value="store.minimizeToTrayOnClose = $event as boolean"
+                        />
+                        <eSetting
+                            icon="minimized"
+                            modelValue="secondary"
+                            :label="t('appsettings.general.startMinimized')"
+                            :value="store.minimizeToTray"
+                            @update:value="store.minimizeToTray = $event as boolean"
+                        />
+                        <eSetting
+                            icon="download"
+                            modelValue="secondary"
+                            :label="t('appsettings.general.checkUpdates')"
+                            :value="store.checkUpdatesOnStartup"
+                            @update:value="store.checkUpdatesOnStartup = $event as boolean"
+                        />
+                        <eSetting
+                            icon="discord"
+                            modelValue="secondary"
+                            :label="t('appsettings.general.discordRpc')"
+                            :value="store.discordRpc"
+                            @update:value="store.discordRpc = $event as boolean"
+                        />
+                        <eSetting
+                            icon="file"
+                            modelValue="secondary"
+                            :label="t('appsettings.general.fileAssoc')"
+                            :value="store.fileAssoc"
+                            @update:value="store.fileAssoc = $event as boolean"
+                        />
+                    </div>
+                </section>
+
+                <div class="column column-stack">
+                    <section class="panel">
+                        <h2 class="panel-title">{{ t('appsettings.sections.qol') }}</h2>
+                        <div class="options">
+                            <eSetting
+                                icon="play"
+                                modelValue="secondary"
+                                :label="t('appsettings.qol.startWithGame')"
+                                :value="store.startWithGame"
+                                @update:value="store.startWithGame = $event as boolean"
+                            />
+                            <eSetting
+                                icon="hide"
+                                modelValue="secondary"
+                                :label="t('appsettings.qol.hideOnFocusLoss')"
+                                :value="store.hideOnFocusLoss"
+                                @update:value="store.hideOnFocusLoss = $event as boolean"
+                            />
+                        </div>
+                    </section>
+
+                    <section class="panel">
+                        <h2 class="panel-title">{{ t('appsettings.sections.privacy') }}</h2>
+                        <div class="options">
+                            <eSetting
+                                icon="improvement"
+                                modelValue="secondary"
+                                :label="t('appsettings.privacy.analyticsConsent')"
+                                :value="store.analyticsConsent"
+                                @update:value="store.analyticsConsent = $event as boolean"
+                            />
+                            <eSetting
+                                icon="bug"
+                                modelValue="secondary"
+                                :label="t('appsettings.privacy.diagnosticsConsent')"
+                                :value="store.diagnosticsConsent"
+                                @update:value="store.diagnosticsConsent = $event as boolean"
+                            />
+                        </div>
+                    </section>
+                </div>
             </div>
 
-            <div class="setting-row">
-              <span class="setting-label">{{ t('appsettings.gameInstallation.gameDirectory') }}</span>
-              <div class="dir-wrapper">
-                <eDirSelector v-model="gameDirPath" />
-              </div>
-            </div>
+            <!-- Keybinds -->
+            <section class="panel">
+                <h2 class="panel-title">{{ t('appsettings.sections.keybinds') }}</h2>
+                <div class="options">
+                    <eKeybind
+                        v-for="hk in FUSE_HOTKEYS"
+                        :key="hk.action"
+                        :label="hk.label"
+                        :description="hk.description"
+                        :model-value="getCombo(hk.action)"
+                        :reset-value="hk.defaultCombo"
+                        @update:model-value="setCombo(hk.action, $event)"
+                    />
+                </div>
+            </section>
 
-          </div>
+            <!-- Audio: master level for plugin sounds on the stage window; plugins set their own under it -->
+            <section class="panel">
+                <h2 class="panel-title">{{ t('appsettings.sections.audio') }}</h2>
+                <div class="options">
+                    <eSetting
+                        icon="plugin"
+                        modelValue="secondary"
+                        :label="t('appsettings.audio.volume')"
+                        :disabled="store.audioMuted"
+                    >
+                        <template #control>
+                            <StageSlider
+                                class="audio-volume"
+                                :model-value="store.audioVolume"
+                                :min="0"
+                                :max="100"
+                                :step="1"
+                                unit="%"
+                                :default="80"
+                                @live="store.audioVolume = $event"
+                                @commit="store.audioVolume = $event"
+                            />
+                        </template>
+                    </eSetting>
+                    <eSetting
+                        icon="hide"
+                        modelValue="secondary"
+                        :label="t('appsettings.audio.muted')"
+                        :value="store.audioMuted"
+                        @update:value="store.audioMuted = $event as boolean"
+                    />
+                </div>
+            </section>
+
+            <!-- Debug -->
+            <section class="panel">
+                <h2 class="panel-title">{{ t('appsettings.debug.title') }}</h2>
+                <div class="options">
+                    <eSetting
+                        icon="console"
+                        modelValue="secondary"
+                        :label="t('appsettings.debug.overlayDevtools')"
+                        :value="overlayDevtoolsOpen"
+                        @update:value="overlayDevtoolsOpen = $event as boolean"
+                    />
+                </div>
+            </section>
+
         </div>
 
-        <div class="section">
-          <h2 class="section-header">{{ t('appsettings.masterSwitch.title') }}</h2>
-          <div class="section-body">
-            <div class="setting-row">
-              <span class="setting-label">{{ t('appsettings.masterSwitch.enableFuse') }}</span>
-              <eButton
-                :label="debuggerEnabled ? t('appsettings.masterSwitch.disable') : t('appsettings.masterSwitch.enable')"
-                size="half"
-                :systemState="debuggerBtnState"
-                :disabled="debuggerEnabled === null || !gameDirPath"
-                @click="handleDebuggerToggle"
-              />
-            </div>
-          </div>
-        </div>
-
-        <div class="section">
-          <h2 class="section-header">{{ t('appsettings.general.title') }}</h2>
-          <div class="section-body">
-
-            <div class="setting-row">
-              <span class="setting-label">{{ t('appsettings.general.launchAtStartup') }}</span>
-              <eCheckbox v-model="store.autostart" :width="18" :height="18" />
-            </div>
-
-            <div class="setting-row">
-              <span class="setting-label">{{ t('appsettings.general.startMinimized') }}</span>
-              <eCheckbox v-model="store.minimizeToTray" :width="18" :height="18" />
-            </div>
-
-            <div class="setting-row">
-              <span class="setting-label">{{ t('appsettings.general.closeMinimizes') }}</span>
-              <eCheckbox v-model="store.minimizeToTrayOnClose" :width="18" :height="18" />
-            </div>
-
-            <div class="setting-row">
-              <span class="setting-label">{{ t('appsettings.general.checkUpdates') }}</span>
-              <eCheckbox v-model="store.checkUpdatesOnStartup" :width="18" :height="18" />
-            </div>
-
-            <div class="setting-row">
-              <span class="setting-label">{{ t('appsettings.general.discordRpc') }}</span>
-              <eCheckbox v-model="store.discordRpc" :width="18" :height="18" />
-            </div>
-
-            <div class="setting-row">
-              <span class="setting-label">{{ t('appsettings.general.fileAssoc') }}</span>
-              <eCheckbox v-model="store.fileAssoc" :width="18" :height="18" />
-            </div>
-
-          </div>
-        </div>
-
-        <div class="section">
-          <h2 class="section-header">{{ t('appsettings.qol.title') }}</h2>
-          <div class="section-body">
-
-            <div class="setting-row">
-              <span class="setting-label">{{ t('appsettings.qol.startWithGame') }}</span>
-              <eCheckbox v-model="store.startWithGame" :width="18" :height="18" />
-            </div>
-
-            <div class="setting-row">
-              <span class="setting-label">{{ t('appsettings.qol.hideOnFocusLoss') }}</span>
-              <eCheckbox v-model="store.hideOnFocusLoss" :width="18" :height="18" />
-            </div>
-
-          </div>
-        </div>
-
-        <div class="section">
-          <div class="kb-title-row">
-            <h2 class="section-header">{{ t('appsettings.keybindings.title') }}</h2>
-            <span class="kb-hint">{{ t('appsettings.keybindings.latinLayoutHint') }}</span>
-          </div>
-          <div class="section-body">
-            <div class="kb-table">
-              <div class="kb-header">
-                <span>{{ t('appsettings.keybindings.columnAction') }}</span>
-                <span>{{ t('appsettings.keybindings.columnBinding') }}</span>
-              </div>
-              <div
-                v-for="hk in FUSE_HOTKEYS"
-                :key="hk.action"
-                class="kb-row"
-              >
-                <span class="kb-label">{{ hk.label }}</span>
-                <span class="kb-combo" :class="{ capturing: capturingAction === hk.action }">
-                  {{ capturingAction === hk.action ? '- press keys -' : getCombo(hk.action) }}
-                </span>
-                <eButton
-                  :label="t('appsettings.keybindings.rebind')"
-                  size="half"
-                  :systemState="capturingAction === hk.action ? 'processing' : 'idle'"
-                  @click="startCapture(hk.action)"
-                />
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="section">
-          <h2 class="section-header">{{ t('appsettings.privacy.title') }}</h2>
-          <div class="section-body">
-
-            <div class="setting-row">
-              <span class="setting-label">
-                {{ t('appsettings.privacy.analyticsConsent').split('FUSE')[0] }}<span class="brand-highlight">FUSE</span>{{ t('appsettings.privacy.analyticsConsent').split('FUSE')[1] }}
-              </span>
-              <eCheckbox v-model="store.analyticsConsent" :width="18" :height="18" />
-            </div>
-
-            <div class="setting-row">
-              <span class="setting-label">{{ t('appsettings.privacy.diagnosticsConsent') }}</span>
-              <eCheckbox v-model="store.diagnosticsConsent" :width="18" :height="18" />
-            </div>
-
-          </div>
-        </div>
-
-        <div class="section">
-          <h2 class="section-header">{{ t('appsettings.debug.title') }}</h2>
-          <div class="section-body">
-            <div class="setting-row">
-              <span class="setting-label">{{ t('appsettings.debug.overlayDevtools') }}</span>
-              <eCheckbox v-model="overlayDevtoolsOpen" :width="18" :height="18" />
-            </div>
-          </div>
-        </div>
-
-        <svg
-          v-if="svgPoints"
-          class="panel-stroke"
-          viewBox="0 0 100 100"
-          preserveAspectRatio="none"
-          xmlns="http://www.w3.org/2000/svg"
-        >
-          <polygon
-            :points="svgPoints"
-            fill="none"
-            stroke="#525252"
-            stroke-width="0.4"
-            vector-effect="non-scaling-stroke"
-          />
-        </svg>
-
-      </div>
     </div>
-  </div>
 </template>
 
 <style scoped>
+.audio-volume {
+    width: 160px;
+}
+
 .app-settings {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  padding: var(--space-4);
-  overflow-y: auto;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: var(--space-4);
+    overflow-y: auto;
 }
 
-.settings-glow {
-  /* filter:
-    drop-shadow(0px 2px 5px rgba(197, 255, 218, 0.2))
-    drop-shadow(0px 0px 1px #84ffb1)
-    drop-shadow(0px 1px 1px rgba(197, 255, 218, 0.2)); */
+.settings-stack {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
 }
 
-.settings-panel {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  padding: 0 var(--space-4) var(--space-2);
-  /* background: var(--black-2-alpha, rgba(25, 25, 25, 0.5)); */
-  clip-path: polygon(
-    10px 0%,
-    100% 0%,
-    100% calc(100% - 10px),
-    calc(100% - 10px) 100%,
-    0% 100%,
-    0% 10px
-  );
+.panel {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: var(--space-3);
+    box-sizing: border-box;
+    background: var(--black-2-a);
+    border: 1px solid var(--base-600);
+    corner-shape: bevel;
+    border-radius: 6px 0 6px 0;
 }
 
-.panel-stroke {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-  overflow: visible;
-  z-index: 1;
+.panel-core {
+    padding-bottom: var(--space-5);
 }
 
-.section {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  position: relative;
-  z-index: 2;
+.panel-title {
+    margin: 0;
+    font-family: var(--font-primary);
+    font-size: var(--main-font-size-2);
+    font-weight: var(--font-weight-2);
+    color: var(--text-muted);
+    line-height: 1;
+    user-select: none;
+    -webkit-user-select: none;
 }
 
-.section-header {
-  font-family: var(--font-primary);
-  font-size: var(--main-font-size-2, 20px);
-  font-weight: var(--font-weight-2);
-  color: var(--text-main, #f2f2f2);
-  padding-top: var(--space-2);
-  margin: 0;
-  line-height: 1;
-  user-select: none;
-  -webkit-user-select: none;
+/* 8px gap either side of an 8px spacer in the design */
+.core-row {
+    display: flex;
+    align-items: stretch;
+    gap: 24px;
 }
 
-.kb-title-row {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--space-2);
+.core-item {
+    flex: 1;
+    min-width: 0;
 }
 
-.kb-hint {
-  font-family: var(--font-microcopy);
-  font-size: var(--secondary-font-size-4, 12px);
-  font-weight: var(--font-weight-3);
-  color: var(--error-base);
-  user-select: none;
-  -webkit-user-select: none;
+.columns {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-3);
 }
 
-.section-body {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
+.column {
+    flex: 1;
+    min-width: 0;
 }
 
-.setting-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-4);
-  min-width: 0;
+.column-stack {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
 }
 
-.setting-label {
-  font-family: var(--font-microcopy);
-  font-size: var(--secondary-font-size-4, 12px);
-  font-weight: var(--font-weight-3);
-  color: var(--text-main, #f2f2f2);
-  white-space: nowrap;
-  flex-shrink: 0;
-  user-select: none;
-  -webkit-user-select: none;
+.options {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
 }
 
-.brand-highlight {
-  color: var(--accent-200);
-  font-weight: var(--font-weight-1);
-}
-
-.dir-wrapper {
-  width: 240px;
-  flex-shrink: 0;
-}
-
-.kb-table {
-  display: flex;
-  flex-direction: column;
-}
-
-.kb-header {
-  display: grid;
-  grid-template-columns: 1fr auto auto;
-  gap: var(--space-4);
-  padding: 0 0 var(--space-2);
-  border-bottom: 1px solid rgba(255,255,255,0.06);
-  font-family: var(--font-microcopy);
-  font-size: var(--secondary-font-size-4);
-  font-weight: var(--font-weight-3);
-  color: var(--light-green);
-  user-select: none;
-  -webkit-user-select: none;
-}
-
-.kb-row {
-  display: grid;
-  grid-template-columns: 1fr auto auto;
-  align-items: center;
-  gap: var(--space-4);
-  padding: var(--space-2) 0;
-  border-bottom: 1px solid rgba(255,255,255,0.03);
-}
-
-.kb-label {
-  font-family: var(--font-microcopy);
-  font-size: var(--secondary-font-size-4);
-  font-weight: var(--font-weight-3);
-  color: var(--text-main);
-  user-select: none;
-  -webkit-user-select: none;
-}
-
-.kb-combo {
-  font-family: var(--font-microcopy);
-  font-size: var(--secondary-font-size-4);
-  color: var(--text-muted);
-  min-width: 64px;
-  text-align: right;
-  user-select: none;
-  -webkit-user-select: none;
-}
-
-.kb-combo.capturing {
-  color: var(--text-muted);
-  font-style: italic;
-}
 </style>

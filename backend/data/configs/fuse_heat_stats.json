@@ -2,29 +2,29 @@
   "sample_interval_s": 5,
   "summarize_hold_s": 5,
   "vue_overlay_pos": {
-    "x": 17,
-    "y": 76,
-    "w": 402,
-    "h": 507
+    "x": 13,
+    "y": 218,
+    "w": 352,
+    "h": 438
   },
-  "vue_width": 280,
-  "vue_height": 180,
-  "api_key": "fuse_Qlj84POyYh4xHy8YkUeV0AuADlRnLgboJRSVIl8sjUY",
-  "player_name": "AET3RNAL",
+  "vue_width": 440,
+  "vue_height": 300,
+  "api_key": "",
+  "player_name": "",
   "session_started_at": 0,
-  "mode": "default",
-  "scene_time_s": 8,
-  "hide_in_battle": false,
+  "mode": "carousel",
+  "scene_time_s": 4,
+  "hide_in_battle": true,
   "graph_scale": "auto",
-  "graph_points": 60,
+  "graph_points": 20,
   "graph_value_scale": 1,
   "overlay_pos": {
-    "x": 0,
-    "y": 40,
-    "w": 200,
+    "x": 19,
+    "y": 149,
+    "w": 170,
     "h": 20
   },
-  "anim_width": 200,
+  "anim_width": 170,
   "anim_height": 20,
-  "api_refresh_interval_s": 60
+  "parked_battle": null
 }

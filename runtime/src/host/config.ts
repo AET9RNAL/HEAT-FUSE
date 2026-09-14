@@ -8,11 +8,13 @@ import fs from "node:fs";
 import path from "node:path";
 import { logger, type Logger } from "../log.js";
 import { resolveConfig } from "../utils/paths.js";
-import type { ConfigCategory } from "../sdk/configSchema.js";
+import { isLegacyCategory, sectionControls, type ConfigSchemaItem } from "../sdk/configSchema.js";
+import { coerceValue, controlKeys, isValueControl, type InspectorControl } from "../sdk/inspector.js";
 
 type Json = unknown;
 type Constraint = { type: "int" | "float"; min?: number; max?: number };
 type Watcher = (value: Json) => void;
+type ActionHandler = (controlId: string, payload?: unknown) => void;
 
 const MISSING = Symbol("missing");
 
@@ -26,8 +28,14 @@ export class PluginConfig {
   private _mtimeMs = 0;
   private _nextMtimeCheck = 0;
 
+  /** Value controls by the config key they write, from the schema's sections. */
+  private _controls = new Map<string, InspectorControl>();
+  /** Button, button-row and row-button ids the schema declares. */
+  private _actionIds = new Set<string>();
+  private _actionHandler: ActionHandler | null = null;
+
   loaded = false;
-  schemaCategories: ConfigCategory[] | null = null;
+  schemaCategories: ConfigSchemaItem[] | null = null;
 
   constructor(name: string) {
     this._path = resolveConfig(`fuse_${name}.json`);
@@ -45,13 +53,29 @@ export class PluginConfig {
 
   // --- Schema -------------------------------------------------------------
 
-  schema(categories: ConfigCategory[]): this {
-    this.schemaCategories = categories;
+  /** Pass the same sections given to `ov.inspector.sections()`; legacy categories still work. */
+  schema(items: ConfigSchemaItem[]): this {
+    this.schemaCategories = items;
     this._constraints.clear();
-    for (const cat of categories) {
-      for (const entry of cat.entries) {
-        if ((entry.type === "int" || entry.type === "float") && (entry.min != null || entry.max != null)) {
-          this._constraints.set(entry.key, { type: entry.type, min: entry.min, max: entry.max });
+    this._controls.clear();
+    this._actionIds.clear();
+    for (const item of items) {
+      if (isLegacyCategory(item)) {
+        for (const entry of item.entries) {
+          if ((entry.type === "int" || entry.type === "float") && (entry.min != null || entry.max != null)) {
+            this._constraints.set(entry.key, { type: entry.type, min: entry.min, max: entry.max });
+          }
+        }
+        continue;
+      }
+      for (const control of sectionControls(item)) {
+        if (control.type === "button") {
+          this._actionIds.add(control.id);
+        } else if (control.type === "buttonRow") {
+          this._actionIds.add(control.id);
+          for (const b of control.buttons) if (b.id) this._actionIds.add(b.id);
+        } else if (isValueControl(control)) {
+          for (const key of controlKeys(control)) this._controls.set(key, control);
         }
       }
     }
@@ -130,6 +154,50 @@ export class PluginConfig {
     return key in this._data;
   }
 
+  /**
+   * Check a write from outside the plugin (the App panel) against the control
+   * that owns the key - the same rules the stage inspector applies. Keys no
+   * section declares keep the legacy clamp-only path.
+   */
+  accept(key: string, raw: Json): { ok: true; value: Json } | { ok: false } {
+    const control = this._controls.get(key);
+    if (!control) return { ok: true, value: raw };
+    if (control.type === "vec2" && control.keys) {
+      // A two-key vec2 is written one key at a time, so each arrives as a number.
+      const n = typeof raw === "number" ? raw : Number.parseFloat(String(raw));
+      if (!Number.isFinite(n)) return { ok: false };
+      let v = n;
+      if (control.min != null) v = Math.max(control.min, v);
+      if (control.max != null) v = Math.min(control.max, v);
+      return { ok: true, value: v };
+    }
+    return coerceValue(control, raw);
+  }
+
+  // --- Actions ------------------------------------------------------------
+
+  /** Button presses from the App panel, and from the stage when the overlay has no handler of its own. */
+  onAction(cb: ActionHandler): void {
+    this._actionHandler = cb;
+  }
+
+  /** Hand a press to the plugin; false when it registered no handler. */
+  runAction(controlId: string, payload?: unknown): boolean {
+    if (!this._actionHandler) return false;
+    try {
+      this._actionHandler(controlId, payload);
+    } catch (e) {
+      this._log.exception(`Config: onAction handler raised for '${controlId}'`, e);
+    }
+    return true;
+  }
+
+  /** A press from the App panel: only ids the schema declares as buttons get through. */
+  dispatchAction(controlId: string, payload?: unknown): boolean {
+    if (!this._actionIds.has(controlId)) return false;
+    return this.runAction(controlId, payload);
+  }
+
   private clamp(key: string, value: Json): Json {
     const c = this._constraints.get(key);
     if (!c) return value;
@@ -146,6 +214,19 @@ export class PluginConfig {
     const old = this._data[key];
     this._data[key] = value;
     this.save();
+    if (!had || !deepEq(old, value)) this._notify(key, value);
+  }
+
+  /**
+   * In-memory write that fires watchers without touching disk - the live half of
+   * an inspector drag, where `set` would rewrite the config file every frame.
+   * The matching `set` on pointer-up is what persists.
+   */
+  setLive(key: string, value: Json): void {
+    value = this.clamp(key, value);
+    const had = key in this._data;
+    const old = this._data[key];
+    this._data[key] = value;
     if (!had || !deepEq(old, value)) this._notify(key, value);
   }
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { computed } from 'vue'
 import { motion } from 'motion-v'
 import Icons from './Icons.vue'
 import eButton from './eButton.vue'
@@ -104,31 +104,6 @@ const formattedDate = computed(() => {
     return date.toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' }).toUpperCase()
 })
 
-const CUT = 8
-const panelEl = ref<HTMLElement | null>(null)
-const elW = ref(0)
-const elH = ref(0)
-
-const svgPoints = computed(() => {
-    const w = elW.value
-    const h = elH.value
-    if (!w || !h) return ''
-    const cx = (CUT / w) * 100
-    const cy = (CUT / h) * 100
-    return `${cx},0 100,0 100,${100 - cy} ${100 - cx},100 0,100 0,${cy}`
-})
-
-let ro: ResizeObserver | null = null
-onMounted(() => {
-    if (!panelEl.value) return
-    ro = new ResizeObserver(([entry]) => {
-        const box = entry.borderBoxSize?.[0]
-        elW.value = box ? box.inlineSize : entry.contentRect.width
-        elH.value = box ? box.blockSize  : entry.contentRect.height
-    })
-    ro.observe(panelEl.value)
-})
-onUnmounted(() => ro?.disconnect())
 
 function close() { emit('close') }
 </script>
@@ -143,16 +118,16 @@ function close() { emit('close') }
             :exit="{ opacity: 0, scale: 0.96 }"
             :transition="{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }"
         >
-            <div ref="panelEl" class="notes-panel">
+            <div class="notes-panel">
                 <div class="panel-blur" />
                 <div class="panel-inner">
                     <div class="panel-header">
-                        <!-- <Icons kind="app-logo-full" size="xlarge" class="panel-logo" /> -->
+                        <!-- <Icons kind="fuse-logo-full" size="xlarge" class="panel-logo" /> -->
                         <div class="panel-title-group">
                             <span class="panel-name">{{ t('components.releaseNotes.title') }}</span>
                             <span class="panel-sub">{{ t('components.releaseNotes.version', { version }) }}</span>
                         </div>
-                        <button class="close-btn" @click="close">
+                        <button v-tip="t('common.close')" class="close-btn" @click="close">
                             <Icons kind="cross" size="normal" />
                         </button>
                     </div>
@@ -203,21 +178,6 @@ function close() { emit('close') }
                         />
                     </div>
                 </div>
-                <svg
-                    v-if="svgPoints"
-                    class="panel-stroke"
-                    viewBox="0 0 100 100"
-                    preserveAspectRatio="none"
-                    xmlns="http://www.w3.org/2000/svg"
-                >
-                    <polygon
-                        :points="svgPoints"
-                        fill="none"
-                        stroke="#29302D"
-                        stroke-width="0.4"
-                        vector-effect="non-scaling-stroke"
-                    />
-                </svg>
             </div>
         </motion.div>
     </div>
@@ -255,12 +215,10 @@ function close() { emit('close') }
     display: flex;
     flex-direction: column;
     background: hsla(142, 10%, 4%, 0.92);
-    clip-path: polygon(
-        8px 0%, 100% 0%,
-        100% calc(100% - 8px),
-        calc(100% - 8px) 100%,
-        0% 100%, 0% 8px
-    );
+    box-sizing: border-box;
+    border: 1px solid var(--base-600);
+    corner-shape: bevel;
+    border-radius: 8px 0 8px 0;
     box-shadow: 0 8px 32px rgba(0,0,0,0.5);
 }
 
@@ -270,12 +228,8 @@ function close() { emit('close') }
     z-index: 0;
     backdrop-filter: blur(35px);
     -webkit-backdrop-filter: blur(35px);
-    clip-path: polygon(
-        8px 0%, 100% 0%,
-        100% calc(100% - 8px),
-        calc(100% - 8px) 100%,
-        0% 100%, 0% 8px
-    );
+    corner-shape: bevel;
+    border-radius: 8px 0 8px 0;
     pointer-events: none;
 }
 
@@ -286,16 +240,6 @@ function close() { emit('close') }
     flex-direction: column;
     flex: 1;
     min-height: 0;
-}
-
-.panel-stroke {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    pointer-events: none;
-    overflow: visible;
-    z-index: 2;
 }
 
 .panel-header {
@@ -428,12 +372,8 @@ function close() { emit('close') }
     gap: var(--space-3);
     background: var(--black-2-a);
     padding: var(--space-4);
-    clip-path: polygon(
-        8px 0%, 100% 0%,
-        100% calc(100% - 8px),
-        calc(100% - 8px) 100%,
-        0% 100%, 0% 8px
-    );
+    corner-shape: bevel;
+    border-radius: 8px 0 8px 0;
 }
 
 .version-title {
@@ -468,12 +408,8 @@ function close() { emit('close') }
     padding: 2px var(--space-2);
     background: var(--light-green);
     color: var(--black-1);
-    clip-path: polygon(
-        4px 0%, 100% 0%,
-        100% calc(100% - 4px),
-        calc(100% - 4px) 100%,
-        0% 100%, 0% 4px
-    );
+    corner-shape: bevel;
+    border-radius: 4px 0 4px 0;
     user-select: none;
     -webkit-user-select: none;
 }

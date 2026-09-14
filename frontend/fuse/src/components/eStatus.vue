@@ -3,7 +3,7 @@ export type StatusState = 'None' | 'Initializing' | 'Connecting' | 'Running' | '
 </script>
 
 <script setup lang="ts">
-import { computed, ref, onMounted, onUnmounted } from 'vue'
+import { computed } from 'vue'
 
 const props = withDefaults(defineProps<{
   state?: StatusState
@@ -29,53 +29,12 @@ const dotGlow = computed(() =>
     : `0 0 4px 1px ${dotColor.value}, 0 0 10px 2px ${dotColor.value}66`
 )
 
-// Clipped corners + SVG stroke overlay, matching eUpdateProgress.
-const CUT = 6
-const containerEl = ref<HTMLElement | null>(null)
-const elW = ref(0)
-const elH = ref(0)
-
-const svgPoints = computed(() => {
-  const w = elW.value
-  const h = elH.value
-  if (!w || !h) return ''
-  const cx = (CUT / w) * 100
-  const cy = (CUT / h) * 100
-  return `${cx},0 100,0 100,${100 - cy} ${100 - cx},100 0,100 0,${cy}`
-})
-
-let ro: ResizeObserver | null = null
-onMounted(() => {
-  if (!containerEl.value) return
-  ro = new ResizeObserver(([entry]) => {
-    const box = entry.borderBoxSize?.[0]
-    elW.value = box ? box.inlineSize : entry.contentRect.width
-    elH.value = box ? box.blockSize  : entry.contentRect.height
-  })
-  ro.observe(containerEl.value)
-})
-onUnmounted(() => ro?.disconnect())
 </script>
 
 <template>
-  <div ref="containerEl" class="e-status">
+  <div class="e-status">
     <span class="dot" :style="{ background: dotColor, boxShadow: dotGlow }" />
     <span class="label">{{ status }}</span>
-    <svg
-      v-if="svgPoints"
-      class="stroke-overlay"
-      viewBox="0 0 100 100"
-      preserveAspectRatio="none"
-      xmlns="http://www.w3.org/2000/svg"
-    >
-      <polygon
-        :points="svgPoints"
-        fill="none"
-        stroke="#525252"
-        stroke-width="0.4"
-        vector-effect="non-scaling-stroke"
-      />
-    </svg>
   </div>
 </template>
 
@@ -87,25 +46,10 @@ onUnmounted(() => ro?.disconnect())
   gap: var(--space-2);
   padding: var(--space-1) var(--space-3) var(--space-1) var(--space-3);
   background-color: var(--black-1-a);
-  clip-path: polygon(
-    6px 0%,
-    100% 0%,
-    100% calc(100% - 6px),
-    calc(100% - 6px) 100%,
-    0% 100%,
-    0% 6px
-  );
+  border: 1px solid var(--base-600);
+  corner-shape: bevel;
+  border-radius: 6px 0 6px 0;
   user-select: none;
-}
-
-.stroke-overlay {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-  overflow: visible;
-  z-index: 1;
 }
 
 .dot {

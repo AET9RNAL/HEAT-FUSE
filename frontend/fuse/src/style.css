@@ -22,7 +22,8 @@ h5 { font-size: var(--main-font-size-5); font-weight: var(--font-weight-2); }
   height: 100%;
   display: flex;
   flex-direction: column;
-  clip-path: polygon(20px 0, 100% 0, 100% 100%, 0 100%, 0 20px);
+  corner-shape: bevel;
+  border-radius: 20px 0 0 0;
 }
 
 .shadow-small {

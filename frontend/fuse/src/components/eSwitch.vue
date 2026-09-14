@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref } from 'vue'
 import { motion } from 'motion-v'
 import Icons, { type IconKind } from './Icons.vue'
 import { Dynamics } from '../composables/useMotion'
@@ -27,35 +27,10 @@ function showOverlay(value: string) {
   return isActive(value)
 }
 
-const CUT = 8
-const switchEl = ref<HTMLElement | null>(null)
-const elW = ref(0)
-const elH = ref(0)
-
-const svgPoints = computed(() => {
-  const w = elW.value
-  const h = elH.value
-  if (!w || !h) return ''
-  const cx = (CUT / w) * 100
-  const cy = (CUT / h) * 100
-  return `${cx},0 100,0 100,${100 - cy} ${100 - cx},100 0,100 0,${cy}`
-})
-
-let ro: ResizeObserver | null = null
-onMounted(() => {
-  if (!switchEl.value) return
-  ro = new ResizeObserver(([entry]) => {
-    const box = entry.borderBoxSize?.[0]
-    elW.value = box ? box.inlineSize : entry.contentRect.width
-    elH.value = box ? box.blockSize  : entry.contentRect.height
-  })
-  ro.observe(switchEl.value)
-})
-onUnmounted(() => ro?.disconnect())
 </script>
 
 <template>
-  <div ref="switchEl" class="e-switch">
+  <div class="e-switch">
     <div
       v-for="opt in options"
       :key="opt.value"
@@ -92,21 +67,6 @@ onUnmounted(() => ro?.disconnect())
       </div>
     </div>
 
-    <svg
-      v-if="svgPoints"
-      class="switch-stroke"
-      viewBox="0 0 100 100"
-      preserveAspectRatio="none"
-      xmlns="http://www.w3.org/2000/svg"
-    >
-      <polygon
-        :points="svgPoints"
-        fill="none"
-        stroke="#525252"
-        stroke-width="0.4"
-        vector-effect="non-scaling-stroke"
-      />
-    </svg>
   </div>
 </template>
 
@@ -118,24 +78,10 @@ onUnmounted(() => ro?.disconnect())
   gap: var(--space-1);
   padding: var(--space-2);
   background: var(--black-1-a);
-  clip-path: polygon(
-    8px 0%,
-    100% 0%,
-    100% calc(100% - 8px),
-    calc(100% - 8px) 100%,
-    0% 100%,
-    0% 8px
-  );
-}
-
-.switch-stroke {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-  overflow: visible;
-  z-index: 1;
+  box-sizing: border-box;
+  border: 1px solid var(--base-600);
+  corner-shape: bevel;
+  border-radius: 8px 0 8px 0;
 }
 
 .e-switch-option {
@@ -168,7 +114,8 @@ onUnmounted(() => ro?.disconnect())
 .option-overlay {
   position: absolute;
   inset: 0;
-  clip-path: polygon(20% 0%, 100% 0%, 100% 80%, 80% 100%, 0% 100%, 0% 20%);
+  corner-shape: bevel;
+  border-radius: 20% 0 20% 0;
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
   background:

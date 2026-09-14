@@ -1,337 +1,456 @@
 {
-    "common": {
-        "cancel": "Cancel",
-        "confirm": "Confirm",
-        "ok": "OK",
-        "brandName": "FUSE",
-        "launcherName": "Launcher",
-        "gameName": "WoT:HEAT"
-    },
-    "apptitlebar": {
-        "close": "Close",
-        "minimize": "Minimize",
-        "maximize": "Maximize",
-        "windowControls": "Window controls",
-        "updateAvailable": "Update available - click to download"
-    },
-    "appnav": {
-        "home": "Home",
-        "discover": "Discover",
-        "settings": "Settings",
-        "plugins": "Plugins",
-        "about": "About"
-    },
-    "apphome": {
-        "searchPlaceholder": "Search plugins...",
-        "discover": "Discover",
-        "filtering": "Filtering",
-        "refresh": "Refresh",
-        "filters": {
-            "all": "All",
-            "active": "Active",
-            "disabled": "Disabled"
-        }
-    },
-    "applaunch": {
-        "launch": "Launch",
-        "stop": "Stop",
-        "showInExplorer": "Show In Explorer",
-        "versionFallback": "m.m.p",
-        "calibratePrompt": "Calibration",
-        "calibrateHint": "Ctrl+L to lock",
-        "lockedPrompt": "Locked",
-        "copyObsUrl": "Copy OBS Browser Source URL",
-        "copyObsUrlFor": "Copy URL for this monitor ({w}x{h})",
-        "obsUrlCopied": "OBS Browser Source URL copied to clipboard",
-        "notifications": {
-            "fuseDisabledTitle": "FUSE Is Disabled",
-            "fuseDisabledMessage": "Enable FUSE with the master switch before launching.",
-            "noGamePathTitle": "Game Path Required",
-            "noGamePathMessage": "Select a valid game directory before launching."
-        }
-    },
-    "appsettings": {
-        "gameInstallation": {
-            "title": "Game Installation",
-            "platform": "Platform",
-            "gameDirectory": "Path To Game Directory"
-        },
-        "masterSwitch": {
-            "title": "Master Switch",
-            "enableFuse": "Enable {brandName}",
-            "enable": "Enable",
-            "disable": "Disable"
-        },
-        "general": {
-            "title": "General",
-            "launchAtStartup": "Launch App At System Startup",
-            "startMinimized": "Start Minimized To Tray",
-            "closeMinimizes": "Close Button Minimizes To Tray",
-            "checkUpdates": "Check For Updates On Startup",
-            "discordRpc": "Show Activity On Discord",
-            "fileAssoc": "Register .fuse File Type"
-        },
-        "qol": {
-            "title": "Quality of Life",
-            "startWithGame": "Start FUSE With Game",
-            "hideOnFocusLoss": "Hide Overlays When Game Is Not In Focus"
-        },
-        "notifications": {
-            "gameConfigChangedTitle": "Game Configuration Changed",
-            "gameConfigChangedMessage": "Restart the game for changes to take effect.",
-            "invalidPathTitle": "Invalid Game Directory",
-            "invalidPathMessage": "The selected folder is not a valid game installation."
-        },
-        "keybindings": {
-            "title": "FUSE Keybindings",
-            "columnAction": "Action",
-            "columnBinding": "Binding",
-            "rebind": "Rebind",
-            "latinOnlyTitle": "Invalid Key",
-            "latinOnly": "Only latin keys are allowed",
-            "invalidCombo": "Use a modifier with a letter or number, or a single function key",
-            "latinLayoutHint": "Only Latin keyboard layouts"
-        },
-        "privacy": {
-            "title": "Privacy & Telemetry",
-            "analyticsConsent": "Help improve FUSE for everyone",
-            "diagnosticsConsent": "Send anonymous diagnostic reports",
-            "allowApiAccess": "Allow 3rd-party API access to my match data"
-        },
-        "debug": {
-            "title": "Debug",
-            "overlayDevtools": "Open overlay DevTools"
-        }
-    },
-    "appabout": {
-        "wip": "WORK IN PROGRESS"
-    },
-    "appdiscover": {
-        "browse": "Browse",
-        "myPlugins": "My Plugins",
-        "creation": "Are you ready to show the world what you've built?",
-        "searchPlaceholder": "Search plugins...",
-        "noResults": "No plugins found",
-        "allTags": "All",
-        "install": "Install",
-        "installing": "Installing...",
-        "installed": "Installed",
-        "installError": "Install Failed",
-        "update": "Update",
-        "swap": "Swap",
-        "signInToInstall": "Sign in to install",
-        "viewDetails": "Details",
-        "back": "Back",
-        "by": "by",
-        "versions": "Versions",
-        "noVersions": "No versions published yet.",
-        "dependencies": "Dependencies",
-        "changelog": "Changelog",
-        "compatibility": "Compatibility",
-        "gameVersions": "Game Versions",
-        "fuseVersions": "FUSE Versions",
-        "optional": "optional",
-        "downloads": "downloads",
-        "views": "views",
-        "publish": "Publish",
-        "unpublish": "Unpublish",
-        "createProject": "New Plugin",
-        "editProject": "Edit",
-        "uploadVersion": "New Version",
-        "myPluginsEmpty": "You have no published plugins yet.",
-        "confirmDelete": "Delete this?",
-        "deleteConfirm": "Yes, delete",
-        "versionType": {
-            "alpha": "Alpha",
-            "beta": "Beta",
-            "release": "Release"
-        },
-        "form": {
-            "name": "Plugin Name",
-            "summary": "Short summary",
-            "description": "Description (markdown)",
-            "versionNumber": "Version number",
-            "versionType": "Release type",
-            "changelog": "Changelog",
-            "gameVersions": "Compatible game versions",
-            "fuseVersions": "Compatible FUSE versions",
-            "tagsLabel": "Tags",
-            "cancel": "Cancel",
-            "save": "Save",
-            "upload": "Upload File",
-            "noFileSelected": "No file selected",
-            "iconLabel": "Icon"
-        },
-        "notify": {
-            "projectCreated": "Plugin project created.",
-            "projectUpdated": "Plugin updated.",
-            "versionCreated": "Version created. Upload your .fuse file.",
-            "versionFinalized": "Version published.",
-            "publishedOn": "Plugin is now public.",
-            "publishedOff": "Plugin is now hidden."
-        }
-    },
-    "appwelcome": {
-        "tagline": "",
-        "getStarted": "Get Started"
-    },
-    "appauth": {
-        "signIn": "Sign In",
-        "signUp": "Sign Up",
-        "welcomeBack": "Welcome Back",
-        "signUpPrompt": "Create Account",
-        "email": "Email",
-        "password": "Password",
-        "forgotPassword": "Forgot password?",
-        "passwordMustInclude": "Password must include:",
-        "passwordMinLength": "At least 6 characters",
-        "passwordUppercase": "At least one uppercase letter",
-        "passwordNumber": "At least one number",
-        "passwordSpecial": "At least one special character",
-        "otpTitle": "Check Your Email",
-        "otpSubtext1": "We sent a 6-digit code to your email.",
-        "otpSubtext2": "Enter it below to verify your account.",
-        "otpSending": "Sending email...",
-        "otpSent": "Email sent",
-        "otpDelivered": "Email delivered",
-        "otpBounced": "Email bounced",
-        "resendCode": "Resend code",
-        "forgotPasswordTitle": "Reset Password",
-        "forgotPasswordSubtext": "Enter your email and we'll send a reset link.",
-        "forgotPasswordSend": "Send Reset Link",
-        "forgotPasswordSentTitle": "Check your inbox",
-        "forgotPasswordSentSubtext": "We sent a password reset link to your email."
-    },
-    "resetPassword": {
-        "title": "Set New Password",
-        "subtitle": "Choose a strong password for your account.",
-        "newPassword": "New Password",
-        "confirmPassword": "Confirm Password",
-        "passwordMismatch": "Passwords do not match",
-        "submit": "Update Password",
-        "cancel": "Cancel"
-    },
-    "appaccount": {
-        "title": "Account",
-        "account": "Account",
-        "profileInfo": "Profile",
-        "profileInfoDesc": "Your account information.",
-        "emailAddress": "Email Address",
-        "creationDate": "Member Since",
-        "deviceManagement": "Devices",
-        "deviceManagementDesc": "Manage devices signed in to your account.",
-        "authSecurity": "Security",
-        "authSecurityDesc": "Manage your account security settings.",
-        "changePassword": "Change Password",
-        "signOutAll": "Sign Out All Devices",
-        "signOutAllHeader": "Sign Out All Devices?",
-        "signOutAllDesc": "All sessions on all devices will be terminated.",
-        "currentDevice": "This device",
-        "lastActive": "Last active",
-        "unknown": "Unknown",
-        "revoke": "Remove",
-        "copied": "Copied!",
-        "copy": "Copy",
-        "username": "Username",
-        "usernamePlaceholder": "Set a username",
-        "usernameUnsaved": "Unsaved username change",
-        "usernameSave": "Save",
-        "dangerZone": "Danger Zone",
-        "dangerZoneDesc": "Permanent and irreversible actions.",
-        "deleteAccount": "Delete Account",
-        "deleteAccountDesc": "Permanently delete your account and all associated data.",
-        "deleteAccountConfirmTitle": "This cannot be undone.",
-        "deleteAccountConfirmDesc": "Your account, devices, and all data will be permanently deleted.",
-        "deleteAccountConfirm": "Delete My Account",
-        "deleteAccountCancel": "Cancel",
-        "apiAccess": "API Access",
-        "apiAccessDesc": "Manage 3rd-party API access to your match data.",
-        "apiAccessOptIn": "Allow API Access",
-        "apiAccessOptInDesc": "When enabled, external applications can query your match sessions and samples via API.",
-        "apiKeyLabel": "Key Name",
-        "apiKeyLabelPlaceholder": "e.g. My Discord Bot",
-        "apiKeyMint": "Create Key",
-        "apiKeyCreated": "API Key Created",
-        "apiKeyCreatedDesc": "Copy this key now. It cannot be retrieved again.",
-        "apiKeyRevoke": "Revoke"
-    },
-    "components": {
-        "loading": "Loading...",
-        "error": "Something went wrong",
-        "button": {
-            "processing": "Working",
-            "success": "Done",
-            "error": "Failed"
-        },
-        "status": {
-            "none": "None",
-            "initializing": "Initializing",
-            "connecting": "Connecting",
-            "running": "Running",
-            "error": "Error"
-        },
-        "notification": {
-            "defaultTitle": "Notification",
-            "dependencyErrorTitle": "Dependency Error",
-            "dependencyErrorMessage": "\"{plugin}\" was skipped - it requires \"{dependency}\". Install the missing dependency and restart FUSE."
-        },
-        "dirSelector": {
-            "placeholder": "Select directory..."
-        },
-        "pluginList": {
-            "columnPlugin": "Plugin",
-            "columnVersion": "Version",
-            "columnStatus": "Status",
-            "columnActions": "Actions",
-            "emptyNoPlugins": "No plugins discovered",
-            "emptyNoMatch": "No plugins match"
-        },
-        "plugin": {
-            "by": "by",
-            "status": {
-                "active": "Active",
-                "error": "Error",
-                "pending": "Enqueued",
-                "loading": "Loading",
-                "skipped": "Skipped",
-                "disabled": "Disabled"
-            },
-            "menu": {
-                "settings": "Settings",
-                "showInExplorer": "Show in Explorer",
-                "delete": "Delete"
-            },
-            "reloadWarningTitle": "Reload Required",
-            "reloadWarningMessage": "Plugin changes may not apply until you reload with Ctrl+R or restart FUSE."
-        },
-        "updateProgress": {
-            "updating": "Updating",
-            "notifFoundTitle": "Update Found",
-            "notifFoundMessage": "v{version} is ready to download",
-            "notifDownloadingTitle": "Downloading Update",
-            "notifDownloadingMessage": "Praying nothing crashes...",
-            "notifReadyTitle": "Update Ready",
-            "notifReadyMessage": "Restarting to apply...",
-            "notifErrorTitle": "Update Failed"
-        },
-        "releaseNotes": {
-            "title": "RELEASE NOTES",
-            "version": "v{version}",
-            "loading": "Loading release notes...",
-            "empty": "No release notes available for this version.",
-            "viewOnline": "View Release Notes",
-            "close": "CLOSE"
-        },
-        "console": {
-            "searchPlaceholder": "Search logs...",
-            "clear": "Clear",
-            "empty": "Start the runtime to receive logs",
-            "filters": {
-                "all": "All",
-                "error": "Error",
-                "warn": "Warn",
-                "info": "Info"
-            }
-        }
+  "common": {
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "ok": "OK",
+    "brandName": "FUSE",
+    "launcherName": "Launcher",
+    "gameName": "WoT:HEAT",
+    "close": "Close"
+  },
+  "apptitlebar": {
+    "close": "Close",
+    "minimize": "Minimize",
+    "maximize": "Maximize",
+    "windowControls": "Window controls",
+    "updateAvailable": "Update available - click to download"
+  },
+  "appnav": {
+    "home": "Home",
+    "discover": "Discover",
+    "settings": "Settings",
+    "plugins": "Plugins",
+    "about": "About"
+  },
+  "apphome": {
+    "searchPlaceholder": "Search plugins...",
+    "discover": "Discover",
+    "filtering": "Filtering",
+    "refresh": "Refresh",
+    "filters": {
+      "all": "All",
+      "active": "Active",
+      "disabled": "Disabled"
     }
+  },
+  "applaunch": {
+    "launch": "Launch",
+    "stop": "Stop",
+    "showInExplorer": "Show In Explorer",
+    "versionFallback": "m.m.p",
+    "calibratePrompt": "Calibration",
+    "calibrateHint": "{combo} to lock",
+    "lockedPrompt": "Locked",
+    "copyObsUrl": "Copy OBS Browser Source URL",
+    "copyObsUrlFor": "Copy URL for this monitor ({w}x{h})",
+    "obsUrlCopied": "OBS Browser Source URL copied to clipboard",
+    "autoLockOn": "Overlays lock on launch. Click to calibrate on launch instead",
+    "autoLockOff": "Overlays wait for calibration on launch. Click to lock them automatically",
+    "launchTip": "Start FUSE and load your enabled plugins",
+    "stopTip": "Stop FUSE and unload all plugins",
+    "notifications": {
+      "fuseDisabledTitle": "Incomplete Game Configuration",
+      "fuseDisabledMessage": "FUSE Configuration Not Applied",
+      "noGamePathTitle": "Game Path Required",
+      "noGamePathMessage": "Select a valid game directory before launching."
+    }
+  },
+  "appsettings": {
+    "core": {
+      "title": "Core Functionality",
+      "platform": "Platform",
+      "platformDesc": "Your Game Client",
+      "gameDir": "Path To Game Client",
+      "gameDirDesc": "Where Is Your Game?",
+      "gameConfig": "Set-up Game Configuration",
+      "gameConfigDesc": "Apply {brandName} Configuration"
+    },
+    "sections": {
+      "general": "General",
+      "qol": "Quality Of Life",
+      "audio": "Audio",
+      "privacy": "Privacy & Telemetry",
+      "keybinds": "{brandName} Keybinds"
+    },
+    "hotkeys": {
+      "reloadDesc": "Reload All Active Plugins",
+      "quitDesc": "Shut {brandName} Down",
+      "calibrateDesc": "Switch Between Calibrate And Lock",
+      "interactiveDesc": "Toggle Overlay Interactivity"
+    },
+    "gameInstallation": {
+      "title": "Game Installation",
+      "platform": "Platform",
+      "gameDirectory": "Path To Game Directory"
+    },
+    "masterSwitch": {
+      "title": "Master Switch",
+      "enableFuse": "Enable {brandName}",
+      "enable": "Enable",
+      "disable": "Disable"
+    },
+    "general": {
+      "title": "General",
+      "launchAtStartup": "Launch App At System Startup",
+      "startMinimized": "Start Minimized To Tray",
+      "closeMinimizes": "Close Button Minimizes To Tray",
+      "checkUpdates": "Check For Updates On Startup",
+      "discordRpc": "Show Activity On Discord",
+      "fileAssoc": "Register .fuse File Type"
+    },
+    "qol": {
+      "title": "Quality of Life",
+      "startWithGame": "Start FUSE With Game",
+      "hideOnFocusLoss": "Hide Overlays When Game Is Not In Focus"
+    },
+    "audio": {
+      "title": "Audio",
+      "volume": "Plugin Sound Volume",
+      "muted": "Mute Plugin Sounds"
+    },
+    "notifications": {
+      "gameConfigChangedTitle": "Game Configuration Changed",
+      "gameConfigChangedMessage": "Restart the game for changes to take effect.",
+      "invalidPathTitle": "Invalid Game Directory",
+      "invalidPathMessage": "The selected folder is not a valid game installation."
+    },
+    "keybindings": {
+      "title": "FUSE Keybindings",
+      "columnAction": "Action",
+      "columnBinding": "Binding",
+      "rebind": "Rebind",
+      "latinOnlyTitle": "Invalid Key",
+      "latinOnly": "Only latin keys are allowed",
+      "invalidCombo": "Use a letter, number, or function key, alone or with a modifier",
+      "latinLayoutHint": "Only Latin keyboard layouts"
+    },
+    "privacy": {
+      "title": "Privacy & Telemetry",
+      "analyticsConsent": "Help improve FUSE for everyone",
+      "diagnosticsConsent": "Send anonymous diagnostic reports",
+      "allowApiAccess": "Allow 3rd-party API access to my match data"
+    },
+    "debug": {
+      "title": "Debug",
+      "overlayDevtools": "Open overlay DevTools"
+    }
+  },
+  "appabout": {
+    "wip": "WORK IN PROGRESS",
+    "launcherVersion": "LAUNCHER VERSION",
+    "whatsNew": "What's New",
+    "disclaimer": "Heat Fuse is an unofficial community project and is not affiliated with, endorsed by, or sponsored by Wargaming.",
+    "supportLinks": "SUPPORT & LINKS",
+    "linkGithub": "Project GitHub",
+    "linkCoffee": "BuyMeACoffee",
+    "linkDiscord": "Discord (DM)",
+    "linkBehance": "My Behance",
+    "statsTitle": "INTERESTING STATISTICS",
+    "statComponents": "VUE COMPONENTS",
+    "statLines": "LINES OF CODE",
+    "statDays": "DAYS SINCE CREATION",
+    "statPlugins": "PUBLISHED PLUGINS",
+    "statDownloads": "MARKETPLACE DOWNLOADS",
+    "builtWith": "BUILT WITH",
+    "credits": "UI/UX, Branding & Development by AETERNAL"
+  },
+  "appdiscover": {
+    "browse": "Browse",
+    "myPlugins": "My Plugins",
+    "creation": "Are you ready to show the world what you've built?",
+    "searchPlaceholder": "Search plugins...",
+    "noResults": "No plugins found",
+    "allTags": "All",
+    "sorting": "Sorting",
+    "sort": {
+      "views": "Views",
+      "downloads": "Downloads",
+      "updated": "Last Updated",
+      "name": "Name"
+    },
+    "install": "Install",
+    "installing": "Installing...",
+    "installed": "Installed",
+    "installError": "Install Failed",
+    "update": "Update",
+    "swap": "Swap",
+    "signInToInstall": "Sign in to install",
+    "viewDetails": "Details",
+    "back": "Back",
+    "by": "by",
+    "versions": "Versions",
+    "noVersions": "No versions published yet.",
+    "dependencies": "Dependencies",
+    "changelog": "Changelog",
+    "compatibility": "Compatibility",
+    "gameVersions": "Game Versions",
+    "fuseVersions": "FUSE Versions",
+    "optional": "optional",
+    "downloads": "downloads",
+    "views": "views",
+    "publish": "Publish",
+    "unpublish": "Unpublish",
+    "createProject": "New Plugin",
+    "editProject": "Edit",
+    "editProjectTip": "Edit project details",
+    "deleteProject": "Delete project",
+    "editVersion": "Edit version",
+    "deleteVersion": "Delete version",
+    "uploadVersion": "New Version",
+    "myPluginsEmpty": "You have no published plugins yet.",
+    "confirmDelete": "Delete this?",
+    "deleteConfirm": "Yes, delete",
+    "versionType": {
+      "alpha": "Alpha",
+      "beta": "Beta",
+      "release": "Release"
+    },
+    "form": {
+      "name": "Plugin Name",
+      "summary": "Short summary",
+      "description": "Description (markdown)",
+      "versionNumber": "Version number",
+      "versionType": "Release type",
+      "changelog": "Changelog",
+      "gameVersions": "Compatible game versions",
+      "fuseVersions": "Compatible FUSE versions",
+      "tagsLabel": "Tags",
+      "cancel": "Cancel",
+      "save": "Save",
+      "upload": "Upload File",
+      "noFileSelected": "No file selected",
+      "iconLabel": "Icon"
+    },
+    "notify": {
+      "projectCreated": "Plugin project created.",
+      "projectUpdated": "Plugin updated.",
+      "versionCreated": "Version created. Upload your .fuse file.",
+      "versionFinalized": "Version published.",
+      "publishedOn": "Plugin is now public.",
+      "publishedOff": "Plugin is now hidden."
+    }
+  },
+  "appwelcome": {
+    "tagline": "",
+    "getStarted": "Get Started"
+  },
+  "appauth": {
+    "signIn": "Sign In",
+    "signUp": "Sign Up",
+    "welcomeBack": "Welcome Back",
+    "signUpPrompt": "Create Account",
+    "email": "Email",
+    "password": "Password",
+    "forgotPassword": "Forgot password?",
+    "passwordMustInclude": "Password must include:",
+    "passwordMinLength": "At least 6 characters",
+    "passwordUppercase": "At least one uppercase letter",
+    "passwordNumber": "At least one number",
+    "passwordSpecial": "At least one special character",
+    "otpTitle": "Check Your Email",
+    "otpSubtext1": "We sent a 6-digit code to your email.",
+    "otpSubtext2": "Enter it below to verify your account.",
+    "otpSending": "Sending email...",
+    "otpSent": "Email sent",
+    "otpDelivered": "Email delivered",
+    "otpBounced": "Email bounced",
+    "resendCode": "Resend code",
+    "forgotPasswordTitle": "Reset Password",
+    "forgotPasswordSubtext": "Enter your email and we'll send a reset link.",
+    "forgotPasswordSend": "Send Reset Link",
+    "forgotPasswordSentTitle": "Check your inbox",
+    "forgotPasswordSentSubtext": "We sent a password reset link to your email.",
+    "logIn": "Log In",
+    "skipForNow": "Skip for now",
+    "noAccount": "Don't have an account?",
+    "createOne": "Create one",
+    "haveAccount": "Already have a FUSE account?",
+    "logInLink": "Log in",
+    "signInWithGoogle": "Sign in with Google",
+    "signInWithWargaming": "Sign in with Wargaming",
+    "signUpWithGoogle": "Sign up with Google",
+    "signUpWithWargaming": "Sign up with Wargaming",
+    "providerUnavailable": "Coming soon",
+    "or": "OR",
+    "emailLabel": "EMAIL",
+    "passwordLabel": "PASSWORD",
+    "edit": "EDIT",
+    "forgot": "FORGOT?",
+    "back": "Back",
+    "backToLogIn": "Back to log in",
+    "welcomeToFuse": "Welcome to FUSE",
+    "createAccount": "Create your account",
+    "recoveryTitleLine1": "Momma always said",
+    "recoveryTitleLine2": "I was special",
+    "recoveryBody": "Enter the email address you used to sign up, and we'll send you a one time password",
+    "verifyEmail": "Verify Email",
+    "telemetryConsent": "Help improve FUSE for everyone",
+    "diagnosticsConsent": "Send anonymous diagnostic reports",
+    "legalSignIn": "Terms of Service and Privacy Policy.",
+    "legalSignUp": "Creating an account means you're okay with our Terms of Service and Privacy Policy.",
+    "termsOfService": "Terms of Service",
+    "privacyPolicy": "Privacy Policy",
+    "emailRequired": "Enter your email address to continue",
+    "recoveryUnknownEmail": "We couldn't find an account for that address"
+  },
+  "resetPassword": {
+    "title": "Set New Password",
+    "subtitle": "Choose a strong password for your account.",
+    "newPassword": "New Password",
+    "confirmPassword": "Confirm Password",
+    "passwordMismatch": "Passwords do not match",
+    "submit": "Update Password",
+    "cancel": "Cancel"
+  },
+  "appaccount": {
+    "title": "Account",
+    "account": "Account",
+    "profileInfo": "Profile",
+    "profileInfoDesc": "Your account information.",
+    "emailAddress": "Email Address",
+    "creationDate": "Member Since",
+    "deviceManagement": "Devices",
+    "deviceManagementDesc": "Manage devices signed in to your account.",
+    "authSecurity": "Security",
+    "authSecurityDesc": "Manage your account security settings.",
+    "changePassword": "Change Password",
+    "signOutAll": "Sign Out All Devices",
+    "signOutAllHeader": "Sign Out All Devices?",
+    "signOutAllDesc": "All sessions on all devices will be terminated.",
+    "currentDevice": "This device",
+    "lastActive": "Last active",
+    "unknown": "Unknown",
+    "revoke": "Remove",
+    "copied": "Copied!",
+    "copy": "Copy",
+    "username": "Username",
+    "usernamePlaceholder": "Set a username",
+    "usernameUnsaved": "Unsaved username change",
+    "usernameSave": "Save",
+    "dangerZone": "Danger Zone",
+    "dangerZoneDesc": "Permanent and irreversible actions.",
+    "deleteAccount": "Delete Account",
+    "deleteAccountDesc": "Permanently delete your account and all associated data.",
+    "deleteAccountConfirmTitle": "This cannot be undone.",
+    "deleteAccountConfirmDesc": "Your account, devices, and all data will be permanently deleted.",
+    "deleteAccountConfirm": "Delete My Account",
+    "deleteAccountCancel": "Cancel",
+    "apiAccess": "API Access",
+    "apiAccessDesc": "Manage 3rd-party API access to your match data.",
+    "apiAccessOptIn": "Allow API Access",
+    "apiAccessOptInDesc": "When enabled, external applications can query your match sessions and samples via API.",
+    "apiKeyLabel": "Key Name",
+    "apiKeyLabelPlaceholder": "e.g. My Discord Bot",
+    "apiKeyMint": "Create Key",
+    "apiKeyCreated": "API Key Created",
+    "apiKeyCreatedDesc": "Copy this key now. It cannot be retrieved again.",
+    "apiKeyRevoke": "Revoke",
+    "apiKeyRevokeTip": "Revoke this API key",
+    "signOutAllTip": "Sign out of every device"
+  },
+  "components": {
+    "loading": "Loading...",
+    "error": "Something went wrong",
+    "button": {
+      "processing": "Working",
+      "success": "Done",
+      "error": "Failed",
+      "confirm": "Confirm?"
+    },
+    "status": {
+      "none": "None",
+      "initializing": "Initializing",
+      "connecting": "Connecting",
+      "running": "Running",
+      "error": "Error"
+    },
+    "notification": {
+      "defaultTitle": "Notification",
+      "dependencyErrorTitle": "Dependency Error",
+      "dependencyErrorMessage": "\"{plugin}\" was skipped - it requires \"{dependency}\". Install the missing dependency and restart FUSE.",
+      "dismiss": "Dismiss"
+    },
+    "dirSelector": {
+      "placeholder": "Select directory..."
+    },
+    "pluginList": {
+      "columnPlugin": "Plugin",
+      "columnVersion": "Version",
+      "columnStatus": "Status",
+      "columnActions": "Actions",
+      "emptyNoPlugins": "No plugins discovered",
+      "emptyNoMatch": "No plugins match"
+    },
+    "plugin": {
+      "by": "by",
+      "status": {
+        "active": "Active",
+        "error": "Error",
+        "pending": "Enqueued",
+        "loading": "Loading",
+        "skipped": "Skipped",
+        "disabled": "Disabled"
+      },
+      "menu": {
+        "settings": "Settings",
+        "showInExplorer": "Show in Explorer",
+        "delete": "Delete"
+      },
+      "reloadWarningTitle": "Reload Required",
+      "reloadWarningMessage": "Plugin changes may not apply until you reload with Ctrl+R or restart FUSE."
+    },
+    "updateProgress": {
+      "updating": "Updating",
+      "notifFoundTitle": "Update Found",
+      "notifFoundMessage": "v{version} is ready to download",
+      "notifDownloadingTitle": "Downloading Update",
+      "notifDownloadingMessage": "Praying nothing crashes...",
+      "notifReadyTitle": "Update Ready",
+      "notifReadyMessage": "Restarting to apply...",
+      "notifErrorTitle": "Update Failed"
+    },
+    "releaseNotes": {
+      "title": "RELEASE NOTES",
+      "version": "v{version}",
+      "loading": "Loading release notes...",
+      "empty": "No release notes available for this version.",
+      "viewOnline": "View Release Notes",
+      "close": "CLOSE"
+    },
+    "contextMenu": {
+      "more": "More options"
+    },
+    "console": {
+      "searchPlaceholder": "Search logs...",
+      "clear": "Clear",
+      "empty": "Start the runtime to receive logs",
+      "filters": {
+        "all": "All",
+        "error": "Error",
+        "warn": "Warn",
+        "info": "Info"
+      }
+    }
+  },
+  "apponboarding": {
+    "titleStage1": "LET'S GET YOU STARTED",
+    "titleStage2": "ALMOST THERE",
+    "titleStage3": "YOU'RE READY TO GO!",
+    "subtitle": "FUSE Configuration",
+    "platformTitle": "Platform",
+    "platformDescription": "Your Game Client",
+    "pathTitle": "Path To Game Client",
+    "pathDescription": "Where Is Your Game?",
+    "pathPlaceholder": "Select a folder",
+    "goBack": "Go Back",
+    "next": "Next",
+    "finish": "Finish",
+    "success": "Configuration Successful",
+    "pathInvalid": "That folder doesn't look like a HEAT install",
+    "configTitle": "Game Configuration",
+    "configDescription": "Prepare HEAT For FUSE",
+    "applying": "Applying configuration...",
+    "applyFailed": "Couldn't apply the configuration",
+    "retry": "Retry"
+  }
 }

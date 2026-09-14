@@ -80,14 +80,8 @@ const showOverlay = computed(() => isHovered.value || props.selected)
 .hover-overlay {
   position: absolute;
   inset: 0;
-  clip-path: polygon(
-    20% 0%,
-    100% 0%,
-    100% 80%,
-    80% 100%,
-    0% 100%,
-    0% 20%
-  );
+  corner-shape: bevel;
+  border-radius: 20% 0 20% 0;
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
   background:

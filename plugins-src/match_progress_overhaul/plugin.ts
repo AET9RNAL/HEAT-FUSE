@@ -1,4 +1,4 @@
-import { FusePlugin, ConfigCategory, ConfigEntry, type FuseContext, type OverlayHandle } from "@fuse/plugin-sdk";
+import { FusePlugin, type FuseContext, type InspectorSection, type OverlayHandle } from "@fuse/plugin-sdk";
 import { HUD } from "../_shared/hudSelectors.js";
 
 interface Accessors {
@@ -41,6 +41,46 @@ export class MatchProgressOverhaulPlugin extends FusePlugin {
     return typeof v === "number" ? v : null;
   }
 
+  private sections(): InspectorSection[] {
+    return [
+      {
+        id: "mpo.enhancements",
+        label: "Enhancements",
+        order: 10,
+        controls: [
+          {
+            type: "switch",
+            id: "enhanced",
+            key: "enhanced",
+            label: "Lead cues",
+            tooltip: "Lead and proximity cues on the score bars.",
+          },
+          {
+            type: "switch",
+            id: "flames",
+            key: "flames",
+            label: "Flames VFX",
+            tooltip: "Set the leading team's bar alight once the score gap becomes decisive.",
+          },
+        ],
+      },
+      {
+        id: "mpo.native",
+        label: "Native HUD",
+        order: 11,
+        controls: [
+          {
+            type: "switch",
+            id: "hide_native",
+            key: "hide_native",
+            label: "Hide native",
+            tooltip: "Hide the game's own match timer and score bars.",
+          },
+        ],
+      },
+    ];
+  }
+
   setup(ctx: FuseContext): void {
     this.ctx = ctx;
     this.acc = ctx.services.get<Accessors>("accessors");
@@ -48,33 +88,9 @@ export class MatchProgressOverhaulPlugin extends FusePlugin {
     ctx.config
       .defaults({ vue_overlay_pos: null, vue_width: 1100, vue_height: 100, hide_native: true, enhanced: true, flames: true })
       .load();
-    ctx.config.schema([
-      new ConfigCategory("Enhancements", [
-        new ConfigEntry({
-          key: "enhanced",
-          label: "Lead / Proximity Cues",
-          type: "bool",
-          description: "Advanced UX cues",
-        }),
-        new ConfigEntry({
-          key: "flames",
-          label: "Flames VFX",
-          type: "bool",
-          description: "Set the leading team's bar alight once the score gap becomes decisive",
-        }),
-      ]),
-      new ConfigCategory("Native HUD", [
-        new ConfigEntry({
-          key: "hide_native",
-          label: "Hide Native Timer + Score Bars",
-          type: "bool",
-          description: "",
-        }),
-      ]),
-      new ConfigCategory("Position", [
-        new ConfigEntry({ key: "vue_overlay_pos", label: "Bar Position", type: "position" }),
-      ]),
-    ]);
+    // One declaration for both surfaces: the App panel and the stage inspector.
+    const sections = this.sections();
+    ctx.config.schema(sections);
 
     const w = Number(ctx.config.get("vue_width", 1100)) || 1100;
     const h = Number(ctx.config.get("vue_height", 100)) || 100;
@@ -85,6 +101,7 @@ export class MatchProgressOverhaulPlugin extends FusePlugin {
       size: { w, h },
       positionConfigKey: "vue_overlay_pos",
     });
+    this.ov.inspector.sections(sections);
   }
 
   override enterCalibrate(_stage = 1): void {

@@ -1,0 +1,25 @@
+{
+  "demo_pos": {
+    "x": 309,
+    "y": 277,
+    "w": 342,
+    "h": 282
+  },
+  "opacity_pct": 100,
+  "offset": 50,
+  "count": 64,
+  "nudge_x": -15,
+  "nudge_y": 0,
+  "enabled": true,
+  "compact": true,
+  "density": "medium",
+  "phase": "active",
+  "corners": [],
+  "font_family": "WGNormalidad",
+  "title": "Inspector Demo",
+  "notes": "rgrgrfrf",
+  "accent": "#ff3935ff",
+  "tint": "#84FFB1FF",
+  "anchor": "start",
+  "combo": "alt+shift+s"
+}

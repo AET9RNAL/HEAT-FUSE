@@ -24,6 +24,9 @@ declare namespace NodeJS {
 // Used in Renderer process, expose in `preload.ts`
 interface Window {
   ipcRenderer: import('electron').IpcRenderer
+  splashAPI?: {
+    done: () => void
+  }
   safeStorageAPI: {
     isAvailable: () => Promise<boolean>
     encrypt: (value: string) => Promise<{ type: 'Buffer'; data: number[] }>
@@ -139,7 +142,7 @@ interface Window {
     getIP: () => Promise<string | null>
   }
   fuseAPI: {
-    spawn: () => Promise<{ success: boolean; pid?: number; port?: number; connectionToken?: string; obsUrl?: string | null; error?: string }>
+    spawn: (opts?: { autoLock?: boolean }) => Promise<{ success: boolean; pid?: number; port?: number; connectionToken?: string; obsUrl?: string | null; error?: string }>
     kill: () => Promise<{ success: boolean }>
     status: () => Promise<{ running: boolean; pid: number | null; port: number | null; obsUrl: string | null }>
     onExited: (cb: (data: { code: number | null; signal: string | null }) => void) => void

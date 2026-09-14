@@ -10,7 +10,7 @@ const store = useMarketplaceStore()
 const { t } = useI18n()
 
 const project = computed(() => store.selectedProject)
-const iconUrl = computed(() => project.value?.icon_key ? store.buildPublicUrl(project.value.icon_key) : null)
+const iconUrl = computed(() => project.value?.icon_key ? store.buildPublicUrl(project.value.icon_key, project.value.updated_at) : null)
 const descHtml = computed(() => renderMarkdown(project.value?.description ?? ''))
 
 watch(() => store.selectedProject?.id, (id) => {
@@ -110,7 +110,8 @@ watch(() => store.selectedProject?.id, (id) => {
     width: 100%;
     height: 100%;
     object-fit: cover;
-    clip-path: polygon(6px 0%, 100% 0%, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0% 100%, 0% 6px);
+    corner-shape: bevel;
+    border-radius: 6px 0 6px 0;
 }
 
 .detail-icon-placeholder {
@@ -124,7 +125,8 @@ watch(() => store.selectedProject?.id, (id) => {
     font-size: var(--main-font-size-1);
     font-weight: var(--font-weight-2);
     color: var(--text-muted);
-    clip-path: polygon(6px 0%, 100% 0%, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0% 100%, 0% 6px);
+    corner-shape: bevel;
+    border-radius: 6px 0 6px 0;
 }
 
 .detail-meta {
@@ -152,7 +154,8 @@ watch(() => store.selectedProject?.id, (id) => {
 
 .detail-section {
     background: var(--black-1-a);
-    clip-path: polygon(8px 0%, 100% 0%, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0% 100%, 0% 8px);
+    corner-shape: bevel;
+    border-radius: 8px 0 8px 0;
 }
 
 .section-title {

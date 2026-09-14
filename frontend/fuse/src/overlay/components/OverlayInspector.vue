@@ -1,12 +1,15 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from "vue";
 import StagePanel from "./StagePanel.vue";
-import StageIconButton from "./StageIconButton.vue";
-import StageCheckbox from "./StageCheckbox.vue";
-import StageSegmented from "./StageSegmented.vue";
-import StageNumberField from "./StageNumberField.vue";
-import { overlays, sendTransform } from "../overlayClient";
-import { clearSelection, grid, inspectorPos, lockAspect, selectedId, type SnapMode } from "../stageState";
+import ControlRenderer from "../inspector/ControlRenderer.vue";
+import Icons from "../../components/Icons.vue";
+import { motion } from "motion-v";
+import { Dynamics } from "../../composables/useMotion";
+import { useInspectorModel, type BuiltinSource } from "../inspector/useInspectorModel";
+import { evalWhen, type InputPhase, type InspectorSection } from "../inspector/types";
+import { overlays } from "../overlayClient";
+import { commitTransform } from "../history";
+import { clearSelection, inspectorPos, lockAspect, selectedId } from "../stageState";
 import type { OverlayRect } from "../types";
 
 const PANEL_W = 264;
@@ -16,6 +19,7 @@ const root = ref<HTMLElement | null>(null);
 
 const descriptor = computed(() => (selectedId.value ? overlays.get(selectedId.value) : undefined));
 const isRive = computed(() => descriptor.value?.kind === "rive");
+const overlayId = computed(() => selectedId.value);
 
 /** The selected overlay's rect, materialising the centered default if unset. */
 const rect = computed<OverlayRect>(() => {
@@ -26,49 +30,25 @@ const rect = computed<OverlayRect>(() => {
   return { x: Math.round((window.innerWidth - w) / 2), y: Math.round((window.innerHeight - h) / 2), w, h };
 });
 
-const rot = computed(() => rect.value.rot ?? 0);
-const opacityPct = computed(() => Math.round((rect.value.opacity ?? 1) * 100));
-
 function apply(patch: Partial<OverlayRect>): void {
   const d = descriptor.value;
   if (!d) return;
-  const next: OverlayRect = { ...rect.value, ...patch };
-  sendTransform(d.overlayId, next);
-}
-
-function setWidth(w: number): void {
-  if (lockAspect.value && rect.value.w > 0) {
-    apply({ w, h: Math.round((w * rect.value.h) / rect.value.w) });
-    return;
-  }
-  apply({ w });
-}
-
-function setHeight(h: number): void {
-  if (lockAspect.value && rect.value.h > 0) {
-    apply({ h, w: Math.round((h * rect.value.w) / rect.value.h) });
-    return;
-  }
-  apply({ h });
+  commitTransform(d.overlayId, { ...rect.value, ...patch });
 }
 
 function setRot(deg: number): void {
   apply({ rot: ((deg % 360) + 360) % 360 });
 }
 
-function rotate90(): void {
-  setRot(rot.value + 90);
-}
-
-// The persisted model has no scale, so a flip is expressed as the equivalent
-// rotation of the box. This mirrors the frame, not the overlay's own content
-// (a Rive artboard or Vue tree is not itself mirrored).
-function flipH(): void {
-  setRot(180 - rot.value);
-}
-
-function flipV(): void {
-  setRot(360 - rot.value);
+function setSize(w: number, h: number): void {
+  if (!lockAspect.value) {
+    apply({ w, h });
+    return;
+  }
+  const r = rect.value;
+  // Whichever component moved drives the other through the original ratio.
+  if (w !== r.w && r.w > 0) apply({ w, h: Math.round((w * r.h) / r.w) });
+  else if (h !== r.h && r.h > 0) apply({ h, w: Math.round((h * r.w) / r.h) });
 }
 
 type Align = "left" | "center-h" | "right" | "top" | "center-v" | "bottom";
@@ -84,6 +64,169 @@ function align(mode: Align): void {
     case "bottom": return apply({ y: Math.round(window.innerHeight - r.h) });
   }
 }
+
+// --- FUSE's own sections -------------------------------------------------
+// Declared in the same shape plugins use, so one renderer covers both. Their
+// values come from the overlay rect rather than the socket.
+const builtinSections = computed<InspectorSection[]>(() => [
+  {
+    id: "fuse.position",
+    label: "Position",
+    order: 0,
+    builtin: true,
+    controls: [
+      {
+        type: "buttonRow",
+        id: "align",
+        builtin: true,
+        buttons: [
+          { id: "left", text: "", icon: "alignLeft", variant: "ghost", tooltip: "Align left" },
+          { id: "center-h", text: "", icon: "alignHorizontalCenter", variant: "ghost", tooltip: "Align horizontal centre" },
+          { id: "right", text: "", icon: "alignRight", variant: "ghost", tooltip: "Align right" },
+          { id: "top", text: "", icon: "alignTop", variant: "ghost", tooltip: "Align top" },
+          { id: "center-v", text: "", icon: "alignVerticalCenter", variant: "ghost", tooltip: "Align vertical centre" },
+          { id: "bottom", text: "", icon: "alignBottom", variant: "ghost", tooltip: "Align bottom" },
+        ],
+      },
+      { type: "vec2", id: "pos", label: "X / Y", builtin: true, labels: ["X", "Y"], step: 1 },
+      {
+        type: "number",
+        id: "rot",
+        label: "Rotation",
+        builtin: true,
+        min: -360,
+        max: 360,
+        unit: "°",
+        tooltip: "Clockwise degrees about the overlay's centre",
+      },
+      {
+        type: "buttonRow",
+        id: "rot-ops",
+        builtin: true,
+        buttons: [
+          // No rotate glyph in Icons.vue yet - `reload` is the closest circular arrow.
+          { id: "rot90", text: "", icon: "reload", variant: "ghost", tooltip: "Rotate 90° clockwise" },
+          { id: "flip-h", text: "", icon: "flipHorizontal", variant: "ghost", tooltip: "Flip horizontal" },
+          { id: "flip-v", text: "", icon: "flipVertical", variant: "ghost", tooltip: "Flip vertical" },
+        ],
+      },
+    ],
+  },
+  {
+    id: "fuse.layout",
+    label: "Layout",
+    order: 1,
+    builtin: true,
+    controls: [
+      {
+        type: "vec2",
+        id: "size",
+        label: "W / H",
+        builtin: true,
+        labels: ["W", "H"],
+        min: 1,
+        disabledWhen: { key: "__rive", truthy: true },
+        tooltip: isRive.value ? "Rive overlays size their own canvas" : undefined,
+      },
+      {
+        type: "toggle",
+        id: "lockAspect",
+        label: "Lock aspect",
+        builtin: true,
+        disabledWhen: { key: "__rive", truthy: true },
+      },
+    ],
+  },
+  {
+    id: "fuse.appearance",
+    label: "Appearance",
+    order: 2,
+    builtin: true,
+    controls: [
+      {
+        type: "slider",
+        id: "opacity",
+        label: "Opacity",
+        builtin: true,
+        min: 0,
+        max: 100,
+        step: 1,
+        unit: "%",
+        default: 100,
+        tooltip: "Double-click the track to reset to 100%",
+      },
+    ],
+  },
+]);
+
+const builtin = computed<BuiltinSource>(() => ({
+  sections: builtinSections.value,
+  // Rive overlays size their own canvas, so the size controls read this.
+  feed: { __rive: isRive.value },
+  get(controlId: string): unknown {
+    const r = rect.value;
+    switch (controlId) {
+      case "pos": return { x: r.x, y: r.y };
+      case "size": return { x: r.w, y: r.h };
+      case "rot": return r.rot ?? 0;
+      case "opacity": return Math.round((r.opacity ?? 1) * 100);
+      case "lockAspect": return lockAspect.value;
+      default: return undefined;
+    }
+  },
+  set(controlId: string, value: unknown, _phase: InputPhase): void {
+    switch (controlId) {
+      case "pos": {
+        const v = value as { x: number; y: number };
+        apply({ x: v.x, y: v.y });
+        return;
+      }
+      case "size": {
+        const v = value as { x: number; y: number };
+        setSize(v.x, v.y);
+        return;
+      }
+      case "rot":
+        setRot(Number(value));
+        return;
+      case "opacity":
+        apply({ opacity: Number(value) / 100 });
+        return;
+      case "lockAspect":
+        lockAspect.value = Boolean(value);
+        return;
+    }
+  },
+  action(controlId: string, payload?: unknown): void {
+    if (controlId === "align") {
+      align(String(payload) as Align);
+      return;
+    }
+    if (controlId !== "rot-ops") return;
+    const r = rect.value.rot ?? 0;
+    // A flip is expressed as the equivalent box rotation - the persisted model
+    // has no scale, so this mirrors the frame, not the overlay's own content.
+    if (payload === "rot90") setRot(r + 90);
+    else if (payload === "flip-h") setRot(180 - r);
+    else if (payload === "flip-v") setRot(360 - r);
+  },
+}));
+
+const model = useInspectorModel(overlayId, computed(() => builtin.value));
+
+// `__rive` is a predicate feed, not a row of its own.
+const HIDDEN_IDS = new Set(["__rive"]);
+
+const collapsed = reactive(new Set<string>());
+function toggleSection(s: InspectorSection): void {
+  if (s.collapsible === false) return;
+  if (collapsed.has(s.id)) collapsed.delete(s.id);
+  else collapsed.add(s.id);
+}
+
+const visibleSections = computed(() =>
+  model.sections.value.filter((s) => evalWhen(s.when, model.values.value)),
+);
 
 // --- floating placement + header drag ------------------------------------
 function clampToViewport(x: number, y: number): { x: number; y: number } {
@@ -135,12 +278,6 @@ function onResize(): void {
 
 onMounted(() => window.addEventListener("resize", onResize));
 onBeforeUnmount(() => window.removeEventListener("resize", onResize));
-
-const SNAP_MODES: { value: SnapMode; label: string }[] = [
-  { value: "smart", label: "Smart" },
-  { value: "grid", label: "Grid" },
-  { value: "off", label: "Off" },
-];
 </script>
 
 <template>
@@ -156,85 +293,56 @@ const SNAP_MODES: { value: SnapMode; label: string }[] = [
           <span class="ins-title">{{ descriptor.kind === "rive" ? "Rive" : "Frame" }}</span>
           <span class="ins-sub">{{ descriptor.overlayId }}</span>
         </div>
-        <StageIconButton variant="ghost" title="Deselect (Esc)" @click="clearSelection">
-          <svg viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8" fill="none" stroke="currentColor" stroke-width="1.4" /></svg>
-        </StageIconButton>
+        <button type="button" class="ins-close" title="Deselect (Esc)" @click="clearSelection">
+          <Icons kind="cross" size="small" color="var(--ico)" />
+        </button>
       </header>
 
       <div class="ins-body">
-        <section class="ins-section">
-          <div class="ins-section-label">Position</div>
-          <div class="btn-row">
-            <StageIconButton title="Align left" @click="align('left')"><svg viewBox="0 0 16 16"><path d="M2 2v12M5 5h8v2H5zM5 9h5v2H5z" /></svg></StageIconButton>
-            <StageIconButton title="Align horizontal center" @click="align('center-h')"><svg viewBox="0 0 16 16"><path d="M8 2v12M4 5h8v2H4zM5.5 9h5v2h-5z" /></svg></StageIconButton>
-            <StageIconButton title="Align right" @click="align('right')"><svg viewBox="0 0 16 16"><path d="M14 2v12M3 5h8v2H3zM6 9h5v2H6z" /></svg></StageIconButton>
-            <StageIconButton title="Align top" @click="align('top')"><svg viewBox="0 0 16 16"><path d="M2 2h12M5 5h2v8H5zM9 5h2v5H9z" /></svg></StageIconButton>
-            <StageIconButton title="Align vertical center" @click="align('center-v')"><svg viewBox="0 0 16 16"><path d="M2 8h12M5 4h2v8H5zM9 5.5h2v5H9z" /></svg></StageIconButton>
-            <StageIconButton title="Align bottom" @click="align('bottom')"><svg viewBox="0 0 16 16"><path d="M2 14h12M5 3h2v8H5zM9 6h2v5H9z" /></svg></StageIconButton>
-          </div>
-          <div class="ins-row">
-            <StageNumberField label="X" :model-value="rect.x" @update:model-value="apply({ x: $event })" />
-            <StageNumberField label="Y" :model-value="rect.y" @update:model-value="apply({ y: $event })" />
-          </div>
-          <div class="ins-row">
-            <StageNumberField
-              label="&#8735;" title="Rotation" suffix="&#176;"
-              :model-value="rot" :min="-360" :max="360"
-              @update:model-value="setRot"
-            />
-            <div class="btn-row">
-              <StageIconButton title="Rotate 90&#176; clockwise" @click="rotate90"><svg viewBox="0 0 16 16"><path d="M8 3a5 5 0 1 0 5 5" fill="none" stroke="currentColor" stroke-width="1.6" /><path d="M8 0.5 11 3 8 5.5z" /></svg></StageIconButton>
-              <StageIconButton title="Flip horizontal" @click="flipH"><svg viewBox="0 0 16 16"><path d="M8 1v14" fill="none" stroke="currentColor" stroke-width="1.2" /><path d="M6.5 4 2 8l4.5 4zM9.5 4 14 8l-4.5 4z" /></svg></StageIconButton>
-              <StageIconButton title="Flip vertical" @click="flipV"><svg viewBox="0 0 16 16"><path d="M1 8h14" fill="none" stroke="currentColor" stroke-width="1.2" /><path d="M4 6.5 8 2l4 4.5zM4 9.5 8 14l4-4.5z" /></svg></StageIconButton>
-            </div>
-          </div>
-        </section>
-
-        <section class="ins-section">
-          <div class="ins-section-label">Layout</div>
-          <div class="ins-row">
-            <StageNumberField
-              label="W" :model-value="rect.w" :min="1" :disabled="isRive"
-              :title="isRive ? 'Rive overlays size their own canvas' : ''"
-              @update:model-value="setWidth"
-            />
-            <StageNumberField
-              label="H" :model-value="rect.h" :min="1" :disabled="isRive"
-              :title="isRive ? 'Rive overlays size their own canvas' : ''"
-              @update:model-value="setHeight"
-            />
-          </div>
-          <StageCheckbox v-model="lockAspect" :disabled="isRive" label="Lock aspect ratio" />
-        </section>
-
-        <section class="ins-section">
-          <div class="ins-section-label">Appearance</div>
-          <div class="ins-row">
-            <StageNumberField
-              label="Opacity" suffix="%" :model-value="opacityPct" :min="0" :max="100"
-              @update:model-value="apply({ opacity: $event / 100 })"
-            />
-          </div>
+        <section v-for="s in visibleSections" :key="s.id" class="ins-section">
+          <button
+            type="button"
+            class="ins-section-head"
+            :class="{ static: s.collapsible === false }"
+            @click="toggleSection(s)"
+          >
+            <motion.span
+              v-if="s.collapsible !== false"
+              class="sec-caret"
+              :initial="false"
+              :animate="{ rotate: collapsed.has(s.id) ? -90 : 0 }"
+              :transition="Dynamics.snappy"
+            >
+              <Icons kind="chevron-down" size="small" color="var(--text-muted)" />
+            </motion.span>
+            <span class="ins-section-label">{{ s.label }}</span>
+          </button>
+          <template v-if="!collapsed.has(s.id)">
+            <p v-if="s.description" class="ins-section-desc">{{ s.description }}</p>
+            <template v-for="(c, i) in s.controls" :key="c.id ?? `${s.id}-${i}`">
+              <ControlRenderer
+                v-if="!(c.id && HIDDEN_IDS.has(c.id)) && model.visible(c)"
+                :control="c"
+                :value="model.valueOf(c)"
+                :disabled="model.disabled(c)"
+                @set="(v, phase) => model.set(c, v, phase)"
+                @action="(p) => model.action(c, p)"
+              />
+            </template>
+          </template>
         </section>
       </div>
-
-      <footer class="ins-footer">
-        <div class="ins-section-label">Grid</div>
-        <StageCheckbox v-model="grid.visible" label="Show grid" />
-        <div class="ins-row">
-          <StageNumberField label="Size" :model-value="grid.size" :min="2" :max="512" @update:model-value="grid.size = $event" />
-        </div>
-        <StageSegmented v-model="grid.mode" :options="SNAP_MODES" />
-      </footer>
     </StagePanel>
   </aside>
 </template>
 
 <style scoped>
 .inspector {
+  user-select: none;
+  -webkit-user-select: none;
   position: fixed;
   width: 264px;
-  max-height: calc(100vh - 48px);
+  max-height: calc(100vh - 120px);
   display: flex;
   color: var(--text-main);
   font-family: var(--font-primary);
@@ -260,10 +368,25 @@ const SNAP_MODES: { value: SnapMode; label: string }[] = [
   user-select: none;
 }
 
-.ins-header > .stage-icon-btn {
+.ins-close {
+  --ico: var(--text-muted);
   flex: none;
-  width: 24px;
-  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  corner-shape: bevel;
+  border-radius: 6px 0 6px 0;
+}
+
+.ins-close:hover {
+  --ico: var(--text-main);
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .ins-title-group { display: flex; flex-direction: column; min-width: 0; }
@@ -286,10 +409,11 @@ const SNAP_MODES: { value: SnapMode; label: string }[] = [
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  scrollbar-width: thin;
   scrollbar-color: var(--black-3) transparent;
 }
 
-.ins-section, .ins-footer {
+.ins-section {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
@@ -297,7 +421,25 @@ const SNAP_MODES: { value: SnapMode; label: string }[] = [
   border-bottom: 1px solid var(--black-3);
 }
 
-.ins-footer { border-bottom: none; border-top: 1px solid var(--black-3); }
+.ins-section:last-child { border-bottom: none; }
+
+.ins-section-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  text-align: left;
+}
+
+.ins-section-head.static { cursor: default; }
+
+.sec-caret {
+  display: flex;
+  line-height: 0;
+}
 
 .ins-section-label {
   font-family: var(--font-microcopy);
@@ -305,20 +447,14 @@ const SNAP_MODES: { value: SnapMode; label: string }[] = [
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--text-muted);
+  user-select: none;
 }
 
-.ins-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--space-2);
-}
-
-.btn-row {
-  display: flex;
-  gap: var(--space-0);
-}
-
-.btn-row > .stage-icon-btn {
-  flex: 1;
+.ins-section-desc {
+  margin: 0;
+  font-family: var(--font-microcopy);
+  font-size: 10px;
+  line-height: 1.4;
+  color: var(--base-600);
 }
 </style>

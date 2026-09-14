@@ -1,4 +1,4 @@
-import { FusePlugin, ConfigCategory, ConfigEntry, type FuseContext } from "@fuse/plugin-sdk";
+import { FusePlugin, type FuseContext, type InspectorControl, type InspectorSection } from "@fuse/plugin-sdk";
 import { HUD } from "../_shared/hudSelectors.js";
 
 interface Accessors {
@@ -216,6 +216,119 @@ export class PrismPlugin extends FusePlugin {
   private dirty = true;
   private lastConnected = false;
 
+  private sections(): InspectorSection[] {
+    const itemControls = (it: PrismEl): InspectorControl[] => {
+      const out: InspectorControl[] = [];
+      if (it.color) {
+        out.push({
+          type: "switch",
+          id: K_TINT(it.key),
+          key: K_TINT(it.key),
+          label: `${it.label}: Tint`,
+          tooltip: "Enable the colour override.",
+        });
+        out.push({
+          type: "color",
+          id: K_COLOR(it.key),
+          key: K_COLOR(it.key),
+          label: `${it.label}: Colour`,
+          disabledWhen: { key: K_TINT(it.key), truthy: false },
+        });
+      }
+      out.push({
+        type: "slider",
+        id: K_SCALE(it.key),
+        key: K_SCALE(it.key),
+        label: `${it.label}: Scale`,
+        min: 0.1,
+        max: 5,
+        step: 0.05,
+        unit: "×",
+        default: 1,
+        tooltip: "Double-click to reset.",
+      });
+      out.push({
+        type: "slider",
+        id: K_ROT(it.key),
+        key: K_ROT(it.key),
+        label: `${it.label}: Rotation`,
+        min: -180,
+        max: 180,
+        step: 1,
+        unit: "°",
+        default: 0,
+        bipolar: true,
+        tooltip: "Double-click to reset.",
+      });
+      return out;
+    };
+
+    return [
+      {
+        id: "prism.accessibility",
+        label: "Accessibility",
+        description:
+          "One-click styling tuned for a specific need. Resets and overwrites the sections below - pick None to clear, then fine-tune manually.",
+        controls: [
+          {
+            type: "select",
+            id: "preset",
+            key: "preset",
+            label: "Quick Preset",
+            options: PRESET_CHOICES.map((p) => ({ value: p, label: p })),
+          },
+        ],
+      },
+      {
+        id: "prism.team",
+        label: "Team Colours",
+        controls: [
+          {
+            type: "switch",
+            id: "enemy_tint",
+            key: "enemy_tint",
+            label: "Recolour Enemies",
+            hint: "Enemy markers (icon / name / health), score bar + objective",
+          },
+          {
+            type: "color",
+            id: "enemy_color",
+            key: "enemy_color",
+            label: "Enemy Colour",
+            disabledWhen: { key: "enemy_tint", truthy: false },
+          },
+          {
+            type: "switch",
+            id: "ally_tint",
+            key: "ally_tint",
+            label: "Recolour Allies",
+            hint: "Ally markers (icon / name / health), score bar + objective",
+          },
+          {
+            type: "color",
+            id: "ally_color",
+            key: "ally_color",
+            label: "Ally Colour",
+            disabledWhen: { key: "ally_tint", truthy: false },
+          },
+        ],
+      },
+      // Every element's tint, colour, scale and rotation - long, so each group starts folded.
+      ...SECTIONS.map(
+        (sec): InspectorSection => ({
+          id: `prism.${sec.category.toLowerCase().replace(/[^a-z0-9]+/g, "_")}`,
+          label: sec.category,
+          collapsible: true,
+          defaultCollapsed: true,
+          controls: sec.items.flatMap((it, i): InspectorControl[] => [
+            ...(i > 0 ? [{ type: "divider" as const, id: `${it.key}_divider` }] : []),
+            ...itemControls(it),
+          ]),
+        }),
+      ),
+    ];
+  }
+
   setup(ctx: FuseContext): void {
     this.ctx = ctx;
     this.acc = ctx.services.get<Accessors>("accessors");
@@ -236,41 +349,8 @@ export class PrismPlugin extends FusePlugin {
     }
     ctx.config.defaults(defaults).load();
 
-    const sectionCategories = SECTIONS.map(
-      (sec) =>
-        new ConfigCategory(
-          sec.category,
-          sec.items.flatMap((it) => {
-            const entries: ConfigEntry[] = [];
-            if (it.color) {
-              entries.push(new ConfigEntry({ key: K_TINT(it.key), label: `${it.label}: Tint`, type: "bool", description: "Enable colour override" }));
-              entries.push(new ConfigEntry({ key: K_COLOR(it.key), label: `${it.label}: Colour`, type: "color" }));
-            }
-            entries.push(new ConfigEntry({ key: K_SCALE(it.key), label: `${it.label}: Scale`, type: "float", min: 0.1, max: 5.0 }));
-            entries.push(new ConfigEntry({ key: K_ROT(it.key), label: `${it.label}: Rotation`, type: "float", min: -180, max: 180 }));
-            return entries;
-          }),
-        ),
-    );
-
-    ctx.config.schema([
-      new ConfigCategory("Accessibility", [
-        new ConfigEntry({
-          key: "preset",
-          label: "Quick Preset",
-          type: "choice",
-          choices: PRESET_CHOICES,
-          description: "One-click styling tuned for a specific need. Resets and overwrites the sections below - pick None to clear, then fine-tune manually.",
-        }),
-      ]),
-      new ConfigCategory("Team Colours", [
-        new ConfigEntry({ key: "enemy_tint", label: "Recolour Enemies", type: "bool", description: "Enemy markers (icon / name / health), score bar + objective" }),
-        new ConfigEntry({ key: "enemy_color", label: "Enemy Colour", type: "color" }),
-        new ConfigEntry({ key: "ally_tint", label: "Recolour Allies", type: "bool", description: "Ally markers (icon / name / health), score bar + objective" }),
-        new ConfigEntry({ key: "ally_color", label: "Ally Colour", type: "color" }),
-      ]),
-      ...sectionCategories,
-    ]);
+    // App panel only: Prism restyles the game's own HUD and has no overlay.
+    ctx.config.schema(this.sections());
 
     ctx.config.watch("preset", (v) => this.applyPreset(String(v)));
     for (const k of ["enemy_tint", "enemy_color", "ally_tint", "ally_color"]) {

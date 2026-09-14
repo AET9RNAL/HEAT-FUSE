@@ -53,7 +53,8 @@ async function handleSave() {
             })
             if (!res.success) throw new Error(res.error)
             if (iconFile.value) {
-                await store.uploadIcon(props.editProject.id, iconFile.value)
+                const iconRes = await store.uploadIcon(props.editProject.id, iconFile.value)
+                if (!iconRes.success) throw new Error(iconRes.error ?? 'Icon upload failed')
             }
             eventBus.emit('notification', { message: t('appdiscover.notify.projectUpdated'), type: 'success' })
         } else {
@@ -65,7 +66,8 @@ async function handleSave() {
             })
             if (!res.success || !res.project) throw new Error(res.error)
             if (iconFile.value) {
-                await store.uploadIcon(res.project.id, iconFile.value)
+                const iconRes = await store.uploadIcon(res.project.id, iconFile.value)
+                if (!iconRes.success) throw new Error(iconRes.error ?? 'Icon upload failed')
             }
             eventBus.emit('notification', { message: t('appdiscover.notify.projectCreated'), type: 'success' })
         }

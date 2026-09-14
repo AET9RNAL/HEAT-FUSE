@@ -248,8 +248,8 @@ function backToVersionsTab() {
                                 @click="handleToggleVisibility(project)"
                             />
                         </template>
-                        <eButton size="slim" icon="settings" @click="openEdit(project)" />
-                        <eButton size="slim" icon="delete"   @click="confirmDeleteProject(project)" />
+                        <eButton v-tip="t('appdiscover.editProjectTip')" size="slim" icon="settings" @click="openEdit(project)" />
+                        <eButton v-tip="t('appdiscover.deleteProject')" size="slim" icon="delete" @click="confirmDeleteProject(project)" />
                     </div>
                 </div>
             </div>
@@ -300,8 +300,8 @@ function backToVersionsTab() {
                                     :systemState="submittingId === ver.id ? 'processing' : 'idle'"
                                     @click="handleSubmitForReview('version', ver.id)" />
                             </template>
-                            <eButton size="slim" icon="settings" @click="startEditVersion(ver)" />
-                            <eButton size="slim" icon="delete"   @click="confirmDeleteVersion(ver)" />
+                            <eButton v-tip="t('appdiscover.editVersion')" size="slim" icon="settings" @click="startEditVersion(ver)" />
+                            <eButton v-tip="t('appdiscover.deleteVersion')" size="slim" icon="delete" @click="confirmDeleteVersion(ver)" />
                         </div>
                     </div>
                 </div>

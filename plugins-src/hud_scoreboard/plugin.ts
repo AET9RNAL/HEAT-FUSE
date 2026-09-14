@@ -1,5 +1,5 @@
 import fs from "node:fs";
-import { FusePlugin, ConfigCategory, ConfigEntry, type FuseContext, type OverlayHandle } from "@fuse/plugin-sdk";
+import { FusePlugin, type FuseContext, type InspectorSection, type OverlayHandle } from "@fuse/plugin-sdk";
 
 interface Accessors {
   read(name: string): unknown;
@@ -153,6 +153,43 @@ export class HudScoreboardPlugin extends FusePlugin {
     }
   }
 
+  private sections(): InspectorSection[] {
+    return [
+      {
+        id: "hs.layout",
+        label: "Layout",
+        order: 10,
+        controls: [
+          {
+            type: "segmented",
+            id: "layout",
+            key: "layout",
+            label: "Layout",
+            options: [
+              { value: "scoreboard", label: "Scoreboard", tooltip: "Horizontal strip, like the game's own." },
+              { value: "columns", label: "Columns", tooltip: "Vertical two-column roster." },
+              { value: "simplified", label: "Simplified", tooltip: "Class icons only, with HP as the fill." },
+            ],
+          },
+          {
+            type: "switch",
+            id: "mirror_enemies",
+            key: "mirror_enemies",
+            label: "Mirror enemies",
+            tooltip: "Reverse the enemy cluster so classes read outward-in, matching the game strip.",
+          },
+          {
+            type: "switch",
+            id: "show_names",
+            key: "show_names",
+            label: "Player names",
+            tooltip: "Show player names.",
+          },
+        ],
+      },
+    ];
+  }
+
   setup(ctx: FuseContext): void {
     this.ctx = ctx;
     this.acc = ctx.services.get<Accessors>("accessors");
@@ -175,16 +212,9 @@ export class HudScoreboardPlugin extends FusePlugin {
     this.knownTanks = this.readAssetBasenames("tanks");
     this.knownAgents = this.readAssetBasenames("agents");
 
-    ctx.config.schema([
-      new ConfigCategory("Layout", [
-        new ConfigEntry({ key: "layout", label: "Layout", type: "choice", choices: ["scoreboard", "columns", "simplified"], description: "Horizontal strip (standard), vertical two-column roster, or class icons only with HP as fill" }),
-        new ConfigEntry({ key: "mirror_enemies", label: "Mirror Enemy Side", type: "bool", description: "Reverse the enemy cluster so classes read outward-in, matching the game strip" }),
-        new ConfigEntry({ key: "show_names", label: "Show Player Names", type: "bool" }),
-      ]),
-      new ConfigCategory("Position", [
-        new ConfigEntry({ key: "vue_overlay_pos", label: "Scoreboard Position", type: "position" }),
-      ]),
-    ]);
+    // One declaration for both surfaces: the App panel and the stage inspector.
+    const sections = this.sections();
+    ctx.config.schema(sections);
 
     const w = Number(ctx.config.get("vue_width", 1500)) || 1500;
     const h = Number(ctx.config.get("vue_height", 50)) || 50;
@@ -195,6 +225,7 @@ export class HudScoreboardPlugin extends FusePlugin {
       size: { w, h },
       positionConfigKey: "vue_overlay_pos",
     });
+    this.ov.inspector.sections(sections);
   }
 
   override enterCalibrate(_stage = 1): void {

@@ -1,9 +1,0 @@
-pynput
-Pillow
-pytesseract
-numpy
-mss
-loguru
-fastapi
-uvicorn[standard]
-websocket-client

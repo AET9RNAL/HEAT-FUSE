@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { computed } from 'vue'
 import Icons from './Icons.vue'
 import { useI18n } from '../composables/useI18n'
 
@@ -21,57 +21,16 @@ async function pick() {
   if (path !== null) emit('update:modelValue', path)
 }
 
-const CUT = 10
-const containerEl = ref<HTMLElement | null>(null)
-const elW = ref(0)
-const elH = ref(0)
-
-const svgPoints = computed(() => {
-  const w = elW.value
-  const h = elH.value
-  if (!w || !h) return ''
-  const cx = (CUT / w) * 100
-  const cy = (CUT / h) * 100
-  return `${cx},0 100,0 100,${100 - cy} ${100 - cx},100 0,100 0,${cy}`
-})
-
-let ro: ResizeObserver | null = null
-onMounted(() => {
-  if (!containerEl.value) return
-  ro = new ResizeObserver(([entry]) => {
-    const box = entry.borderBoxSize?.[0]
-    elW.value = box ? box.inlineSize : entry.contentRect.width
-    elH.value = box ? box.blockSize  : entry.contentRect.height
-  })
-  ro.observe(containerEl.value)
-})
-onUnmounted(() => ro?.disconnect())
 </script>
 
 <template>
   <div
-    ref="containerEl"
     class="e-dir-selector"
     :class="{ 'is-empty': !modelValue }"
     @click="pick"
   >
     <span class="path-text">{{ modelValue || resolvedPlaceholder }}</span>
     <Icons kind="folder" size="small" class="folder-icon" />
-    <svg
-      v-if="svgPoints"
-      class="polygon-stroke"
-      viewBox="0 0 100 100"
-      preserveAspectRatio="none"
-      xmlns="http://www.w3.org/2000/svg"
-    >
-      <polygon
-        :points="svgPoints"
-        fill="none"
-        stroke="#525252"
-        stroke-width="0.4"
-        vector-effect="non-scaling-stroke"
-      />
-    </svg>
   </div>
 </template>
 
@@ -85,14 +44,9 @@ onUnmounted(() => ro?.disconnect())
   width: 100%;
   box-sizing: border-box;
   cursor: pointer;
-  clip-path: polygon(
-    10px 0%,
-    100% 0%,
-    100% calc(100% - 10px),
-    calc(100% - 10px) 100%,
-    0% 100%,
-    0% 10px
-  );
+  border: 1px solid var(--base-600);
+  corner-shape: bevel;
+  border-radius: 10px 0 10px 0;
 }
 
 .e-dir-selector::before {
@@ -101,14 +55,8 @@ onUnmounted(() => ro?.disconnect())
   inset: 0;
   z-index: 0;
   background: var(--black-1-a);
-  clip-path: polygon(
-    10px 0%,
-    100% 0%,
-    100% calc(100% - 10px),
-    calc(100% - 10px) 100%,
-    0% 100%,
-    0% 10px
-  );
+  corner-shape: bevel;
+  border-radius: 10px 0 10px 0;
   transition: background 0.15s;
 }
 
@@ -149,13 +97,4 @@ onUnmounted(() => ro?.disconnect())
   opacity: 1;
 }
 
-.polygon-stroke {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-  overflow: visible;
-  z-index: 1;
-}
 </style>

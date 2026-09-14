@@ -1,3 +1,5 @@
+import type { OverlayInspector } from "./inspector.js";
+
 export type OverlayKind = "rive" | "vue";
 
 export interface Size {
@@ -32,10 +34,14 @@ export interface OverlayDeclaration {
   viewModel?: string;
   defaultRect?: Rect;
   positionConfigKey?: string;
+  /** Takes pointer input in interactive mode (Ctrl+I); badged on the stage while calibrating. */
+  interactive?: boolean;
 }
 
 export interface OverlayHandle {
   readonly id: string;
+  /** In-stage config surface for this overlay (sections shown in the inspector). */
+  readonly inspector: OverlayInspector;
   set(path: string, value: number): void;
   setBool(path: string, value: boolean): void;
   setString(path: string, value: string): void;
@@ -44,6 +50,8 @@ export interface OverlayHandle {
   trigger(path: string): void;
   setJson(path: string, value: unknown): void;
   setRect(rect: Rect): void;
+  /** Canvas size, applied live. The stage can't resize Rive overlays, so their plugin sizes them. */
+  setSize(size: Size): void;
   setPositionConfigKey(key: string): void;
   setVisible(visible: boolean): void;
   /**

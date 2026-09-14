@@ -25,7 +25,8 @@ withDefaults(defineProps<{
 .e-badge {
     display: inline-flex;
     flex-shrink: 0;
-    clip-path: polygon(4px 0%, 100% 0%, 100% calc(100% - 4px), calc(100% - 4px) 100%, 0% 100%, 0% 4px);
+    corner-shape: bevel;
+    border-radius: 4px 0 4px 0;
     background: color-mix(in srgb, var(--badge-color, rgba(255,255,255,0.18)) 35%, transparent);
     padding: 1px;
     user-select: none;
@@ -43,7 +44,8 @@ withDefaults(defineProps<{
     color: var(--badge-color, var(--text-muted));
     background: color-mix(in srgb, var(--badge-color, transparent) 8%, rgba(12,12,12,0.85));
     padding: 1px 6px 1px 4px;
-    clip-path: polygon(3px 0%, 100% 0%, 100% calc(100% - 3px), calc(100% - 3px) 100%, 0% 100%, 0% 3px);
+    corner-shape: bevel;
+    border-radius: 3px 0 3px 0;
     white-space: nowrap;
 }
 

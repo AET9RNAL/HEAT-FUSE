@@ -12,7 +12,11 @@ export default defineConfig({
   // uiohook-napi.node mapped, and unlinking a mapped image fails EPERM, which
   // would abort the whole build.
   clean: ["!node_modules/**"],
-  sourcemap: true,
+  // Inline, not external: the DevTools frontend's CSP (`connect-src data: …
+  // 'self' devtools: ws://127.0.0.1:*`) blocks the file:// fetch of a sibling
+  // .map, so an external sourcemap never loads in the runtime debug window.
+  // A data: URI rides in the script source over CDP and is allowed.
+  sourcemap: "inline",
   dts: false,
   // Bundled CJS deps (ws, chrome-remote-interface) do dynamic require()s of node
   // builtins ('events', 'net', …). esbuild's ESM output shims require() to throw

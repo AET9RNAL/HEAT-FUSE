@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, nextTick, onBeforeUnmount } from 'vue'
 import Icons from './Icons.vue'
 import { AnimatePresence, motion } from 'motion-v'
 import { Dynamics } from '../composables/useMotion'
@@ -29,31 +29,9 @@ const isHovered = ref(false)
 const isEntering = ref(false)
 const scrollerRef = ref<HTMLElement | null>(null)
 const buttonRef = ref<HTMLElement | null>(null)
-const trackEl = ref<HTMLElement | null>(null)
 const dropdownStyle = ref<Record<string, string>>({})
 const scrollTop = ref(0)
 
-const CUT = 6
-const elW = ref(0)
-const elH = ref(0)
-const svgPoints = computed(() => {
-    const w = elW.value
-    const h = elH.value
-    if (!w || !h) return ''
-    const cx = (CUT / w) * 100
-    const cy = (CUT / h) * 100
-    return `${cx},0 100,0 100,${100 - cy} ${100 - cx},100 0,100 0,${cy}`
-})
-let _ro: ResizeObserver | null = null
-onMounted(() => {
-    if (!trackEl.value) return
-    _ro = new ResizeObserver(([entry]) => {
-        const box = entry.borderBoxSize?.[0]
-        elW.value = box ? box.inlineSize : entry.contentRect.width
-        elH.value = box ? box.blockSize  : entry.contentRect.height
-    })
-    _ro.observe(trackEl.value)
-})
 
 const selectedIndex = computed(() => {
     const idx = resolvedValues.value.indexOf(props.modelValue)
@@ -254,13 +232,12 @@ function onWheel(e: WheelEvent) {
 onBeforeUnmount(() => {
     window.removeEventListener('mouseup', onMouseUp)
     document.removeEventListener('mousedown', onDocumentMouseDown)
-    _ro?.disconnect()
 })
 </script>
 
 <template>
     <div class="list-selector-root">
-        <div ref="trackEl" class="list-selector-track">
+        <div class="list-selector-track">
             <!-- Label side -->
             <div class="list-selector-label">
                 <span class="list-selector-label-text">{{ label }}</span>
@@ -302,22 +279,6 @@ onBeforeUnmount(() => {
                 </div>
             </div>
 
-            <!-- Polygon stroke -->
-            <svg
-                v-if="svgPoints"
-                class="track-stroke"
-                viewBox="0 0 100 100"
-                preserveAspectRatio="none"
-                xmlns="http://www.w3.org/2000/svg"
-            >
-                <polygon
-                    :points="svgPoints"
-                    fill="none"
-                    stroke="#525252"
-                    stroke-width="0.4"
-                    vector-effect="non-scaling-stroke"
-                />
-            </svg>
         </div>
 
         <!-- Dropdown teleported to body to escape overflow: clip -->
@@ -365,12 +326,9 @@ onBeforeUnmount(() => {
     user-select: none;
     -webkit-user-select: none;
     background: var(--black-1-a);
-    clip-path: polygon(
-        6px 0%, 100% 0%,
-        100% calc(100% - 6px),
-        calc(100% - 6px) 100%,
-        0% 100%, 0% 6px
-    );
+    border: 1px solid var(--base-600);
+    corner-shape: bevel;
+    border-radius: 6px 0 6px 0;
 }
 
 .list-selector-label {
@@ -452,15 +410,6 @@ onBeforeUnmount(() => {
     justify-content: center;
 }
 
-.track-stroke {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    pointer-events: none;
-    overflow: visible;
-    z-index: 1;
-}
 
 </style>
 

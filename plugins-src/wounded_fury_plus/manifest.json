@@ -1,0 +1,30 @@
+{
+  "plugin_id": "wounded_fury_plus",
+  "name": "Wounded Fury Plus",
+  "version": "1.0.0",
+  "author": "AETERNAL",
+  "description": "Tracks SIS-90's Wounded Fury modifier status",
+  "entry": "plugin:WoundedFuryPlusPlugin",
+  "core": false,
+  "runtime": "node",
+  "dependencies": ["accessors", "fuse_ui", "canvas_ui"],
+  "default_config": {
+    "vue_overlay_pos": null,
+    "vue_overlay_pos_fp": null,
+    "vue_width": 225,
+    "vue_height": 44,
+    "show_in": ["battle"],
+    "threshold_damage": 4000,
+    "duration_s": 30,
+    "cooldown_s": 40,
+    "charge_color": "#8FFFB8FF",
+    "active_color": "#FF6A62FF",
+    "cooldown_color": "#F2F2F2FF",
+    "sound_on_trigger": true,
+    "sound_ten_left": true,
+    "sound_volume": 1,
+    "buff_tag": "",
+    "log_buff_tags": false,
+    "vehicle_slug": "a02_m1e1_120"
+  }
+}

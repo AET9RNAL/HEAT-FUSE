@@ -6,12 +6,14 @@ import EStatus, { type StatusState } from './eStatus.vue'
 import eUpdateProgress from './eUpdateProgress.vue'
 import { useI18n } from '../composables/useI18n'
 import { useNavigationStore } from '../stores/navigation'
+import { useAuthStore } from '../stores/auth'
 import { useFuseControl } from '../composables/useFuseControl'
 import { useUpdater } from '../composables/useUpdater'
-import AppLogoFull from '../assets/icons/app-logo-full.svg'
+import FuseLogoFull from '../assets/icons/fuse-logo-full.svg'
 
 const { t } = useI18n()
 const nav = useNavigationStore()
+const auth = useAuthStore()
 const closeWindow    = () => window.appAPI?.closeWindow()
 const minimizeWindow = () => window.appAPI?.minimizeWindow()
 const maximizeWindow = () => window.appAPI?.maximizeWindow()
@@ -45,9 +47,9 @@ const pageTitle = computed(() => t(`appnav.${nav.selectedOption}`))
   <header class="titlebar" role="banner">
     <div class="left-group">
       <div class="logo-holder">
-        <img :src="AppLogoFull" class="app-logo" alt="HEAT FUSE" />
+        <img :src="FuseLogoFull" class="app-logo" alt="HEAT FUSE" />
       </div>
-      <h2 class="page-title">{{ pageTitle }}</h2>
+      <h2 v-if="!auth.inWelcomeFlow" class="page-title">{{ pageTitle }}</h2>
     </div>
 
     <div class="progress-center">
@@ -72,7 +74,7 @@ const pageTitle = computed(() => t(`appnav.${nav.selectedOption}`))
           :key="'update-btn'"
           type="button"
           class="btn update-btn"
-          :title="t('apptitlebar.updateAvailable')"
+          v-tip="t('apptitlebar.updateAvailable')"
           :initial="{ opacity: 0, scale: 0.7 }"
           :animate="{ opacity: 1, scale: 1 }"
           :exit="{ opacity: 0, scale: 0.7 }"
@@ -88,16 +90,16 @@ const pageTitle = computed(() => t(`appnav.${nav.selectedOption}`))
       <EStatus :state="statusState" :status="statusLabel" />
 
       <div class="controls" role="group" :aria-label="t('apptitlebar.windowControls')">
-        <button type="button" class="btn" :title="t('apptitlebar.minimize')" @click="minimizeWindow">
+        <button type="button" class="btn" v-tip="t('apptitlebar.minimize')" @click="minimizeWindow">
           <Icons kind="minimize" size="small" />
         </button>
-        <button type="button" class="btn" :title="t('apptitlebar.maximize')" @click="maximizeWindow">
+        <button type="button" class="btn" v-tip="t('apptitlebar.maximize')" @click="maximizeWindow">
           <Icons kind="maximize" size="small" />
         </button>
         <motion.button
           type="button"
           class="btn close"
-          :title="t('apptitlebar.close')"
+          v-tip="t('apptitlebar.close')"
           :aria-label="t('apptitlebar.close')"
           @click="closeWindow"
           :initial="{ scale: 1 }"
@@ -113,6 +115,8 @@ const pageTitle = computed(() => t(`appnav.${nav.selectedOption}`))
 
 <style scoped>
 .titlebar {
+  corner-shape: bevel;
+  border-radius: 18px 0 0 0;
   -webkit-app-region: drag;
   position: relative;
   z-index: 9999;

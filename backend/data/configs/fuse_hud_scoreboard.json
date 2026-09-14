@@ -1,33 +1,14 @@
 {
   "vue_overlay_pos": {
-    "x": 460,
-    "y": 237,
-    "w": 1640,
-    "h": 53
+    "x": 567,
+    "y": 107,
+    "w": 1421,
+    "h": 52
   },
   "vue_width": 1500,
-  "vue_height": 90,
+  "vue_height": 50,
   "mirror_enemies": true,
   "show_names": false,
   "layout": "scoreboard",
-  "vehicle_slugs": {
-    "1": "a01_chrysler_xm1_volcano",
-    "2": "a13_chrysler_xm1_ares_90",
-    "3": "a02_m1e1_120",
-    "5": "a14_m60a1",
-    "8": "g11_leopard2k_st",
-    "24": "gb01_challenger",
-    "26": "g06_leopard2fk_atgm",
-    "34": "a07_hstv_l",
-    "39": "a12_alvt",
-    "41": "r01_t_62a",
-    "42": "g01_leopard_1_a6_120",
-    "53": "a08_m3_bradley",
-    "56": "r08_object_287",
-    "97": "a05_m551a1_sheridan",
-    "98": "a17_m1150_abv",
-    "100": "g07_marder1a3",
-    "101": "a20_m60a2",
-    "102": "a13_chrysler_xm1_ares_90_dummy"
-  }
+  "vehicle_slugs": {}
 }

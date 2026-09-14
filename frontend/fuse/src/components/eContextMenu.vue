@@ -3,6 +3,9 @@ import { ref, computed, toRef, watch, onUnmounted, nextTick, type MaybeRef } fro
 import Icons from './Icons.vue'
 import type { IconKind, IconSize } from './Icons.vue'
 import { useKeystroke } from '../composables/useKeystroke'
+import { useI18n } from '../composables/useI18n'
+
+const { t } = useI18n()
 
 export interface MenuOption {
     label: string
@@ -22,6 +25,8 @@ interface Props {
     placement?: MenuPlacement
     triggerIcon?: IconKind
     triggerIconSize?: IconSize
+    /** Trigger hover text; defaults to "More options" */
+    triggerTooltip?: string
     keystrokeTarget?: HTMLElement | null
     keystrokeKey?: string | string[]
     /** 'press' fires shortcut action once; 'hold' tracks held state for shortcut icon */
@@ -61,25 +66,7 @@ const { isHovering, isPressed } = keystrokeEnabled
     })
     : { isHovering: ref(false), isPressed: ref(false) }
 
-const CUT = 8
 const menuEl = ref<HTMLElement | null>(null)
-const menuW = ref(0)
-const menuH = ref(0)
-let ro: ResizeObserver | null = null
-
-watch(menuEl, (el) => {
-    ro?.disconnect()
-    ro = null
-    menuW.value = 0
-    menuH.value = 0
-    if (!el) return
-    ro = new ResizeObserver(([entry]) => {
-        const box = entry.borderBoxSize?.[0]
-        menuW.value = box ? box.inlineSize : entry.contentRect.width
-        menuH.value = box ? box.blockSize  : entry.contentRect.height
-    })
-    ro.observe(el)
-})
 function updateMenuPos() {
     if (!show.value || !triggerRef.value) return
     const rect = triggerRef.value.getBoundingClientRect()
@@ -110,8 +97,16 @@ watch(show, async (val) => {
     }
 })
 
-watch([menuW, menuH], () => {
-    if (show.value) updateMenuPos()
+// The menu is anchored to the trigger, so a size change has to re-anchor it.
+let ro: ResizeObserver | null = null
+watch(menuEl, (el) => {
+    ro?.disconnect()
+    ro = null
+    if (!el) return
+    ro = new ResizeObserver(() => {
+        if (show.value) updateMenuPos()
+    })
+    ro.observe(el)
 })
 
 function onLayoutChange() {
@@ -166,15 +161,6 @@ onUnmounted(() => {
     if (leaveTimer) clearTimeout(leaveTimer)
 })
 
-const menuSvgPoints = computed(() => {
-    const w = menuW.value
-    const h = menuH.value
-    if (!w || !h) return ''
-    const cx = (CUT / w) * 100
-    const cy = (CUT / h) * 100
-    return `${cx},0 100,0 100,${100 - cy} ${100 - cx},100 0,100 0,${cy}`
-})
-
 function close() {
     show.value = false
 }
@@ -206,7 +192,12 @@ defineExpose({ close, isHovering, isPressed })
         </template>
         <!-- Normal more menu -->
         <template v-else>
-            <span class="more-btn" ref="triggerRef" @click.stop="show = !show">
+            <span
+                class="more-btn"
+                ref="triggerRef"
+                v-tip="triggerTooltip ?? t('components.contextMenu.more')"
+                @click.stop="show = !show"
+            >
                 <Icons :kind="triggerIcon" :size="triggerIconSize"/>
             </span>
         </template>
@@ -222,21 +213,6 @@ defineExpose({ close, isHovering, isPressed })
                 <Icons :kind="option.icon" :size="option.iconSize ?? 'small'" :color="option.iconColor ?? ''"/>
                 <span class="menu-item-label">{{ option.label }}</span>
             </span>
-            <svg
-                v-if="menuSvgPoints"
-                class="menu-polygon-stroke"
-                viewBox="0 0 100 100"
-                preserveAspectRatio="none"
-                xmlns="http://www.w3.org/2000/svg"
-            >
-                <polygon
-                    :points="menuSvgPoints"
-                    fill="none"
-                    stroke="#525252"
-                    stroke-width="0.4"
-                    vector-effect="non-scaling-stroke"
-                />
-            </svg>
         </div>
     </Teleport>
 </template>
@@ -281,25 +257,12 @@ defineExpose({ close, isHovering, isPressed })
     min-width: 80px;
     padding: var(--space-1);
     background-color: var(--black-1-a);
-    clip-path: polygon(
-        8px 0%,
-        100% 0%,
-        100% calc(100% - 8px),
-        calc(100% - 8px) 100%,
-        0% 100%,
-        0% 8px
-    );
+    box-sizing: border-box;
+    border: 1px solid var(--base-600);
+    corner-shape: bevel;
+    border-radius: 8px 0 8px 0;
 }
 
-.menu-polygon-stroke {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    pointer-events: none;
-    overflow: visible;
-    z-index: 1;
-}
 
 /* Placement: bottom (default) */
 .placement-bottom::before {
@@ -333,11 +296,8 @@ defineExpose({ close, isHovering, isPressed })
     cursor: pointer;
     user-select: none;
     white-space: nowrap;
-    clip-path: polygon(
-        4px 0%, 100% 0%,
-        100% calc(100% - 4px), calc(100% - 4px) 100%,
-        0% 100%, 0% 4px
-    );
+    corner-shape: bevel;
+    border-radius: 4px 0 4px 0;
 }
 
 .menu-item:hover {

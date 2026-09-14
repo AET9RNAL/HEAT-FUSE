@@ -73,7 +73,8 @@ const lastActiveFormatted = computed(() => {
     gap: var(--space-2);
     padding: var(--space-2);
     background: var(--black-2-a);
-    clip-path: polygon(4px 0%, 100% 0%, 100% calc(100% - 4px), calc(100% - 4px) 100%, 0% 100%, 0% 4px);
+    corner-shape: bevel;
+    border-radius: 4px 0 4px 0;
 }
 
 .device-row.current {

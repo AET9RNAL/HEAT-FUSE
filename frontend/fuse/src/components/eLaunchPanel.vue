@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onUnmounted } from 'vue'
 import { motion, AnimatePresence } from 'motion-v'
 import Icons from './Icons.vue'
 import eButton from './eButton.vue'
@@ -10,9 +10,10 @@ import { useFuseControl } from '../composables/useFuseControl'
 import { useI18n } from '../composables/useI18n'
 import { Dynamics } from '../composables/useMotion'
 import { eventBus } from '../events/eventBus'
+import { formatCombo } from '../utils/formatCombo'
 const appStore = useAppStore()
 const { t } = useI18n()
-const { fuseState, runtimeState, obsUrl } = useFuseControl()
+const { fuseState, runtimeState, obsUrl, hostHotkeys } = useFuseControl()
 
 const isRunning = computed(() => fuseState.value === 'running')
 
@@ -94,35 +95,11 @@ const menuOptions = computed<MenuOption[]>(() => [
   },
 ])
 
-const CUT = 10
-const panelEl = ref<HTMLElement | null>(null)
-const elW = ref(0)
-const elH = ref(0)
-
-const svgPoints = computed(() => {
-  const w = elW.value
-  const h = elH.value
-  if (!w || !h) return ''
-  const cx = (CUT / w) * 100
-  const cy = (CUT / h) * 100
-  return `${cx},0 100,0 100,${100 - cy} ${100 - cx},100 0,100 0,${cy}`
-})
-
-let ro: ResizeObserver | null = null
-onMounted(() => {
-  if (!panelEl.value) return
-  ro = new ResizeObserver(([entry]) => {
-    const box = entry.borderBoxSize?.[0]
-    elW.value = box ? box.inlineSize : entry.contentRect.width
-    elH.value = box ? box.blockSize  : entry.contentRect.height
-  })
-  ro.observe(panelEl.value)
-})
-onUnmounted(() => { ro?.disconnect(); clearLockTimer(); if (obsCopyTimer) clearTimeout(obsCopyTimer) })
+onUnmounted(() => { clearLockTimer(); if (obsCopyTimer) clearTimeout(obsCopyTimer) })
 </script>
 
 <template>
-  <div ref="panelEl" class="e-launch-panel">
+  <div class="e-launch-panel">
 
     <div class="left-cluster">
       <div class="app-icon">
@@ -159,7 +136,7 @@ onUnmounted(() => { ro?.disconnect(); clearLockTimer(); if (obsCopyTimer) clearT
               :key="d.id"
               icon="monitor"
               :label="d.label"
-              :title="t('applaunch.copyObsUrlFor', { w: d.width, h: d.height })"
+              v-tip="t('applaunch.copyObsUrlFor', { w: d.width, h: d.height })"
               size="slim"
               @click="copyObsUrl(d.id)"
             />
@@ -167,7 +144,7 @@ onUnmounted(() => { ro?.disconnect(); clearLockTimer(); if (obsCopyTimer) clearT
           <motion.span
             v-else-if="obsReady"
             key="obs-copy"
-            :title="t('applaunch.copyObsUrl')"
+            v-tip="t('applaunch.copyObsUrl')"
             :initial="{ opacity: 0, scale: 0.8 }"
             :animate="{ opacity: 1, scale: 1 }"
             :exit="{ opacity: 0, scale: 0.8 }"
@@ -194,11 +171,34 @@ onUnmounted(() => { ro?.disconnect(); clearLockTimer(); if (obsCopyTimer) clearT
             :transition="Dynamics.spring"
           >
             <span class="calibrate-text">{{ promptLocked ? t('applaunch.lockedPrompt') : t('applaunch.calibratePrompt') }}</span>
-            <span v-if="!promptLocked" class="calibrate-hint">{{ t('applaunch.calibrateHint') }}</span>
+            <span v-if="!promptLocked" class="calibrate-hint">{{ t('applaunch.calibrateHint', { combo: formatCombo(hostHotkeys.lock) }) }}</span>
           </motion.div>
+        </AnimatePresence>
+        <!-- The calibration prompt slides out over this slot, so the toggle yields to it -->
+        <AnimatePresence>
+          <motion.span
+            v-if="!promptVisible"
+            key="auto-lock"
+            class="auto-lock"
+            :initial="{ opacity: 0, scale: 0.8 }"
+            :animate="{ opacity: 1, scale: 1 }"
+            :exit="{ opacity: 0, scale: 0.8 }"
+            :transition="Dynamics.quick"
+          >
+            <eButton
+              mode="toggle"
+              size="slim"
+              icon="unlock"
+              active-icon="lock"
+              :model-value="appStore.autoLockOverlays"
+              v-tip="appStore.autoLockOverlays ? t('applaunch.autoLockOn') : t('applaunch.autoLockOff')"
+              @update:model-value="appStore.autoLockOverlays = $event"
+            />
+          </motion.span>
         </AnimatePresence>
         <eButton
           class="launch-btn"
+          v-tip="isRunning ? t('applaunch.stopTip') : t('applaunch.launchTip')"
           :icon="isRunning ? 'stop' : 'play'"
           :label="isRunning ? t('applaunch.stop') : t('applaunch.launch')"
           size="slim"
@@ -209,21 +209,6 @@ onUnmounted(() => { ro?.disconnect(); clearLockTimer(); if (obsCopyTimer) clearT
       <eContextMenu :options="menuOptions" placement="bottom" />
     </div>
 
-    <svg
-      v-if="svgPoints"
-      class="panel-stroke"
-      viewBox="0 0 100 100"
-      preserveAspectRatio="none"
-      xmlns="http://www.w3.org/2000/svg"
-    >
-      <polygon
-        :points="svgPoints"
-        fill="none"
-        stroke="#525252"
-        stroke-width="0.4"
-        vector-effect="non-scaling-stroke"
-      />
-    </svg>
 
   </div>
 </template>
@@ -241,14 +226,10 @@ onUnmounted(() => { ro?.disconnect(); clearLockTimer(); if (obsCopyTimer) clearT
   background: var(--black-1-a);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
-  clip-path: polygon(
-    10px 0%,
-    100% 0%,
-    100% calc(100% - 10px),
-    calc(100% - 10px) 100%,
-    0% 100%,
-    0% 10px
-  );
+  box-sizing: border-box;
+  border: 1px solid var(--base-600);
+  corner-shape: bevel;
+  border-radius: 10px 0 10px 0;
 }
 
 .left-cluster {
@@ -330,6 +311,11 @@ onUnmounted(() => { ro?.disconnect(); clearLockTimer(); if (obsCopyTimer) clearT
   position: relative;
   display: flex;
   align-items: center;
+  gap: var(--space-2);
+}
+
+.auto-lock {
+  display: flex;
 }
 
 .launch-btn {
@@ -353,13 +339,8 @@ onUnmounted(() => { ro?.disconnect(); clearLockTimer(); if (obsCopyTimer) clearT
   white-space: nowrap;
   z-index: 1;
   pointer-events: none;
-  clip-path: polygon(
-    6px 0%,
-    100% 0%,
-    100% 100%,
-    0% 100%,
-    0% 6px
-  );
+  corner-shape: bevel;
+  border-radius: 6px 0 0 0;
   transition: border-left-color 0.3s ease;
 }
 
@@ -387,13 +368,4 @@ onUnmounted(() => { ro?.disconnect(); clearLockTimer(); if (obsCopyTimer) clearT
   line-height: 1;
 }
 
-.panel-stroke {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-  overflow: visible;
-  z-index: 1;
-}
 </style>

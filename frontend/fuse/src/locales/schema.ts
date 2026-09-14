@@ -5,6 +5,7 @@ export interface TranslationSchema {
         ok: string
         brandName: string
         gameName: string
+        close: string
     }
     apptitlebar: {
         close: string
@@ -41,6 +42,10 @@ export interface TranslationSchema {
         copyObsUrl: string
         copyObsUrlFor: string
         obsUrlCopied: string
+        autoLockOn: string
+        autoLockOff: string
+        launchTip: string
+        stopTip: string
         notifications: {
             fuseDisabledTitle: string
             fuseDisabledMessage: string
@@ -74,6 +79,11 @@ export interface TranslationSchema {
             startWithGame: string
             hideOnFocusLoss: string
         }
+        audio: {
+            title: string
+            volume: string
+            muted: string
+        }
         notifications: {
             gameConfigChangedTitle: string
             gameConfigChangedMessage: string
@@ -102,6 +112,7 @@ export interface TranslationSchema {
             processing: string
             success: string
             error: string
+            confirm: string
         }
         status: {
             none: string
@@ -114,6 +125,7 @@ export interface TranslationSchema {
             defaultTitle: string
             dependencyErrorTitle: string
             dependencyErrorMessage: string
+            dismiss: string
         }
         dirSelector: {
             placeholder: string
@@ -151,6 +163,9 @@ export interface TranslationSchema {
             empty: string
             viewOnline: string
             close: string
+        }
+        contextMenu: {
+            more: string
         }
         console: {
             searchPlaceholder: string

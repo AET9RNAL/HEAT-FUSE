@@ -91,14 +91,8 @@ function formatTime(ts: number) {
   display: flex;
   flex-direction: column;
   min-height: 200px;
-  clip-path: polygon(
-    10px 0%,
-    100% 0%,
-    100% calc(100% - 10px),
-    calc(100% - 10px) 100%,
-    0% 100%,
-    0% 10px
-  );
+  corner-shape: bevel;
+  border-radius: 10px 0 10px 0;
 }
 
 .console-toolbar {

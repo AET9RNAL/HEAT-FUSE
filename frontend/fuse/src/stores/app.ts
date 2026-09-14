@@ -34,11 +34,17 @@ export const useAppStore = defineStore('app', () => {
     const backendVersion = ref<string>('')
     const gameVersion = ref<string>('')
     const licenseAccepted = ref<boolean>(false)
+    
+    const onboardingComplete = ref<boolean>(false)
     const analyticsConsent = ref<boolean>(false)
     const diagnosticsConsent = ref<boolean>(false)
     const username = ref<string | null>(null)
     const allowApiAccess = ref<boolean>(false)
     const lastSeenVersion = ref<string>('')
+    const autoLockOverlays = ref<boolean>(false)
+    // Master level for plugin audio on the stage window, 0-100.
+    const audioVolume = ref<number>(80)
+    const audioMuted = ref<boolean>(false)
 
     // Setting registry
     // Each entry maps a ref to a DB column key and a load default.
@@ -67,6 +73,9 @@ export const useAppStore = defineStore('app', () => {
         diagnosticsConsent:     { ref: diagnosticsConsent,     db: 'diagnostics_consent',        default: false },
         allowApiAccess:         { ref: allowApiAccess,         db: 'allow_api_access',            default: false },
         lastSeenVersion:        { ref: lastSeenVersion,        db: 'last_seen_version',           default: '' },
+        autoLockOverlays:       { ref: autoLockOverlays,       db: 'auto_lock_overlays',          default: false },
+        audioVolume:            { ref: audioVolume,            db: 'audio_volume',                default: 80 },
+        audioMuted:             { ref: audioMuted,             db: 'audio_muted',                 default: false },
     }
 
     // Batched save system (wire DB when auth is ready)
@@ -404,11 +413,15 @@ export const useAppStore = defineStore('app', () => {
         gameDirPaths,
         gameVersion,
         licenseAccepted,
+        onboardingComplete,
         analyticsConsent,
         diagnosticsConsent,
         username,
         allowApiAccess,
         lastSeenVersion,
+        autoLockOverlays,
+        audioVolume,
+        audioMuted,
         releaseNotes,
         releaseNotesLoading,
         releaseNotesOpen,
@@ -444,11 +457,15 @@ export const useAppStore = defineStore('app', () => {
             'gameVersion',
             'backendVersion',
             'licenseAccepted',
+            'onboardingComplete',
             'analyticsConsent',
             'diagnosticsConsent',
             'username',
             'allowApiAccess',
             'lastSeenVersion',
+            'autoLockOverlays',
+            'audioVolume',
+            'audioMuted',
         ],
     },
 })

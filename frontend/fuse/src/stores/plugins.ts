@@ -1,6 +1,9 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { useFuseConnection } from '../composables/useFuseConnection'
+import { normalizeConfigSchema, type ConfigSection } from '../utils/configSchema'
+
+export type { ConfigSection, ConfigControl } from '../utils/configSchema'
 
 export type PluginStatus = 'active' | 'disabled' | 'error' | 'skipped' | 'pending' | 'loading'
 
@@ -10,23 +13,6 @@ export interface PluginHotkey {
     label: string
 }
 
-export interface ConfigEntry {
-    key: string
-    label: string
-    type: 'bool' | 'int' | 'float' | 'string' | 'select' | 'position' | 'color'
-    min?: number
-    max?: number
-    choices?: string[]
-    description?: string
-    /** color entries only: whether the alpha channel is editable (default true) */
-    alpha?: boolean
-}
-
-export interface ConfigCategory {
-    label: string
-    entries: ConfigEntry[]
-}
-
 export interface PluginRecord {
     plugin_id: string
     name: string
@@ -34,20 +20,29 @@ export interface PluginRecord {
     description: string
     author?: string
     status: PluginStatus
-    configSchema: ConfigCategory[]
+    configSchema: ConfigSection[]
     configValues: Record<string, unknown>
     hotkeys: PluginHotkey[]
     filePath?: string
     checksum?: string
 }
 
+/** Incoming schemas may be sections or legacy categories; they're normalised on the way in. */
+export type PluginUpsert = Partial<Omit<PluginRecord, 'configSchema'>> & { plugin_id: string; configSchema?: unknown }
+
 export const usePluginsStore = defineStore('plugins', () => {
     const plugins = ref<PluginRecord[]>([])
 
-    function upsert(data: Partial<PluginRecord> & { plugin_id: string }) {
+    function upsert(data: PluginUpsert) {
+        const { configSchema: rawSchema, ...rest } = data
+        const schema = rawSchema !== undefined ? normalizeConfigSchema(rawSchema) : undefined
         const idx = plugins.value.findIndex(p => p.plugin_id === data.plugin_id)
         if (idx >= 0) {
-            plugins.value[idx] = { ...plugins.value[idx], ...data } as PluginRecord
+            plugins.value[idx] = {
+                ...plugins.value[idx],
+                ...rest,
+                ...(schema ? { configSchema: schema } : {}),
+            } as PluginRecord
         } else {
             plugins.value.push({
                 plugin_id: data.plugin_id,
@@ -56,7 +51,7 @@ export const usePluginsStore = defineStore('plugins', () => {
                 description: data.description ?? '',
                 author: data.author,
                 status: (data.status as PluginStatus) ?? 'pending',
-                configSchema: data.configSchema ?? [],
+                configSchema: schema ?? [],
                 configValues: data.configValues ?? {},
                 hotkeys: data.hotkeys ?? [],
                 filePath: data.filePath,
@@ -115,6 +110,13 @@ export const usePluginsStore = defineStore('plugins', () => {
         }
     }
 
+    /** A config-panel button. Buttons talk to the running plugin, so offline they do nothing. */
+    async function configAction(id: string, controlId: string, payload?: unknown) {
+        const { connected, send } = useFuseConnection()
+        if (!connected.value) return
+        await send('config.action', { plugin_id: id, control_id: controlId, payload })
+    }
+
     async function rebindHotkey(id: string, action: string, combo: string) {
         const { connected, send } = useFuseConnection()
         if (connected.value) {
@@ -141,7 +143,7 @@ export const usePluginsStore = defineStore('plugins', () => {
                     : isDisabled ? 'disabled'
                     : existing?.status ?? 'pending',
                 configSchema: r.configSchema?.length
-                    ? r.configSchema as ConfigCategory[]
+                    ? r.configSchema
                     : existing?.configSchema ?? [],
                 configValues: Object.keys(r.configValues ?? {}).length
                     ? r.configValues as Record<string, unknown>
@@ -174,7 +176,7 @@ export const usePluginsStore = defineStore('plugins', () => {
         plugins,
         upsert, remove, setStatus, resetRuntimeStatuses,
         updateConfigValue, updateHotkey,
-        setEnabled, setPluginConfig, rebindHotkey,
+        setEnabled, setPluginConfig, configAction, rebindHotkey,
         scan, watchHostConfig, unwatchHostConfig,
     }
 })

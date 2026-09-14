@@ -12,6 +12,8 @@ import type { ServiceRegistry } from "../host/ServiceRegistry.js";
 import type { HotkeyRegistryView } from "./hotkeys.js";
 import type { PluginAssets } from "./assets.js";
 import type { OverlayManager } from "./overlay.js";
+import type { StageNotifier } from "./notifications.js";
+import type { PluginAudio } from "./audio.js";
 
 export type HostState = "calibrate" | "locked" | "interactive";
 
@@ -31,6 +33,10 @@ export interface FuseContext {
   services: ServiceRegistry;
   events: EventBus;
   overlays: OverlayManager;
+  /** Toasts on the overlay stage, attributed to this plugin. */
+  notifications: StageNotifier;
+  /** Sounds from this plugin's assets, played on the stage window. */
+  audio: PluginAudio;
   host: HostView;
   logger: Logger;
 

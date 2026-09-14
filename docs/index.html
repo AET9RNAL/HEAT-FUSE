@@ -1033,11 +1033,12 @@ function renderProfile(sessions) {
   const byVehicle = {};
   for (const s of sessions) {
     const v = s.player_vehicle || 'Unknown';
-    if (!byVehicle[v]) byVehicle[v] = { sessions: 0, kills: 0, deaths: 0, damage: 0, wins: 0 };
+    if (!byVehicle[v]) byVehicle[v] = { sessions: 0, kills: 0, deaths: 0, damage: 0, score: 0, wins: 0 };
     byVehicle[v].sessions += 1;
     byVehicle[v].kills += s.final_kills || 0;
     byVehicle[v].deaths += s.final_deaths || 0;
     byVehicle[v].damage += s.final_damage || 0;
+    byVehicle[v].score += s.final_score || 0;
     if (s.outcome === 'win') byVehicle[v].wins += 1;
   }
 
@@ -1047,11 +1048,13 @@ function renderProfile(sessions) {
       const winPct = v.sessions > 0 ? (v.wins / v.sessions * 100) : 0;
       const vKd = v.deaths > 0 ? (v.kills / v.deaths).toFixed(2) : v.kills.toFixed(2);
       const vAvgDmg = v.sessions > 0 ? (v.damage / v.sessions).toFixed(0) : '0';
+      const vAvgScore = v.sessions > 0 ? (v.score / v.sessions).toFixed(0) : '0';
       return `<tr>
         <td>${name.replace(/_/g, ' ')}</td>
         <td style="color:var(--text-muted)">${v.sessions}</td>
         <td style="color:var(--kill)">${vKd}</td>
         <td style="color:var(--dmg)">${Number(vAvgDmg).toLocaleString()}</td>
+        <td style="color:var(--win)">${Number(vAvgScore).toLocaleString()}</td>
         <td>
           <div style="display:flex;align-items:center;gap:8px">
             <div class="winrate-bar-bg"><div class="winrate-bar-fill" style="width:${winPct}%"></div></div>
@@ -1170,7 +1173,7 @@ function renderProfile(sessions) {
         <h2>Vehicle Performance</h2>
         <table class="vehicle-table">
           <thead><tr>
-            <th>Vehicle</th><th>Sessions</th><th>K/D</th><th>Avg Dmg</th><th>Winrate</th>
+            <th>Vehicle</th><th>Sessions</th><th>K/D</th><th>Avg Dmg</th><th>Avg Score</th><th>Winrate</th>
           </tr></thead>
           <tbody>${vehicleRows}</tbody>
         </table>

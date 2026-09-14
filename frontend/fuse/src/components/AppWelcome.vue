@@ -1,160 +1,114 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { motion } from 'motion-v'
-import Icons from './Icons.vue'
-import eButton from './eButton.vue'
+import { computed, ref, watch, onMounted, onUnmounted } from 'vue'
+import { AnimatePresence, motion } from 'motion-v'
 import { useAuthStore } from '../stores/auth'
-import { useI18n } from '../composables/useI18n'
+import { useSuspension } from '../composables/useSuspension'
+import AppSignInUp from './AppSignInUp.vue'
+import AppOTP from './AppOTP.vue'
+import AppOnboarding from './AppOnboarding.vue'
+import welcomeAnimation from '../assets/animationWelcome.webm?url'
 
 const auth = useAuthStore()
-const { t } = useI18n()
+const { isSuspended } = useSuspension()
 
-const CUT = 8
-const cardEl = ref<HTMLElement | null>(null)
-const elW = ref(0)
-const elH = ref(0)
+const videoEl = ref<HTMLVideoElement | null>(null)
 
-const svgPoints = computed(() => {
-    const w = elW.value
-    const h = elH.value
-    if (!w || !h) return ''
-    const cx = (CUT / w) * 100
-    const cy = (CUT / h) * 100
-    return `${cx},0 100,0 100,${100 - cy} ${100 - cx},100 0,100 0,${cy}`
+// halt decode in tray
+watch(isSuspended, (suspended) => {
+    const video = videoEl.value
+    if (!video) return
+    if (suspended) video.pause()
+    else void video.play().catch(() => { /* autoplay refused - static frame is fine */ })
 })
 
-let ro: ResizeObserver | null = null
+const activeKey = computed(() => auth.screen)
+
+const prefersReducedMotion = ref(false)
+let motionQuery: MediaQueryList | null = null
+function syncMotionPreference(event: MediaQueryList | MediaQueryListEvent) {
+    prefersReducedMotion.value = event.matches
+}
+
 onMounted(() => {
-    if (!cardEl.value) return
-    ro = new ResizeObserver(([entry]) => {
-        const box = entry.borderBoxSize?.[0]
-        elW.value = box ? box.inlineSize : entry.contentRect.width
-        elH.value = box ? box.blockSize  : entry.contentRect.height
-    })
-    ro.observe(cardEl.value)
+    motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
+    syncMotionPreference(motionQuery)
+    motionQuery.addEventListener('change', syncMotionPreference)
 })
-onUnmounted(() => ro?.disconnect())
+onUnmounted(() => motionQuery?.removeEventListener('change', syncMotionPreference))
 </script>
 
 <template>
-    <div class="welcome-backdrop" @click.self="auth.setScreen('main')">
-        <motion.div
-            class="welcome-motion"
-            :initial="{ opacity: 0, scale: 0.96 }"
-            :animate="{ opacity: 1, scale: 1 }"
-            :exit="{ opacity: 0, scale: 0.96 }"
-            :transition="{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }"
-        >
-            <div ref="cardEl" class="welcome-card">
-                <div class="card-blur" />
+    <div class="welcome-screen">
+        <video
+            ref="videoEl"
+            class="media-video"
+            :src="welcomeAnimation"
+            muted
+            autoplay
+            :loop="!prefersReducedMotion"
+            playsinline
+            preload="auto"
+            disablepictureinpicture
+        />
 
-                <div class="card-inner">
-                    <Icons class="logo" kind="app-logo-full" size="xlarge" />
-                    <!-- <span v-if="t('appwelcome.tagline')" class="tagline">{{ t('appwelcome.tagline') }}</span> -->
-                    <eButton
-                        size="half"
-                        :label="t('appwelcome.getStarted')"
-                        @click="auth.setScreen('auth')"
-                    />
-                </div>
-
-                <svg
-                    v-if="svgPoints"
-                    class="card-stroke"
-                    viewBox="0 0 100 100"
-                    preserveAspectRatio="none"
-                    xmlns="http://www.w3.org/2000/svg"
+        <div class="auth-panel">
+            <AnimatePresence mode="wait">
+                <motion.div
+                    :key="activeKey"
+                    class="panel-content"
+                    :initial="{ opacity: 0, x: -12 }"
+                    :animate="{ opacity: 1, x: 0 }"
+                    :exit="{ opacity: 0, x: 12 }"
+                    :transition="{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }"
                 >
-                    <polygon
-                        :points="svgPoints"
-                        fill="none"
-                        stroke="#29302D"
-                        stroke-width="0.4"
-                        vector-effect="non-scaling-stroke"
-                    />
-                </svg>
-            </div>
-        </motion.div>
+                    <AppOnboarding v-if="auth.screen === 'onboarding'" />
+                    <AppOTP v-else-if="auth.screen === 'otp'" />
+                    <AppSignInUp v-else />
+                </motion.div>
+            </AnimatePresence>
+        </div>
     </div>
 </template>
 
 <style scoped>
-.welcome-backdrop {
+.welcome-screen {
     position: fixed;
     top: 48px;
     left: 0;
     right: 0;
     bottom: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
     z-index: 100;
-    background: rgba(0, 0, 0, 0.5);
-    backdrop-filter: blur(4px);
-    -webkit-backdrop-filter: blur(4px);
+    overflow: hidden;
 }
 
-.welcome-motion {
-    width: 280px;
-}
-
-.welcome-card {
-    position: relative;
-    width: 100%;
-    background: hsla(142, 10%, 4%, 0.92);
-    clip-path: polygon(
-        8px 0%, 100% 0%,
-        100% calc(100% - 8px),
-        calc(100% - 8px) 100%,
-        0% 100%, 0% 8px
-    );
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
-}
-
-.card-blur {
-    position: absolute;
-    inset: 0;
-    z-index: 0;
-    backdrop-filter: blur(35px);
-    -webkit-backdrop-filter: blur(35px);
-    clip-path: polygon(
-        8px 0%, 100% 0%,
-        100% calc(100% - 8px),
-        calc(100% - 8px) 100%,
-        0% 100%, 0% 8px
-    );
-    pointer-events: none;
-}
-
-.card-inner {
+.auth-panel {
     position: relative;
     z-index: 1;
     display: flex;
-    flex-direction: column;
     align-items: center;
-    gap: var(--space-4);
-    padding: var(--space-7) var(--space-5);
+    height: 100%;
+    width: max-content;
+    max-width: 100%;
+    padding: var(--space-5) 55px;
+    box-sizing: border-box;
+    overflow-y: auto;
 }
 
-.tagline {
-    font-family: var(--font-primary);
-    font-size: var(--main-font-size-4);
-    color: var(--text-muted);
-    text-align: center;
+.panel-content {
+    display: flex;
+    justify-content: center;
 }
 
-.card-stroke {
+.media-video {
+    user-select: none;
+    -webkit-user-select: none;
     position: absolute;
     inset: 0;
+    z-index: 0;
     width: 100%;
     height: 100%;
+    object-fit: cover;
+    display: block;
     pointer-events: none;
-    overflow: visible;
-    z-index: 2;
-}
-
-.logo {
-    width: 200px;
-    height: auto;
 }
 </style>

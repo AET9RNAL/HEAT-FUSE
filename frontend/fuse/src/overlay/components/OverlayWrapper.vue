@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import ElementRenderer from "./ElementRenderer.vue";
-import { hostState, sendTransform, dragging } from "../overlayClient";
+import OverlayInfoBar from "./OverlayInfoBar.vue";
+import { hostState, dragging } from "../overlayClient";
+import { commitTransform } from "../history";
 import { activeGuides, grid, lockAspect, selectOverlay, selectedId } from "../stageState";
 import { peerBoxes, snapEdge, snapMove, type Box } from "../composables/useSnapping";
 import type { OverlayDescriptor, OverlayRect } from "../types";
@@ -92,7 +94,7 @@ function commit(x: number, y: number, w: number, h: number): void {
   const rect: OverlayRect = { x: Math.round(x), y: Math.round(y), w: Math.round(w), h: Math.round(h) };
   if (rot.value) rect.rot = rot.value;
   if (opacity.value !== 1) rect.opacity = opacity.value;
-  sendTransform(props.descriptor.overlayId, rect);
+  commitTransform(props.descriptor.overlayId, rect);
 }
 
 // --- drag (reposition) --------------------------------------------------
@@ -243,6 +245,7 @@ function onResizeUp(): void {
     @pointerup="onPointerUp"
   >
     <ElementRenderer :descriptor="descriptor" />
+    <OverlayInfoBar v-if="calibrating" :descriptor="descriptor" :selected="selected" />
     <template v-if="selected">
       <div
         v-for="corner in CORNER_IDS"

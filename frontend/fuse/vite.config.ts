@@ -3,6 +3,7 @@ import path from 'node:path'
 import electron from 'vite-plugin-electron/simple'
 import vue from '@vitejs/plugin-vue'
 import vueDevTools from 'vite-plugin-vue-devtools'
+import { collectSourceStats } from './scripts/source-stats.mjs'
 
 const isRelease = process.env.RELEASE === 'true'
 
@@ -10,6 +11,7 @@ const isRelease = process.env.RELEASE === 'true'
 export default defineConfig({
   define: {
     __RELEASE__: JSON.stringify(isRelease),
+    __SOURCE_STATS__: JSON.stringify(collectSourceStats()),
   },
   build: {
     rollupOptions: {
@@ -17,6 +19,7 @@ export default defineConfig({
         // Control app (existing) + the transparent overlay stage window.
         main: path.join(__dirname, 'index.html'),
         overlay: path.join(__dirname, 'overlay.html'),
+        splash: path.join(__dirname, 'splash.html'),
       },
     },
   },

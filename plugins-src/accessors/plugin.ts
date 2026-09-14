@@ -10,7 +10,7 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import { FusePlugin, ConfigCategory, ConfigEntry, type FuseContext } from "@fuse/plugin-sdk";
+import { FusePlugin, type FuseContext, type InspectorSection } from "@fuse/plugin-sdk";
 import { Accessors } from "./accessors.js";
 
 export class AccessorsPlugin extends FusePlugin {
@@ -24,20 +24,69 @@ export class AccessorsPlugin extends FusePlugin {
   private polling = false;
   private wasConnected = false;
 
+  private sections(): InspectorSection[] {
+    return [
+      {
+        id: "acc.cdp",
+        label: "CDP Debugger",
+        description: "How FUSE connects to the game's UI debugger.",
+        controls: [
+          {
+            type: "number",
+            id: "cdp_port",
+            key: "cdp_port",
+            label: "CDP Port",
+            min: 1024,
+            max: 65535,
+            step: 1,
+            tooltip: "Chrome DevTools Protocol port the game exposes.",
+          },
+          {
+            type: "number",
+            id: "connect_timeout_s",
+            key: "connect_timeout_s",
+            label: "Connect Timeout",
+            min: 1,
+            max: 30,
+            step: 0.5,
+            unit: "s",
+            tooltip: "How long to wait for a game page to accept the connection.",
+          },
+          {
+            type: "number",
+            id: "reconnect_interval_s",
+            key: "reconnect_interval_s",
+            label: "Reconnect Interval",
+            min: 1,
+            max: 60,
+            step: 1,
+            unit: "s",
+            tooltip: "How often to look for game pages that appeared or went away.",
+          },
+          {
+            type: "number",
+            id: "poll_interval_s",
+            key: "poll_interval_s",
+            label: "Poll Interval",
+            min: 0.05,
+            max: 1,
+            step: 0.05,
+            unit: "s",
+            tooltip: "How often game values are read. Lower is more responsive and costs more CPU.",
+          },
+        ],
+      },
+    ];
+  }
+
   setup(ctx: FuseContext): void {
     this.ctx = ctx;
     ctx.config
       .defaults({ cdp_port: 9222, connect_timeout_s: 8.0, reconnect_interval_s: 5.0, poll_interval_s: 0.1 })
       .load();
 
-    ctx.config.schema([
-      new ConfigCategory("CDP Debugger", [
-        new ConfigEntry({ key: "cdp_port", label: "CDP Port", type: "int", min: 1024, max: 65535 }),
-        new ConfigEntry({ key: "connect_timeout_s", label: "Connect Timeout (s)", type: "float", min: 1.0, max: 30.0 }),
-        new ConfigEntry({ key: "reconnect_interval_s", label: "Reconnect Interval (s)", type: "float", min: 1.0, max: 60.0 }),
-        new ConfigEntry({ key: "poll_interval_s", label: "Poll Interval (s)", type: "float", min: 0.05, max: 1.0 }),
-      ]),
-    ]);
+    // App panel only: Accessors is a service and has no overlay.
+    ctx.config.schema(this.sections());
 
     const jsDir = path.join(ctx.packageRoot, "js");
     const readScript = (name: string): string => fs.readFileSync(path.join(jsDir, name), "utf-8");

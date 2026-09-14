@@ -18,7 +18,18 @@ import type {
   OverlayHandle,
   OverlayManager,
   Rect,
+  Size,
 } from "../sdk/overlay.js";
+import {
+  coerceValue,
+  controlKeys,
+  indexControls,
+  isValueControl,
+  type InputPhase,
+  type InspectorControl,
+  type InspectorSection,
+  type OverlayInspector,
+} from "../sdk/inspector.js";
 
 type InputType = "number" | "bool" | "string" | "color" | "enum" | "trigger" | "json";
 interface InputValue {
@@ -39,6 +50,7 @@ interface Descriptor {
   rect?: Rect;
   visible: boolean;
   positionConfigKey?: string;
+  interactive: boolean;
 }
 
 /**
@@ -76,6 +88,18 @@ interface PluginReg {
   config: PluginConfig;
 }
 
+interface InspectorReg {
+  sections: InspectorSection[];
+  byId: Map<string, InspectorControl>;
+  /** Values for controls with no config key - stage-side state, not persisted. */
+  transient: Map<string, unknown>;
+  /** Config keys already watched, so a re-declare doesn't stack watchers. */
+  watched: Set<string>;
+  rev: number;
+  onInput?: (controlId: string, value: unknown, phase: InputPhase) => void;
+  onAction?: (controlId: string, payload?: unknown) => void;
+}
+
 export class OverlayHub {
   private server: WsServer;
   private plugins = new Map<string, PluginReg>();
@@ -85,6 +109,8 @@ export class OverlayHub {
   private lastInputs = new Map<string, Map<string, InputValue>>();
   /** Per-overlay handler for actions emitted by interactive Vue overlays. */
   private actionHandlers = new Map<string, (action: string, payload?: unknown) => void>();
+  /** Per-overlay inspector schema + transient state. */
+  private inspectors = new Map<string, InspectorReg>();
   private flushScheduled = false;
 
   constructor(server: WsServer) {
@@ -101,6 +127,11 @@ export class OverlayHub {
       if (d.pluginId === pluginId) this.removeDescriptor(gid);
     }
     this.plugins.delete(pluginId);
+  }
+
+  /** Drop a re-declared overlay's stale inspector schema (hot reload). */
+  private resetInspector(overlayId: string): void {
+    this.inspectors.delete(overlayId);
   }
 
   // --- WsServer bridge hooks ----------------------------------------------
@@ -138,6 +169,86 @@ export class OverlayHub {
     return [...this.descriptors.values()].map((d) => this.declaredPayload(d));
   }
 
+  /** Inspector payloads for a newly-connected stage client. */
+  inspectorHydration(): Array<Record<string, unknown>> {
+    const out: Array<Record<string, unknown>> = [];
+    for (const [overlayId, reg] of this.inspectors) {
+      out.push(this.inspectorPayload(overlayId, reg));
+    }
+    return out;
+  }
+
+  /**
+   * Apply a control change from the stage. `live` keeps the write in memory so a
+   * slider drag doesn't rewrite the config file every frame; `commit` persists.
+   */
+  onInspectorSet(overlayId: string, controlId: string, value: unknown, phase: InputPhase): void {
+    const reg = this.inspectors.get(overlayId);
+    const control = reg?.byId.get(controlId);
+    // Unknown control => the stage is out of date, or writing a key it was never
+    // offered. Either way it does not get to touch the config.
+    if (!reg || !control || !isValueControl(control)) return;
+
+    const coerced = coerceValue(control, value);
+    if (!coerced.ok) {
+      logger.debug(`inspector:set rejected ${overlayId}/${controlId} (bad value)`);
+      return;
+    }
+    const v = coerced.value;
+
+    const [keyA, keyB] = controlKeys(control);
+    if (keyA) {
+      const desc = this.descriptors.get(overlayId);
+      const cfg = desc ? this.plugins.get(desc.pluginId)?.config : undefined;
+      if (cfg) {
+        if (control.type === "vec2" && keyB) {
+          const pair = v as { x: number; y: number };
+          this.writeKey(cfg, keyA, pair.x, phase);
+          this.writeKey(cfg, keyB, pair.y, phase);
+        } else {
+          this.writeKey(cfg, keyA, v, phase);
+        }
+      }
+    } else {
+      reg.transient.set(controlId, v);
+    }
+
+    try {
+      reg.onInput?.(controlId, v, phase);
+    } catch (e) {
+      logger.exception(`inspector onInput handler for ${overlayId} raised`, e);
+    }
+    // Echo so other stage clients (a second monitor, the OBS view) follow along.
+    this.server.broadcastOverlay({
+      type: "inspector:values",
+      overlayId,
+      values: { [controlId]: v },
+      phase,
+    });
+  }
+
+  onInspectorAction(overlayId: string, controlId: string, payload?: unknown): void {
+    const reg = this.inspectors.get(overlayId);
+    if (!reg?.byId.has(controlId)) return;
+    try {
+      if (reg.onAction) {
+        reg.onAction(controlId, payload);
+      } else {
+        // Sections shared with ctx.config.schema() keep one handler, on the config.
+        const desc = this.descriptors.get(overlayId);
+        const cfg = desc ? this.plugins.get(desc.pluginId)?.config : undefined;
+        cfg?.runAction(controlId, payload);
+      }
+    } catch (e) {
+      logger.exception(`inspector onAction handler for ${overlayId} raised`, e);
+    }
+  }
+
+  private writeKey(cfg: PluginConfig, key: string, value: unknown, phase: InputPhase): void {
+    if (phase === "commit") cfg.set(key, value);
+    else cfg.setLive(key, value);
+  }
+
   onOverlayTransform(overlayId: string, rect: Partial<Rect>): void {
     const d = this.descriptors.get(overlayId);
     if (!d) return;
@@ -173,8 +284,10 @@ export class OverlayHub {
       rect,
       visible: true,
       positionConfigKey: decl.positionConfigKey,
+      interactive: decl.interactive ?? false,
     };
     this.descriptors.set(overlayId, desc);
+    this.resetInspector(overlayId);
     this.server.broadcastOverlay({ type: "overlay:declared", ...this.declaredPayload(desc) });
     logger.debug(`overlay declared: ${overlayId} (${desc.kind})`);
     return new OverlayHandleImpl(this, desc);
@@ -218,6 +331,16 @@ export class OverlayHub {
     this.server.broadcastOverlay({ type: "overlay:transform", overlayId: desc.overlayId, rect: r });
   }
 
+  /** The declared size, changed after the fact; late-joining stages get it via `overlay:declared`. */
+  setSize(desc: Descriptor, size: Size): void {
+    const w = Math.round(Number(size.w));
+    const h = Math.round(Number(size.h));
+    if (!Number.isFinite(w) || !Number.isFinite(h) || w < 1 || h < 1) return;
+    if (desc.size.w === w && desc.size.h === h) return;
+    desc.size = { w, h };
+    this.server.broadcastOverlay({ type: "overlay:size", overlayId: desc.overlayId, size: desc.size });
+  }
+
   setVisible(desc: Descriptor, visible: boolean): void {
     desc.visible = visible;
     this.server.broadcastOverlay({
@@ -232,11 +355,114 @@ export class OverlayHub {
     this.pending.delete(overlayId);
     this.lastInputs.delete(overlayId);
     this.actionHandlers.delete(overlayId);
+    this.inspectors.delete(overlayId);
     this.server.broadcastOverlay({ type: "overlay:removed", overlayId });
+  }
+
+  /** Overlay ids owned by a plugin, for the stage's plugin list. */
+  overlayIdsFor(pluginId: string): string[] {
+    return [...this.descriptors.values()].filter((d) => d.pluginId === pluginId).map((d) => d.overlayId);
   }
 
   onAction(overlayId: string, cb: (action: string, payload?: unknown) => void): void {
     this.actionHandlers.set(overlayId, cb);
+  }
+
+  // --- inspector -----------------------------------------------------------
+
+  private inspectorReg(overlayId: string): InspectorReg {
+    let reg = this.inspectors.get(overlayId);
+    if (!reg) {
+      reg = { sections: [], byId: new Map(), transient: new Map(), watched: new Set(), rev: 0 };
+      this.inspectors.set(overlayId, reg);
+    }
+    return reg;
+  }
+
+  setInspectorSections(overlayId: string, sections: InspectorSection[]): void {
+    const reg = this.inspectorReg(overlayId);
+    reg.sections = sections;
+    reg.byId = indexControls(sections);
+    reg.rev += 1;
+    this.watchInspectorKeys(overlayId, reg);
+    this.server.broadcastOverlay({ type: "overlay:inspector", ...this.inspectorPayload(overlayId, reg) });
+  }
+
+  patchInspectorControl(overlayId: string, controlId: string, patch: Record<string, unknown>): void {
+    const reg = this.inspectors.get(overlayId);
+    const control = reg?.byId.get(controlId);
+    if (!reg || !control) return;
+    Object.assign(control, patch);
+    reg.rev += 1;
+    this.watchInspectorKeys(overlayId, reg);
+    this.server.broadcastOverlay({ type: "overlay:inspector", ...this.inspectorPayload(overlayId, reg) });
+  }
+
+  onInspectorInput(overlayId: string, cb: (id: string, value: unknown, phase: InputPhase) => void): void {
+    this.inspectorReg(overlayId).onInput = cb;
+  }
+
+  onInspectorActionHandler(overlayId: string, cb: (id: string, payload?: unknown) => void): void {
+    this.inspectorReg(overlayId).onAction = cb;
+  }
+
+  inspectorValues(overlayId: string): Record<string, unknown> {
+    const reg = this.inspectors.get(overlayId);
+    if (!reg) return {};
+    const desc = this.descriptors.get(overlayId);
+    const cfg = desc ? this.plugins.get(desc.pluginId)?.config : undefined;
+    const out: Record<string, unknown> = {};
+    for (const [id, control] of reg.byId) {
+      if (!isValueControl(control)) continue;
+      const [keyA, keyB] = controlKeys(control);
+      if (!keyA) {
+        if (reg.transient.has(id)) out[id] = reg.transient.get(id);
+        continue;
+      }
+      if (!cfg) continue;
+      if (control.type === "vec2" && keyB) {
+        out[id] = { x: cfg.get(keyA, 0), y: cfg.get(keyB, 0) };
+      } else {
+        const v = cfg.get<unknown>(keyA, undefined);
+        if (v !== undefined) out[id] = v;
+      }
+    }
+    return out;
+  }
+
+  /**
+   * Mirror config changes (App panel, a plugin writing its own key, a file edit)
+   * into the stage, so both config surfaces show the same value.
+   */
+  private watchInspectorKeys(overlayId: string, reg: InspectorReg): void {
+    const desc = this.descriptors.get(overlayId);
+    const cfg = desc ? this.plugins.get(desc.pluginId)?.config : undefined;
+    if (!cfg) return;
+    for (const control of reg.byId.values()) {
+      for (const key of controlKeys(control)) {
+        if (reg.watched.has(key)) continue;
+        reg.watched.add(key);
+        // Pushes the whole value map rather than this key's control: a later
+        // re-declare can rebind the key to a different control id.
+        cfg.watch(key, () => {
+          this.server.broadcastOverlay({
+            type: "inspector:values",
+            overlayId,
+            values: this.inspectorValues(overlayId),
+            phase: "commit",
+          });
+        });
+      }
+    }
+  }
+
+  private inspectorPayload(overlayId: string, reg: InspectorReg): Record<string, unknown> {
+    return {
+      overlayId,
+      rev: reg.rev,
+      sections: reg.sections,
+      values: this.inspectorValues(overlayId),
+    };
   }
 
   /** Route an action emitted by an interactive overlay to its plugin handler. */
@@ -274,6 +500,7 @@ export class OverlayHub {
       viewModel: d.viewModel ?? null,
       rect: d.rect ?? null,
       visible: d.visible,
+      interactive: d.interactive,
       inputs,
     };
   }
@@ -317,13 +544,38 @@ class ScopedOverlayManager implements OverlayManager {
   }
 }
 
+class ScopedInspector implements OverlayInspector {
+  constructor(
+    private hub: OverlayHub,
+    private overlayId: string,
+  ) {}
+
+  sections(list: InspectorSection[]): void {
+    this.hub.setInspectorSections(this.overlayId, list);
+  }
+  patch(controlId: string, patch: Record<string, unknown>): void {
+    this.hub.patchInspectorControl(this.overlayId, controlId, patch);
+  }
+  values(): Record<string, unknown> {
+    return this.hub.inspectorValues(this.overlayId);
+  }
+  onInput(cb: (controlId: string, value: unknown, phase: InputPhase) => void): void {
+    this.hub.onInspectorInput(this.overlayId, cb);
+  }
+  onAction(cb: (controlId: string, payload?: unknown) => void): void {
+    this.hub.onInspectorActionHandler(this.overlayId, cb);
+  }
+}
+
 class OverlayHandleImpl implements OverlayHandle {
   readonly id: string;
+  readonly inspector: OverlayInspector;
   constructor(
     private hub: OverlayHub,
     private desc: Descriptor,
   ) {
     this.id = desc.overlayId;
+    this.inspector = new ScopedInspector(hub, desc.overlayId);
   }
 
   set(path_: string, value: number): void {
@@ -349,6 +601,9 @@ class OverlayHandleImpl implements OverlayHandle {
   }
   setRect(rect: Rect): void {
     this.hub.setRect(this.desc, rect);
+  }
+  setSize(size: Size): void {
+    this.hub.setSize(this.desc, size);
   }
   setPositionConfigKey(key: string): void {
     this.desc.positionConfigKey = key;
