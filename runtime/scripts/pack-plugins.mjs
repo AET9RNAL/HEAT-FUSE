@@ -55,10 +55,17 @@ async function packOne(id) {
   const files = {};
   files[`${pluginId}/${moduleName}.js`] = new TextEncoder().encode(bundled);
   files[`${pluginId}/manifest.json`] = new TextEncoder().encode(JSON.stringify(manifest, null, 2));
-  // `ui` carries raw UI-library sources (.vue/.js/.css/.riv) served to overlays.
-  for (const sub of ["js", "assets", "ui"]) {
+  // `ui` carries raw UI-library sources (.vue/.js/.css/.riv) served to overlays; `components` holds an overlay's own child components.
+  const PACKED = ["js", "assets", "ui", "components"];
+  for (const sub of PACKED) {
     const dir = path.join(srcDir, sub);
     if (fs.existsSync(dir)) addDir(dir, `${pluginId}/${sub}`, files);
+  }
+  // A feature folder (such as atgm_preview/cam) keeps its overlay files next to its code: only the overlay files ship.
+  for (const entry of fs.readdirSync(srcDir, { withFileTypes: true })) {
+    if (entry.isDirectory() && !PACKED.includes(entry.name) && !NOT_PACKED.has(entry.name)) {
+      addDir(path.join(srcDir, entry.name), `${pluginId}/${entry.name}`, files, OVERLAY_FILE);
+    }
   }
 
   // Copy root-level .vue files (Vue overlay components live in the plugin root).
@@ -76,12 +83,43 @@ async function packOne(id) {
   console.log(`packed ${id} → plugins-dist/${outName} (${Object.keys(files).length} files, ${zipped.length} bytes)`);
 }
 
-function addDir(dir, prefix, files) {
+/** Libraries plugins may import, declared in plugins-src/package.json. */
+function sharedDeps() {
+  try {
+    const pkg = JSON.parse(fs.readFileSync(path.join(SRC_ROOT, "package.json"), "utf-8"));
+    return Object.keys(pkg.dependencies ?? {});
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * A forgotten `npm install` in plugins-src shows up as an unresolvable import,
+ * which says nothing about the cause. Name it.
+ */
+function installHint(err) {
+  const text = (err?.errors ?? []).map((e) => e.text).join(" ");
+  const missing = sharedDeps().filter((dep) => text.includes(`"${dep}"`));
+  if (!missing.length) return "";
+  const installed = fs.existsSync(path.join(SRC_ROOT, "node_modules"));
+  return installed
+    ? `\n  ${missing.join(", ")} is declared in plugins-src/package.json but did not resolve.` +
+        `\n  Try: npm install --prefix plugins-src`
+    : `\n  ${missing.join(", ")} comes from plugins-src/package.json, which has not been installed.` +
+        `\n  Run: npm install --prefix plugins-src`;
+}
+
+/** Files an overlay loads at run time. Code in other forms is bundled into the entry module. */
+const OVERLAY_FILE = /\.(vue|mjs|css|riv)$/;
+/** Plugin folders that never ship. */
+const NOT_PACKED = new Set(["node_modules", "tools", "test", "tests"]);
+
+function addDir(dir, prefix, files, only = null) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const abs = path.join(dir, entry.name);
     const rel = `${prefix}/${entry.name}`;
-    if (entry.isDirectory()) addDir(abs, rel, files);
-    else files[rel] = fs.readFileSync(abs);
+    if (entry.isDirectory()) addDir(abs, rel, files, only);
+    else if (!only || only.test(entry.name)) files[rel] = fs.readFileSync(abs);
   }
 }
 
@@ -90,13 +128,17 @@ const ids = args.length
   ? args
   : fs
       .readdirSync(SRC_ROOT)
-      .filter((n) => !n.startsWith("_") && fs.statSync(path.join(SRC_ROOT, n)).isDirectory());
+      // `_` marks a directory that isn't a plugin; node_modules holds the
+      // libraries plugins import, installed from plugins-src/package.json.
+      .filter(
+        (n) => !n.startsWith("_") && n !== "node_modules" && fs.statSync(path.join(SRC_ROOT, n)).isDirectory(),
+      );
 
 for (const id of ids) {
   try {
     await packOne(id);
   } catch (e) {
-    console.error(`FAILED ${id}: ${e.message ?? e}`);
+    console.error(`FAILED ${id}: ${e.message ?? e}${installHint(e)}`);
     process.exitCode = 1;
   }
 }

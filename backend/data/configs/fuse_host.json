@@ -1,8 +1,32 @@
 {
   "enabled_plugins": null,
   "disabled_plugins": [
+    "leaderboard_fix",
+    "inspector_demo",
+    "dpm_meter",
+    "threat_ring",
     "rive_dev",
-    "inspector_demo"
+    "witchery",
+    "atgm_preview"
   ],
-  "hotkey_overrides": {}
+  "hotkey_overrides": {
+    "host": {
+      "Hot-Reload Plugins": "ctrl+o",
+      "Quit FUSE": "ctrl+p",
+      "Toggle Calibrate/Lock": "ctrl+l",
+      "Toggle Interactive": "ctrl+i"
+    },
+    "minimap": {
+      "Minimap Zoom Out": "shift"
+    },
+    "atgm_preview": {
+      "ATGM next target": "2",
+      "ATGM target at crosshair": "1",
+      "ATGM clear target": "3",
+      "ATGM assist on/off": "ctrl+alt+a"
+    },
+    "cruise_control": {
+      "Toggle Cruise Control": "v"
+    }
+  }
 }

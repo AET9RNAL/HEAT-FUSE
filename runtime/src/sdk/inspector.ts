@@ -124,6 +124,8 @@ export interface ColorControl extends ControlBase {
   /** Renders an opacity slider beside the swatch. */
   withOpacitySlider?: boolean;
   swatches?: string[];
+  /** Double-click target, "#RRGGBB" or "#RRGGBBAA". */
+  default?: string;
 }
 
 export interface RadioControl extends ControlBase {
@@ -147,8 +149,14 @@ export interface ButtonRowControl extends ControlBase {
 
 export interface KeybindControl extends ControlBase {
   type: "keybind";
-  /** Hotkey action label as registered with the host; omit to just store the combo. */
+  /**
+   * The label of one of this plugin's hotkeys. The control then shows and rebinds that live
+   * binding, the same one the App's Keybinds tab edits, and `key` is not used.
+   * Omit it to store the combo in `key`.
+   */
   action?: string;
+  /** The combo feeds `ctx.hotkeys.hold`, so a bare modifier such as "shift" is accepted. */
+  hold?: boolean;
 }
 
 export interface NoteControl extends ControlBase {

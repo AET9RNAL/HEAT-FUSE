@@ -7,12 +7,15 @@
   "entry": "plugin:CruiseControlPlugin",
   "runtime": "node",
   "dependencies": ["accessors"],
+  "min_host_version": "5.0.0",
   "hotkeys": {
     "toggle": "c"
   },
   "default_config": {
     "overlay_pos": null,
     "anim_width": 300,
-    "anim_height": 300
+    "anim_height": 300,
+    "show_in": ["alive", "map"],
+    "show_in_hangar": []
   }
 }

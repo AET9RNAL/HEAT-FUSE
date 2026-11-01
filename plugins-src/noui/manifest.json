@@ -7,6 +7,7 @@
   "entry": "plugin:NoUiPlugin",
   "runtime": "node",
   "dependencies": ["accessors"],
+  "min_host_version": "5.0.0",
   "permissions": {
     "accessors.ui": { "reason": "Hides the HUD elements you pick." }
   },

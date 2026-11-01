@@ -1,0 +1,623 @@
+{
+  "common": {
+    "cancel": "Annuler",
+    "confirm": "Confirmer",
+    "ok": "OK",
+    "brandName": "FUSE",
+    "launcherName": "Lanceur",
+    "gameName": "WoT:HEAT",
+    "close": "Fermer"
+  },
+  "apptitlebar": {
+    "close": "Fermer",
+    "minimize": "Réduire",
+    "maximize": "Agrandir",
+    "windowControls": "Contrôles de la fenêtre",
+    "updateAvailable": "Mise à jour disponible - cliquez pour la télécharger"
+  },
+  "appnav": {
+    "home": "Accueil",
+    "discover": "Découvrir",
+    "settings": "Réglages",
+    "plugins": "Plugins",
+    "about": "À propos"
+  },
+  "apphome": {
+    "searchPlaceholder": "Rechercher des plugins...",
+    "discover": "Découvrir",
+    "filtering": "Filtre",
+    "refresh": "Actualiser",
+    "filters": {
+      "all": "Tous",
+      "active": "Actifs",
+      "disabled": "Désactivés"
+    }
+  },
+  "applaunch": {
+    "launch": "Lancer",
+    "stop": "Arrêter",
+    "showInExplorer": "Afficher dans l'Explorateur",
+    "versionFallback": "m.m.p",
+    "calibratePrompt": "Calibrage",
+    "calibrateHint": "{combo} pour verrouiller",
+    "lockedPrompt": "Verrouillé",
+    "copyObsUrl": "Copier l'URL de la source navigateur OBS",
+    "copyObsUrlFor": "Copier l'URL pour cet écran ({w}x{h})",
+    "obsUrlCopied": "URL de la source navigateur OBS copiée dans le presse-papiers",
+    "autoLockOn": "Les overlays se verrouillent au lancement. Cliquez pour calibrer au lancement à la place",
+    "autoLockOff": "Les overlays attendent le calibrage au lancement. Cliquez pour les verrouiller automatiquement",
+    "launchTip": "Démarrer FUSE et charger vos plugins activés",
+    "stopTip": "Arrêter FUSE et décharger tous les plugins",
+    "notifications": {
+      "fuseDisabledTitle": "Configuration du jeu incomplète",
+      "fuseDisabledMessage": "Configuration FUSE non appliquée",
+      "noGamePathTitle": "Chemin du jeu requis",
+      "noGamePathMessage": "Sélectionnez un dossier de jeu valide avant de lancer.",
+      "portMismatchTitle": "Mauvais port de débogage du jeu",
+      "portMismatchMessage": "Le jeu utilise le port {filePort}, FUSE attend {appPort}. Appliquez de nouveau la configuration du jeu."
+    }
+  },
+  "appsettings": {
+    "core": {
+      "title": "Fonctions principales",
+      "platform": "Plateforme",
+      "platformDesc": "Votre client de jeu",
+      "gameDir": "Chemin du client de jeu",
+      "gameDirDesc": "Où se trouve votre jeu ?",
+      "gameConfig": "Configuration du jeu",
+      "gameConfigDesc": "Appliquer la configuration {brandName}"
+    },
+    "sections": {
+      "general": "Général",
+      "qol": "Confort",
+      "audio": "Audio",
+      "advanced": "Avancé",
+      "privacy": "Confidentialité et télémétrie",
+      "language": "Langue",
+      "keybinds": "Raccourcis {brandName}"
+    },
+    "language": {
+      "label": "Langue de l'application",
+      "desc": "Les plugins compatibles utilisent aussi cette langue"
+    },
+    "advanced": {
+      "cdpPort": "Port CDP du jeu",
+      "cdpPortDesc": "Le port que {brandName} utilise pour communiquer avec le jeu. Changez-le seulement si un autre programme l'occupe.",
+      "cdpPortMismatch": "La configuration du jeu indique toujours le port {port}. Désactivez puis réactivez la configuration du jeu pour appliquer ce port."
+    },
+    "gameConfig": {
+      "changedTitle": "Configuration du jeu modifiée",
+      "nowEnabled": "Le CDP du jeu est activé.",
+      "nowDisabled": "Le CDP du jeu est désactivé.",
+      "portNow": "Le jeu utilise maintenant le port {port}."
+    },
+    "hotkeys": {
+      "reloadDesc": "Recharger tous les plugins actifs",
+      "quitDesc": "Arrêter {brandName}",
+      "calibrateDesc": "Basculer entre calibrage et verrouillage",
+      "interactiveDesc": "Activer ou désactiver l'interactivité des overlays"
+    },
+    "gameInstallation": {
+      "title": "Installation du jeu",
+      "platform": "Plateforme",
+      "gameDirectory": "Chemin du dossier du jeu"
+    },
+    "masterSwitch": {
+      "title": "Interrupteur principal",
+      "enableFuse": "Activer {brandName}",
+      "enable": "Activer",
+      "disable": "Désactiver"
+    },
+    "general": {
+      "title": "Général",
+      "launchAtStartup": "Lancer l'application au démarrage du système",
+      "startMinimized": "Démarrer réduit dans la zone de notification",
+      "closeMinimizes": "Le bouton Fermer réduit dans la zone de notification",
+      "checkUpdates": "Rechercher des mises à jour au démarrage",
+      "discordRpc": "Afficher l'activité sur Discord",
+      "fileAssoc": "Associer le type de fichier .fuse"
+    },
+    "qol": {
+      "title": "Confort",
+      "startWithGame": "Démarrer FUSE avec le jeu",
+      "hideOnFocusLoss": "Masquer les overlays quand le jeu n'a pas le focus",
+      "stagePerfWidget": "Afficher les performances de la scène sur la scène"
+    },
+    "audio": {
+      "title": "Audio",
+      "volume": "Volume des sons des plugins",
+      "muted": "Couper les sons des plugins"
+    },
+    "notifications": {
+      "gameConfigChangedTitle": "Configuration du jeu modifiée",
+      "gameConfigChangedMessage": "Redémarrez le jeu pour appliquer les changements.",
+      "invalidPathTitle": "Dossier de jeu invalide",
+      "invalidPathMessage": "Le dossier sélectionné n'est pas une installation valide du jeu."
+    },
+    "keybindings": {
+      "title": "Raccourcis FUSE",
+      "columnAction": "Action",
+      "columnBinding": "Raccourci",
+      "rebind": "Réassigner",
+      "latinOnlyTitle": "Touche invalide",
+      "latinOnly": "Seules les touches latines sont autorisées",
+      "invalidCombo": "Utilisez une lettre, un chiffre ou une touche de fonction, seule ou avec un modificateur",
+      "latinLayoutHint": "Dispositions de clavier latines uniquement"
+    },
+    "privacy": {
+      "title": "Confidentialité et télémétrie",
+      "analyticsConsent": "Aider à améliorer FUSE pour tous",
+      "diagnosticsConsent": "Envoyer des rapports de diagnostic anonymes",
+      "allowApiAccess": "Autoriser l'accès API tiers à mes données de match"
+    },
+    "debug": {
+      "title": "Débogage",
+      "overlayDevtools": "Ouvrir les DevTools des overlays"
+    }
+  },
+  "appabout": {
+    "wip": "EN COURS DE DÉVELOPPEMENT",
+    "launcherVersion": "VERSION DU LANCEUR",
+    "whatsNew": "Nouveautés",
+    "tours": "VISITES",
+    "tourLauncher": "Lanceur",
+    "tourLauncherTip": "Affiche maintenant la visite du lanceur.",
+    "tourStage": "Scène",
+    "tourStageTip": "Affiche la visite de la scène la prochaine fois que la scène est en mode calibrage.",
+    "disclaimer": "Heat Fuse est un projet communautaire non officiel. Il n'est ni affilié à Wargaming, ni approuvé ou sponsorisé par Wargaming.",
+    "supportLinks": "SOUTIEN ET LIENS",
+    "linkGithub": "GitHub du projet",
+    "linkCoffee": "BuyMeACoffee",
+    "linkDiscord": "Discord (MP)",
+    "linkBehance": "Mon Behance",
+    "statsTitle": "STATISTIQUES INTÉRESSANTES",
+    "statComponents": "COMPOSANTS VUE",
+    "statLines": "LIGNES DE CODE",
+    "statDays": "JOURS DEPUIS LA CRÉATION",
+    "statPlugins": "PLUGINS PUBLIÉS",
+    "statDownloads": "TÉLÉCHARGEMENTS DU MARCHÉ",
+    "builtWith": "CONÇU AVEC",
+    "credits": "UI/UX, identité visuelle et développement par AETERNAL"
+  },
+  "appdiscover": {
+    "browse": "Parcourir",
+    "myPlugins": "Mes plugins",
+    "creation": "Prêt à montrer au monde ce que vous avez créé ?",
+    "searchPlaceholder": "Rechercher des plugins...",
+    "noResults": "Aucun plugin trouvé",
+    "allTags": "Tous",
+    "sorting": "Tri",
+    "sort": {
+      "views": "Vues",
+      "downloads": "Téléchargements",
+      "updated": "Dernière mise à jour",
+      "name": "Nom"
+    },
+    "install": "Installer",
+    "installing": "Installation...",
+    "installed": "Installé",
+    "installError": "Échec de l'installation",
+    "update": "Mettre à jour",
+    "swap": "Changer",
+    "signInToInstall": "Connectez-vous pour installer",
+    "viewDetails": "Détails",
+    "back": "Retour",
+    "by": "par",
+    "versions": "Versions",
+    "noVersions": "Aucune version publiée pour l'instant.",
+    "dependencies": "Dépendances",
+    "changelog": "Journal des modifications",
+    "compatibility": "Compatibilité",
+    "gameVersions": "Versions du jeu",
+    "fuseVersions": "Versions de FUSE",
+    "optional": "facultatif",
+    "downloads": "téléchargements",
+    "views": "vues",
+    "publish": "Publier",
+    "unpublish": "Dépublier",
+    "createProject": "Nouveau plugin",
+    "editProject": "Modifier",
+    "editProjectTip": "Modifier les détails du projet",
+    "deleteProject": "Supprimer le projet",
+    "editVersion": "Modifier la version",
+    "deleteVersion": "Supprimer la version",
+    "uploadVersion": "Nouvelle version",
+    "myPluginsEmpty": "Vous n'avez encore publié aucun plugin.",
+    "confirmDelete": "Supprimer ceci ?",
+    "deleteConfirm": "Oui, supprimer",
+    "versionType": {
+      "alpha": "Alpha",
+      "beta": "Bêta",
+      "release": "Version stable"
+    },
+    "form": {
+      "name": "Nom du plugin",
+      "summary": "Résumé court",
+      "description": "Description (markdown)",
+      "versionNumber": "Numéro de version",
+      "versionType": "Type de version",
+      "changelog": "Journal des modifications",
+      "gameVersions": "Versions du jeu compatibles",
+      "fuseVersions": "Versions de FUSE compatibles",
+      "tagsLabel": "Tags",
+      "cancel": "Annuler",
+      "save": "Enregistrer",
+      "upload": "Téléverser le fichier",
+      "noFileSelected": "Aucun fichier sélectionné",
+      "iconLabel": "Icône"
+    },
+    "notify": {
+      "projectCreated": "Projet de plugin créé.",
+      "projectUpdated": "Plugin mis à jour.",
+      "versionCreated": "Version créée. Téléversez votre fichier .fuse.",
+      "versionFinalized": "Version publiée.",
+      "publishedOn": "Le plugin est maintenant public.",
+      "publishedOff": "Le plugin est maintenant masqué."
+    }
+  },
+  "appwelcome": {
+    "tagline": "",
+    "getStarted": "Commencer"
+  },
+  "appauth": {
+    "signIn": "Connexion",
+    "signUp": "Inscription",
+    "welcomeBack": "Bon retour",
+    "signUpPrompt": "Créer un compte",
+    "email": "E-mail",
+    "password": "Mot de passe",
+    "forgotPassword": "Mot de passe oublié ?",
+    "passwordMustInclude": "Le mot de passe doit contenir :",
+    "passwordMinLength": "Au moins 6 caractères",
+    "passwordUppercase": "Au moins une majuscule",
+    "passwordNumber": "Au moins un chiffre",
+    "passwordSpecial": "Au moins un caractère spécial",
+    "otpTitle": "Vérifiez vos e-mails",
+    "otpSubtext1": "Nous avons envoyé un code à 6 chiffres à votre adresse e-mail.",
+    "otpSubtext2": "Saisissez-le ci-dessous pour vérifier votre compte.",
+    "otpSending": "Envoi de l'e-mail...",
+    "otpSent": "E-mail envoyé",
+    "otpDelivered": "E-mail remis",
+    "otpBounced": "E-mail rejeté",
+    "resendCode": "Renvoyer le code",
+    "forgotPasswordTitle": "Réinitialiser le mot de passe",
+    "forgotPasswordSubtext": "Saisissez votre e-mail et nous vous enverrons un lien de réinitialisation.",
+    "forgotPasswordSend": "Envoyer le lien",
+    "forgotPasswordSentTitle": "Vérifiez votre boîte de réception",
+    "forgotPasswordSentSubtext": "Nous avons envoyé un lien de réinitialisation à votre adresse e-mail.",
+    "logIn": "Se connecter",
+    "skipForNow": "Passer pour l'instant",
+    "noAccount": "Pas encore de compte ?",
+    "createOne": "Créez-en un",
+    "haveAccount": "Vous avez déjà un compte FUSE ?",
+    "logInLink": "Se connecter",
+    "signInWithGoogle": "Se connecter avec Google",
+    "signInWithWargaming": "Se connecter avec Wargaming",
+    "signUpWithGoogle": "S'inscrire avec Google",
+    "signUpWithWargaming": "S'inscrire avec Wargaming",
+    "providerUnavailable": "Bientôt disponible",
+    "or": "OU",
+    "emailLabel": "E-MAIL",
+    "passwordLabel": "MOT DE PASSE",
+    "edit": "MODIFIER",
+    "forgot": "OUBLIÉ ?",
+    "back": "Retour",
+    "backToLogIn": "Retour à la connexion",
+    "backToSignUp": "Retour à l'inscription",
+    "welcomeToFuse": "Bienvenue sur FUSE",
+    "createAccount": "Créez votre compte",
+    "recoveryTitleLine1": "Maman disait toujours",
+    "recoveryTitleLine2": "que j'étais spécial",
+    "recoveryBody": "Saisissez l'adresse e-mail utilisée lors de l'inscription et nous vous enverrons un mot de passe à usage unique",
+    "verifyEmail": "Vérifier l'e-mail",
+    "telemetryConsent": "Aider à améliorer FUSE pour tous",
+    "diagnosticsConsent": "Envoyer des rapports de diagnostic anonymes",
+    "legalSignIn": "Conditions d'utilisation et politique de confidentialité.",
+    "legalSignUp": "En créant un compte, vous acceptez nos conditions d'utilisation et notre politique de confidentialité.",
+    "termsOfService": "Conditions d'utilisation",
+    "privacyPolicy": "Politique de confidentialité",
+    "emailRequired": "Saisissez votre adresse e-mail pour continuer",
+    "recoveryUnknownEmail": "Aucun compte ne correspond à cette adresse"
+  },
+  "resetPassword": {
+    "title": "Nouveau mot de passe",
+    "subtitle": "Choisissez un mot de passe solide pour votre compte.",
+    "newPassword": "Nouveau mot de passe",
+    "confirmPassword": "Confirmer le mot de passe",
+    "passwordMismatch": "Les mots de passe ne correspondent pas",
+    "submit": "Mettre à jour le mot de passe",
+    "cancel": "Annuler"
+  },
+  "appaccount": {
+    "title": "Compte",
+    "account": "Compte",
+    "profileInfo": "Profil",
+    "profileInfoDesc": "Les informations de votre compte.",
+    "emailAddress": "Adresse e-mail",
+    "creationDate": "Membre depuis",
+    "deviceManagement": "Appareils",
+    "deviceManagementDesc": "Gérez les appareils connectés à votre compte.",
+    "authSecurity": "Sécurité",
+    "authSecurityDesc": "Gérez les réglages de sécurité de votre compte.",
+    "changePassword": "Changer le mot de passe",
+    "signOutAll": "Déconnecter tous les appareils",
+    "signOutAllHeader": "Déconnecter tous les appareils ?",
+    "signOutAllDesc": "Toutes les sessions sur tous les appareils seront fermées.",
+    "currentDevice": "Cet appareil",
+    "lastActive": "Dernière activité",
+    "unknown": "Inconnu",
+    "revoke": "Retirer",
+    "copied": "Copié !",
+    "copy": "Copier",
+    "username": "Nom d'utilisateur",
+    "usernamePlaceholder": "Choisir un nom d'utilisateur",
+    "usernameUnsaved": "Modification du nom d'utilisateur non enregistrée",
+    "usernameSave": "Enregistrer",
+    "dangerZone": "Zone de danger",
+    "dangerZoneDesc": "Actions permanentes et irréversibles.",
+    "deleteAccount": "Supprimer le compte",
+    "deleteAccountDesc": "Supprimer définitivement votre compte et toutes les données associées.",
+    "deleteAccountConfirmTitle": "Cette action est irréversible.",
+    "deleteAccountConfirmDesc": "Votre compte, vos appareils et toutes vos données seront définitivement supprimés.",
+    "deleteAccountConfirm": "Supprimer mon compte",
+    "deleteAccountCancel": "Annuler",
+    "apiAccess": "Accès API",
+    "apiAccessDesc": "Gérez l'accès API tiers à vos données de match.",
+    "apiAccessOptIn": "Autoriser l'accès API",
+    "apiAccessOptInDesc": "Une fois activé, des applications externes peuvent interroger vos sessions de match et vos échantillons via l'API.",
+    "apiKeyLabel": "Nom de la clé",
+    "apiKeyLabelPlaceholder": "p. ex. Mon bot Discord",
+    "apiKeyMint": "Créer une clé",
+    "apiKeyCreated": "Clé API créée",
+    "apiKeyCreatedDesc": "Copiez cette clé maintenant. Elle ne pourra plus être récupérée.",
+    "apiKeyRevoke": "Révoquer",
+    "apiKeyRevokeTip": "Révoquer cette clé API",
+    "signOutAllTip": "Se déconnecter de tous les appareils"
+  },
+  "components": {
+    "loading": "Chargement...",
+    "error": "Une erreur s'est produite",
+    "button": {
+      "processing": "En cours",
+      "success": "Terminé",
+      "error": "Échec",
+      "confirm": "Confirmer ?"
+    },
+    "status": {
+      "none": "Aucun",
+      "initializing": "Initialisation",
+      "connecting": "Connexion",
+      "running": "En marche",
+      "error": "Erreur"
+    },
+    "notification": {
+      "defaultTitle": "Notification",
+      "dependencyErrorTitle": "Erreur de dépendance",
+      "dependencyErrorMessage": "\"{plugin}\" a été ignoré - il nécessite \"{dependency}\". Installez la dépendance manquante et redémarrez FUSE.",
+      "dismiss": "Ignorer"
+    },
+    "dirSelector": {
+      "placeholder": "Sélectionner un dossier..."
+    },
+    "select": {
+      "search": "Rechercher",
+      "noMatches": "Aucun résultat"
+    },
+    "pluginList": {
+      "columnPlugin": "Plugin",
+      "columnVersion": "Version",
+      "columnStatus": "État",
+      "columnActions": "Actions",
+      "emptyNoPlugins": "Aucun plugin trouvé",
+      "emptyNoMatch": "Aucun plugin ne correspond"
+    },
+    "plugin": {
+      "by": "par",
+      "status": {
+        "active": "Actif",
+        "error": "Erreur",
+        "pending": "En file",
+        "loading": "Chargement",
+        "skipped": "Ignoré",
+        "disabled": "Désactivé"
+      },
+      "menu": {
+        "settings": "Réglages",
+        "showInExplorer": "Afficher dans l'Explorateur",
+        "delete": "Supprimer"
+      },
+      "reloadWarningTitle": "Rechargement requis",
+      "reloadWarningMessage": "Les changements de plugin peuvent ne pas s'appliquer avant un rechargement avec Ctrl+R ou un redémarrage de FUSE."
+    },
+    "updateProgress": {
+      "updating": "Mise à jour",
+      "notifFoundTitle": "Mise à jour trouvée",
+      "notifFoundMessage": "v{version} est prête à être téléchargée",
+      "notifDownloadingTitle": "Téléchargement de la mise à jour",
+      "notifDownloadingMessage": "En espérant que rien ne plante...",
+      "notifReadyTitle": "Mise à jour prête",
+      "notifReadyMessage": "Redémarrage pour l'appliquer...",
+      "notifErrorTitle": "Échec de la mise à jour"
+    },
+    "releaseNotes": {
+      "title": "NOTES DE VERSION",
+      "version": "v{version}",
+      "loading": "Chargement des notes de version...",
+      "empty": "Aucune note de version pour cette version.",
+      "viewOnline": "Voir les notes de version",
+      "close": "FERMER"
+    },
+    "contextMenu": {
+      "more": "Plus d'options"
+    },
+    "console": {
+      "searchPlaceholder": "Rechercher dans les journaux...",
+      "clear": "Effacer",
+      "empty": "Démarrez le runtime pour recevoir les journaux",
+      "filters": {
+        "all": "Tous",
+        "error": "Erreur",
+        "warn": "Avert.",
+        "info": "Info"
+      }
+    }
+  },
+  "apponboarding": {
+    "titleStage1": "COMMENÇONS",
+    "titleStage2": "PRESQUE FINI",
+    "titleStage3": "VOUS ÊTES PRÊT !",
+    "subtitle": "Configuration de FUSE",
+    "platformTitle": "Plateforme",
+    "platformDescription": "Votre client de jeu",
+    "pathTitle": "Chemin du client de jeu",
+    "pathDescription": "Où se trouve votre jeu ?",
+    "pathPlaceholder": "Sélectionner un dossier",
+    "goBack": "Retour",
+    "next": "Suivant",
+    "finish": "Terminer",
+    "success": "Configuration réussie",
+    "pathInvalid": "Ce dossier ne ressemble pas à une installation de HEAT",
+    "configTitle": "Configuration du jeu",
+    "configDescription": "Préparer HEAT pour FUSE",
+    "applying": "Application de la configuration...",
+    "applyFailed": "Impossible d'appliquer la configuration",
+    "retry": "Réessayer"
+  },
+  "ftue": {
+    "skip": "PASSER",
+    "start": "COMMENCER",
+    "back": "RETOUR",
+    "next": "SUIVANT",
+    "done": "TERMINÉ",
+    "skipHold1": "MAINTENEZ",
+    "skipHold2": "VRAIMENT ?",
+    "skipHold3": "D'ACCORD",
+    "sample": "DEMO"
+  },
+  "apptour": {
+    "welcome": {
+      "title": "Bienvenue sur FUSE",
+      "body": "FUSE est un runtime de mods pour WoT:HEAT. Ici, les mods s'appellent des « plugins ». Ils modifient le HUD, ajoutent des overlays et vous donnent de nouveaux outils. Cette visite présente les parties principales du lanceur en deux minutes environ."
+    },
+    "nav": {
+      "title": "Navigation",
+      "body": "Utilisez la barre latérale pour aller à Accueil, Découvrir, Réglages et À propos. Votre compte se trouve en bas."
+    },
+    "plugins": {
+      "title": "Vos plugins",
+      "body": "Chaque plugin est un module de code autonome, avec ses propres fichiers et réglages. Activez ou désactivez un plugin ici. Ouvrez le menu d'un plugin (icône à trois points) pour modifier sa configuration pendant que FUSE tourne."
+    },
+    "pluginTypes": {
+      "title": "Types de plugins",
+      "body": "Les plugins ajoutent des overlays, modifient l'interface en jeu, ou vous donnent des outils et des données. Les bibliothèques fournissent du code partagé à d'autres plugins, qui dépendent donc d'elles. Par exemple, HEATStats a besoin d'Accessors, FUSE UI et Canvas UI. Si une dépendance n'est pas installée, FUSE ignore le plugin et vous le signale."
+    },
+    "search": {
+      "title": "Trouver des plugins",
+      "body": "Recherchez vos plugins installés par nom. Découvrir ouvre le marché, où vous obtenez de nouveaux plugins."
+    },
+    "views": {
+      "title": "Vues",
+      "body": "Passez de vos plugins aux fichiers de FUSE et au journal de la console en direct."
+    },
+    "discover": {
+      "title": "Marché",
+      "body": "FUSE est un projet communautaire. Des membres de la communauté créent les plugins du marché, et chaque auteur entretient ses propres plugins. Parcourir affiche tous les plugins publiés."
+    },
+    "discoverTools": {
+      "title": "Rechercher dans le marché",
+      "body": "Recherchez par nom, appliquez des tags et un tri. Ouvrez la page d'un plugin pour voir ses détails, ses versions et la description de l'auteur. Si un plugin a des dépendances, elles figurent en général dans la description."
+    },
+    "account": {
+      "title": "Compte",
+      "body": "Il vous faut un compte pour télécharger des plugins. Connectez-vous ou créez un compte ici. Avec un compte, l'onglet Mes plugins de Découvrir vous permet aussi de publier vos propres plugins."
+    },
+    "settings": {
+      "title": "Réglages principaux",
+      "body": "C'est la partie la plus importante de la configuration. FUSE a besoin de ces trois réglages avant de pouvoir tourner dans le jeu."
+    },
+    "platform": {
+      "title": "Plateforme",
+      "body": "Sélectionnez le client avec lequel vous jouez : Steam ou Wargaming Game Center."
+    },
+    "gameDir": {
+      "title": "Dossier du jeu",
+      "body": "Sélectionnez le dossier où le jeu est installé. FUSE lit les fichiers du jeu et applique sa configuration dans ce dossier."
+    },
+    "gameConfig": {
+      "title": "Configuration du jeu",
+      "body": "Appliquez la configuration FUSE au jeu. Les mises à jour du jeu la réinitialisent en général : appliquez-la de nouveau après chaque mise à jour. L'état indique quand la configuration manque."
+    },
+    "keybinds": {
+      "title": "Raccourcis {brandName}",
+      "body": "Ces touches fonctionnent pendant que FUSE tourne. Par défaut, Ctrl+L bascule entre calibrage et verrouillage. En mode calibrage, vous déplacez et redimensionnez les overlays. Le verrouillage les garde en place. Ctrl+I active le mode interactif, où les overlays reçoivent vos clics et vos touches. Ctrl+R recharge les plugins actifs, et Ctrl+P arrête FUSE. Modifiez n'importe quelle touche ici."
+    },
+    "launch": {
+      "title": "Lancer",
+      "body": "Une fois la configuration terminée, Lancer démarre FUSE et charge vos plugins activés. Le panneau affiche aussi les versions de FUSE, du lanceur et du jeu."
+    },
+    "about": {
+      "title": "À propos",
+      "body": "Consultez la version du lanceur et les nouveautés. Relancez cette visite d'ici à tout moment."
+    }
+  },
+  "stagetour": {
+    "unlock": {
+      "title": "Visite de la scène",
+      "body": "FUSE a verrouillé vos overlays : vos clics vont au jeu. Appuyez sur {lock} pour ouvrir le mode calibrage et commencer la visite. Pour passer la visite ensuite, maintenez Échap."
+    },
+    "welcome": {
+      "title": "Bienvenue sur la scène FUSE",
+      "body": "FUSE dessine les overlays ici, par-dessus le jeu. Vous êtes en mode calibrage : placez chaque overlay où vous le voulez à l'écran. Cette visite utilise un overlay DEMO, que FUSE retire à la fin."
+    },
+    "overlay": {
+      "title": "Overlays",
+      "body": "Chaque cadre est un overlay. Faites glisser le cadre DEMO pour le déplacer. Tirez un coin pour changer sa taille. Les cadres s'alignent les uns sur les autres, et Alt désactive l'alignement pendant le glissement."
+    },
+    "info": {
+      "title": "Onglet d'infos",
+      "body": "L'onglet au-dessus de chaque cadre affiche le nom du plugin et son étape de calibrage. Chaque plugin tourne dans son propre processus, donc FUSE peut mesurer et afficher sa mémoire, son GPU et son CPU. Le badge INTERACTIVE indique qu'un overlay prend en charge le mode interactif."
+    },
+    "perms": {
+      "title": "Modèle de permissions de FUSE",
+      "body": "Chaque plugin liste les permissions dont il a besoin et pourquoi. Les permissions normales sont actives par défaut. Les dangereuses, comme le réseau, attendent votre réponse sur une carte dédiée. Cliquez sur le cadenas pour les voir. Dans un vrai plugin, cliquez sur l'une d'elles pour changer votre réponse. Sans une permission, un plugin peut ne pas fonctionner comme prévu."
+    },
+    "inspector": {
+      "title": "Inspecteur",
+      "body": "Réglez ici la position exacte, la taille, la rotation et l'opacité du cadre sélectionné. En dessous, un plugin peut ajouter ses propres réglages. Ce sont les mêmes réglages que dans l'application."
+    },
+    "toolbar": {
+      "title": "Barre d'outils",
+      "body": "Affichez la grille et réglez son pas. Choisissez comment les cadres s'alignent : sur les autres cadres, sur la grille, ou pas du tout. Annulez et rétablissez avec Ctrl+Z et Ctrl+Y. Assombrissez le jeu pour mieux voir les cadres."
+    },
+    "plugins": {
+      "title": "Plugins sur la scène",
+      "body": "Cette liste affiche chaque plugin, son état et ses overlays. Cliquez sur un overlay dans la liste pour sélectionner son cadre : il est mis en évidence et l'inspecteur s'ouvre."
+    },
+    "done": {
+      "title": "Verrouiller les overlays",
+      "body": "« Done », ou {lock}, verrouille les overlays et ferme le mode calibrage. Les overlays verrouillés ne réagissent pas aux clics. Certains plugins ont besoin de plusieurs étapes de calibrage. Ce bouton affiche alors « Next » jusqu'à la dernière étape."
+    },
+    "interactive": {
+      "title": "Mode interactif",
+      "body": "Certains overlays ont des boutons ou des champs. En mode interactif, les cadres reçoivent vos clics. Appuyez sur {interactive} maintenant pour essayer."
+    },
+    "click": {
+      "title": "Essayez",
+      "body": "Cliquez sur le bouton du cadre DEMO. L'overlay reçoit le clic."
+    },
+    "leave": {
+      "title": "Retour au jeu",
+      "body": "Appuyez sur {interactive} pour quitter le mode interactif. Les overlays se verrouillent alors et laissent passer les clics. Appuyez sur {lock} pour revenir au mode calibrage et terminer la visite."
+    },
+    "help": {
+      "title": "Visite",
+      "body": "Cliquez ici pour revoir cette visite à tout moment."
+    },
+    "demo": {
+      "name": "DEMO",
+      "count": "compteur : {n}",
+      "networkReason": "Récupère des données d'exemple pour la démo.",
+      "storageReason": "Garde le nombre de clics."
+    }
+  }
+}

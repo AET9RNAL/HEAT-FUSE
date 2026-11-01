@@ -1,281 +1,235 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from "vue";
-import { motion, AnimatePresence } from "motion-v";
+import { computed, provide, ref, watch } from "vue";
 import "fuse_ui/ui/tokens.css";
-import eMaterialButton from "fuse_ui/ui/eMaterialButton.vue";
-import eSessions from "./eSessions.vue";
-import eTrend from "./eTrend.vue";
-import eEfficiency from "./eEfficiency.vue";
-
-const SCENE_COUNT = 2;
-
-interface SessionRow {
-  vehicle: string;
-  map: string;
-  mode: string;
-  score: number;
-  damage: number;
-  kills: number;
-  deaths: number;
-  assists: number;
-  outcome: string;
-}
-interface Series {
-  kd: number[];
-  wr: number[];
-  dmg: number[];
-}
-interface Efficiency {
-  dmgPerKill: number;
-  killsPerMin: number;
-  scorePerMin: number;
-}
-interface ModeRow {
-  mode: string;
-  winRate: number;
-  count: number;
-}
-export interface HeatStatsData {
-  playerName: string;
-  battleCount: number;
-  sessionStartedAt: number;
-  kd: number;
-  winRate: number;
-  damage: number;
-  series: Series;
-  latest: SessionRow[];
-  mode: string;
-  sceneTime: number;
-  graphScale: string;
-  graphPoints: number;
-  graphValueScale: number;
-  efficiency: Efficiency;
-  byMode: ModeRow[];
-}
+import eTooltip from "fuse_ui/ui/eTooltip.vue";
+import eTitlebar from "./ui/eTitlebar.vue";
+import eComingSoon from "./ui/eComingSoon.vue";
+import eSubNav, { TABS } from "./ui/eSubNav.vue";
+import HsAccount from "./ui/HsAccount.vue";
+import HsBattles from "./ui/HsBattles.vue";
+import HsCharts from "./ui/HsCharts.vue";
+import HsLabs from "./ui/HsLabs.vue";
+import HsOverview from "./ui/HsOverview.vue";
+import HsReplays from "./ui/HsReplays.vue";
+import HsTags from "./ui/HsTags.vue";
+import { ASSETS, createAssets } from "./ui/assets.mjs";
+import { I18N, createI18n } from "./ui/i18n.mjs";
+import { TAGS, tagIndex } from "./ui/tags.mjs";
 
 const props = defineProps<{
-  data: Partial<HeatStatsData>;
+  data: Record<string, unknown>;
   assetBase?: string;
   interactive?: boolean;
   emitAction?: (action: string, payload?: unknown) => void;
 }>();
 
-const playerName = computed(() => props.data?.playerName || "-");
-const battleCount = computed(() => props.data?.battleCount ?? 0);
-const latest = computed<SessionRow[]>(() => props.data?.latest ?? []);
-const series = computed(() => props.data?.series);
-const efficiency = computed(() => props.data?.efficiency);
-const byMode = computed(() => props.data?.byMode ?? []);
+const str = (key: string, fallback: string): string => {
+  const v = props.data?.[key];
+  return typeof v === "string" && v ? v : fallback;
+};
 
-/** Scene glyph, masked so the active one can fill as a progress indicator. */
-const indexerUrl = computed(() => `url(${props.assetBase ?? ""}/assets/indexer.svg)`);
+const locale = computed(() => str("locale", "en"));
+const version = computed(() => str("version", ""));
+const status = computed(() => str("status", "idle"));
+const connection = computed(() => str("connection", "local"));
+const locales = computed(() => (Array.isArray(props.data?.locales) ? props.data.locales.map(String) : [locale.value]));
+const streakLength = computed(() => {
+  const v = Number(props.data?.streakLength);
+  return Number.isFinite(v) && v > 0 ? v : 75;
+});
+const overview = computed(() => {
+  const v = props.data?.overview;
+  return v && typeof v === "object" ? v : null;
+});
+const battles = computed(() => {
+  const v = props.data?.battles;
+  return v && typeof v === "object" ? v : null;
+});
+const samples = computed(() => {
+  const v = props.data?.samples;
+  return v && typeof v === "object" ? v : null;
+});
+const account = computed(() => {
+  const v = props.data?.account;
+  return v && typeof v === "object" ? (v as Record<string, unknown>) : null;
+});
+const charts = computed(() => {
+  const v = props.data?.charts;
+  return v && typeof v === "object" ? v : null;
+});
+const tags = computed(() => {
+  const v = props.data?.tags;
+  return v && typeof v === "object" ? v : null;
+});
+const replays = computed(() => {
+  const v = props.data?.replays;
+  return v && typeof v === "object" ? v : null;
+});
 
-// Carousel 
-const isCarousel = computed(() => props.data?.mode === "carousel");
-const sceneTime = computed(() => Math.max(2, props.data?.sceneTime ?? 8));
-const scene = ref(0);
-let sceneTimer: ReturnType<typeof setInterval> | undefined;
+// The overlay host hands down where this plugin's files are served from; every
+// component that draws a tank, an agent or the mark reads it from here.
+provide(
+  ASSETS,
+  createAssets({
+    get base() {
+      return props.assetBase ?? "";
+    },
+  }),
+);
 
-function restartCarousel(): void {
-  clearInterval(sceneTimer);
-  sceneTimer = undefined;
-  if (!isCarousel.value) {
-    scene.value = 0;
-    return;
+provide(
+  I18N,
+  createI18n({
+    get locale() {
+      return locale.value;
+    },
+    get messages() {
+      return (props.data?.messages as Record<string, string> | undefined) ?? {};
+    },
+  }),
+);
+
+// Marks follow a player everywhere they appear, so the index is provided once
+// here rather than threaded through every roster and list that draws one.
+const marks = computed(() => tagIndex((tags.value as { players?: unknown } | null)?.players));
+const tagColors = computed(
+  () => ((tags.value as { colors?: Record<string, string> } | null)?.colors ?? {}) as Record<string, string>,
+);
+
+provide(TAGS, {
+  marks: (pid: string | null | undefined) => (pid ? (marks.value.get(String(pid)) ?? []) : []),
+  /** The group's configured colour; the brand's green until one is picked. */
+  color: (id: string) => tagColors.value[id] || "var(--accent-200)",
+});
+
+const NAV_KEY = "heat_stats:nav";
+const SECTIONS = ["home", "account"];
+
+function remembered(): { section: string; tab: string } {
+  const fallback = { section: "home", tab: "overview" };
+  try {
+    const raw = sessionStorage.getItem(NAV_KEY);
+    if (!raw) return fallback;
+    const saved = JSON.parse(raw) as { section?: unknown; tab?: unknown };
+    return {
+      section: SECTIONS.includes(String(saved.section)) ? String(saved.section) : fallback.section,
+      tab: TABS.includes(String(saved.tab)) ? String(saved.tab) : fallback.tab,
+    };
+  } catch {
+    return fallback;
   }
-  sceneTimer = setInterval(() => {
-    scene.value = (scene.value + 1) % SCENE_COUNT;
-  }, sceneTime.value * 1000);
 }
-watch([isCarousel, sceneTime], restartCarousel, { immediate: true });
 
-onBeforeUnmount(() => {
-  clearInterval(sceneTimer);
-  sceneTimer = undefined;
+const start = remembered();
+const section = ref(start.section);
+const tab = ref(start.tab);
+
+watch([section, tab], ([s, t]: [string, string]) => {
+  try {
+    sessionStorage.setItem(NAV_KEY, JSON.stringify({ section: s, tab: t }));
+  } catch {
+    // A stage without storage keeps working; it just forgets where it was.
+  }
 });
 </script>
 
 <template>
-  <div class="hs">
-    <div class="hs-head">
-      <div class="hs-name">{{ playerName }}</div>
-      <div v-if="isCarousel" class="hs-scenes" :style="{ '--indexer-url': indexerUrl }">
-        <span
-          v-for="i in SCENE_COUNT"
-          :key="i"
-          class="hs-indexer"
-          :class="{ active: scene === i - 1 }"
-        >
-          <span
-            v-if="scene === i - 1"
-            :key="scene"
-            class="hs-indexer-fill"
-            :style="{ animationDuration: `${sceneTime}s` }"
-          />
-        </span>
-      </div>
-      <div class="hs-count">{{ battleCount }} battles</div>
-      <template v-if="interactive">
-        <eMaterialButton variant="tertiary" label="Refresh" @click="emitAction?.('refresh')" />
-        <eMaterialButton
-          label="New Session"
-          color="var(--light-green)"
-          @click="emitAction?.('newSession')"
+  <div class="hs-window">
+    <eTitlebar
+      :section="section"
+      :version="version"
+      :status="status"
+      :connection="connection"
+      :locale="locale"
+      :locales="locales"
+      @section="section = $event"
+      @locale="emitAction?.('setLocale', $event)"
+      @close="emitAction?.('close')"
+    />
+    <template v-if="section === 'home'">
+      <eSubNav v-model="tab" />
+      <div class="hs-body">
+        <HsOverview v-if="tab === 'overview'" :overview="overview" :streak-length="streakLength" />
+        <HsBattles
+          v-else-if="tab === 'battles'"
+          :battles="battles"
+          :samples="samples"
+          @query="emitAction?.('battles', $event)"
+          @refresh="emitAction?.('refresh')"
+          @samples="emitAction?.('samples', $event)"
         />
-      </template>
+        <HsReplays
+          v-else-if="tab === 'replays'"
+          :replays="replays"
+          @action="(op, name) => emitAction?.('replays', { op, name })"
+        />
+        <HsCharts v-else-if="tab === 'charts'" :charts="charts" />
+        <!-- Mounted only while open: the site runs in its own process. -->
+        <HsLabs v-else-if="tab === 'labs'" />
+        <HsTags
+          v-else-if="tab === 'tags'"
+          :tags="tags"
+          @action="(name, payload) => emitAction?.(name, payload)"
+        />
+        <!-- Tabs the nav already offers and the plugin does not fill yet. -->
+        <eComingSoon v-else :key="tab" :tab="tab" />
+      </div>
+    </template>
+    <div v-else-if="section === 'account'" class="hs-body">
+      <HsAccount
+        :account="account"
+        :overview="overview"
+        @action="(name, payload) => emitAction?.(name, payload)"
+      />
     </div>
-
-    <!-- Only this container swaps between scenes. -->
-    <div class="hs-body">
-      <AnimatePresence mode="wait">
-        <motion.div
-          :key="scene"
-          class="hs-scene"
-          :initial="{ opacity: 0, x: 14 }"
-          :animate="{ opacity: 1, x: 0 }"
-          :exit="{ opacity: 0, x: -14 }"
-          :transition="{ duration: 0.3, ease: 'easeOut' }"
-        >
-          <eTrend class="e-trend"
-            v-if="scene === 0"
-            :series="series"
-            :kd="data.kd"
-            :win-rate="data.winRate"
-            :damage="data.damage"
-            :scale-mode="data.graphScale"
-            :points="data.graphPoints"
-            :value-scale="data.graphValueScale"
-          />
-          <eEfficiency v-else :efficiency="efficiency" :by-mode="byMode" :asset-base="assetBase" />
-        </motion.div>
-      </AnimatePresence>
-    </div>
-
-    <div class="hs-sessions">
-      <eSessions class="e-sessions" v-for="(s, i) in latest" :key="i" :session="s" />
-    </div>
+    <eTooltip />
   </div>
 </template>
 
 <style scoped>
-.hs {
-  --ch8: polygon(8px 0%, 100% 0%, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0% 100%, 0% 8px);
-
+.hs-window {
   width: 100%;
   height: 100%;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  clip-path: var(--ch8);
-  padding: var(--space-3);
-  font-family: var(--font-primary);
-  color: var(--text-main);
   overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+  backdrop-filter: blur(35px);
+  -webkit-backdrop-filter: blur(35px);
 }
 
-.hs-head {
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  margin-bottom: var(--space-2);
-}
-.hs-name {
-  flex: 1 1 auto;
-  min-width: 0;
-  font-size: var(--main-font-size-3);
-  font-weight: var(--font-weight-2);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.hs-scenes {
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: 3px;
-}
-.hs-indexer {
-  position: relative;
-  flex: none;
-  width: 9px;
-  height: 9px;
-  overflow: hidden;
-  background: var(--base-600);
-  -webkit-mask-image: var(--indexer-url);
-  mask-image: var(--indexer-url);
-  -webkit-mask-size: contain;
-  mask-size: contain;
-  -webkit-mask-repeat: no-repeat;
-  mask-repeat: no-repeat;
-  -webkit-mask-position: center;
-  mask-position: center;
-}
-.hs-indexer.active {
-  background: color-mix(in srgb, var(--light-green) 25%, transparent);
-}
-.hs-indexer-fill {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  width: 0;
-  background: var(--light-green);
-  animation-name: hs-indexer-fill;
-  animation-timing-function: linear;
-  animation-fill-mode: forwards;
-}
-@keyframes hs-indexer-fill {
-  from {
-    width: 0;
-  }
-  to {
-    width: 100%;
-  }
-}
-
-.hs-count {
-  flex: none;
-  font-family: var(--font-microcopy);
-  font-size: var(--main-font-size-5);
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
-
-.hs-head :deep(.material-button) {
-  flex: none;
-  font-size: var(--main-font-size-5);
-}
-
-/* Scenes */
 .hs-body {
-  position: relative;
-  flex: 1 1 0;
+  flex: 1 1 auto;
   min-height: 0;
-}
-.hs-scene {
-  width: 100%;
-  height: 100%;
-}
-
-/* Session list (persistent)  */
-.hs-sessions {
-  flex: none;
-  margin-top: var(--space-4);
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
+  align-items: center;
+  gap: var(--space-5);
+  padding: var(--space-4) 0;
+  box-sizing: border-box;
+  overflow-y: auto;
+  background: var(--black-1-a);
 }
 
-.e-trend {
-  user-select: none;
-  -webkit-user-select: none;
+.hs-window :deep(*)::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
 }
 
-.e-sessions {
-  user-select: none;
-  -webkit-user-select: none;
+.hs-window :deep(*)::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.hs-window :deep(*)::-webkit-scrollbar-thumb {
+  background-color: hsla(0, 0%, 100%, 0.15);
+  border-radius: 4px;
+  border-left: 4px solid transparent;
+  background-clip: padding-box;
+}
+
+.hs-window :deep(*)::-webkit-scrollbar-thumb:hover {
+  background-color: hsla(0, 0%, 100%, 0.25);
 }
 </style>

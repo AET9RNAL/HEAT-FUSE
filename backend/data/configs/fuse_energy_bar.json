@@ -7,15 +7,19 @@
   },
   "bar_custom_pos_fp": {
     "x": 1130,
-    "y": 571,
+    "y": 374,
     "w": 300,
     "h": 300
   },
   "anim_width": 300,
   "anim_height": 300,
-  "color_high": "#84FFB1FF",
-  "color_mid": "#FF9800FF",
+  "color_high": "#7ABFDFFF",
+  "color_mid": "#f2f2f2",
   "color_low": "#FF3935FF",
-  "stroke_weight": 3,
-  "rotation": 0
+  "stroke_weight": 1,
+  "rotation": 0,
+  "show_in": [
+    "alive"
+  ],
+  "show_in_hangar": []
 }

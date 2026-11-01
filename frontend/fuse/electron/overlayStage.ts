@@ -1,4 +1,4 @@
-import { BrowserWindow, screen, session } from 'electron'
+import { BrowserWindow, screen, session, shell, type WebFrameMain } from 'electron'
 import { handleIpc, onIpc, trustSurface } from './ipcGuard'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -13,6 +13,8 @@ const OVERLAY_CSP =
   " img-src 'self' data: blob: https: http://127.0.0.1:* http://localhost:*;" +
   " font-src 'self' data:;" +
   " connect-src 'self' http://127.0.0.1:* ws://127.0.0.1:* http://localhost:* ws://localhost:*;" +
+  // Any https frame passes the CSP. Main then cancels every one outside `frameSources`.
+  " frame-src https:;" +
   " object-src 'none';" +
   " base-uri 'self'"
 
@@ -35,6 +37,37 @@ let requestedIgnore = true
 /** Last state sent to the window, so frequent requests don't repeat it. */
 let appliedIgnore: boolean | null = null
 let env: StageEnv | null = null
+/** What the enabled plugins declared in `frames`: `https://site.net` or `https://*.site.net`. */
+let frameSources: string[] = []
+
+/** The runtime sends this whenever the set of enabled plugins changes. */
+export function setFrameSources(raw: unknown): void {
+  frameSources = (Array.isArray(raw) ? raw : []).filter(
+    (s): s is string => typeof s === 'string' && s.startsWith('https://'),
+  )
+}
+
+function frameAllowed(url: string): boolean {
+  let u: URL
+  try {
+    u = new URL(url)
+  } catch {
+    return false
+  }
+  if (u.protocol !== 'https:' || u.port) return false
+  return frameSources.some((s) =>
+    s.startsWith('https://*.') ? u.hostname.endsWith(s.slice('https://*'.length)) : u.origin === s,
+  )
+}
+
+/** A frame inside the stage page, not the page itself. A gone frame reads as no frame. */
+function isSubFrame(frame: WebFrameMain | null | undefined): boolean {
+  try {
+    return !!frame?.parent
+  } catch {
+    return false
+  }
+}
 
 /** Bounding box of the union of all displays (the virtual desktop). */
 function virtualBounds(): { x: number; y: number; width: number; height: number } {
@@ -72,6 +105,18 @@ function applyIgnore(ignore: boolean, win: BrowserWindow | null = getStageWindow
   if (!win || win.isDestroyed() || appliedIgnore === ignore) return
   appliedIgnore = ignore
   win.setIgnoreMouseEvents(ignore, { forward: true })
+}
+
+/** The primary display's box inside the stage window, which spans every display. */
+function primaryDisplayRect(win: BrowserWindow): { x: number; y: number; w: number; h: number } {
+  const content = win.getContentBounds()
+  const primary = screen.getPrimaryDisplay().bounds
+  return { x: primary.x - content.x, y: primary.y - content.y, w: primary.width, h: primary.height }
+}
+
+function sendPrimaryDisplay(): void {
+  const win = getStageWindow()
+  if (win && !win.webContents.isDestroyed()) win.webContents.send('overlay:primary-display-changed', primaryDisplayRect(win))
 }
 
 function isStagePage(url: string): boolean {
@@ -113,10 +158,26 @@ function createStageWindow(): void {
   applyIgnore(inputOverride === null ? true : !inputOverride, win)
 
   // Plugin overlays run in this page: no popups, and no navigating it anywhere else.
-  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+  // A new-window link inside an allowed frame opens in the browser. The referrer is the only clue to the opener.
+  win.webContents.setWindowOpenHandler(({ url, referrer }) => {
+    if (url.startsWith('https://') && frameAllowed(referrer.url)) void shell.openExternal(url)
+    return { action: 'deny' }
+  })
   win.webContents.on('will-navigate', (e, url) => {
     if (!isStagePage(url)) e.preventDefault()
   })
+  // A frame stays on its declared sites. A link the site itself follows elsewhere opens in the browser.
+  win.webContents.on('will-frame-navigate', (e) => {
+    if (e.isMainFrame || frameAllowed(e.url)) return
+    e.preventDefault()
+    const initiator = e.initiator
+    if (e.url.startsWith('https://') && isSubFrame(initiator) && frameAllowed(initiator?.url ?? '')) {
+      void shell.openExternal(e.url)
+    }
+  })
+  // The stage grows to the whole desktop after it opens, which moves the primary display inside it.
+  win.on('move', sendPrimaryDisplay)
+  win.on('resize', sendPrimaryDisplay)
   win.webContents.on('did-start-navigation', (details) => {
     if (details.isMainFrame && !details.isSameDocument) connectionTaken = false
   })
@@ -144,18 +205,35 @@ function createStageWindow(): void {
 
 function resizeToVirtualDesktop(): void {
   if (stageWindow && !stageWindow.isDestroyed()) applyVirtualBounds(stageWindow)
+  // A new primary display can move without the stage window changing size.
+  sendPrimaryDisplay()
 }
 
 export function initOverlayStage(stageEnv: StageEnv): void {
   env = stageEnv
 
-  session.fromPartition(OVERLAY_PARTITION).webRequest.onHeadersReceived((details, cb) => {
+  const stageSession = session.fromPartition(OVERLAY_PARTITION)
+  stageSession.webRequest.onHeadersReceived((details, cb) => {
+    // A framed site keeps its own headers. The stage policy would block its files.
+    if (details.resourceType === 'subFrame' || isSubFrame(details.frame)) {
+      cb({})
+      return
+    }
     cb({
       responseHeaders: {
         ...details.responseHeaders,
         'Content-Security-Policy': [OVERLAY_CSP],
       },
     })
+  })
+  // The second check: it also catches redirects, which `will-frame-navigate` does not see.
+  stageSession.webRequest.onBeforeRequest((details, cb) => {
+    cb({ cancel: details.resourceType === 'subFrame' && !frameAllowed(details.url) })
+  })
+
+  handleIpc('overlay:primary-display', (e) => {
+    const win = getStageWindow()
+    return win && e.sender === win.webContents ? primaryDisplayRect(win) : null
   })
 
   // Once per page load. The stage app takes it first, so plugin code that asks later gets null.

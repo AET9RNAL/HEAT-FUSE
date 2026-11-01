@@ -58,6 +58,8 @@ export interface OverlayHandle {
    * Register a handler for actions emitted by an interactive Vue overlay
    * (buttons/inputs calling `emitAction`). One handler per overlay; a second
    * call replaces the first. Payload is arbitrary JSON authored by the overlay.
+   * An action named `report:<name>` is data from the overlay (stats, telemetry):
+   * it reaches this handler but does not count as a user action.
    */
   onAction(cb: (action: string, payload?: unknown) => void): void;
   remove(): void;
@@ -67,4 +69,17 @@ export interface OverlayManager {
   declare(decl: OverlayDeclaration): OverlayHandle;
   get(id: string): OverlayHandle | undefined;
   all(): OverlayHandle[];
+  /**
+   * The URL path of a file in `<filesDir>/overlay/`, for an overlay to fetch (put the stage asset base in
+   * front). Use it for large data that the plugin makes at run time. The route needs the `files` permission.
+   */
+  fileUrl(relPath: string): string;
+}
+
+/** The folder of `filesDir` that the overlay file route serves. */
+export const OVERLAY_FILES_DIR = "overlay";
+
+export function overlayFileUrl(pluginId: string, relPath: string): string {
+  const rel = relPath.replace(/\\/g, "/").replace(/^\/+/, "");
+  return `/overlay-file/${encodeURIComponent(pluginId)}/${rel.split("/").map(encodeURIComponent).join("/")}`;
 }

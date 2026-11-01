@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { AnimatePresence, motion } from "motion-v";
-import Icons from "../../../components/Icons.vue";
+import Icons from "../../../components/ui/Icons.vue";
 import { Dynamics } from "../../../composables/useMotion";
 import type { Option } from "../types";
 

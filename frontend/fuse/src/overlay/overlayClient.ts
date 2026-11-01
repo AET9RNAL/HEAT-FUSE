@@ -10,7 +10,7 @@
  * Connection params (port/token) come from `stageAPI.connection()` in the
  * Electron stage, or from the URL query string in a plain browser tab.
  */
-import { reactive, ref, toRaw } from "vue";
+import { computed, reactive, ref, toRaw } from "vue";
 import mitt from "mitt";
 import { playAudio, preloadAudio, setAudioMaster, stopAllAudio, stopAudio } from "./audio";
 
@@ -19,7 +19,7 @@ let obsMode = false;
 import type { OverlayInput } from "./rive";
 import type { InputPhase, InspectorSchema } from "./inspector/types";
 import { clearNotifications, pushNotification, removeNotification, type StageNotification } from "./notifications";
-import type { HostState, OverlayDescriptor, OverlayRect, PluginMetrics, StagePlugin } from "./types";
+import type { HostState, OverlayDescriptor, OverlayRect, PluginMetrics, StageMetrics, StagePlugin } from "./types";
 
 type DataEvents = Record<string, Record<string, OverlayInput>>;
 export const overlayBus = mitt<DataEvents>();
@@ -35,8 +35,22 @@ export const inspectorSchemas = reactive(new Map<string, InspectorSchema>());
 export const inspectorValues = reactive(new Map<string, Record<string, unknown>>());
 /** Plugin roster for the stage's plugin list. */
 export const stagePlugins = ref<StagePlugin[]>([]);
+/** Stage-only rows, e.g. the tour's demo plugin. A `plugin:list` message does not replace them. */
+export const localPlugins = ref<StagePlugin[]>([]);
+/** The roster the stage UI shows: the runtime's plugins, then the local rows. */
+export const stageRoster = computed(() =>
+  localPlugins.value.length ? [...stagePlugins.value, ...localPlugins.value] : stagePlugins.value,
+);
+/** Overlays that live only on this stage. Their transforms stay here and never reach the runtime. */
+export const localOverlayIds = new Set<string>();
 /** Each running plugin's process resources, once a second. */
 export const pluginMetrics = ref<Record<string, PluginMetrics>>({});
+/** Settings the App sends for the stage. Off until the runtime says, so OBS views never show stage-only UI. */
+export const stageSettings = reactive({ perfWidget: false, tour: false });
+/** The stage renderer's and GPU process's resources, once a second while the widget is on. */
+export const stageMetrics = ref<StageMetrics | null>(null);
+/** The primary display's box in stage coordinates; null outside the Electron stage. */
+export const primaryDisplay = ref<{ x: number; y: number; w: number; h: number } | null>(null);
 /** Host shortcuts as currently bound (user-rebindable), for on-stage hints. */
 export const hostHotkeys = reactive({ lock: "ctrl+l", interactive: "ctrl+i" });
 
@@ -66,13 +80,32 @@ export const dragging = ref(false);
  */
 export const sourceRev = ref(0);
 
+type DisplayRect = { x: number; y: number; w: number; h: number };
+
 type StageApi = {
   stageAPI?: {
     setIgnore(ignore: boolean): void;
     setFocusable(focusable: boolean): void;
     connection(): Promise<FuseOverlayParams | null>;
+    primaryDisplay(): Promise<DisplayRect | null>;
+    onPrimaryDisplay(cb: (rect: DisplayRect) => void): void;
   };
 };
+
+let primaryDisplayWatched = false;
+
+function watchPrimaryDisplay(): void {
+  const api = (window as unknown as StageApi).stageAPI;
+  if (!api || primaryDisplayWatched) return;
+  primaryDisplayWatched = true;
+  api.onPrimaryDisplay((rect) => (primaryDisplay.value = rect));
+  void api
+    .primaryDisplay()
+    .then((rect) => {
+      if (rect) primaryDisplay.value = rect;
+    })
+    .catch(() => {});
+}
 
 /** Ask Electron main to make the stage window click-through (true) or interactive (false). */
 export function setWindowIgnore(ignore: boolean): void {
@@ -162,6 +195,7 @@ export function connectOverlay(): void {
     return;
   }
 
+  watchPrimaryDisplay();
   void resolveParams().then((params) => {
     if (!params) {
       console.error("[overlay] no connection params (stageAPI.connection() or ?port&token)");
@@ -184,6 +218,9 @@ function openSocket(params: FuseOverlayParams): void {
     inspectorValues.clear();
     stagePlugins.value = [];
     pluginMetrics.value = {};
+    stageMetrics.value = null;
+    stageSettings.perfWidget = false;
+    stageSettings.tour = false;
     clearNotifications();
     stopAllAudio();
     setTimeout(connectOverlay, RECONNECT_MS); // simple auto-reconnect
@@ -277,6 +314,17 @@ function handle(m: Record<string, unknown>): void {
     case "plugin:metrics":
       pluginMetrics.value = (m.metrics as Record<string, PluginMetrics>) ?? {};
       break;
+    case "stage:settings":
+      stageSettings.perfWidget = m.perfWidget === true;
+      stageSettings.tour = m.tour === true;
+      if (!stageSettings.perfWidget) stageMetrics.value = null;
+      break;
+    case "stage:metrics":
+      stageMetrics.value = {
+        renderer: (m.renderer as StageMetrics["renderer"]) ?? null,
+        gpuProcess: (m.gpuProcess as StageMetrics["gpuProcess"]) ?? null,
+      };
+      break;
     case "host:hotkeys":
       if (typeof m.lock === "string") hostHotkeys.lock = m.lock;
       if (typeof m.interactive === "string") hostHotkeys.interactive = m.interactive;
@@ -301,11 +349,7 @@ function handle(m: Record<string, unknown>): void {
       hostState.value =
         m.state === "calibrate" ? "calibrate" : m.state === "interactive" ? "interactive" : "locked";
       calibStage.value = Number(m.calib_stage) || 1;
-      // Locked => fully click-through. Calibrate/interactive => start
-      // click-through; the hover hit-test (StageApp) enables interaction only
-      // over an overlay or the editor UI. Both states need a focusable window:
-      // interactive for overlay text input, calibrate for the inspector fields.
-      setWindowIgnore(true);
+      // StageApp owns click-through. Interactive needs focus for overlay text input, calibrate for the inspector fields.
       setWindowFocusable(hostState.value === "interactive" || hostState.value === "calibrate");
       break;
     }
@@ -314,6 +358,11 @@ function handle(m: Record<string, unknown>): void {
 
 /** Persist a dragged/resized overlay rect back to the runtime. */
 export function sendTransform(overlayId: string, rect: OverlayRect): void {
+  if (localOverlayIds.has(overlayId)) {
+    const d = overlays.get(overlayId);
+    if (d) d.rect = { ...rect };
+    return;
+  }
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify({ type: "overlay:transform", overlayId, rect }));
   }
@@ -366,6 +415,18 @@ export function sendPermissionReview(pluginId: string, scope: string): void {
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify({ type: "permissions:review", pluginId, scope }));
   }
+}
+
+/** The stage tour ended by the user's choice. The App marks it seen. */
+export function sendStageTourDone(): void {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: "stage:tour_done" }));
+  }
+}
+
+/** True when this page is an OBS browser source, not the Electron stage. */
+export function isObsMode(): boolean {
+  return obsMode;
 }
 
 /** The user closed a notification here; the runtime stops replaying it and closes it elsewhere. */

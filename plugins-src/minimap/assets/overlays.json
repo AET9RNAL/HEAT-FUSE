@@ -1,0 +1,4561 @@
+{
+ "version": 1,
+ "maps": {
+  "02": [
+   {
+    "id": "kc-02-8dcf37e0",
+    "kind": "point",
+    "points": [
+     [
+      -272.9,
+      232.5
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-02-3e5b1344",
+    "kind": "point",
+    "points": [
+     [
+      -265.2,
+      -104.5
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-02-3a20c757",
+    "kind": "point",
+    "points": [
+     [
+      -213.2,
+      -357.7
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-02-cc80d152",
+    "kind": "point",
+    "points": [
+     [
+      -38.6,
+      -223.0
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-02-ee022bf4",
+    "kind": "point",
+    "points": [
+     [
+      55.6,
+      284.3
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-02-89a0774c",
+    "kind": "point",
+    "points": [
+     [
+      123.9,
+      4.0
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-02-a7409960",
+    "kind": "point",
+    "points": [
+     [
+      277.2,
+      446.8
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-02-0905404e",
+    "kind": "point",
+    "points": [
+     [
+      400.0,
+      -5.2
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-02-2d2d9daa",
+    "kind": "point",
+    "points": [
+     [
+      -465.5,
+      288.2
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-02-e00ec92d",
+    "kind": "point",
+    "points": [
+     [
+      -464.8,
+      -256.7
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-02-67670b63",
+    "kind": "point",
+    "points": [
+     [
+      -238.8,
+      -586.8
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-02-a7b3506a",
+    "kind": "point",
+    "points": [
+     [
+      -174.9,
+      490.6
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-02-a3ce9af7",
+    "kind": "point",
+    "points": [
+     [
+      53.6,
+      556.7
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-02-b656a951",
+    "kind": "point",
+    "points": [
+     [
+      76.9,
+      -605.0
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-02-43eac653",
+    "kind": "point",
+    "points": [
+     [
+      296.4,
+      -343.1
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-02-9e9ec2d1",
+    "kind": "point",
+    "points": [
+     [
+      419.3,
+      -127.4
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-02-c35f5560",
+    "kind": "point",
+    "points": [
+     [
+      470.8,
+      396.0
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-02-b5303d13",
+    "kind": "point",
+    "points": [
+     [
+      536.5,
+      -111.5
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-02-c126732f",
+    "kind": "point",
+    "points": [
+     [
+      -440.8,
+      79.5
+     ]
+    ],
+    "tag": "kc_ultimate",
+    "label": "",
+    "stroke": "#DDCE9CFF",
+    "fill": "#DDCE9C40",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-02-696e616c",
+    "kind": "point",
+    "points": [
+     [
+      29.5,
+      87.2
+     ]
+    ],
+    "tag": "kc_ultimate",
+    "label": "",
+    "stroke": "#DDCE9CFF",
+    "fill": "#DDCE9C40",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-02-815135fd",
+    "kind": "point",
+    "points": [
+     [
+      330.6,
+      66.4
+     ]
+    ],
+    "tag": "kc_ultimate",
+    "label": "",
+    "stroke": "#DDCE9CFF",
+    "fill": "#DDCE9C40",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   }
+  ],
+  "06": [
+   {
+    "id": "kc-06-d4bfba44",
+    "kind": "point",
+    "points": [
+     [
+      -306.8,
+      -182.7
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-06-9b285ca2",
+    "kind": "point",
+    "points": [
+     [
+      -305.2,
+      163.5
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-06-bfc69345",
+    "kind": "point",
+    "points": [
+     [
+      -197.1,
+      -17.1
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-06-b9b1fb48",
+    "kind": "point",
+    "points": [
+     [
+      -170.9,
+      35.5
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-06-2fc24a1b",
+    "kind": "point",
+    "points": [
+     [
+      -163.0,
+      7.7
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-06-6614bde1",
+    "kind": "point",
+    "points": [
+     [
+      -137.7,
+      131.8
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-06-0c9bd15c",
+    "kind": "point",
+    "points": [
+     [
+      -134.5,
+      4.3
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-06-61643ea7",
+    "kind": "point",
+    "points": [
+     [
+      -9.0,
+      4.8
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-06-5486665c",
+    "kind": "point",
+    "points": [
+     [
+      -4.1,
+      75.5
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-06-47db50b7",
+    "kind": "point",
+    "points": [
+     [
+      -2.8,
+      -63.7
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-06-8dcdc452",
+    "kind": "point",
+    "points": [
+     [
+      3.3,
+      16.9
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-06-0905404e",
+    "kind": "point",
+    "points": [
+     [
+      15.9,
+      -249.6
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-06-a39ca450",
+    "kind": "point",
+    "points": [
+     [
+      38.5,
+      14.5
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-06-6098dd92",
+    "kind": "point",
+    "points": [
+     [
+      55.3,
+      188.7
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-06-eb35d780",
+    "kind": "point",
+    "points": [
+     [
+      131.9,
+      -224.5
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-06-cabab7ab",
+    "kind": "point",
+    "points": [
+     [
+      152.0,
+      173.8
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-06-5da19ce9",
+    "kind": "point",
+    "points": [
+     [
+      205.4,
+      4.3
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-06-e3106ea5",
+    "kind": "point",
+    "points": [
+     [
+      263.3,
+      3.0
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-06-0381a728",
+    "kind": "point",
+    "points": [
+     [
+      340.6,
+      28.2
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-06-d072a788",
+    "kind": "point",
+    "points": [
+     [
+      -397.9,
+      -177.7
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-06-9183a1dc",
+    "kind": "point",
+    "points": [
+     [
+      -369.7,
+      15.9
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-06-52fb91cb",
+    "kind": "point",
+    "points": [
+     [
+      -142.8,
+      -72.8
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-06-2845fc48",
+    "kind": "point",
+    "points": [
+     [
+      -141.8,
+      79.3
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-06-d4ff5ad6",
+    "kind": "point",
+    "points": [
+     [
+      -48.8,
+      -311.3
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-06-e70c9e88",
+    "kind": "point",
+    "points": [
+     [
+      -17.1,
+      2.0
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-06-75a70461",
+    "kind": "point",
+    "points": [
+     [
+      44.4,
+      -43.3
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-06-460fbd36",
+    "kind": "point",
+    "points": [
+     [
+      80.5,
+      -300.1
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-06-b86bae43",
+    "kind": "point",
+    "points": [
+     [
+      97.1,
+      -94.7
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-06-debf55ca",
+    "kind": "point",
+    "points": [
+     [
+      113.7,
+      100.1
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-06-815135fd",
+    "kind": "point",
+    "points": [
+     [
+      265.0,
+      6.2
+     ]
+    ],
+    "tag": "kc_ultimate",
+    "label": "",
+    "stroke": "#DDCE9CFF",
+    "fill": "#DDCE9C40",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   }
+  ],
+  "10": [
+   {
+    "id": "kc-10-6f2614bc",
+    "kind": "point",
+    "points": [
+     [
+      -266.8,
+      -172.1
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-10-bb04f421",
+    "kind": "point",
+    "points": [
+     [
+      -249.6,
+      -146.4
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-10-514b9b16",
+    "kind": "point",
+    "points": [
+     [
+      -249.5,
+      103.1
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-10-4674aa66",
+    "kind": "point",
+    "points": [
+     [
+      -206.6,
+      177.7
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-10-7cf70460",
+    "kind": "point",
+    "points": [
+     [
+      -183.4,
+      -283.5
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-10-2d391fdb",
+    "kind": "point",
+    "points": [
+     [
+      -175.5,
+      -274.9
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-10-0b22371c",
+    "kind": "point",
+    "points": [
+     [
+      -162.6,
+      -269.9
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-10-eedf30fd",
+    "kind": "point",
+    "points": [
+     [
+      -156.8,
+      -298.9
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-10-40fe8104",
+    "kind": "point",
+    "points": [
+     [
+      -152.1,
+      -288.7
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-10-73a79d76",
+    "kind": "point",
+    "points": [
+     [
+      -110.0,
+      -185.6
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-10-0905404e",
+    "kind": "point",
+    "points": [
+     [
+      -104.6,
+      57.9
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-10-d5db4d47",
+    "kind": "point",
+    "points": [
+     [
+      -92.6,
+      -156.2
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-10-d44f8334",
+    "kind": "point",
+    "points": [
+     [
+      -18.5,
+      -316.0
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-10-7f3375ff",
+    "kind": "point",
+    "points": [
+     [
+      -3.9,
+      -287.7
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-10-4ffa6f10",
+    "kind": "point",
+    "points": [
+     [
+      -0.2,
+      292.7
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-10-e87d05f0",
+    "kind": "point",
+    "points": [
+     [
+      6.7,
+      288.9
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-10-e601b7e8",
+    "kind": "point",
+    "points": [
+     [
+      92.2,
+      168.4
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-10-fadd7d1d",
+    "kind": "point",
+    "points": [
+     [
+      98.6,
+      231.5
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-10-0ec05ac1",
+    "kind": "point",
+    "points": [
+     [
+      100.6,
+      -60.0
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-10-64c11f14",
+    "kind": "point",
+    "points": [
+     [
+      152.0,
+      201.6
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-10-2dd0703c",
+    "kind": "point",
+    "points": [
+     [
+      157.3,
+      292.4
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-10-8a2042c4",
+    "kind": "point",
+    "points": [
+     [
+      163.9,
+      289.4
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-10-e97cab13",
+    "kind": "point",
+    "points": [
+     [
+      170.3,
+      285.6
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-10-af11cd4b",
+    "kind": "point",
+    "points": [
+     [
+      222.5,
+      -185.5
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-10-a08341ad",
+    "kind": "point",
+    "points": [
+     [
+      253.3,
+      152.2
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-10-ae8c08a1",
+    "kind": "point",
+    "points": [
+     [
+      259.7,
+      148.3
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-10-c4b008f7",
+    "kind": "point",
+    "points": [
+     [
+      268.7,
+      -106.5
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-10-b6401992",
+    "kind": "point",
+    "points": [
+     [
+      -215.0,
+      -93.5
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-10-e8011121",
+    "kind": "point",
+    "points": [
+     [
+      -203.5,
+      -4.7
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-10-9e9ec2d1",
+    "kind": "point",
+    "points": [
+     [
+      -157.7,
+      87.6
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-10-099c99b4",
+    "kind": "point",
+    "points": [
+     [
+      -94.1,
+      160.6
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-10-a830aa45",
+    "kind": "point",
+    "points": [
+     [
+      11.7,
+      -235.8
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-10-df6d4b72",
+    "kind": "point",
+    "points": [
+     [
+      20.4,
+      175.2
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-10-3304bcc7",
+    "kind": "point",
+    "points": [
+     [
+      105.7,
+      -197.6
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-10-257d9425",
+    "kind": "point",
+    "points": [
+     [
+      136.8,
+      115.4
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-10-cf1a787b",
+    "kind": "point",
+    "points": [
+     [
+      172.0,
+      15.6
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-10-2900d71c",
+    "kind": "point",
+    "points": [
+     [
+      173.1,
+      -103.2
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-10-815135fd",
+    "kind": "point",
+    "points": [
+     [
+      23.5,
+      -14.9
+     ]
+    ],
+    "tag": "kc_ultimate",
+    "label": "",
+    "stroke": "#DDCE9CFF",
+    "fill": "#DDCE9C40",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   }
+  ],
+  "09": [
+   {
+    "id": "kc-09-41931d0e",
+    "kind": "point",
+    "points": [
+     [
+      -375.5,
+      -163.9
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-09-81e23ea3",
+    "kind": "point",
+    "points": [
+     [
+      -370.0,
+      1.4
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-09-3f0066bc",
+    "kind": "point",
+    "points": [
+     [
+      -258.5,
+      -210.2
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-09-b6e4c4b0",
+    "kind": "point",
+    "points": [
+     [
+      -244.7,
+      -0.9
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-09-0e000529",
+    "kind": "point",
+    "points": [
+     [
+      -206.7,
+      169.8
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-09-d4447f50",
+    "kind": "point",
+    "points": [
+     [
+      -139.6,
+      -122.0
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-09-0c3be535",
+    "kind": "point",
+    "points": [
+     [
+      -99.1,
+      -228.6
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-09-77696cdd",
+    "kind": "point",
+    "points": [
+     [
+      -77.4,
+      348.8
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-09-774a6c3d",
+    "kind": "point",
+    "points": [
+     [
+      -17.8,
+      -177.1
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-09-91103c23",
+    "kind": "point",
+    "points": [
+     [
+      -17.1,
+      131.1
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-09-0905404e",
+    "kind": "point",
+    "points": [
+     [
+      14.7,
+      -1.3
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-09-948bd0b8",
+    "kind": "point",
+    "points": [
+     [
+      261.6,
+      -181.6
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-09-7e2fd048",
+    "kind": "point",
+    "points": [
+     [
+      328.6,
+      187.5
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-09-93cbc776",
+    "kind": "point",
+    "points": [
+     [
+      373.4,
+      -0.8
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-09-18525403",
+    "kind": "point",
+    "points": [
+     [
+      383.4,
+      -129.2
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-09-96257294",
+    "kind": "point",
+    "points": [
+     [
+      -279.0,
+      -24.1
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-09-150935da",
+    "kind": "point",
+    "points": [
+     [
+      -275.2,
+      21.5
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-09-9e9ec2d1",
+    "kind": "point",
+    "points": [
+     [
+      -244.4,
+      -278.8
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-09-e1238492",
+    "kind": "point",
+    "points": [
+     [
+      -177.7,
+      -1.1
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-09-7dd207d1",
+    "kind": "point",
+    "points": [
+     [
+      -70.6,
+      -207.8
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-09-d9be1363",
+    "kind": "point",
+    "points": [
+     [
+      -41.9,
+      -81.9
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-09-5406e722",
+    "kind": "point",
+    "points": [
+     [
+      -30.5,
+      -354.6
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-09-9f875be1",
+    "kind": "point",
+    "points": [
+     [
+      -13.1,
+      412.2
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-09-39d964f5",
+    "kind": "point",
+    "points": [
+     [
+      3.5,
+      -238.5
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-09-2d046d41",
+    "kind": "point",
+    "points": [
+     [
+      5.4,
+      219.6
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-09-5dca0d3b",
+    "kind": "point",
+    "points": [
+     [
+      7.4,
+      286.0
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-09-2116a73b",
+    "kind": "point",
+    "points": [
+     [
+      77.1,
+      178.6
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-09-efb7eae6",
+    "kind": "point",
+    "points": [
+     [
+      102.0,
+      -35.7
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-09-874b60db",
+    "kind": "point",
+    "points": [
+     [
+      102.6,
+      33.7
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-09-eb9372f1",
+    "kind": "point",
+    "points": [
+     [
+      175.9,
+      0.2
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-09-74912b57",
+    "kind": "point",
+    "points": [
+     [
+      183.7,
+      -299.8
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-09-fc0dfdd5",
+    "kind": "point",
+    "points": [
+     [
+      249.0,
+      -116.4
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-09-470cfd2a",
+    "kind": "point",
+    "points": [
+     [
+      306.6,
+      296.4
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-09-75998fdd",
+    "kind": "point",
+    "points": [
+     [
+      383.5,
+      -126.3
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-09-100e75c2",
+    "kind": "point",
+    "points": [
+     [
+      436.7,
+      178.7
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-09-72079377",
+    "kind": "point",
+    "points": [
+     [
+      436.9,
+      212.4
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-09-815135fd",
+    "kind": "point",
+    "points": [
+     [
+      -82.7,
+      0.0
+     ]
+    ],
+    "tag": "kc_ultimate",
+    "label": "",
+    "stroke": "#DDCE9CFF",
+    "fill": "#DDCE9C40",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-09-9d021de8",
+    "kind": "point",
+    "points": [
+     [
+      241.1,
+      -35.5
+     ]
+    ],
+    "tag": "kc_ultimate",
+    "label": "",
+    "stroke": "#DDCE9CFF",
+    "fill": "#DDCE9C40",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   }
+  ],
+  "04": [
+   {
+    "id": "kc-04-43c69689",
+    "kind": "point",
+    "points": [
+     [
+      -127.8,
+      -57.2
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-04-6aa5d355",
+    "kind": "point",
+    "points": [
+     [
+      -34.2,
+      322.1
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-04-fc923114",
+    "kind": "point",
+    "points": [
+     [
+      -25.7,
+      130.7
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-04-13c69de8",
+    "kind": "point",
+    "points": [
+     [
+      -23.4,
+      -28.6
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-04-a78c21fe",
+    "kind": "point",
+    "points": [
+     [
+      -17.6,
+      -259.2
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-04-c6233bb9",
+    "kind": "point",
+    "points": [
+     [
+      3.1,
+      -348.8
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-04-41d3de6d",
+    "kind": "point",
+    "points": [
+     [
+      20.6,
+      -133.6
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-04-13f3bf77",
+    "kind": "point",
+    "points": [
+     [
+      98.4,
+      212.5
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-04-40a1e6bc",
+    "kind": "point",
+    "points": [
+     [
+      118.8,
+      21.8
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-04-2e3e4224",
+    "kind": "point",
+    "points": [
+     [
+      249.4,
+      -75.6
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-04-0798e682",
+    "kind": "point",
+    "points": [
+     [
+      -385.9,
+      63.9
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-04-c13e0269",
+    "kind": "point",
+    "points": [
+     [
+      -287.7,
+      -169.0
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-04-d092910f",
+    "kind": "point",
+    "points": [
+     [
+      -272.8,
+      42.5
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-04-906895f3",
+    "kind": "point",
+    "points": [
+     [
+      -264.0,
+      -81.5
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-04-9a114b57",
+    "kind": "point",
+    "points": [
+     [
+      -194.8,
+      324.1
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-04-f8850265",
+    "kind": "point",
+    "points": [
+     [
+      -193.0,
+      -393.4
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-04-8dc0c657",
+    "kind": "point",
+    "points": [
+     [
+      -181.1,
+      -167.9
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-04-c55c48f3",
+    "kind": "point",
+    "points": [
+     [
+      -137.6,
+      20.4
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-04-38d3c397",
+    "kind": "point",
+    "points": [
+     [
+      -126.2,
+      170.4
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-04-d7612ac4",
+    "kind": "point",
+    "points": [
+     [
+      -63.2,
+      244.3
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-04-0bfa9480",
+    "kind": "point",
+    "points": [
+     [
+      -8.5,
+      -300.3
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-04-db335353",
+    "kind": "point",
+    "points": [
+     [
+      52.7,
+      -173.0
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-04-b96caf37",
+    "kind": "point",
+    "points": [
+     [
+      55.5,
+      87.8
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-04-36c72d73",
+    "kind": "point",
+    "points": [
+     [
+      73.4,
+      -92.5
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-04-4cf6d4f0",
+    "kind": "point",
+    "points": [
+     [
+      87.9,
+      357.2
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-04-0ec03ec7",
+    "kind": "point",
+    "points": [
+     [
+      89.7,
+      -313.8
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-04-9042a918",
+    "kind": "point",
+    "points": [
+     [
+      145.0,
+      389.8
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-04-5527ca8c",
+    "kind": "point",
+    "points": [
+     [
+      148.1,
+      303.5
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-04-104f647a",
+    "kind": "point",
+    "points": [
+     [
+      179.4,
+      -330.0
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-04-69f4eb91",
+    "kind": "point",
+    "points": [
+     [
+      194.5,
+      127.0
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-04-af8a1b2b",
+    "kind": "point",
+    "points": [
+     [
+      204.4,
+      -235.5
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-04-2fa3d04d",
+    "kind": "point",
+    "points": [
+     [
+      228.5,
+      47.2
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-04-9b958293",
+    "kind": "point",
+    "points": [
+     [
+      274.6,
+      -170.7
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-04-f2261fb9",
+    "kind": "point",
+    "points": [
+     [
+      356.9,
+      -128.2
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-04-49f2636b",
+    "kind": "point",
+    "points": [
+     [
+      -10.2,
+      3.1
+     ]
+    ],
+    "tag": "kc_ultimate",
+    "label": "",
+    "stroke": "#DDCE9CFF",
+    "fill": "#DDCE9C40",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   }
+  ],
+  "07": [
+   {
+    "id": "kc-07-0905404e",
+    "kind": "point",
+    "points": [
+     [
+      -89.5,
+      89.1
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-07-7306b6d0",
+    "kind": "point",
+    "points": [
+     [
+      -54.6,
+      -128.4
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-07-5cad71e9",
+    "kind": "point",
+    "points": [
+     [
+      73.7,
+      -260.8
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-07-c105a6df",
+    "kind": "point",
+    "points": [
+     [
+      128.7,
+      55.5
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-07-2a7c61f7",
+    "kind": "point",
+    "points": [
+     [
+      258.3,
+      -61.9
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-07-f8ab6bf8",
+    "kind": "point",
+    "points": [
+     [
+      -160.8,
+      -14.5
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-07-4179967b",
+    "kind": "point",
+    "points": [
+     [
+      -57.2,
+      55.1
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-07-d0f0045b",
+    "kind": "point",
+    "points": [
+     [
+      5.6,
+      151.1
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-07-ebc2be72",
+    "kind": "point",
+    "points": [
+     [
+      69.5,
+      -273.6
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-07-9e9ec2d1",
+    "kind": "point",
+    "points": [
+     [
+      205.9,
+      -209.3
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-07-5d1e2f42",
+    "kind": "point",
+    "points": [
+     [
+      269.2,
+      -72.0
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-07-815135fd",
+    "kind": "point",
+    "points": [
+     [
+      45.1,
+      -44.4
+     ]
+    ],
+    "tag": "kc_ultimate",
+    "label": "",
+    "stroke": "#DDCE9CFF",
+    "fill": "#DDCE9C40",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   }
+  ],
+  "01": [
+   {
+    "id": "kc-01-0f5c4939",
+    "kind": "point",
+    "points": [
+     [
+      -644.2,
+      540.2
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-01-b47752d7",
+    "kind": "point",
+    "points": [
+     [
+      -383.3,
+      842.1
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-01-91bc1a1a",
+    "kind": "point",
+    "points": [
+     [
+      -353.4,
+      126.5
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-01-f797489a",
+    "kind": "point",
+    "points": [
+     [
+      -331.2,
+      -121.0
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-01-f1f1d038",
+    "kind": "point",
+    "points": [
+     [
+      -261.4,
+      846.6
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-01-9219d852",
+    "kind": "point",
+    "points": [
+     [
+      -187.1,
+      478.4
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-01-0905404e",
+    "kind": "point",
+    "points": [
+     [
+      -124.2,
+      253.3
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-01-44f47f01",
+    "kind": "point",
+    "points": [
+     [
+      -85.3,
+      377.9
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-01-29cdadff",
+    "kind": "point",
+    "points": [
+     [
+      -51.7,
+      141.7
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-01-774c5df9",
+    "kind": "point",
+    "points": [
+     [
+      159.9,
+      341.1
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-01-4c63afe7",
+    "kind": "point",
+    "points": [
+     [
+      -682.6,
+      -33.3
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-01-1e02e937",
+    "kind": "point",
+    "points": [
+     [
+      -678.2,
+      140.4
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-01-ddb3ebab",
+    "kind": "point",
+    "points": [
+     [
+      -653.1,
+      482.1
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-01-54ad1b3c",
+    "kind": "point",
+    "points": [
+     [
+      -651.3,
+      317.7
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-01-bf97b717",
+    "kind": "point",
+    "points": [
+     [
+      -459.0,
+      634.2
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-01-d31ec346",
+    "kind": "point",
+    "points": [
+     [
+      -225.9,
+      647.5
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-01-9e9ec2d1",
+    "kind": "point",
+    "points": [
+     [
+      -89.1,
+      199.7
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-01-fb8680af",
+    "kind": "point",
+    "points": [
+     [
+      -4.0,
+      530.0
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-01-b6e43185",
+    "kind": "point",
+    "points": [
+     [
+      214.7,
+      515.2
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-01-b9513c62",
+    "kind": "point",
+    "points": [
+     [
+      -533.1,
+      446.5
+     ]
+    ],
+    "tag": "kc_ultimate",
+    "label": "",
+    "stroke": "#DDCE9CFF",
+    "fill": "#DDCE9C40",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-01-78cb65d6",
+    "kind": "point",
+    "points": [
+     [
+      -355.8,
+      19.8
+     ]
+    ],
+    "tag": "kc_ultimate",
+    "label": "",
+    "stroke": "#DDCE9CFF",
+    "fill": "#DDCE9C40",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-01-815135fd",
+    "kind": "point",
+    "points": [
+     [
+      -201.8,
+      317.6
+     ]
+    ],
+    "tag": "kc_ultimate",
+    "label": "",
+    "stroke": "#DDCE9CFF",
+    "fill": "#DDCE9C40",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   }
+  ],
+  "03": [
+   {
+    "id": "kc-03-93e2fb59",
+    "kind": "point",
+    "points": [
+     [
+      -206.0,
+      7.0
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-03-3a15545a",
+    "kind": "point",
+    "points": [
+     [
+      -202.6,
+      238.4
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-03-0905404e",
+    "kind": "point",
+    "points": [
+     [
+      -160.6,
+      -63.2
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-03-61d97c3a",
+    "kind": "point",
+    "points": [
+     [
+      -126.5,
+      141.2
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-03-f6ff4c30",
+    "kind": "point",
+    "points": [
+     [
+      -106.7,
+      -64.0
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-03-6cd318e0",
+    "kind": "point",
+    "points": [
+     [
+      -37.6,
+      -104.8
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-03-3b5b5ec5",
+    "kind": "point",
+    "points": [
+     [
+      -24.5,
+      -29.0
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-03-7cca2cae",
+    "kind": "point",
+    "points": [
+     [
+      -22.7,
+      374.7
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-03-4e8afcbd",
+    "kind": "point",
+    "points": [
+     [
+      -7.0,
+      39.4
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-03-9439e864",
+    "kind": "point",
+    "points": [
+     [
+      19.0,
+      204.4
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-03-512639bf",
+    "kind": "point",
+    "points": [
+     [
+      19.9,
+      -75.6
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-03-d990024b",
+    "kind": "point",
+    "points": [
+     [
+      105.5,
+      -70.4
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-03-2d3489b5",
+    "kind": "point",
+    "points": [
+     [
+      125.3,
+      419.9
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-03-1f612dfd",
+    "kind": "point",
+    "points": [
+     [
+      141.8,
+      198.7
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-03-a8d1be15",
+    "kind": "point",
+    "points": [
+     [
+      168.6,
+      7.0
+     ]
+    ],
+    "tag": "kc_heal",
+    "label": "",
+    "stroke": "#78D098FF",
+    "fill": "#78D09840",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-03-d41e97fa",
+    "kind": "point",
+    "points": [
+     [
+      -325.6,
+      168.2
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-03-e2613b24",
+    "kind": "point",
+    "points": [
+     [
+      -314.1,
+      -190.8
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-03-e9b5f4ea",
+    "kind": "point",
+    "points": [
+     [
+      -236.2,
+      -307.7
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-03-9e9ec2d1",
+    "kind": "point",
+    "points": [
+     [
+      -235.5,
+      -67.9
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-03-68d46410",
+    "kind": "point",
+    "points": [
+     [
+      -189.8,
+      386.7
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-03-f38af175",
+    "kind": "point",
+    "points": [
+     [
+      -71.2,
+      55.7
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-03-e6894caf",
+    "kind": "point",
+    "points": [
+     [
+      -54.9,
+      -348.2
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-03-82ba3614",
+    "kind": "point",
+    "points": [
+     [
+      -33.9,
+      -179.1
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-03-89e15f76",
+    "kind": "point",
+    "points": [
+     [
+      41.2,
+      468.8
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-03-9a8fdd44",
+    "kind": "point",
+    "points": [
+     [
+      74.4,
+      37.3
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-03-56806f74",
+    "kind": "point",
+    "points": [
+     [
+      87.1,
+      -327.5
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-03-eec11f29",
+    "kind": "point",
+    "points": [
+     [
+      181.4,
+      -66.8
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-03-bf7a5763",
+    "kind": "point",
+    "points": [
+     [
+      230.6,
+      303.5
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-03-9b5f89e0",
+    "kind": "point",
+    "points": [
+     [
+      231.6,
+      -186.2
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-03-f2a2856e",
+    "kind": "point",
+    "points": [
+     [
+      333.5,
+      91.4
+     ]
+    ],
+    "tag": "kc_overdrive",
+    "label": "",
+    "stroke": "#ECA782FF",
+    "fill": "#ECA78240",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   },
+   {
+    "id": "kc-03-815135fd",
+    "kind": "point",
+    "points": [
+     [
+      -19.8,
+      2.3
+     ]
+    ],
+    "tag": "kc_ultimate",
+    "label": "",
+    "stroke": "#DDCE9CFF",
+    "fill": "#DDCE9C40",
+    "width": 1,
+    "modes": [
+     "killconfirm"
+    ],
+    "roles": [],
+    "vehicles": []
+   }
+  ]
+ }
+}

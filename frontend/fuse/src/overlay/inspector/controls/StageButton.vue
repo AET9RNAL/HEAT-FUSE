@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref } from "vue";
 import { motion } from "motion-v";
-import Icons from "../../../components/Icons.vue";
-import type { ButtonMode } from "../../../components/eButton.vue";
+import Icons from "../../../components/ui/Icons.vue";
+import type { ButtonMode } from "../../../components/inputs/eButton.vue";
 import { Dynamics } from "../../../composables/useMotion";
 
 const props = withDefaults(

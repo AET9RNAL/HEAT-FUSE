@@ -7,6 +7,24 @@ interface Accessors {
   injectStylesheet(css: string | null, styleId?: string): void;
 }
 
+const SHOW_IN_OPTIONS = [
+  { value: "alive", label: "Alive", tooltip: "While you drive, aim or use an ability." },
+  { value: "map", label: "Map", tooltip: "While the tactical map is open." },
+  { value: "dead", label: "Death screen", tooltip: "From the fatal hit until the deploy screen." },
+  { value: "deploy", label: "Deploy", tooltip: "On the deploy screen and during the spawn drop." },
+];
+const DEFAULT_SHOW_IN = ["alive", "dead", "deploy"];
+
+// The game's own affiliation colours.
+const ALLY_COLOR = "#7ABFDFFF";
+const ENEMY_COLOR = "#FF6D46FF";
+const COLOR_SWATCHES = ["#7ABFDFFF", "#FF6D46FF", "#78D098FF", "#FFD85CFF", "#0072B2FF", "#E69F00FF"];
+
+/** A valid "#RRGGBB[AA]" as "#RRGGBB" (the overlay has no alpha), else the fallback's. */
+function rgbHex(value: unknown, fallback: string): string {
+  const ok = typeof value === "string" && /^#(?:[0-9a-f]{6}|[0-9a-f]{8})$/i.test(value);
+  return (ok ? (value as string) : fallback).slice(0, 7);
+}
 const CONTROL_MODES = new Set(["control"]);
 const NATIVE_STYLE_ID = "__fuse_mph__";
 const HIDE_NATIVE_CSS =
@@ -22,6 +40,8 @@ export class MatchProgressOverhaulPlugin extends FusePlugin {
   private lastJson = "";
   private lastConnected = false;
   private nativeHidden = false;
+  private hostVisible = true;
+  private lastVisible: boolean | null = null;
   // Fill-rate tracking for prediction (P3): EMA of d(fill)/dt per team.
   private lastT = 0;
   // Calibration animation
@@ -30,6 +50,7 @@ export class MatchProgressOverhaulPlugin extends FusePlugin {
   private calibAnim: { t: number; g: number; phase: "up" | "down" } | null = null;
   private lastAllyFill = 0;
   private lastEnemyFill = 0;
+  private desiredHeld: number | null = null;
   private allyRate = 0;
   private enemyRate = 0;
 
@@ -43,6 +64,22 @@ export class MatchProgressOverhaulPlugin extends FusePlugin {
 
   private sections(): InspectorSection[] {
     return [
+      {
+        id: "mpo.display",
+        label: "Display",
+        description: "Where the score bars show.",
+        order: 9,
+        controls: [
+          {
+            type: "buttons",
+            id: "show_in",
+            key: "show_in",
+            mode: "multi",
+            label: "Show in",
+            options: SHOW_IN_OPTIONS,
+          },
+        ],
+      },
       {
         id: "mpo.enhancements",
         label: "Enhancements",
@@ -65,9 +102,37 @@ export class MatchProgressOverhaulPlugin extends FusePlugin {
         ],
       },
       {
+        id: "mpo.colors",
+        label: "Team Colours",
+        description: "Bars, glows, flames, scores and the lead track follow these.",
+        order: 11,
+        controls: [
+          {
+            type: "color",
+            id: "ally_color",
+            key: "ally_color",
+            label: "Allies",
+            alpha: false,
+            default: ALLY_COLOR,
+            swatches: COLOR_SWATCHES,
+            tooltip: "Double-click the swatch to reset to the game's colour.",
+          },
+          {
+            type: "color",
+            id: "enemy_color",
+            key: "enemy_color",
+            label: "Enemies",
+            alpha: false,
+            default: ENEMY_COLOR,
+            swatches: COLOR_SWATCHES,
+            tooltip: "Double-click the swatch to reset to the game's colour.",
+          },
+        ],
+      },
+      {
         id: "mpo.native",
         label: "Native HUD",
-        order: 11,
+        order: 12,
         controls: [
           {
             type: "switch",
@@ -86,7 +151,17 @@ export class MatchProgressOverhaulPlugin extends FusePlugin {
     this.acc = ctx.services.get<Accessors>("accessors");
 
     ctx.config
-      .defaults({ vue_overlay_pos: null, vue_width: 1100, vue_height: 100, hide_native: true, enhanced: true, flames: true })
+      .defaults({
+        vue_overlay_pos: null,
+        vue_width: 1100,
+        vue_height: 100,
+        hide_native: true,
+        enhanced: true,
+        flames: true,
+        show_in: DEFAULT_SHOW_IN,
+        ally_color: ALLY_COLOR,
+        enemy_color: ENEMY_COLOR,
+      })
       .load();
     // One declaration for both surfaces: the App panel and the stage inspector.
     const sections = this.sections();
@@ -111,7 +186,20 @@ export class MatchProgressOverhaulPlugin extends FusePlugin {
   override enterLocked(): void {
     this.calibAnim = null;
     this.lastJson = "";
+    this.lastVisible = null;
     this.resetRates();
+  }
+
+  /** Accessors' scene tags against the Show in pick. */
+  private applyVisibility(): void {
+    if (this.ctx.state === "calibrate") return;
+    const raw = this.ctx.config.get<unknown>("show_in", DEFAULT_SHOW_IN);
+    const showIn = new Set(Array.isArray(raw) ? raw.map(String) : DEFAULT_SHOW_IN);
+    const tags = this.rd("scene_tags");
+    const visible = this.hostVisible && Array.isArray(tags) && tags.some((tag) => showIn.has(String(tag)));
+    if (visible === this.lastVisible) return;
+    this.lastVisible = visible;
+    this.ov?.setVisible(visible);
   }
 
   private resetRates(): void {
@@ -137,13 +225,15 @@ export class MatchProgressOverhaulPlugin extends FusePlugin {
     this.lastEnemyFill = enemyFill;
   }
   override setOverlayVisible(visible: boolean): void {
-    if (this.ctx.state === "calibrate") return;
-    this.ov?.setVisible(visible);
+    this.hostVisible = visible;
+    this.lastVisible = null;
+    this.applyVisibility();
   }
 
   override tick(_dt: number): void {
     this.ctx.config.checkReload();
     if (!this.acc) return;
+    this.applyVisibility();
 
     const connected = this.acc.connected;
     if (connected && !this.lastConnected) this.nativeHidden = false;
@@ -273,6 +363,8 @@ export class MatchProgressOverhaulPlugin extends FusePlugin {
     const enemy = this.num("enemy_score");
     if (battleState !== 8 || ally == null || enemy == null) {
       this.pushData({ inMatch: false });
+      // Out of the match, so the next one works out its own target.
+      this.desiredHeld = null;
       return;
     }
 
@@ -300,7 +392,9 @@ export class MatchProgressOverhaulPlugin extends FusePlugin {
       allyTeamScore = Math.round(ally);
       enemyTeamScore = Math.round(enemy);
     } else {
-      const desired = this.num("desired_score");
+      const reported = this.num("desired_score");
+      if (reported && reported > 0) this.desiredHeld = reported;
+      const desired = reported && reported > 0 ? reported : this.desiredHeld;
       allyText = `${Math.round(ally)}`;
       enemyText = `${Math.round(enemy)}`;
       allyFill = this.frac(ally, desired);
@@ -369,9 +463,14 @@ export class MatchProgressOverhaulPlugin extends FusePlugin {
 
   private pushData(payload: Record<string, unknown>): void {
     if (!this.ov) return;
-    const json = JSON.stringify(payload);
+    const board = {
+      ...payload,
+      allyColor: rgbHex(this.ctx.config.get("ally_color", ALLY_COLOR), ALLY_COLOR),
+      enemyColor: rgbHex(this.ctx.config.get("enemy_color", ENEMY_COLOR), ENEMY_COLOR),
+    };
+    const json = JSON.stringify(board);
     if (json === this.lastJson) return;
     this.lastJson = json;
-    this.ov.setJson("board", payload);
+    this.ov.setJson("board", board);
   }
 }

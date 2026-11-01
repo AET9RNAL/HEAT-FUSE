@@ -5,7 +5,8 @@
 export { FusePlugin } from "./plugin.js";
 export type { FuseContext, HostView, HostState, TeardownReason } from "./plugin.js";
 export { HotkeyRegistryView } from "./hotkeys.js";
-export type { BindingInfo, PluginHotkeys } from "./hotkeys.js";
+export type { BindingInfo, HoldHandlers, PluginHotkeys } from "./hotkeys.js";
+export type { KeyboardService } from "./keyboard.js";
 export { PluginAssets } from "./assets.js";
 export { ConfigCategory, ConfigEntry, serializeSchema } from "./configSchema.js";
 export type { ConfigEntryType, ConfigEntryInit, ConfigSchemaItem } from "./configSchema.js";
@@ -20,6 +21,7 @@ export type {
   Rect,
   Size,
 } from "./overlay.js";
+export { OVERLAY_FILES_DIR } from "./overlay.js";
 export type {
   OverlayInspector,
   InspectorSection,
@@ -51,3 +53,4 @@ export type { PluginPermissions, PermissionState } from "./permissions.js";
 export type { PluginStorage, StorageCollection, StorageQuery, StorageWhere, StorageOp } from "./storage.js";
 export type { PluginSecrets } from "./secrets.js";
 export type { PluginLinks } from "./links.js";
+export type { LanguageService } from "./language.js";

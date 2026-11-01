@@ -1,0 +1,46 @@
+{
+  "config": {
+    "section": "Damage log",
+    "sectionTip": "What the log shows for the current life.",
+    "rows": "Rows",
+    "rowsTip": "Most recent hits shown. Older hits still count in the total. Double-click to reset.",
+    "selfDamage": "Self damage",
+    "selfDamageTip": "Show falls and other damage the game credits to you.",
+    "language": "Language",
+    "languageAuto": "Automatic",
+    "languageTip": "Language for What Just Hit Me. Automatic follows the FUSE App.",
+    "showIn": "Show in"
+  },
+  "overlay": {
+    "damageLog": "Damage log",
+    "destroyed": "Destroyed",
+    "life": "Life",
+    "kia": "KIA",
+    "destroyedBy": "Destroyed by",
+    "you": "You",
+    "unknown": "Unknown",
+    "noHits": "No hits this life",
+    "older": "Older",
+    "missed": "Missed"
+  },
+  "source": {
+    "shell": "Shell",
+    "ramming": "Ram",
+    "falling": "Fall",
+    "indirect": "Ability",
+    "periodic": "Periodic",
+    "hit": "Hit"
+  },
+  "scene": {
+    "alive": "Alive",
+    "aliveTip": "While you drive, aim or use an ability.",
+    "map": "Map",
+    "mapTip": "While the tactical map is open.",
+    "dead": "Death screen",
+    "deadTip": "From the fatal hit until the deploy screen. Shows who destroyed you.",
+    "deploy": "Deploy",
+    "deployTip": "On the deploy screen and during the spawn drop.",
+    "results": "Results",
+    "resultsTip": "After the match ends, on the results screens."
+  }
+}

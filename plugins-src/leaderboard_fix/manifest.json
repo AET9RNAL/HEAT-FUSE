@@ -7,8 +7,10 @@
   "entry": "plugin:LeaderboardFixPlugin",
   "runtime": "node",
   "dependencies": [],
+  "min_host_version": "5.0.0",
   "permissions": {
-    "network": { "reason": "Connects to the game's debugger on this PC to sort the leaderboard." }
+    "network": { "reason": "Connects to the game's CDP on this PC to sort the leaderboard." },
+    "game_config": { "reason": "Needs the CDP port the FUSE App configured for the game." }
   },
   "hotkeys": {},
   "default_config": {}

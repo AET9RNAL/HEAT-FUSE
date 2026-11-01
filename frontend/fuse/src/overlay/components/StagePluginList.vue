@@ -4,11 +4,11 @@
  */
 import { computed, ref } from "vue";
 import StagePanel from "./StagePanel.vue";
-import Icons from "../../components/Icons.vue";
+import Icons from "../../components/ui/Icons.vue";
 import { motion } from "motion-v";
 import { Dynamics } from "../../composables/useMotion";
 import { vTip } from "../inspector/tooltip";
-import { overlays, stagePlugins } from "../overlayClient";
+import { overlays, stageRoster } from "../overlayClient";
 import { pluginListOpen, pluginListPos, selectOverlay, selectedId } from "../stageState";
 
 const PANEL_W = 300;
@@ -20,8 +20,8 @@ const expanded = ref(new Set<string>());
 const rows = computed(() => {
   const q = query.value.trim().toLowerCase();
   const list = q
-    ? stagePlugins.value.filter((p) => p.name.toLowerCase().includes(q) || p.plugin_id.includes(q))
-    : stagePlugins.value;
+    ? stageRoster.value.filter((p) => p.name.toLowerCase().includes(q) || p.plugin_id.includes(q))
+    : stageRoster.value;
   // Loaded plugins first, then alphabetical - the roster includes disabled ones.
   return [...list].sort((a, b) => {
     const rank = (s: string): number => (s === "active" ? 0 : s === "error" ? 1 : 2);
@@ -35,7 +35,7 @@ function toggle(id: string): void {
   expanded.value = new Set(expanded.value);
 }
 
-function stageLabel(p: (typeof stagePlugins.value)[number]): string {
+function stageLabel(p: (typeof stageRoster.value)[number]): string {
   if (!p.requires_calibration) return "—";
   if (!p.current_stage) return `${p.calibration_stages} stage${p.calibration_stages > 1 ? "s" : ""}`;
   return `${p.current_stage}/${p.calibration_stages}`;
@@ -94,7 +94,7 @@ function onHeaderUp(): void {
 </script>
 
 <template>
-  <aside v-if="pluginListOpen" ref="root" class="plugin-list stage-ui" :style="panelStyle">
+  <aside v-if="pluginListOpen" ref="root" v-ftue="'stage-plugins'" class="plugin-list stage-ui" :style="panelStyle">
     <StagePanel class="pl-panel" :cut="8" blur>
       <header
         class="pl-header"

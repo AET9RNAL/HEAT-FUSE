@@ -36,11 +36,12 @@ function boxOf(rect: OverlayRect): Box {
 /**
  * Snap targets for a gesture. Call once at gesture start - peers cannot move
  * mid-gesture, and recomputing per pointermove would be wasteful.
+ * Gestures run only while calibrating, when every overlay shows, so hidden ones count too.
  */
 export function peerBoxes(movingId: string): Box[] {
   const boxes: Box[] = [];
   for (const d of overlays.values()) {
-    if (d.overlayId === movingId || !d.visible || !d.rect) continue;
+    if (d.overlayId === movingId || !d.rect) continue;
     boxes.push(boxOf(d.rect));
   }
   return boxes;

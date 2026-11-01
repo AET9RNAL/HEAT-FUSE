@@ -1,11 +1,26 @@
-import { computed } from 'vue'
-import { useAppStore, type AppLanguage } from '../stores/app'
+import { readonly, ref } from 'vue'
+import type { AppLanguage } from '../stores/app'
 import type { TranslationSchema } from '../locales/schema'
 
 import en from '../locales/en.json'
+import fr from '../locales/fr.json'
+import ru from '../locales/ru.json'
+import ua from '../locales/ua.json'
 
+// A key missing from a catalog falls back to English.
 const locales: Record<AppLanguage, TranslationSchema> = {
     en: en as unknown as TranslationSchema,
+    fr: fr as unknown as TranslationSchema,
+    ru: ru as unknown as TranslationSchema,
+    ua: ua as unknown as TranslationSchema,
+}
+
+// No store import: the overlay stage has no Pinia, and the app store loads the Supabase client.
+const locale = ref<AppLanguage>('en')
+
+/** The App syncs this from its store. Other surfaces stay on English. */
+export function setI18nLocale(language: AppLanguage): void {
+    locale.value = language
 }
 
 function getNestedValue(obj: Record<string, unknown>, path: string): string | undefined {
@@ -31,9 +46,6 @@ function interpolate(
 }
 
 export function useI18n() {
-    const appStore = useAppStore()
-    const locale = computed(() => appStore.appLanguage)
-
     function resolveCommon(key: string): string | undefined {
         const current = locales[locale.value]
         const fallback = locales.en
@@ -57,7 +69,7 @@ export function useI18n() {
         return interpolate(value, params ?? {}, resolveCommon)
     }
 
-    return { locale, t }
+    return { locale: readonly(locale), t }
 }
 
 export default useI18n

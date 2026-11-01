@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { AnimatePresence, motion } from "motion-v";
-import Icons, { type IconKind } from "../components/Icons.vue";
+import Icons, { type IconKind } from "../components/ui/Icons.vue";
 import StagePanel from "../overlay/components/StagePanel.vue";
 import StageButton from "../overlay/inspector/controls/StageButton.vue";
 import { Dynamics } from "../composables/useMotion";

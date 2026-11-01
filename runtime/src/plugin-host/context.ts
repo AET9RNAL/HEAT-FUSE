@@ -11,9 +11,9 @@ import { PluginAssets } from "../sdk/assets.js";
 import { serializeSchema, type ConfigSchemaItem } from "../sdk/configSchema.js";
 import type { PluginConfigApi } from "../sdk/config.js";
 import type { EventHandler, PluginEvents } from "../sdk/events.js";
-import { HotkeyRegistry, type BindingInfo, type PluginHotkeys } from "../sdk/hotkeys.js";
+import { HotkeyRegistry, type BindingInfo, type HoldHandlers, type PluginHotkeys } from "../sdk/hotkeys.js";
 import type { InputPhase, InspectorSection, OverlayInspector } from "../sdk/inspector.js";
-import type { OverlayDeclaration, OverlayHandle, OverlayManager, Rect, Size } from "../sdk/overlay.js";
+import { overlayFileUrl, type OverlayDeclaration, type OverlayHandle, type OverlayManager, type Rect, type Size } from "../sdk/overlay.js";
 import type { StageNotificationInit, StageNotifier } from "../sdk/notifications.js";
 import type { PlayOptions, PluginAudio } from "../sdk/audio.js";
 import type { PermissionState, PluginPermissions } from "../sdk/permissions.js";
@@ -178,7 +178,14 @@ function bindingKey(mods: string[], key: string): string {
 
 class RemoteHotkeys implements PluginHotkeys {
   private callbacks = new Map<string, () => void>();
-  private bindings = new Map<string, { id: string; combo: string; label: string; mods: string[]; key: string }>();
+  private holds = new Map<string, HoldHandlers>();
+  /** Hold ids that are down now. */
+  private down = new Set<string>();
+  private bindings = new Map<
+    string,
+    { id: string; combo: string; label: string; mods: string[]; key: string; hold: boolean }
+  >();
+  private listeners: Array<() => void> = [];
 
   constructor(
     private readonly channel: Channel,
@@ -187,14 +194,32 @@ class RemoteHotkeys implements PluginHotkeys {
   ) {}
 
   register(combo: string, callback: () => void, label = ""): void {
+    const id = this.bind(combo, label, false);
+    this.callbacks.set(id, callback);
+    this.channel.send({ t: "hotkey.register", combo, label, id });
+  }
+
+  hold(combo: string, handlers: HoldHandlers, label = ""): void {
+    const id = this.bind(combo, label, true);
+    this.holds.set(id, handlers);
+    this.channel.send({ t: "hotkey.hold", combo, label, id });
+  }
+
+  private bind(combo: string, label: string, hold: boolean): string {
     const { mods, key } = HotkeyRegistry.parse(combo);
     const bk = bindingKey(mods, key);
     const prev = this.bindings.get(bk);
-    if (prev) this.callbacks.delete(prev.id);
+    if (prev) this.forget(prev.id);
     const id = randomUUID();
-    this.callbacks.set(id, callback);
-    this.bindings.set(bk, { id, combo, label: label || combo, mods, key });
-    this.channel.send({ t: "hotkey.register", combo, label, id });
+    this.bindings.set(bk, { id, combo, label: label || combo, mods, key, hold });
+    return id;
+  }
+
+  /** Drop a binding's callbacks. A hold that is down gets its `onUp` first. */
+  private forget(id: string): void {
+    if (this.down.has(id)) this.fire(id, "up");
+    this.callbacks.delete(id);
+    this.holds.delete(id);
   }
 
   unregister(combo: string): boolean {
@@ -202,9 +227,9 @@ class RemoteHotkeys implements PluginHotkeys {
     const bk = bindingKey(mods, key);
     const prev = this.bindings.get(bk);
     if (!prev) return false;
-    this.callbacks.delete(prev.id);
+    this.forget(prev.id);
     this.bindings.delete(bk);
-    this.channel.send({ t: "hotkey.unregister", combo });
+    this.channel.send({ t: "hotkey.unregister", combo, id: prev.id });
     return true;
   }
 
@@ -221,13 +246,56 @@ class RemoteHotkeys implements PluginHotkeys {
 
   listBindings(_owner?: string): BindingInfo[] {
     return [...this.bindings.values()]
-      .map((b) => ({ mods: b.mods, key: b.key, combo: b.combo, label: b.label, owner: this.pluginId }))
+      .map((b) => ({ mods: b.mods, key: b.key, combo: b.combo, label: b.label, owner: this.pluginId, hold: b.hold }))
       .sort((a, b) => a.label.localeCompare(b.label));
   }
 
-  fire(id: string): void {
+  onChange(callback: () => void): void {
+    this.listeners.push(callback);
+  }
+
+  /** The combos the runtime binds now (a saved override, a user rebind). */
+  sync(list: unknown): void {
+    if (!Array.isArray(list)) return;
+    let moved = false;
+    for (const item of list as Array<{ id?: unknown; combo?: unknown }>) {
+      const id = String(item?.id ?? "");
+      const combo = typeof item?.combo === "string" ? item.combo : "";
+      const entry = [...this.bindings.entries()].find(([, b]) => b.id === id);
+      if (!entry || !combo || entry[1].combo === combo) continue;
+      let parsed: { mods: string[]; key: string };
+      try {
+        parsed = HotkeyRegistry.parse(combo);
+      } catch {
+        continue;
+      }
+      this.bindings.delete(entry[0]);
+      this.bindings.set(bindingKey(parsed.mods, parsed.key), { ...entry[1], combo, mods: parsed.mods, key: parsed.key });
+      moved = true;
+    }
+    if (!moved) return;
+    for (const cb of this.listeners) this.call(cb);
+  }
+
+  /** A press, or a hold's "down"/"up", sent by the runtime. */
+  fire(id: string, phase?: unknown): void {
+    const hold = this.holds.get(id);
+    if (hold) {
+      if (phase === "up") {
+        if (!this.down.delete(id)) return;
+        this.call(() => hold.onUp());
+      } else {
+        if (this.down.has(id)) return;
+        this.down.add(id);
+        this.call(() => hold.onDown());
+      }
+      return;
+    }
     const cb = this.callbacks.get(id);
-    if (!cb) return;
+    if (cb) this.call(cb);
+  }
+
+  private call(cb: () => void): void {
     try {
       cb();
     } catch (e) {
@@ -406,6 +474,10 @@ class RemoteOverlays implements OverlayManager {
 
   all(): OverlayHandle[] {
     return [...this.handles.values()];
+  }
+
+  fileUrl(relPath: string): string {
+    return overlayFileUrl(this.pluginId, relPath);
   }
 
   byLocalId(id: string): RemoteHandle | undefined {
@@ -731,6 +803,7 @@ export class PluginRuntime {
       logger: this.log,
       state: init.state,
       packageRoot: init.packageRoot,
+      filesDir: init.filesDir ?? null,
       manifestHotkeys,
       extras: new Map(),
       hotkeyFor: (name: string, fallback = "") => manifestHotkeys[name] ?? fallback,
@@ -788,7 +861,10 @@ export class PluginRuntime {
       }
 
       case "hotkey":
-        this.hotkeys.fire(String(msg.id ?? ""));
+        this.hotkeys.fire(String(msg.id ?? ""), msg.phase);
+        return;
+      case "hotkey.bindings":
+        this.hotkeys.sync(msg.list);
         return;
       case "event":
         this.events.dispatch(String(msg.event ?? ""), asRecord(msg.payload));

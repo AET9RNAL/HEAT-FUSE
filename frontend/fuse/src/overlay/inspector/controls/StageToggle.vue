@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // had to drop Rive cuz every instance consumes WebGL context
 import { motion } from "motion-v";
-import Icons from "../../../components/Icons.vue";
+import Icons from "../../../components/ui/Icons.vue";
 import { Dynamics } from "../../../composables/useMotion";
 
 withDefaults(defineProps<{ modelValue: boolean; label?: string; disabled?: boolean }>(), {

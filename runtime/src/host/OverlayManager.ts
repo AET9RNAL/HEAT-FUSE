@@ -20,6 +20,7 @@ import type {
   Rect,
   Size,
 } from "../sdk/overlay.js";
+import { overlayFileUrl } from "../sdk/overlay.js";
 import {
   coerceValue,
   controlKeys,
@@ -100,8 +101,17 @@ interface InspectorReg {
   onAction?: (controlId: string, payload?: unknown) => void;
 }
 
+/** A plugin's live hotkeys, for keybind controls that name an `action`. */
+export interface HotkeyBridge {
+  /** The bound combo, or undefined when the plugin has no binding with that label. */
+  combo(pluginId: string, action: string): string | undefined;
+  /** Move the binding and save it as the user's choice. False on a conflict. */
+  rebind(pluginId: string, action: string, combo: string): boolean;
+}
+
 export class OverlayHub {
   private server: WsServer;
+  private hotkeys: HotkeyBridge | null = null;
   private plugins = new Map<string, PluginReg>();
   private descriptors = new Map<string, Descriptor>();
   private pending = new Map<string, Map<string, InputValue>>();
@@ -115,6 +125,24 @@ export class OverlayHub {
 
   constructor(server: WsServer) {
     this.server = server;
+  }
+
+  setHotkeyBridge(bridge: HotkeyBridge): void {
+    this.hotkeys = bridge;
+  }
+
+  /** Send the live combos to the stage after a plugin's hotkeys change. */
+  refreshKeybinds(pluginId: string): void {
+    for (const [overlayId, reg] of this.inspectors) {
+      if (this.descriptors.get(overlayId)?.pluginId !== pluginId) continue;
+      if (![...reg.byId.values()].some((c) => c.type === "keybind" && c.action)) continue;
+      this.server.broadcastOverlay({
+        type: "inspector:values",
+        overlayId,
+        values: this.inspectorValues(overlayId),
+        phase: "commit",
+      });
+    }
   }
 
   registerPlugin(pluginId: string, assetsRoot: string, packageRoot: string, config: PluginConfig): OverlayManager {
@@ -195,6 +223,15 @@ export class OverlayHub {
       return;
     }
     const v = coerced.value;
+
+    // The host binding is the value: the App's Keybinds tab edits the same one.
+    if (control.type === "keybind" && control.action) {
+      const pluginId = this.descriptors.get(overlayId)?.pluginId;
+      if (!pluginId || phase !== "commit") return;
+      // A refused combo sends the live one back, so the field never shows a bind that does not work.
+      if (!this.hotkeys?.rebind(pluginId, control.action, String(v))) this.refreshKeybinds(pluginId);
+      return;
+    }
 
     const [keyA, keyB] = controlKeys(control);
     if (keyA) {
@@ -414,6 +451,11 @@ export class OverlayHub {
     const out: Record<string, unknown> = {};
     for (const [id, control] of reg.byId) {
       if (!isValueControl(control)) continue;
+      if (control.type === "keybind" && control.action) {
+        const combo = desc ? this.hotkeys?.combo(desc.pluginId, control.action) : undefined;
+        if (combo !== undefined) out[id] = combo;
+        continue;
+      }
       const [keyA, keyB] = controlKeys(control);
       if (!keyA) {
         if (reg.transient.has(id)) out[id] = reg.transient.get(id);
@@ -541,6 +583,9 @@ class ScopedOverlayManager implements OverlayManager {
   }
   all(): OverlayHandle[] {
     return this.hub.handlesFor(this.pluginId);
+  }
+  fileUrl(relPath: string): string {
+    return overlayFileUrl(this.pluginId, relPath);
   }
 }
 

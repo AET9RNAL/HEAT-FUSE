@@ -35,7 +35,8 @@ const interactive = computed(() => hostState.value === "interactive");
 const clickable = computed(() => calibrating.value || interactive.value);
 const selected = computed(() => calibrating.value && selectedId.value === props.descriptor.overlayId);
 // Resize is a Vue-overlay capability; Rive overlays size their canvas separately.
-const resizable = computed(() => calibrating.value && props.descriptor.kind === "vue");
+const sizedByRect = computed(() => props.descriptor.kind === "vue" || props.descriptor.kind === "demo");
+const resizable = computed(() => calibrating.value && sizedByRect.value);
 
 const rot = computed(() => props.descriptor.rect?.rot ?? 0);
 const opacity = computed(() => props.descriptor.rect?.opacity ?? 1);
@@ -45,7 +46,7 @@ const opacity = computed(() => props.descriptor.rect?.opacity ?? 1);
 const effSize = computed(() => {
   if (sizeOverride.value) return sizeOverride.value;
   const r = props.descriptor.rect;
-  if (props.descriptor.kind === "vue" && r && r.w && r.h) return { w: r.w, h: r.h };
+  if (sizedByRect.value && r && r.w && r.h) return { w: r.w, h: r.h };
   return props.descriptor.size;
 });
 
@@ -66,7 +67,8 @@ const style = computed(() => {
     position: "absolute" as const,
     width: `${w}px`,
     height: `${h}px`,
-    display: props.descriptor.visible ? "block" : "none",
+    // Calibration shows every overlay, whatever its plugin says about the game state.
+    display: props.descriptor.visible || calibrating.value ? "block" : "none",
     opacity: String(opacity.value),
     transformOrigin: "center" as const,
     pointerEvents: clickable.value ? ("auto" as const) : ("none" as const),

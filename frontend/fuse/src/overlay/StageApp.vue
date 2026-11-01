@@ -6,6 +6,9 @@ import { clearSelection } from "./stageState";
 import { clearHistory, redo, undo } from "./history";
 import { hideTip } from "./inspector/tooltip";
 import { visibleNotifications } from "./notifications";
+import { initStageTour } from "./stageTour";
+
+initStageTour();
 
 let lastIgnore = true;
 

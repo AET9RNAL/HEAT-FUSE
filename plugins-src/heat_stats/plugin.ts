@@ -1,171 +1,65 @@
-import { createHmac, randomUUID } from "node:crypto";
-import { FusePlugin, type FuseContext, type InspectorSection, type OverlayHandle } from "@fuse/plugin-sdk";
+import {
+  FusePlugin,
+  type FuseContext,
+  type InspectorSection,
+  type LanguageService,
+  type OverlayHandle,
+  type ServiceHandle,
+} from "@fuse/plugin-sdk";
+import {
+  DEFAULT_QUERY,
+  normalizeQuery,
+  queryBattles,
+  toBattleRows,
+  type BattleQuery,
+  type BattleRow,
+} from "./battles.js";
+import { Account } from "./account.js";
+import { buildCharts } from "./charts.js";
+import { StatsClient } from "./fetching.js";
+import { compactCatalog, snapshotLoadouts, type LoadoutCatalog, type LoadoutSnapshot } from "./loadout.js";
+import { LOCALES, messagesFor, resolveLocale, translator, type Translate } from "./i18n.js";
+import { DEFAULT_STREAK_LENGTH, STREAK_LENGTHS } from "./overview.js";
+import { DEFAULT_WIDGET_SCENES, RateWidgets, WIDGET_SCENES, widgetRectKey, widgetResetKey } from "./rateWidgets.js";
+import { BLOCK_RESUME_KEY, QueueGuard, type GuardLabels } from "./queueGuard.js";
+import { MatchRecorder } from "./recording.js";
+import { ReplayLibrary } from "./replays.js";
+import { SamplesCache } from "./samples.js";
+import type { Phase } from "./session.js";
+import { MatchStore } from "./store.js";
+import { buildUpload } from "./submission.js";
+import { Sync } from "./sync.js";
+import {
+  TagStore,
+  TagsInjector,
+  GROUPS as TAG_GROUPS,
+  MARK_SLOTS,
+  TAGS_SERVICE,
+  TAG_COLOR_DEFAULT,
+  tagColorKey,
+} from "./tags.js";
+import { RATE_WIDGETS, RESET_MODES } from "./widgets.js";
 
-/** The stage can't resize Rive overlays; `anim_width` / `anim_height` size the canvas instead, live. */
-function renderSizeSection(idPrefix: string): InspectorSection {
-  return {
-    id: `${idPrefix}.size`,
-    label: "Size",
-    order: 90,
-    controls: [
-      {
-        type: "vec2",
-        id: "render_size",
-        keys: ["anim_width", "anim_height"],
-        labels: ["W", "H"],
-        label: "Render size",
-        min: 10,
-        max: 3000,
-        step: 10,
-        tooltip: "Canvas size. Rive overlays can't be resized on the stage, so this is how to scale them.",
-      },
-    ],
-  };
-}
+const TAG_SWATCHES = [TAG_COLOR_DEFAULT, "#FFF87A", "#FF7A7A", "#7ABFDF", "#F2F2F2", "#C9A7FF"];
 
 interface Accessors {
   read(name: string): unknown;
   readonly connected: boolean;
   readonly connectedHangar: boolean;
+  /** Structured domains. An older Accessors build has none, and the service proxy gives undefined, so every call is guarded. */
+  snapshot?(domain: string): Promise<unknown>;
+  fetchSnapshot?(domain: string): Promise<unknown>;
 }
 
-const API_BASE = "https://jypsytkbliqrwjipolhx.supabase.co/functions/v1/api-v1";
-
-const HMAC_KEY = Buffer.from("heat_fuse_stats_v1");
-const HMAC_EXCLUDE = new Set(["hmac_hex", "type"]);
-// client_version stamped into the payload (kept as the Python value so the
-// backend's HMAC verification + version handling stay compatible).
-const CLIENT_VERSION = "3.0.0";
-const MS_FINISH = "ActiveFinish";
-const SKIP_GAME_MODES = new Set(["FiringRange"]);
-
-const PM_STAT_MAP: Record<string, string> = {
-  p_shell_hits_damage: "shellHitsDamage",
-  p_crit_ammo_damage: "critAmmoDamage",
-  p_crit_fuel_damage: "critFuelDamage",
-  p_crit_engine_damage: "critEngineDamage",
-  p_ability_damage_done: "abilityDamageDone",
-  p_ability_damage_taken: "abilityDamageTaken",
-  p_blocked_damage: "blockedDamage",
-  p_ramming_damage: "rammingDamage",
-  p_heal: "heal",
-  p_damage_taken: "damageTaken",
-  p_captured_base: "capturedBase",
-  p_uncaptured_base: "uncapturedBase",
-  p_capture_points: "capturePoints",
-  p_hits_done: "hitsDone",
-  p_hits_taken: "hitsTaken",
-  p_shoot_done: "shootDone",
-  p_crit_hits_done: "criticalHitsDone",
-  p_crit_hits_taken: "criticalHitsTaken",
-  p_noncrit_hits_done: "nonCriticalHitsDone",
-  p_noncrit_hits_taken: "nonCriticalHitsTaken",
-  p_noncrit_shoot_done: "nonCriticalShootDone",
-  p_rp_crit_fuel_damage: "rolePointsCritFuelDamage",
-};
-
-type Num = number | null;
-
-interface Sample {
-  t: number; hp: Num; en: Num; bo: Num; pi: Num; fp: Num;
-  al: Num; es: Num; ki: Num; de: Num; as: Num; da: Num; co: Num; dn: Num; sc: Num;
-  ms: string | null;
-  dki: number; dde: number; das: number; dda: number; dal: number; des: number; dco: number; ddn: number; dsc: number;
-}
-
-function canonical(v: unknown): string {
-  if (v === null || v === undefined) return "null";
-  if (typeof v === "number") return JSON.stringify(v);
-  if (typeof v === "boolean") return v ? "true" : "false";
-  if (typeof v === "string") return JSON.stringify(v);
-  if (Array.isArray(v)) return "[" + v.map(canonical).join(",") + "]";
-  const obj = v as Record<string, unknown>;
-  const keys = Object.keys(obj).sort();
-  return "{" + keys.map((k) => JSON.stringify(k) + ":" + canonical(obj[k])).join(",") + "}";
-}
-
-function sign(payload: Record<string, unknown>): string {
-  const filtered: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(payload)) if (!HMAC_EXCLUDE.has(k)) filtered[k] = v;
-  return createHmac("sha256", HMAC_KEY).update(canonical(filtered)).digest("hex");
-}
-
-// Session / trend helpers
-const GRAPH_MAX = 60;
-// Temp solution need to figure out a better way to handle this
-const MAX_PAGES = 20;
-
-/** Epoch seconds, epoch ms, or an ISO string -> ms. */
-function toMs(t: unknown): number {
-  const n = typeof t === "number" ? t : Date.parse(String(t ?? ""));
-  if (!Number.isFinite(n)) return 0;
-  return n < 1e12 ? n * 1000 : n;
-}
-
-/** Exponential moving average; N=5 => alpha = 2/(N+1). */
-function ema(xs: number[], n = 5): number[] {
-  const alpha = 2 / (n + 1);
-  const out: number[] = [];
-  let prev = 0;
-  xs.forEach((x, i) => {
-    prev = i === 0 ? x : alpha * x + (1 - alpha) * prev;
-    out.push(Math.round(prev * 1000) / 1000);
-  });
-  return out;
-}
-
-/** Per-match K/D (deathless matches score their kill count). */
-function kdOf(s: Record<string, unknown>): number {
-  const k = Number(s.final_kills ?? 0);
-  const d = Number(s.final_deaths ?? 0);
-  return d > 0 ? k / d : k;
-}
-
-/** Vehicle slug -> display text, e.g. "a20_m60a2" -> "M60A2". */
-function prettyVehicle(v: unknown): string {
-  const s = String(v ?? "")
-    .replace(/^[a-z]{1,3}\d{1,3}_/i, "")
-    .replace(/_/g, " ")
-    .trim();
-  return s ? s.toUpperCase() : "-";
-}
-
-/** A parked battle older than this cannot belong to whatever is starting now. */
-const RESUME_MAX_AGE_S = 2 * 3600;
-/** Consecutive unreadable match_state ticks before the battle is parked. */
-const STALE_TICKS = 3;
-/** Snapshot cadence, in samples, for the crash-resume record. */
-const PARK_EVERY_SAMPLES = 6;
-/** Identity fields filled lazily - on a rejoin the accessors hydrate late. */
-const IDENTITY: ReadonlyArray<[string, string]> = [
-  ["map_slug", "map_slug"],
-  ["map_name", "sb_map_name"],
-  ["game_mode", "game_mode"],
-  ["player_name", "player_name"],
-  ["player_vehicle", "player_vehicle"],
-  ["player_role", "player_role"],
-  ["player_agent_id", "player_agent_id"],
-];
-
-/** Everything needed to pick a battle back up after a crash, quit or rejoin. */
-interface Parked {
-  session_id: string;
-  started_at: number;
-  saved_at: number;
-  session: Record<string, unknown>;
-  samples: Sample[];
-  prev: Record<string, Num>;
-  snap: Record<string, Num>;
-  hpDeathCount: number;
-  peakPing: number;
-  pingSum: number;
-  fpsSum: number;
-  perfCount: number;
-  elapsed: number;
-}
-
-type Phase = "idle" | "waiting" | "recording" | "summarizing" | "finalizing";
-type State = "IDLE" | "WAITING" | "RECORDING" | "SUMMARIZING";
+/** A second read after a finished battle, so a signed-in upload has time to reach the mirror. */
+const REFETCH_AFTER_SUBMIT_MS = 15_000;
+/** Between attempts at the part catalog while the hangar is up but not ready. */
+const CATALOG_RETRY_MS = 30_000;
+/** Starting size only. The window's layout follows the size the stage gives the overlay. */
+const WINDOW_SIZE = { w: 1990, h: 760 };
+/** The recorder widget: one line of status, wide enough for the longest of them. */
+const RECORDER_SIZE = { w: 260, h: 28 };
+const TOGGLE_WINDOW_HOTKEY = "ctrl+alt+s";
 
 export class HeatStatsPlugin extends FusePlugin {
   static override requiresCalibration = true;
@@ -173,321 +67,691 @@ export class HeatStatsPlugin extends FusePlugin {
 
   private ctx!: FuseContext;
   private acc: Accessors | undefined;
+  private language: LanguageService | undefined;
+  /** Last value seen on the language service, which reads empty without the permission. */
+  private appLanguage: string | undefined;
   private ov: OverlayHandle | undefined;
   private vueOv: OverlayHandle | undefined;
-  private state: State = "IDLE";
-  private phase: Phase = "idle";
+  private recorder!: MatchRecorder;
+  private widgets!: RateWidgets;
+  private stats!: StatsClient;
+  private samples!: SamplesCache;
+  private account!: Account;
+  private store!: MatchStore;
+  private sync!: Sync;
+  private replays!: ReplayLibrary;
+  private tags!: TagStore;
+  private tagsInjector!: TagsInjector;
+  private guard!: QueueGuard;
+  private tagsService: ServiceHandle | null = null;
   private lastPhase: Phase | null = null;
+  private battleRows: BattleRow[] | null = null;
+  private battleQuery: BattleQuery = DEFAULT_QUERY;
 
-  private history: { outcome: string; kills: number; deaths: number; playerName: string }[] = [];
-
-  private session: Record<string, unknown> | null = null;
-  private samples: Sample[] = [];
-  private startedAt = 0;
-
-  private summarizeTimer = 0;
-  private sampleTimer = 0;
-  private elapsed = 0;
-  private pingSum = 0;
-  private fpsSum = 0;
-  private perfCount = 0;
-  private peakPing = 0;
-
-  // Delta bookkeeping.
-  private prev = { ki: 0, de: 0, as: null as Num, da: 0, al: 0, es: 0, co: null as Num, dn: null as Num, sc: 0 };
-  private snap = { ki: 0, de: 0, as: null as Num, da: 0, al: 0, es: 0, co: null as Num, dn: null as Num, sc: 0 };
-
-  private hpDeathCount = 0;
-  private lastHp: Num = null;
+  private locale = "en";
+  private t: Translate = translator("en");
+  private toggleCombo = TOGGLE_WINDOW_HOTKEY;
   private hostVisible = true;
   private lastVueVisible: boolean | null = null;
-  private pmCaptured = false;
-  private roster: { ally: unknown[]; enemy: unknown[] } | null = null;
-  private debugMs: unknown = undefined;
-  private staleTicks = 0;
+  private lastConnection: string | null = null;
 
-  private rd(name: string): unknown {
-    return this.acc ? this.acc.read(name) : undefined;
-  }
-  private numOr(name: string, def = 0): number {
-    const v = this.rd(name);
-    return typeof v === "number" ? v : def;
-  }
-  private numOrNull(name: string): Num {
-    const v = this.rd(name);
-    return typeof v === "number" ? v : null;
-  }
+  private catalog: LoadoutCatalog | null = null;
+  private catalogLoading = false;
+  private catalogTriedAt = 0;
 
   private sections(): InspectorSection[] {
+    const t = this.t;
     return [
       {
         id: "hst.display",
-        label: "Display",
+        label: t("config.display"),
         order: 10,
         controls: [
           {
-            type: "segmented",
-            id: "mode",
-            key: "mode",
-            label: "Mode",
+            type: "select",
+            id: "locale",
+            key: "locale",
+            label: t("config.language"),
             options: [
-              { value: "default", label: "Single", tooltip: "One view." },
-              { value: "carousel", label: "Carousel", tooltip: "Loop through every scene." },
+              { value: "", label: t("config.languageAuto") },
+              ...LOCALES.map((code) => ({ value: code, label: code.toUpperCase() })),
             ],
+            tooltip: t("config.languageTip"),
           },
           {
-            type: "slider",
-            id: "scene_time_s",
-            key: "scene_time_s",
-            label: "Scene time",
-            min: 2,
-            max: 60,
-            step: 1,
-            unit: "s",
-            default: 8,
-            when: { key: "mode", eq: "carousel" },
-            tooltip: "How long each carousel scene is shown. Double-click to reset.",
+            type: "switch",
+            id: "window_open",
+            key: "window_open",
+            label: t("config.showWindow"),
+            tooltip: t("config.showWindowTip"),
           },
           {
             type: "switch",
             id: "hide_in_battle",
             key: "hide_in_battle",
-            label: "Hangar only",
-            tooltip: "Hide the stats during battle.",
+            label: t("config.hangarOnly"),
+            tooltip: t("config.hangarOnlyTip"),
+          },
+          {
+            type: "segmented",
+            id: "streak_length",
+            key: "streak_length",
+            label: t("config.streakLength"),
+            options: STREAK_LENGTHS.map((n) => ({ value: n, label: String(n) })),
+            tooltip: t("config.streakLengthTip"),
           },
         ],
       },
       {
-        id: "hst.graph",
-        label: "Trend graph",
+        id: "hst.widgets",
+        label: t("config.widgets"),
+        description: t("config.widgetsHint"),
         order: 11,
         controls: [
           {
-            type: "segmented",
-            id: "graph_scale",
-            key: "graph_scale",
-            label: "Scale",
-            options: [
-              { value: "auto", label: "Auto", tooltip: "Fit the graph to the overlay size." },
-              { value: "manual", label: "Manual", tooltip: "Use the point count and label scale below." },
-            ],
+            type: "buttons",
+            id: "widgets",
+            key: "widgets",
+            mode: "multi",
+            label: t("config.widgetsShown"),
+            options: RATE_WIDGETS.map((w) => ({
+              value: w.id,
+              label: t(`widgets.${w.id}.tab`),
+              tooltip: t(`widgets.${w.id}.tip`),
+            })),
           },
           {
-            type: "number",
-            id: "graph_points",
-            key: "graph_points",
-            label: "Points",
-            min: 4,
-            max: 60,
-            step: 1,
-            when: { key: "graph_scale", eq: "manual" },
-            tooltip: "How many recent matches the graph shows.",
+            type: "buttons",
+            id: "widget_show_in",
+            key: "widget_show_in",
+            mode: "multi",
+            label: t("config.showIn"),
+            options: WIDGET_SCENES.map((scene) => ({
+              value: scene,
+              label: t(`scene.${scene}`),
+              tooltip: t(`scene.${scene}Tip`),
+            })),
           },
-          {
-            type: "slider",
-            id: "graph_value_scale",
-            key: "graph_value_scale",
-            label: "Label scale",
-            min: 0.5,
-            max: 2.5,
-            step: 0.1,
-            unit: "×",
-            default: 1,
-            when: { key: "graph_scale", eq: "manual" },
-            tooltip: "Axis and label size multiplier. Double-click to reset.",
-          },
+          ...RATE_WIDGETS.map((w) => ({
+            type: "buttons" as const,
+            id: widgetResetKey(w.id),
+            key: widgetResetKey(w.id),
+            mode: "exclusive" as const,
+            label: t("config.widgetReset", { widget: t(`widgets.${w.id}.tab`) }),
+            options: RESET_MODES.map((mode) => ({
+              value: mode,
+              label: t(`widgets.reset.${mode}`),
+              tooltip: t(`widgets.reset.${mode}Tip`),
+            })),
+          })),
         ],
       },
       {
-        id: "hst.api",
-        label: "API",
+        id: "hst.player",
+        label: t("config.player"),
         order: 12,
         controls: [
           {
             type: "text",
-            id: "api_key",
-            key: "api_key",
-            label: "API key",
-            placeholder: "fuse_…",
-            tooltip: "Your HEAT Stats API key.",
-          },
-          {
-            type: "text",
             id: "player_name",
             key: "player_name",
-            label: "Player",
-            placeholder: "Player name",
-            tooltip: "Player name to fetch stats for.",
+            label: t("config.player"),
+            placeholder: t("config.playerPlaceholder"),
+            tooltip: t("config.playerTip"),
           },
         ],
       },
       {
         id: "hst.recording",
-        label: "Recording",
+        label: t("config.recording"),
         order: 13,
         controls: [
-          {
-            type: "number",
-            id: "sample_interval_s",
-            key: "sample_interval_s",
-            label: "Sample every",
-            min: 1,
-            max: 30,
-            step: 1,
-            unit: "s",
-            tooltip: "How often battle stats are sampled.",
-          },
           {
             type: "slider",
             id: "summarize_hold_s",
             key: "summarize_hold_s",
-            label: "Summary hold",
+            label: t("config.summaryHold"),
             min: 0,
             max: 20,
             step: 0.5,
             unit: "s",
             default: 5,
-            tooltip: "How long the summary shows before uploading. Double-click to reset.",
+            tooltip: t("config.summaryHoldTip"),
           },
         ],
       },
-      renderSizeSection("hst"),
+      {
+        id: "hst.tags",
+        label: t("config.tags"),
+        description: t("config.tagsHint"),
+        order: 14,
+        controls: TAG_GROUPS.map((id) => ({
+          type: "color" as const,
+          id: tagColorKey(id),
+          key: tagColorKey(id),
+          label: t(`tags.${id}`),
+          alpha: false,
+          swatches: TAG_SWATCHES,
+        })),
+      },
+      {
+        id: "hst.block",
+        label: t("config.block"),
+        description: t("config.blockHint"),
+        order: 15,
+        controls: [
+          {
+            type: "switch",
+            id: BLOCK_RESUME_KEY,
+            key: BLOCK_RESUME_KEY,
+            label: t("block.resume"),
+            tooltip: t("config.blockResumeTip"),
+          },
+        ],
+      },
     ];
+  }
+
+  private guardLabels(): GuardLabels {
+    const t = this.t;
+    return {
+      title: t("block.title"),
+      stopped: t("block.stopped"),
+      inHangar: t("block.inHangar"),
+      players: t("block.players"),
+      resume: t("block.resume"),
+      override: t("block.override"),
+      waiting: t("block.waiting"),
+    };
+  }
+
+  private tagColors(): Record<string, string> {
+    const out: Record<string, string> = {};
+    for (const id of TAG_GROUPS) {
+      out[id] = String(this.ctx.config.get(tagColorKey(id), TAG_COLOR_DEFAULT) || TAG_COLOR_DEFAULT);
+    }
+    return out;
+  }
+
+  /** Rebuilds the page script in the current colors and sends them to the window. */
+  private applyTagColors(): void {
+    this.tagsInjector?.setup(
+      Object.fromEntries(TAG_GROUPS.map((id) => [id, this.t(`tags.${id}`)])),
+      this.tagColors(),
+    );
+    this.pushTags();
   }
 
   setup(ctx: FuseContext): void {
     this.ctx = ctx;
     this.acc = ctx.services.get<Accessors>("accessors");
+    this.language = ctx.services.get<LanguageService>("language");
     ctx.config
       .defaults({
-        sample_interval_s: 5,
         summarize_hold_s: 5.0,
         overlay_pos: null,
-        vue_overlay_pos: null,
-        anim_width: 300,
-        anim_height: 300,
-        vue_width: 440,
-        vue_height: 300,
-        //TO-DO: don't ship the key you dumbell
-        api_key: "",
         player_name: "",
-        session_started_at: 0,
-        // In-flight battle held across a crash/quit/rejoin; not user-facing.
-        parked_battle: null,
-        mode: "default",
-        scene_time_s: 8.0,
         hide_in_battle: false,
-        graph_scale: "auto",
-        graph_points: 20,
-        graph_value_scale: 1.0,
+        streak_length: DEFAULT_STREAK_LENGTH,
+        // Empty follows the App's language.
+        locale: "",
+        window_open: true,
+        window_rect: null,
+        widgets: [],
+        widget_show_in: DEFAULT_WIDGET_SCENES,
+        ...Object.fromEntries(RATE_WIDGETS.map((w) => [widgetRectKey(w.id), null])),
+        ...Object.fromEntries(RATE_WIDGETS.map((w) => [widgetResetKey(w.id), "battle"])),
+        ...Object.fromEntries(TAG_GROUPS.map((id) => [tagColorKey(id), TAG_COLOR_DEFAULT])),
+        [BLOCK_RESUME_KEY]: false,
       })
       .load();
 
-    // One declaration for every surface: the App panel and both overlays' inspectors.
-    const sections = this.sections();
-    ctx.config.schema(sections);
+    this.store = new MatchStore(ctx);
+    this.tags = new TagStore(ctx);
+    this.guard = new QueueGuard(ctx, this.tags, (on) => ctx.config.set(BLOCK_RESUME_KEY, on));
+    this.guard.setup(this.guardLabels());
+    ctx.config.watch(BLOCK_RESUME_KEY, () => void this.guard.refresh());
+    this.tagsInjector = new TagsInjector(ctx, this.tags, () => {
+      this.pushTags();
+      // A tag from the game syncs like a battle.
+      this.sync.nudge();
+    });
+    // English until the locale resolves
+    this.applyTagColors();
+    // A color change rebuilds the script, so the game redraws in the new color.
+    for (const id of TAG_GROUPS) ctx.config.watch(tagColorKey(id), () => this.applyTagColors());
+    // Marks for any plugin that draws players, such as the HUD scoreboard.
+    // Keyed by nickname, because in battle every profileId is 0.
+    this.tagsService = ctx.services.provide(TAGS_SERVICE, {
+      target: {},
+      methods: [],
+      reads: { tagsFor: "byName" },
+      state: () => ({ slots: MARK_SLOTS, ...this.tagsInjector.serviceGroups(), byName: this.tags.byName() }),
+    });
+    void this.tags.load().then(() => this.pushTags());
+    this.sync = new Sync(ctx, this.store, this.tags, {
+      onChange: () => void this.pushAccount(),
+      // Rebuilds from the store
+      onMatchesChanged: () => void this.stats.refresh(),
+      // The window and the game scoreboard both show the marks.
+      onTagsChanged: () => {
+        this.pushTags();
+        void this.tagsInjector.refresh();
+      },
+    });
+    this.account = new Account(ctx, {
+      onChange: () => void this.pushAccount(),
+      onSession: (session) => {
+        void this.sync.onSession(session, this.account.api);
+        // The window follows the account: its matches when signed in, and this PC's when not.
+        this.stats.setSession(session ? this.account.api : null, session?.user.id ?? null);
+      },
+    });
+
+    this.recorder = new MatchRecorder(ctx, {
+      read: (name) => this.acc?.read(name),
+      connected: () => !!this.acc?.connected,
+      onPhase: () => this.pushPhase(),
+      onFinished: (battle) => {
+        // Stored here first, with or without an account. The queue drains after sign-in
+        void this.store
+          .record(buildUpload(battle), battle.samples)
+          .then(() => this.sync.nudge())
+          .catch((e) => ctx.logger.warning(`heat_stats: could not store the battle: ${String(e)}`));
+        this.stats.refreshLater(REFETCH_AFTER_SUBMIT_MS);
+        this.replays.scanLater(REFETCH_AFTER_SUBMIT_MS);
+      },
+      loadoutSnapshot: () => this.readLoadouts(),
+      catalog: () => this.catalog,
+    });
+    this.widgets = new RateWidgets(ctx, (name) => this.acc?.read(name));
+    this.widgets.readConfig();
+    this.stats = new StatsClient(
+      ctx,
+      this.store,
+      () => String(ctx.config.get("player_name", "")) || String(this.acc?.read("player_name") ?? ""),
+      (overview, sessions) => {
+        this.vueOv?.setJson("overview", overview);
+        this.battleRows = sessions ? toBattleRows(sessions) : null;
+        this.pushBattles();
+        this.pushCharts();
+        // A replay shows the result of the battle recorded with it.
+        this.pushReplays();
+      },
+    );
+    this.replays = new ReplayLibrary(ctx, () => this.pushReplays());
+    this.samples = new SamplesCache(
+      (id) => this.stats.samples(id),
+      (open) => this.vueOv?.setJson("samples", open),
+    );
+
+    this.appLanguage = this.language?.language;
+    this.locale = this.pickLocale();
+    this.t = translator(this.locale);
 
     ctx.events.subscribe("accessors.connected", () => this.onConnected());
-    ctx.events.subscribe("accessors.disconnected", () => this.onDisconnected());
+    ctx.events.subscribe("accessors.disconnected", () => this.recorder.onDisconnected());
 
-    ctx.config.watch("api_key", () => { void this.fetchAndPushStats(); });
-    ctx.config.watch("player_name", () => { void this.fetchAndPushStats(); });
-    ctx.config.watch("mode", () => this.pushDisplayConfig());
-    ctx.config.watch("scene_time_s", () => this.pushDisplayConfig());
-    ctx.config.watch("graph_scale", () => this.pushDisplayConfig());
-    ctx.config.watch("graph_points", () => this.pushDisplayConfig());
-    ctx.config.watch("graph_value_scale", () => this.pushDisplayConfig());
+    ctx.config.watch("player_name", () => { void this.stats.refresh(); });
+    ctx.config.watch("locale", () => this.applyLocale());
+    ctx.config.watch("streak_length", () => this.pushStreakLength());
+    ctx.config.watch("widgets", () => this.widgets.sync());
+    for (const key of ["widget_show_in", ...RATE_WIDGETS.map((w) => widgetResetKey(w.id))]) {
+      ctx.config.watch(key, () => this.widgets.readConfig());
+    }
 
-    const w = Number(ctx.config.get("anim_width", 300)) || 300;
-    const h = Number(ctx.config.get("anim_height", 300)) || 300;
     this.ov = ctx.overlays.declare({
       id: "heatStats",
-      kind: "rive",
-      asset: "stats.riv",
-      size: { w, h },
-      artboard: "STATSBOARD",
-      stateMachine: "cruiseEngine",
-      viewModel: "VMStats",
+      kind: "vue",
+      asset: "HeatStatsRecorder.vue",
+      size: RECORDER_SIZE,
       positionConfigKey: "overlay_pos",
     });
-    this.ov.inspector.sections(sections);
-    const applySize = (): void =>
-      this.ov?.setSize({
-        w: Number(ctx.config.get("anim_width", 300)) || 300,
-        h: Number(ctx.config.get("anim_height", 300)) || 300,
-      });
-    ctx.config.watch("anim_width", applySize);
-    ctx.config.watch("anim_height", applySize);
     this.ov.setBool("isSetupComplete", false);
 
-    const vw = Number(ctx.config.get("vue_width", 440)) || 440;
-    const vh = Number(ctx.config.get("vue_height", 300)) || 300;
     this.vueOv = ctx.overlays.declare({
       id: "heatStatsVue",
       kind: "vue",
       asset: "HeatStatsOverlay.vue",
-      size: { w: vw, h: vh },
-      positionConfigKey: "vue_overlay_pos",
+      size: WINDOW_SIZE,
+      positionConfigKey: "window_rect",
       interactive: true,
     });
-    this.vueOv.inspector.sections(sections);
     this.vueOv.setBool("isSetupComplete", false);
-    // Interactive overlay button (Refresh stats) -> re-fetch on demand.
-    this.vueOv.onAction((action) => {
-      if (action === "refresh") void this.fetchAndPushStats();
-      // Start a new session: everything recorded before this moment is filtered
-      // out of the overlay (the API keeps them; we just stop showing them).
-      if (action === "newSession") {
-        this.ctx.config.set("session_started_at", Math.floor(Date.now() / 1000));
-        void this.fetchAndPushStats();
-      }
-    });
+    this.vueOv.setString("version", (this.constructor as typeof HeatStatsPlugin).version);
+    this.vueOv.onAction((action, payload) => this.onWindowAction(action, payload));
 
-    this.pushDisplayConfig();
-    void this.fetchAndPushStats();
+    this.declareSchema();
+    this.pushLocale();
+    this.pushStreakLength();
+    this.pushBattles();
+    this.pushCharts();
+    this.pushConnection();
+    this.widgets.sync();
+
+    this.toggleCombo = ctx.hotkeyFor("toggle_window", TOGGLE_WINDOW_HOTKEY);
+    ctx.hotkeys.register(this.toggleCombo, () => this.toggleWindow(), this.t("hotkeys.toggleWindow"));
+
+    void this.stats.refresh();
+    void this.replays.scan();
+    // Restores a stored session, or settles into local mode.
+    void this.account.start();
 
     this.pushPhase();
   }
 
-  private setPhase(p: Phase): void {
-    this.phase = p;
-    this.pushPhase();
+  /** What the window may know about the account. Never a token. */
+  private async pushAccount(): Promise<void> {
+    const view = this.account.view;
+    const [counts, cloud] = await Promise.all([this.store.counts(), this.store.cloudCount()]);
+    // The profile is held by the sync engine, so this costs no request.
+    const profile = view.state === "signedIn" ? this.sync.profile : null;
+    this.vueOv?.setJson("account", { ...view, counts, cloud, profile, sync: this.sync.progress });
+    this.pushConnection();
+  }
+
+  private pushConnection(): void {
+    const phase = this.sync.progress.phase;
+    const connection =
+      this.account.view.state !== "signedIn"
+        ? "local"
+        : phase === "offline" || phase === "error"
+          ? "offline"
+          : phase === "idle"
+            ? "online"
+            : "syncing";
+    if (connection === this.lastConnection) return;
+    this.lastConnection = connection;
+    this.vueOv?.setString("connection", connection);
+  }
+
+  /** One declaration for every surface: the App panel and both overlays' inspectors, in the current language. */
+  private declareSchema(): void {
+    const sections = this.sections();
+    this.ctx.config.schema(sections);
+    this.ov?.inspector.sections(sections);
+    this.vueOv?.inspector.sections(sections);
+    this.widgets.setSections(sections);
+  }
+
+  /** The user's pick, else the App's language. */
+  private pickLocale(): string {
+    return resolveLocale(this.ctx.config.get("locale", ""), this.appLanguage);
+  }
+
+  /** The service keeps `language` current. A permission change also shows here. */
+  private followAppLanguage(): void {
+    const language = this.language?.language;
+    if (language === this.appLanguage) return;
+    this.appLanguage = language;
+    this.applyLocale();
+  }
+
+  private applyLocale(): void {
+    const next = this.pickLocale();
+    if (next === this.locale) return;
+    this.locale = next;
+    this.t = translator(next);
+    this.declareSchema();
+    this.pushLocale();
+    // The in-game marks show their group name as a tooltip, so the page script is rebuilt in the new language.
+    this.applyTagColors();
+    this.guard.setup(this.guardLabels());
+  }
+
+  private pushLocale(): void {
+    const messages = messagesFor(this.locale);
+    this.vueOv?.setString("locale", this.locale);
+    this.vueOv?.setJson("locales", LOCALES);
+    this.vueOv?.setJson("messages", messages);
+    // The recorder widget also shows text, so it gets the same messages.
+    this.ov?.setString("locale", this.locale);
+    this.ov?.setJson("messages", messages);
+    this.widgets.setLocale(this.locale, messages);
+  }
+
+  private pushStreakLength(): void {
+    const length = Number(this.ctx.config.get("streak_length", DEFAULT_STREAK_LENGTH));
+    this.vueOv?.set("streakLength", STREAK_LENGTHS.includes(length) ? length : DEFAULT_STREAK_LENGTH);
+  }
+
+  private pushBattles(): void {
+    // Nothing to list only when there is neither an account nor a local match.
+    const hasSource = this.stats.source !== "none";
+    this.vueOv?.setJson("battles", queryBattles(this.battleRows, this.battleQuery, hasSource));
+  }
+
+  /**
+   * Every configured loadout, read fresh from the hangar. The cached `snapshot` is as old as the last 2-second poll,
+   * so a loadout edited just before queueing can be stale there. A fresh read after battle start comes after the lock,
+   * so it is exactly what the player took in. The cache is the fallback when the hangar page is absent.
+   */
+  private async readLoadouts(): Promise<LoadoutSnapshot | null> {
+    const acc = this.acc;
+    if (!acc) return null;
+    let hangar: unknown = null;
+    if (typeof acc.fetchSnapshot === "function") hangar = await acc.fetchSnapshot("hangar");
+    if (!hangar && typeof acc.snapshot === "function") hangar = await acc.snapshot("hangar");
+    return snapshotLoadouts(hangar);
+  }
+
+  /** Loads the part catalog once. It only names parts, so nothing waits for it. An earlier loadout keeps ids and no names. */
+  private loadCatalog(): void {
+    const acc = this.acc;
+    if (this.catalog || this.catalogLoading || !acc?.connectedHangar) return;
+    if (typeof acc.fetchSnapshot !== "function") return;
+    if (Date.now() - this.catalogTriedAt < CATALOG_RETRY_MS) return;
+
+    this.catalogLoading = true;
+    this.catalogTriedAt = Date.now();
+    acc
+      .fetchSnapshot("catalog")
+      .then((raw) => {
+        const catalog = compactCatalog(raw);
+        // A hangar that is still loading has no vehicles. The next attempt tries again.
+        if (!catalog) return;
+        this.catalog = catalog;
+        this.ctx.logger.info(
+          `heat_stats: part catalog loaded - ${catalog.vehicles.size} vehicles, ${catalog.modules.size} modules, ` +
+            `${catalog.perks.size} perks, ${catalog.equipment.size} equipment`,
+        );
+      })
+      .catch((e: unknown) =>
+        this.ctx.logger.warning(`heat_stats: part catalog failed: ${e instanceof Error ? e.message : String(e)}`),
+      )
+      .finally(() => {
+        this.catalogLoading = false;
+      });
+  }
+
+  private pushReplays(): void {
+    // Called from the stats callback, which can run before the library exists.
+    if (!this.replays) return;
+    this.vueOv?.setJson("replays", this.replays.view(this.battleRows));
+  }
+
+  /** The Charts tab's data. Computed here, so only the plotted points cross the bridge, not the battle list. */
+  private pushCharts(): void {
+    this.vueOv?.setJson("charts", buildCharts(this.battleRows));
+  }
+
+  /**
+   * The marks for the Tags tab and every roster in the window. `battles` counts the recorded battles
+   * of each player, because that is the only reason to list a tagged stranger.
+   */
+  private pushTags(): void {
+    const seen = new Map<string, number>();
+    for (const row of this.battleRows ?? []) {
+      for (const side of [row.roster?.ally ?? [], row.roster?.enemy ?? []]) {
+        for (const p of side) {
+          if (p.pid) seen.set(p.pid, (seen.get(p.pid) ?? 0) + 1);
+        }
+      }
+    }
+    this.vueOv?.setJson("tags", {
+      groups: TAG_GROUPS,
+      colors: this.tagColors(),
+      players: this.tags.list().map((r) => ({
+        pid: r.pid,
+        name: r.name,
+        tags: r.tags,
+        battles: seen.get(r.pid) ?? 0,
+      })),
+    });
+    // Other plugins that draw players get the change at the same time.
+    this.tagsService?.publish();
+    void this.guard.refresh();
+  }
+
+  private onWindowAction(action: string, payload?: unknown): void {
+    if (action === "setLocale" && typeof payload === "string" && LOCALES.includes(payload)) {
+      this.ctx.config.set("locale", payload);
+      this.applyLocale();
+    } else if (action === "close") {
+      this.ctx.config.set("window_open", false);
+    } else if (action === "battles") {
+      this.battleQuery = normalizeQuery(payload);
+      this.pushBattles();
+    } else if (action === "refresh") {
+      void this.stats.refresh();
+      this.samples.retry();
+    } else if (action === "samples") {
+      this.samples.setOpen(payload);
+    } else if (action === "tags") {
+      void this.onTagAction(payload);
+    } else if (action === "replays") {
+      const body = (payload ?? {}) as Record<string, unknown>;
+      void this.replays.act(String(body.op ?? ""), String(body.name ?? ""));
+    } else {
+      this.onAccountAction(action, payload);
+    }
+  }
+
+  /** The Tags tab edits the same record the in-game scoreboard writes. */
+  private async onTagAction(payload: unknown): Promise<void> {
+    const body = (payload ?? {}) as Record<string, unknown>;
+    const pid = body.pid == null ? "" : String(body.pid);
+    if (!pid) return;
+    if (body.op === "set") await this.tags.set(pid, body.tags);
+    else if (body.op === "clear") await this.tags.set(pid, []);
+    else return;
+    this.pushTags();
+    // The game shows the old marks until it gets the new ones.
+    await this.tagsInjector.refresh();
+    // Signed in, this goes up on the next drain. Local-only, it waits for an account.
+    this.sync.nudge();
+  }
+
+
+  private onAccountAction(action: string, payload?: unknown): void {
+    const field = (name: string): string => {
+      const body = (payload ?? {}) as Record<string, unknown>;
+      return typeof body[name] === "string" ? (body[name] as string) : "";
+    };
+
+    switch (action) {
+      case "signIn":
+        void this.account.signIn(field("email"), field("password"));
+        break;
+      case "signUp":
+        void this.account.signUp(field("email"), field("password"));
+        break;
+      case "confirmEmail":
+        void this.account.confirm(field("code"));
+        break;
+      case "resendCode":
+        void this.account.resendCode();
+        break;
+      case "recover":
+        void this.account.recover(field("email"));
+        break;
+      case "confirmRecovery":
+        void this.account.confirmRecovery(field("code"));
+        break;
+      case "resendRecovery":
+        void this.account.resendRecovery();
+        break;
+      case "cancelRecovery":
+        this.account.cancelRecovery();
+        break;
+      case "setPassword":
+        void this.account.setPassword(field("password"));
+        break;
+      case "signInWithDiscord":
+        void this.account.signInWithDiscord();
+        break;
+      case "signOut":
+        void this.account.signOut();
+        break;
+      case "useLocal":
+        this.account.useLocal();
+        break;
+      case "leaveLocal":
+        this.account.leaveLocal();
+        break;
+      case "deleteAccount":
+        void this.account.deleteAccount();
+        break;
+      case "dismissError":
+        this.account.dismissError();
+        break;
+      case "setUsername":
+        void this.sync.setUsername(field("username")).then(() => void this.pushAccount());
+        break;
+      case "setApiAccess":
+        void this.sync.setApiAccess(Boolean((payload as { allow?: unknown })?.allow));
+        break;
+      case "retryRejected":
+        void this.store.retryRejected().then(() => this.sync.nudge());
+        break;
+      default:
+        break;
+    }
+  }
+
+  private toggleWindow(): void {
+    this.ctx.config.set("window_open", !this.ctx.config.get("window_open", true));
   }
 
   private pushPhase(): void {
-    if (!this.ov || this.phase === this.lastPhase) return;
-    this.lastPhase = this.phase;
-    this.ov.setBool("isWaiting", this.phase === "waiting");
-    this.ov.setBool("isRecording", this.phase === "recording");
-    this.ov.setBool("isSummarizing", this.phase === "summarizing");
-    this.ov.setBool("isFinalizing", this.phase === "finalizing");
+    const phase = this.recorder.phase;
+    if (!this.ov || phase === this.lastPhase) return;
+    this.lastPhase = phase;
+    this.ov.setString("phase", phase);
+    // The window's recorder status: waiting for a match counts as idle.
+    const status = phase === "recording" ? "recording" : phase === "summarizing" || phase === "finalizing" ? "submitting" : "idle";
+    this.vueOv?.setString("status", status);
   }
 
   override enterCalibrate(_stage = 1): void {
     this.ov?.setBool("isSetupComplete", false);
     this.vueOv?.setBool("isSetupComplete", false);
+    this.widgets.resend();
   }
   override enterLocked(): void {
     this.ov?.setBool("isSetupComplete", true);
     this.vueOv?.setBool("isSetupComplete", true);
-    void this.fetchAndPushStats();
+    this.widgets.resend();
+    void this.stats.refresh();
   }
   override setOverlayVisible(visible: boolean): void {
     this.hostVisible = visible;
+    this.widgets.setHostVisible(visible);
     if (this.ctx.state === "calibrate") return;
     this.ov?.setVisible(visible);
     this.applyVueVisibility();
   }
 
-  /** battle_hud only exists while a battle is running. */
+  /** battle_hud exists only during a battle. */
   private get inBattle(): boolean {
     return !!this.acc?.connected;
   }
 
   private applyVueVisibility(): void {
     if (this.ctx.state === "calibrate") return;
+    const open = Boolean(this.ctx.config.get("window_open", true));
     const hideInBattle = Boolean(this.ctx.config.get("hide_in_battle", false));
-    const visible = this.hostVisible && !(hideInBattle && this.inBattle);
+    const visible = this.hostVisible && open && !(hideInBattle && this.inBattle);
     if (visible === this.lastVueVisible) return;
     this.lastVueVisible = visible;
     this.vueOv?.setVisible(visible);
@@ -495,644 +759,37 @@ export class HeatStatsPlugin extends FusePlugin {
 
   override tick(dt: number): void {
     this.ctx.config.checkReload();
+    this.followAppLanguage();
     this.pushPhase();
     this.applyVueVisibility();
+    // It limits its own rate and does nothing once loaded, so each tick can call it.
+    this.loadCatalog();
+    // Its own CDP socket, so tagging works whether or not a battle is recording.
+    void this.tagsInjector.pump(dt);
+    void this.guard.pump(dt);
+    this.widgets.tick(dt);
     if (this.ctx.state !== "locked" || !this.acc) return;
-
-    // Mid-match recovery if we went IDLE while still connected.
-    if (this.state === "IDLE") {
-      const msNow = this.rd("match_state");
-      const bsNow = this.rd("battle_state");
-      // msNow must be readable: an unreadable state is what park() just reacted
-      // to, and resuming on it would flap between park and resume.
-      if (bsNow === 8 && msNow != null && msNow !== MS_FINISH) {
-        // Same skips as checkMatchStart(): FiringRange, and a lingering postmatch.
-        if (SKIP_GAME_MODES.has(String(this.rd("game_mode")))) return;
-        if (this.rd("pm_available") === 1) return;
-        this.debugMs = undefined;
-        this.ctx.logger.info(`heat_stats: mid-match recovery - ms=${String(msNow)} bs=${String(bsNow)}`);
-        this.beginSession();
-      }
-    }
-
-    if (this.state === "WAITING") {
-      this.checkMatchStart();
-    } else if (this.state === "RECORDING") {
-      this.elapsed += dt;
-      if (!this.pmCaptured && this.rd("pm_available") === 1) {
-        if (this.capturePostmatch()) {
-          this.pmCaptured = true;
-          this.state = "SUMMARIZING";
-          this.setPhase("summarizing");
-          this.summarizeTimer = 0;
-          return;
-        }
-      }
-      this.fillIdentity();
-      this.pollDeaths();
-      this.sampleTimer += dt;
-      const interval = Number(this.ctx.config.get("sample_interval_s"));
-      if (this.sampleTimer >= interval) {
-        this.sampleTimer -= interval;
-        this.takeSample();
-        // park() writes the file synchronously, so snapshot every few samples
-        // rather than every one.
-        if (this.samples.length % PARK_EVERY_SAMPLES === 0) this.park();
-      }
-      this.checkMatchEnd();
-    } else if (this.state === "SUMMARIZING") {
-      this.summarizeTimer += dt;
-      if (this.summarizeTimer >= Number(this.ctx.config.get("summarize_hold_s"))) {
-        this.setPhase("finalizing");
-        this.submit();
-      }
-    }
-  }
-
-  /**
-   * Identity reads are empty for the first ticks after a rejoin, which is how
-   * fragments ended up with null map_slug / player_vehicle. Backfill until set.
-   */
-  private fillIdentity(): void {
-    const sess = this.session;
-    if (!sess) return;
-    for (const [col, accessor] of IDENTITY) {
-      if (sess[col] == null) {
-        const v = this.rd(accessor);
-        if (v != null) sess[col] = v;
-      }
-    }
-  }
-
-  private pollDeaths(): void {
-    const hp = this.numOrNull("health");
-    if (hp === null) return;
-    if (hp === 0 && this.lastHp !== null && this.lastHp !== 0) this.hpDeathCount += 1;
-    this.lastHp = hp;
+    // A replay's battle looks live to Accessors. It is not a new battle.
+    if (this.replays.playing) return;
+    this.recorder.tick(dt);
   }
 
   override teardown(): void {
-    // Never submit on the way out: if postmatch was already captured the battle
-    // is complete and can go, otherwise park it so a restart can resume.
-    if (this.session) this.pmCaptured ? this.submit() : this.park();
+    this.tagsInjector.teardown();
+    this.guard.teardown();
+    this.replays.teardown();
+    this.recorder.teardown();
+    this.widgets.teardown();
+    this.stats.dispose();
+    this.sync.stop();
+    this.ctx.hotkeys.unregister(this.toggleCombo);
     this.ov?.remove();
     this.vueOv?.remove();
   }
 
   private onConnected(): void {
-    if (this.state === "IDLE") {
-      this.state = "WAITING";
-      this.setPhase("waiting");
-      this.debugMs = undefined;
-      this.ctx.logger.info("heat_stats: CDP connected - waiting for active match");
-      // player_name only resolves from accessors once CDP is up, so a lock-time
-      // fetch with no configured name would have bailed - retry here.
-      void this.fetchAndPushStats();
-    }
-  }
-
-  private onDisconnected(): void {
-    if (this.session) {
-      // A disconnect is not a result. Only an already-captured postmatch is.
-      if (this.pmCaptured) this.submit();
-      else this.park("CDP disconnected");
-    } else if (this.state === "WAITING") {
-      this.state = "IDLE";
-      this.setPhase("idle");
-      this.ctx.logger.info("heat_stats: CDP disconnected before match started");
-    }
-  }
-
-  private checkMatchStart(): void {
-    const ms = this.rd("match_state");
-    const bs = this.rd("battle_state");
-    if (ms !== this.debugMs) {
-      this.debugMs = ms;
-      this.ctx.logger.info(`heat_stats: waiting - ms=${String(ms)} bs=${String(bs)}`);
-    }
-    if (bs === 8 && ms != null && ms !== MS_FINISH) {
-      if (SKIP_GAME_MODES.has(String(this.rd("game_mode")))) return;
-      // The previous battle's postmatch panel is still up - starting here would
-      // record a phantom battle and submit it a second time off the same panel.
-      if (this.rd("pm_available") === 1) return;
-      this.beginSession();
-    }
-  }
-
-  /**
-   * An unreadable match_state means the game went away (crash, quit, page
-   * teardown) - it is NOT a finished match. Submitting there is what produced
-   * fragments carrying a fabricated win/loss/draw. Park instead, and let the
-   * postmatch panel be the only thing that ends a battle.
-   */
-  private checkMatchEnd(): void {
-    const ms = this.rd("match_state");
-    if (ms === null || ms === undefined) {
-      if (++this.staleTicks >= STALE_TICKS) this.park("match_state unreadable");
-      return;
-    }
-    this.staleTicks = 0;
-  }
-
-  /** Parked battle from a crash/quit/disconnect, if one is still resumable. */
-  private takeParked(): Parked | null {
-    const raw = this.ctx.config.get("parked_battle", null) as Parked | null;
-    if (!raw || !raw.session_id) return null;
-    const ageS = Date.now() / 1000 - Number(raw.saved_at ?? 0);
-    if (!(ageS >= 0 && ageS < RESUME_MAX_AGE_S)) {
-      this.ctx.logger.info(`heat_stats: parked battle too old (${Math.round(ageS)}s) - discarding`);
-      this.clearParked();
-      return null;
-    }
-    // Only reject on a readable, genuinely different map - identity reads are
-    // still empty this early on a rejoin.
-    const mapNow = this.rd("map_slug");
-    const mapWas = raw.session?.map_slug;
-    if (mapNow != null && mapWas != null && String(mapNow) !== String(mapWas)) {
-      this.ctx.logger.info(`heat_stats: parked battle is a different map (${String(mapWas)}) - discarding`);
-      this.clearParked();
-      return null;
-    }
-    // In-game counters are battle-cumulative, so they only ever go up within one
-    // battle. A confident read below what was parked means this is a new battle
-    // on the same map, not the old one resuming.
-    const killsNow = this.rd("player_kills");
-    const killsWas = Number(raw.snap?.ki ?? 0);
-    if (typeof killsNow === "number" && killsWas > 0 && killsNow < killsWas) {
-      this.ctx.logger.info(`heat_stats: counters reset (${killsNow} < ${killsWas}) - new battle, discarding parked`);
-      this.clearParked();
-      return null;
-    }
-    return raw;
-  }
-
-  private clearParked(): void {
-    if (this.ctx.config.get("parked_battle", null) != null) this.ctx.config.set("parked_battle", null);
-  }
-
-  /** Snapshot the in-flight battle so a crash or rejoin can pick it back up. */
-  private park(reason?: string): void {
-    if (!this.session) return;
-    const rec: Parked = {
-      session_id: String(this.session.session_id),
-      started_at: this.startedAt,
-      saved_at: Date.now() / 1000,
-      session: this.session,
-      samples: this.samples,
-      prev: this.prev,
-      snap: this.snap,
-      hpDeathCount: this.hpDeathCount,
-      peakPing: this.peakPing,
-      pingSum: this.pingSum,
-      fpsSum: this.fpsSum,
-      perfCount: this.perfCount,
-      elapsed: this.elapsed,
-    };
-    this.ctx.config.set("parked_battle", rec as unknown as null);
-    if (!reason) return;
-    // An explicit park ends recording; the battle stays on disk, unsubmitted.
-    this.ctx.logger.info(
-      `heat_stats: battle parked (${reason}) - ${this.samples.length} samples held, nothing submitted`,
-    );
-    this.session = null;
-    this.samples = [];
-    this.pmCaptured = false;
-    this.roster = null;
-    this.staleTicks = 0;
-    this.state = "IDLE";
-    this.setPhase("idle");
-  }
-
-  private resumeSession(rec: Parked): void {
-    this.startedAt = Number(rec.started_at) || Date.now() / 1000;
-    this.session = rec.session;
-    this.samples = Array.isArray(rec.samples) ? rec.samples : [];
-    this.prev = rec.prev as typeof this.prev;
-    this.snap = rec.snap as typeof this.snap;
-    this.hpDeathCount = Number(rec.hpDeathCount) || 0;
-    this.peakPing = Number(rec.peakPing) || 0;
-    this.pingSum = Number(rec.pingSum) || 0;
-    this.fpsSum = Number(rec.fpsSum) || 0;
-    this.perfCount = Number(rec.perfCount) || 0;
-    this.elapsed = Number(rec.elapsed) || 0;
-    this.lastHp = this.numOrNull("health");
-    this.pmCaptured = false;
-    this.roster = null;
-    this.sampleTimer = 0;
-    this.staleTicks = 0;
-    this.state = "RECORDING";
-    this.setPhase("recording");
-    this.fillIdentity();
-    this.ctx.logger.info(
-      `heat_stats: resumed battle ${rec.session_id} on ${String(this.session.map_slug ?? "?")} ` +
-        `- ${this.samples.length} samples carried over`,
-    );
-  }
-
-  private beginSession(): void {
-    const parked = this.takeParked();
-    if (parked) {
-      this.resumeSession(parked);
-      return;
-    }
-    this.startedAt = Date.now() / 1000;
-    this.session = {
-      session_id: randomUUID(),
-      map_slug: this.rd("map_slug") ?? null,
-      map_name: this.rd("sb_map_name") ?? null,
-      game_mode: this.rd("game_mode") ?? null,
-      player_name: this.rd("player_name") ?? null,
-      player_vehicle: this.rd("player_vehicle") ?? null,
-      player_role: this.rd("player_role") ?? null,
-      player_agent_id: this.rd("player_agent_id") ?? null,
-    };
-    this.samples = [];
-    this.hpDeathCount = 0;
-    this.lastHp = this.numOrNull("health");
-    this.pmCaptured = false;
-    this.roster = null;
-    this.prev = {
-      ki: this.numOr("player_kills"),
-      de: 0,
-      as: this.numOrNull("player_assists"),
-      da: this.numOr("player_damage"),
-      al: this.numOr("ally_score"),
-      es: this.numOr("enemy_score"),
-      co: this.numOrNull("sb_player_confirms"),
-      dn: this.numOrNull("sb_player_denies"),
-      sc: this.numOr("player_role_pts"),
-    };
-    this.snap = { ...this.prev };
-    this.elapsed = 0;
-    this.sampleTimer = 0;
-    this.pingSum = 0;
-    this.fpsSum = 0;
-    this.perfCount = 0;
-    this.peakPing = 0;
-    this.staleTicks = 0;
-    this.state = "RECORDING";
-    this.setPhase("recording");
-    this.ctx.logger.info(
-      `heat_stats: match started - ${String(this.session.game_mode ?? "?")} on ${String(this.session.map_slug ?? "?")}`,
-    );
-    this.takeSample();
-    this.park();
-  }
-
-  private takeSample(): void {
-    if (!this.session) return;
-    const hpNow = this.numOrNull("health");
-    const ki = this.numOr("player_kills");
-    const de = this.hpDeathCount;
-    const as_ = this.numOrNull("player_assists");
-    const da = this.numOr("player_damage");
-    const al = this.numOr("ally_score");
-    const es = this.numOr("enemy_score");
-    const co = this.numOrNull("sb_player_confirms");
-    const dn = this.numOrNull("sb_player_denies");
-    const sc = this.numOr("player_role_pts");
-    const pi = this.numOrNull("ping");
-    const fp = this.numOrNull("fps");
-
-    if (pi !== null) {
-      this.pingSum += pi;
-      this.perfCount += 1;
-      if (pi > this.peakPing) this.peakPing = pi;
-    }
-    if (fp !== null) this.fpsSum += fp;
-
-    const dki = Math.max(0, ki - this.prev.ki);
-    const dde = Math.max(0, de - this.prev.de);
-    const das = as_ !== null ? Math.max(0, (as_ ?? 0) - (this.prev.as ?? 0)) : 0;
-    const dda = Math.max(0, da - this.prev.da);
-    const dal = al - this.prev.al;
-    const des = es - this.prev.es;
-    const dco = co !== null ? Math.max(0, (co ?? 0) - (this.prev.co ?? 0)) : 0;
-    const ddn = dn !== null ? Math.max(0, (dn ?? 0) - (this.prev.dn ?? 0)) : 0;
-    const dsc = Math.max(0, sc - this.prev.sc);
-
-    this.samples.push({
-      t: Math.round(this.elapsed),
-      hp: hpNow, en: this.numOrNull("energy"), bo: this.numOrNull("boost"), pi, fp,
-      al, es, ki, de, as: as_, da, co, dn, sc, ms: (this.rd("match_state") as string | null) ?? null,
-      dki, dde, das, dda, dal, des, dco, ddn, dsc,
-    });
-
-    this.prev = { ki, de, as: as_, da, al, es, co, dn, sc };
-    if (this.rd("match_state") != null) this.snap = { ki, de, as: as_, da, al, es, co, dn, sc };
-  }
-
-  private capturePostmatch(): boolean {
-    const players = this.rd("pm_players") as Array<Record<string, unknown>> | null | undefined;
-    if (!players || !players.length) return false;
-    const sess = this.session!;
-    const myId = this.rd("pm_my_player_id");
-    let myTeam = this.rd("pm_my_team");
-    const me = players.find((p) => p.playerId === myId) ?? null;
-    if (myTeam == null && me) myTeam = me.team;
-
-    if (me) {
-      for (const [col, key] of Object.entries(PM_STAT_MAP)) sess[col] = me[key] ?? null;
-      const set = (k: string, col: string) => { if (me[k] != null) sess[col] = me[k]; };
-      set("kills", "final_kills");
-      set("deaths", "final_deaths");
-      set("assists", "final_assists");
-      set("damage", "final_damage");
-      set("killConfirmed", "final_confirms");
-      set("killDenied", "final_denies");
-      set("rolePoints", "final_score");
-    }
-
-    const sum = (rows: Array<Record<string, unknown>>, key: string): number =>
-      rows.reduce((acc, p) => acc + (typeof p[key] === "number" ? (p[key] as number) : 0), 0);
-    const ally = players.filter((p) => p.team === myTeam);
-    const enemy = players.filter((p) => p.team !== myTeam);
-    sess.ally_kills = sum(ally, "kills");
-    sess.ally_deaths = sum(ally, "deaths");
-    sess.ally_assists = sum(ally, "assists");
-    sess.ally_damage = sum(ally, "damage");
-    sess.ally_captures = sum(ally, "capturedBase");
-    sess.ally_confirms = sum(ally, "killConfirmed");
-    sess.ally_denies = sum(ally, "killDenied");
-    sess.enemy_kills = sum(enemy, "kills");
-    sess.enemy_deaths = sum(enemy, "deaths");
-    sess.enemy_assists = sum(enemy, "assists");
-    sess.enemy_damage = sum(enemy, "damage");
-    sess.enemy_captures = sum(enemy, "capturedBase");
-    sess.enemy_confirms = sum(enemy, "killConfirmed");
-    sess.enemy_denies = sum(enemy, "killDenied");
-
-    const scores = (this.rd("pm_team_scores") as Record<string, unknown>) ?? {};
-    if (myTeam != null && Object.keys(scores).length) {
-      const scoreFor = (team: unknown) => scores[String(team)] ?? scores[team as string];
-      const a = scoreFor(myTeam);
-      if (a != null) sess.final_ally_score = a;
-      const others = Object.entries(scores).filter(([k]) => String(k) !== String(myTeam)).map(([, v]) => v);
-      if (others.length && others[0] != null) sess.final_enemy_score = others[0];
-    }
-
-    const slim = (p: Record<string, unknown>) => ({ name: p.name ?? null, agent: p.agentName ?? null, tank: p.vehicleName ?? null, role: p.role ?? null });
-    this.roster = { ally: ally.map(slim), enemy: enemy.map(slim) };
-    return true;
-  }
-
-  /**
-   * The ONLY path that uploads. Requires a captured postmatch panel, which is
-   * the game's own authoritative end-of-battle result; anything short of that
-   * is parked or dropped, never sent.
-   */
-  private submit(): void {
-    if (!this.session) {
-      this.state = "IDLE";
-      return;
-    }
-    if (!this.pmCaptured) {
-      this.park("submit without postmatch");
-      return;
-    }
-    if (this.acc && this.rd("match_state") != null) this.takeSample();
-
-    const sess = this.session;
-    const now = Date.now() / 1000;
-    sess.ended_at = now;
-    sess.duration_s = Math.round((now - this.startedAt) * 100) / 100;
-
-    if (this.perfCount > 0) {
-      sess.avg_ping = Math.round((this.pingSum / this.perfCount) * 10) / 10;
-      sess.avg_fps = Math.round((this.fpsSum / this.perfCount) * 10) / 10;
-    }
-
-    const allyScore = Number(sess.final_ally_score ?? 0);
-    const enemyScore = Number(sess.final_enemy_score ?? 0);
-    if (allyScore > enemyScore) sess.outcome = "win";
-    else if (allyScore < enemyScore) sess.outcome = "loss";
-    else sess.outcome = "draw";
-
-    const payload = this.buildPayload(sess);
-    payload.roster = this.roster ?? {};
-    payload.hmac_hex = sign(payload);
-    payload.type = "heat_stats.session_complete";
-
-    this.ctx.logger.info(
-      `heat_stats: match ended - ${String(sess.outcome)} | K${sess.final_kills} D${sess.final_deaths} ` +
-        `A${sess.final_assists ?? "?"} dmg${sess.final_damage} | ${this.samples.length} samples`,
-    );
-
-    this.ctx.host.broadcast(payload);
-
-    this.history.push({
-      outcome: String(sess.outcome),
-      kills: Number(sess.final_kills ?? 0),
-      deaths: Number(sess.final_deaths ?? 0),
-      playerName: String(sess.player_name ?? ""),
-    });
-    if (this.history.length > 50) this.history.shift();
-    this.pushStats();
-    void this.fetchAndPushStats();
-
-    // Submitted battles must not linger as resumable, or the next match would
-    // pick this one back up instead of starting clean.
-    this.clearParked();
-    this.session = null;
-    this.samples = [];
-    this.pmCaptured = false;
-    this.roster = null;
-    this.staleTicks = 0;
-    this.state = "IDLE";
-    if (this.acc && this.acc.connected) {
-      this.state = "WAITING";
-      this.setPhase("waiting");
-    } else {
-      this.setPhase("idle");
-    }
-  }
-
-  /** Assemble the full session payload (all keys present, matching Python to_dict). */
-  private buildPayload(sess: Record<string, unknown>): Record<string, unknown> {
-    const g = (k: string): unknown => sess[k] ?? null;
-    const n = (k: string): number => (typeof sess[k] === "number" ? (sess[k] as number) : 0);
-    return {
-      session_id: sess.session_id,
-      started_at: this.startedAt,
-      ended_at: sess.ended_at,
-      duration_s: sess.duration_s ?? 0,
-      outcome: sess.outcome ?? "abandoned",
-      map_slug: g("map_slug"),
-      map_name: g("map_name"),
-      game_mode: g("game_mode"),
-      player_name: g("player_name"),
-      player_vehicle: g("player_vehicle"),
-      player_role: g("player_role"),
-      player_agent_id: g("player_agent_id"),
-      final_kills: n("final_kills"),
-      final_deaths: n("final_deaths"),
-      final_assists: g("final_assists"),
-      final_damage: n("final_damage"),
-      final_confirms: g("final_confirms"),
-      final_denies: g("final_denies"),
-      final_score: n("final_score"),
-      final_ally_score: n("final_ally_score"),
-      final_enemy_score: n("final_enemy_score"),
-      peak_ping: this.peakPing,
-      avg_ping: sess.avg_ping ?? 0,
-      avg_fps: sess.avg_fps ?? 0,
-      sample_count: this.samples.length,
-      client_version: CLIENT_VERSION,
-      ...Object.fromEntries(Object.keys(PM_STAT_MAP).map((k) => [k, g(k)])),
-      ally_kills: g("ally_kills"), ally_deaths: g("ally_deaths"), ally_assists: g("ally_assists"),
-      ally_damage: g("ally_damage"), ally_captures: g("ally_captures"), ally_confirms: g("ally_confirms"), ally_denies: g("ally_denies"),
-      enemy_kills: g("enemy_kills"), enemy_deaths: g("enemy_deaths"), enemy_assists: g("enemy_assists"),
-      enemy_damage: g("enemy_damage"), enemy_captures: g("enemy_captures"), enemy_confirms: g("enemy_confirms"), enemy_denies: g("enemy_denies"),
-      samples: this.samples.map((s) => ({ ...s })),
-    };
-  }
-
-  /** Display mode + carousel timing, pushed on setup and whenever they change. */
-  private pushDisplayConfig(): void {
-    const ov = this.vueOv;
-    if (!ov) return;
-    ov.setString("mode", String(this.ctx.config.get("mode", "default")));
-    ov.set("sceneTime", Number(this.ctx.config.get("scene_time_s", 8)) || 8);
-    ov.setString("graphScale", String(this.ctx.config.get("graph_scale", "auto")));
-    ov.set("graphPoints", Number(this.ctx.config.get("graph_points", 20)) || 20);
-    ov.set("graphValueScale", Number(this.ctx.config.get("graph_value_scale", 1)) || 1);
-  }
-
-  private pushStats(): void {
-    const ov = this.vueOv;
-    if (!ov) return;
-    const h = this.history;
-    const total = h.length;
-    const wins = h.filter((s) => s.outcome === "win").length;
-    const totalKills = h.reduce((sum, s) => sum + s.kills, 0);
-    const totalDeaths = h.reduce((sum, s) => sum + s.deaths, 0);
-    const winRate = total > 0 ? (wins / total) * 100 : 0;
-    const kd = totalDeaths > 0 ? totalKills / totalDeaths : totalKills;
-    const recent = h.slice(-5).reverse().map((s) => s.outcome);
-    const name = h.length > 0 ? h[h.length - 1].playerName : "";
-
-    ov.setString("playerName", name);
-    ov.set("winRate", Math.round(winRate * 10) / 10);
-    ov.set("kd", Math.round(kd * 100) / 100);
-    ov.set("totalKills", totalKills);
-    ov.set("battleCount", total);
-    ov.setJson("recentBattles", recent);
-  }
-
-  /** Fetch all sessions from the HEAT Stats API and push aggregated stats to the Vue overlay. */
-  private async fetchAndPushStats(): Promise<void> {
-    const apiKey = String(this.ctx.config.get("api_key", ""));
-    const playerName = String(this.ctx.config.get("player_name", "")) || String(this.rd("player_name") ?? "");
-    this.ctx.logger.info(`heat_stats: fetchAndPushStats apiKey=${apiKey ? "set" : "missing"} playerName=${playerName || "missing"}`);
-    if (!apiKey || !playerName) {
-      this.ctx.logger.info("heat_stats: skipping API fetch - missing api_key or player_name");
-      return;
-    }
-
-    // Session filter: drop everything recorded before the session marker.
-    const startedAt = Number(this.ctx.config.get("session_started_at", 0)) || 0;
-    const cutoffMs = startedAt > 0 ? startedAt * 1000 : 0;
-
-    try {
-      // The API is newest-first and rate-limits well before a full history walk
-      // (1000+ matches = 11 pages = HTTP 429), so page only far enough back to
-      // cover the session, and never more than MAX_PAGES.
-      const sessions: Array<Record<string, unknown>> = [];
-      const pageSize = 100;
-      let offset = 0;
-      for (let page = 0; page < MAX_PAGES; page++) {
-        const url = `${API_BASE}/sessions?player_name=${encodeURIComponent(playerName)}&limit=${pageSize}&offset=${offset}`;
-        const resp = await fetch(url, { headers: { "x-api-key": apiKey } });
-        if (!resp.ok) {
-          const body = await resp.json().catch(() => ({}));
-          const msg = (body as Record<string, string>).error ?? `HTTP ${resp.status}`;
-          // Keep whatever pages already landed - a partial window still renders.
-          this.ctx.logger.warning(`heat_stats: page ${page} failed (${msg}) - using ${sessions.length} sessions`);
-          break;
-        }
-        const data = await resp.json() as { sessions?: Array<Record<string, unknown>>; total?: number };
-        if (!data.sessions || data.sessions.length === 0) break;
-        sessions.push(...data.sessions);
-        offset += data.sessions.length;
-        if (data.sessions.length < pageSize) break;
-        if (data.total != null && sessions.length >= data.total) break;
-        // Oldest row on this page predates the session - nothing further is in range.
-        if (cutoffMs > 0 && toMs(data.sessions[data.sessions.length - 1]!.started_at) < cutoffMs) break;
-      }
-
-      const ov = this.vueOv;
-      if (!ov) return;
-
-      const inSession = sessions.filter((s) => toMs(s.started_at) >= cutoffMs);
-
-      // API returns newest-first; the graph reads left->right with latest right.
-      const chrono = [...inSession].reverse();
-      const total = chrono.length;
-
-      // EMA feeds the trend graph only - the headline tiles are session-wide totals.
-      const emaKd = ema(chrono.map(kdOf));
-      const emaWr = ema(chrono.map((s) => (String(s.outcome) === "win" ? 100 : 0)));
-      const emaDmg = ema(chrono.map((s) => Number(s.final_damage ?? 0)));
-
-      const latest = inSession.slice(0, 5).map((s) => ({
-        vehicle: prettyVehicle(s.player_vehicle),
-        map: String(s.map_name ?? s.map_slug ?? "?"),
-        mode: String(s.game_mode ?? "?"),
-        score: Number(s.final_score ?? 0),
-        damage: Number(s.final_damage ?? 0),
-        kills: Number(s.final_kills ?? 0),
-        deaths: Number(s.final_deaths ?? 0),
-        assists: Number(s.final_assists ?? 0),
-        outcome: String(s.outcome ?? ""),
-      }));
-
-      // ── Scene 2: efficiency + per-game-mode breakdown ──
-      const sum = (f: (s: Record<string, unknown>) => number): number =>
-        chrono.reduce((acc, s) => acc + f(s), 0);
-      const totalKills = sum((s) => Number(s.final_kills ?? 0));
-      const totalDeaths = sum((s) => Number(s.final_deaths ?? 0));
-      const totalDamage = sum((s) => Number(s.final_damage ?? 0));
-      const totalScore = sum((s) => Number(s.final_score ?? 0));
-      const totalMin = sum((s) => Number(s.duration_s ?? 0)) / 60;
-      const efficiency = {
-        dmgPerKill: totalKills > 0 ? Math.round(totalDamage / totalKills) : 0,
-        killsPerMin: totalMin > 0 ? Math.round((totalKills / totalMin) * 100) / 100 : 0,
-        scorePerMin: totalMin > 0 ? Math.round((totalScore / totalMin) * 10) / 10 : 0,
-      };
-
-      const modeAgg = new Map<string, { wins: number; count: number }>();
-      for (const s of chrono) {
-        const m = String(s.game_mode ?? "?");
-        const e = modeAgg.get(m) ?? { wins: 0, count: 0 };
-        e.count += 1;
-        if (String(s.outcome) === "win") e.wins += 1;
-        modeAgg.set(m, e);
-      }
-      const byMode = [...modeAgg.entries()].map(([mode, v]) => ({
-        mode,
-        winRate: v.count ? Math.round((v.wins / v.count) * 1000) / 10 : 0,
-        count: v.count,
-      }));
-
-      ov.setString("playerName", playerName);
-      ov.set("battleCount", total);
-      ov.setJson("efficiency", efficiency);
-      ov.setJson("byMode", byMode);
-      ov.set("sessionStartedAt", startedAt);
-      const wins = chrono.filter((s) => String(s.outcome) === "win").length;
-      ov.set("kd", Math.round((totalDeaths > 0 ? totalKills / totalDeaths : totalKills) * 100) / 100);
-      ov.set("winRate", total > 0 ? Math.round((wins / total) * 1000) / 10 : 0);
-      ov.set("damage", total > 0 ? Math.round(totalDamage / total) : 0);
-      // EMA is computed over the whole session, but only the most recent slice
-      // is plotted - otherwise a long session collapses into unreadable noise.
-      const tail = (a: number[]): number[] => a.slice(-GRAPH_MAX);
-      ov.setJson("series", { kd: tail(emaKd), wr: tail(emaWr), dmg: tail(emaDmg) });
-      ov.setJson("latest", latest);
-      this.ctx.logger.info(
-        `heat_stats: fetched ${sessions.length} sessions (${total} in session) from API`,
-      );
-    } catch (e) {
-      this.ctx.logger.warning(`heat_stats: API fetch failed: ${e instanceof Error ? e.message : String(e)}`);
-    }
+    // Without a configured name, player_name comes from accessors only after CDP connects.
+    // A refresh at lock time had no player, so it runs again here.
+    if (this.recorder.onConnected()) void this.stats.refresh();
   }
 }

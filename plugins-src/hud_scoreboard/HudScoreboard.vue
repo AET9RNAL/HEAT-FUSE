@@ -9,6 +9,8 @@ const FRAME_CUT = 8;
 interface Cell {
   tank: string | null;
   agent: string | null;
+  /** HEAT Stats' tags, when that plugin is installed. */
+  marks: Array<{ icon: string; color: string }>;
   role: string;
   dead: boolean;
   respawning: boolean;
@@ -30,6 +32,9 @@ interface Board {
   layout?: "scoreboard" | "columns" | "simplified";
   allies: ClassGroup[];
   enemies: ClassGroup[];
+  /** User-picked team colours, "#RRGGBB". */
+  allyColor?: string;
+  enemyColor?: string;
 }
 
 // `assetBase` is injected by the overlay host (VueOverlay) - absolute URL of this
@@ -42,6 +47,13 @@ const inMatch = computed(() => !!board.value.inMatch);
 const showNames = computed(() => !!board.value.showNames);
 const isColumns = computed(() => board.value.layout === "columns");
 const isSimple = computed(() => board.value.layout === "simplified");
+const allyColor = computed(() => board.value.allyColor || "");
+const enemyColor = computed(() => board.value.enemyColor || "");
+// Everything below reads these two tokens, so overriding them here recolours the whole board.
+const teamVars = computed(() => ({
+  ...(allyColor.value ? { "--woth-ally": allyColor.value } : {}),
+  ...(enemyColor.value ? { "--woth-enemy": enemyColor.value } : {}),
+}));
 const allyCells = computed(() => board.value.allies.flatMap((g) => g.cells));
 const enemyCells = computed(() => board.value.enemies.flatMap((g) => g.cells));
 
@@ -84,17 +96,18 @@ const framePoints = computed(() => {
     ref="frameEl"
     class="hsb"
     :class="isColumns ? 'hsb--columns' : isSimple ? 'hsb--simple' : 'hsb--strip'"
+    :style="teamVars"
   >
     <template v-if="isSimple">
       <div class="hsb-side hsb-ally">
         <div v-for="(c, i) in allyCells" :key="'a' + i" class="hsb-icon">
-          <eCellSimplified :cell="c" :asset-base="assetBase ?? ''" side="ally" />
+          <eCellSimplified :cell="c" :asset-base="assetBase ?? ''" side="ally" :team-color="allyColor" />
         </div>
       </div>
       <div class="hsb-centre" />
       <div class="hsb-side hsb-enemy">
         <div v-for="(c, i) in enemyCells" :key="'e' + i" class="hsb-icon">
-          <eCellSimplified :cell="c" :asset-base="assetBase ?? ''" side="enemy" />
+          <eCellSimplified :cell="c" :asset-base="assetBase ?? ''" side="enemy" :team-color="enemyColor" />
         </div>
       </div>
     </template>
@@ -103,7 +116,7 @@ const framePoints = computed(() => {
       <div class="hsb-side hsb-ally">
         <div v-for="(g, gi) in board.allies" :key="'a' + gi" class="hsb-group" :style="{ flexGrow: g.cells.length }">
           <div v-for="(c, ci) in g.cells" :key="'a' + gi + '-' + ci" class="hsb-slot">
-            <eCell :cell="c" :asset-base="assetBase ?? ''" side="ally" />
+            <eCell :cell="c" :asset-base="assetBase ?? ''" side="ally" :team-color="allyColor" />
             <div v-if="showNames" class="hsb-name">{{ c.name }}</div>
           </div>
           <img v-if="classIconUrl(g.role)" class="hsb-class" :src="classIconUrl(g.role)" :alt="g.role" />
@@ -116,7 +129,7 @@ const framePoints = computed(() => {
         <div v-for="(g, gi) in board.enemies" :key="'e' + gi" class="hsb-group hsb-group--mirror" :style="{ flexGrow: g.cells.length }">
           <img v-if="classIconUrl(g.role)" class="hsb-class" :src="classIconUrl(g.role)" :alt="g.role" />
           <div v-for="(c, ci) in g.cells" :key="'e' + gi + '-' + ci" class="hsb-slot">
-            <eCell :cell="c" :asset-base="assetBase ?? ''" side="enemy" />
+            <eCell :cell="c" :asset-base="assetBase ?? ''" side="enemy" :team-color="enemyColor" />
             <div v-if="showNames" class="hsb-name">{{ c.name }}</div>
           </div>
         </div>
@@ -132,14 +145,14 @@ const framePoints = computed(() => {
         <div class="col">
           <template v-for="(g, gi) in board.allies" :key="'a' + gi">
             <div v-for="(c, ci) in g.cells" :key="'a' + gi + '-' + ci" class="col-row">
-              <eCell :cell="c" :asset-base="assetBase ?? ''" side="ally" variant="row" />
+              <eCell :cell="c" :asset-base="assetBase ?? ''" side="ally" variant="row" :team-color="allyColor" />
             </div>
           </template>
         </div>
         <div class="col">
           <template v-for="(g, gi) in board.enemies" :key="'e' + gi">
             <div v-for="(c, ci) in g.cells" :key="'e' + gi + '-' + ci" class="col-row">
-              <eCell :cell="c" :asset-base="assetBase ?? ''" side="enemy" variant="row" />
+              <eCell :cell="c" :asset-base="assetBase ?? ''" side="enemy" variant="row" :team-color="enemyColor" />
             </div>
           </template>
         </div>

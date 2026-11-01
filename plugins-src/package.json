@@ -1,0 +1,8 @@
+{
+  "name": "fuse-plugins-src",
+  "private": true,
+  "description": "Libraries plugins may import. Not a package: it exists so esbuild resolves these from plugins-src/node_modules when packing. Run npm install here before building plugins that use them.",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.58.0"
+  }
+}

@@ -1,4 +1,6 @@
 <script lang="ts">
+import { cancelFrame, createSurface, requestFrame } from "./gl-host.mjs";
+
 export type AsciifyCharset = "ascii" | "blocks" | "binary";
 
 export interface AsciifyOptions {
@@ -41,8 +43,10 @@ export interface AsciifyElements {
   source: HTMLCanvasElement;
   /** The element inside the source canvas that gets captured. */
   content: HTMLElement;
-  /** Canvas the WebGL effect renders to. */
+  /** 2D canvas that shows the effect frame. */
   output: HTMLCanvasElement;
+  /** Called after the shared WebGL context is lost. The instance is dead then. */
+  onLost?: () => void;
 }
 
 export interface AsciifyInstance {
@@ -664,9 +668,12 @@ export function createAsciify(
   elements: AsciifyElements,
   options: AsciifyOptions = {},
 ): AsciifyInstance | null {
+  const surface = createSurface(elements.output, { onLost: elements.onLost });
+  if (!surface) return null;
   try {
-    return initializeAsciify(elements, options);
+    return initializeAsciify(elements, options, surface);
   } catch (error) {
+    surface.release();
     console.error("Asciify initialization failed:", error);
     return null;
   }
@@ -675,18 +682,11 @@ export function createAsciify(
 function initializeAsciify(
   elements: AsciifyElements,
   options: AsciifyOptions,
+  surface: NonNullable<ReturnType<typeof createSurface>>,
 ): AsciifyInstance | null {
   const config = { ...DEFAULTS, ...options };
   const { source, content, output } = elements;
-
-  const gl = output.getContext("webgl2", {
-    alpha: true,
-    depth: false,
-    stencil: false,
-    antialias: false,
-    premultipliedAlpha: true,
-  });
-  if (!gl || gl.isContextLost()) return null;
+  const { gl } = surface;
 
   const sourceCtx = source.getContext("2d") as ElementImageContext | null;
   const paintable = source as PaintableCanvas;
@@ -787,6 +787,8 @@ function initializeAsciify(
     uniforms[info.name] = gl.getUniformLocation(program, info.name)!;
   }
 
+  const vao = gl.createVertexArray();
+  gl.bindVertexArray(vao);
   const quad = gl.createBuffer();
   gl.bindBuffer(gl.ARRAY_BUFFER, quad);
   gl.bufferData(
@@ -796,6 +798,7 @@ function initializeAsciify(
   );
   gl.enableVertexAttribArray(0);
   gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+  gl.bindVertexArray(null);
 
   const contentTexture = gl.createTexture()!;
   gl.bindTexture(gl.TEXTURE_2D, contentTexture);
@@ -1022,6 +1025,7 @@ function initializeAsciify(
   }
 
   function render() {
+    if (!surface.begin()) return;
     uploadContent();
     uploadMask();
     gl!.useProgram(program);
@@ -1080,9 +1084,10 @@ function initializeAsciify(
     gl!.uniform1f(uniforms.uStrength, config.strength);
     gl!.uniform1f(uniforms.uBase, config.baseStrength);
     gl!.uniform1f(uniforms.uMaxX, contentMaxX);
-    gl!.bindFramebuffer(gl!.FRAMEBUFFER, null);
-    gl!.viewport(0, 0, output.width, output.height);
+    surface.bindOutput();
+    gl!.bindVertexArray(vao);
     gl!.drawArrays(gl!.TRIANGLE_STRIP, 0, 4);
+    surface.end();
   }
 
   let raf = 0;
@@ -1121,14 +1126,14 @@ function initializeAsciify(
       running = false;
       return;
     }
-    raf = requestAnimationFrame(frame);
+    raf = requestFrame(frame);
   }
 
   function start() {
     if (destroyed || running || !visible) return;
     running = true;
     lastTime = performance.now();
-    raf = requestAnimationFrame(frame);
+    raf = requestFrame(frame);
   }
 
   wake = start;
@@ -1274,7 +1279,7 @@ function initializeAsciify(
     },
     destroy() {
       destroyed = true;
-      cancelAnimationFrame(raf);
+      cancelFrame(raf);
       window.clearTimeout(themeTimer);
       window.clearTimeout(fallbackCaptureTimer);
       window.clearTimeout(fallbackScrollCaptureTimer);
@@ -1318,10 +1323,8 @@ function initializeAsciify(
       gl!.deleteShader(vertexShader);
       gl!.deleteShader(fragmentShader);
       gl!.deleteBuffer(quad);
-      // Deleting GL objects does NOT release the context - it stays attached to
-      // the canvas until GC, so churning instances exhausts the browser's live
-      // context cap and it force-loses the oldest ones (older effects go white).
-      gl!.getExtension("WEBGL_lose_context")?.loseContext();
+      gl!.deleteVertexArray(vao);
+      surface.release();
       if (htmlInCanvas) paintable.onpaint = null;
     },
   };
@@ -1341,7 +1344,7 @@ const native = ref(false);
 let instance: AsciifyInstance | null = null;
 let disposed = false;
 
-onMounted(async () => {
+async function mount() {
   native.value = supportsHtmlInCanvas();
   await nextTick();
   if (disposed) return;
@@ -1351,6 +1354,7 @@ onMounted(async () => {
         source: sourceEl.value,
         content: contentEl.value,
         output: outputEl.value,
+        onLost: remount,
       },
       props,
     );
@@ -1364,13 +1368,23 @@ onMounted(async () => {
             source: sourceEl.value,
             content: contentEl.value,
             output: outputEl.value,
+            onLost: remount,
           },
           props,
         );
       }
     }
   }
-});
+}
+
+/** The shared context died: rebuild on a new one. */
+function remount() {
+  instance?.destroy();
+  instance = null;
+  if (!disposed) void mount();
+}
+
+onMounted(mount);
 
 onBeforeUnmount(() => {
   disposed = true;

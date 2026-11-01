@@ -16,6 +16,10 @@ function modsOf(e: KeyboardEvent): string[] {
     return mods
 }
 
+const MODIFIER_KEYS = ['Control', 'Alt', 'Shift', 'Meta']
+// Modifiers a hold bind may use alone. Meta opens the Start menu, so it is left out.
+const BARE_MODIFIER: Record<string, string> = { Control: 'ctrl', Alt: 'alt', Shift: 'shift' }
+
 // Only one capture may be live at a time, across every component using this.
 let activeCancel: (() => void) | null = null
 
@@ -48,19 +52,28 @@ export function useKeybindCapture(
         })
     }
 
-    function startCapture(action: string) {
+    /** `allowModifier`: a modifier released before any other key is the bind (for hold binds). */
+    function startCapture(action: string, opts: { allowModifier?: boolean } = {}) {
         // Starting a capture anywhere aborts whichever one was already running
         if (activeCancel && activeCancel !== cancelCapture) activeCancel()
         if (capturingAction.value) cancelCapture()
         capturingAction.value = action
         activeCancel = cancelCapture
 
+        // The last modifier pressed and every modifier down at that moment
+        let lastMod = ''
+        let modsAtLast: string[] = []
+
         captureListener = (e: KeyboardEvent) => {
             e.preventDefault()
             e.stopPropagation()
 
             // Modifiers don't end the capture - they extend the combo in progress
-            if (['Control', 'Alt', 'Shift', 'Meta'].includes(e.key)) {
+            if (MODIFIER_KEYS.includes(e.key)) {
+                if (!e.repeat) {
+                    lastMod = BARE_MODIFIER[e.key] ?? ''
+                    modsAtLast = modsOf(e)
+                }
                 options?.onProgress?.(action, modsOf(e))
                 return
             }
@@ -85,7 +98,13 @@ export function useKeybindCapture(
 
         // A released modifier is no longer part of the combo
         releaseListener = (e: KeyboardEvent) => {
-            if (!['Control', 'Alt', 'Shift', 'Meta'].includes(e.key)) return
+            if (!MODIFIER_KEYS.includes(e.key)) return
+            if (opts.allowModifier && lastMod) {
+                const combo = [...modsAtLast.filter(m => m !== lastMod), lastMod].join('+')
+                cancelCapture()
+                onCombo(action, combo)
+                return
+            }
             options?.onProgress?.(action, modsOf(e))
         }
 

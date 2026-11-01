@@ -319,6 +319,8 @@ Get a single match session by ID. **Requires API key.** Returns full summary.
 
 Get the high-resolution sample blob for a match session. **Requires API key.** Samples are retained for 90 days; older sessions return `404`.
 
+The recorder takes one sample each second, at most 1380 for each match. Older matches have one sample each 5 seconds. Use `t` for time, not the sample index.
+
 **Path Parameters:**
 
 | Param | Type | Description |

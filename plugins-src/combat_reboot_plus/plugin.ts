@@ -12,9 +12,33 @@ interface Accessors {
   readonly connectedHangar: boolean;
 }
 
+/** Accessors' `scene` values that are part of a running match. */
+const MATCH_SCENES = new Set(["alive", "map", "dead", "deploy", "spawning"]);
+/** Accessors' `scene_tags` offered in the two Show in controls. */
+const SHOW_IN_OPTIONS = [
+  { value: "alive", label: "Alive", tooltip: "Live charge and cooldown while driving the XM1-90." },
+  { value: "map", label: "Map", tooltip: "While the tactical map is open." },
+  { value: "dead", label: "Death screen", tooltip: "From the fatal hit until the deploy screen." },
+  { value: "deploy", label: "Deploy", tooltip: "On the deploy screen and during the spawn drop." },
+];
+const HANGAR_OPTIONS = [
+  { value: "hangar.base", label: "Base camp", tooltip: "The hangar's main screen." },
+  { value: "hangar.select", label: "Select", tooltip: "Agent and vehicle selection." },
+  { value: "hangar.agent", label: "Agent", tooltip: "Agent details, skills, cosmetics and progression." },
+  { value: "hangar.vehicle", label: "Vehicle", tooltip: "Vehicle overview, workshop, equipment, cosmetics and progression." },
+  { value: "hangar.missions", label: "Missions", tooltip: "Missions and operations." },
+  { value: "hangar.modes", label: "Modes", tooltip: "Game mode selection." },
+  { value: "hangar.career", label: "Career", tooltip: "Career, stats, friends and clans." },
+  { value: "hangar.results", label: "Results", tooltip: "Results of the last battle." },
+  { value: "hangar.settings", label: "Settings", tooltip: "The settings screens." },
+  { value: "queue", label: "In queue", tooltip: "While matchmaking runs, on any hangar screen." },
+];
+const ALL_HANGAR_SCREENS = HANGAR_OPTIONS.map((o) => o.value).filter((v) => v !== "queue");
+const DEFAULT_SHOW_IN = ["alive"];
 
-const BATTLE_ACTIVE = 8;
-const MS_FINISH = "ActiveFinish";
+function strings(raw: unknown, fallback: string[]): string[] {
+  return Array.isArray(raw) ? raw.map(String) : fallback;
+}
 
 /**
  * The only vehicle with the module. `player_vehicle` is the art slug (hud_scoreboard's
@@ -24,8 +48,6 @@ const XM1_90_SLUG = "a13_chrysler_xm1_ares_90";
 
 /** How long a confirmed vehicle survives out-of-battle reads (respawn transitions) before it's forgotten. */
 const VEHICLE_LATCH_GRACE_MS = 15_000;
-
-const HANGAR_SETTLE_MS = 3000;
 
 const POS_KEY_TP = "vue_overlay_pos";
 const POS_KEY_FP = "vue_overlay_pos_fp";
@@ -91,10 +113,10 @@ export class CombatRebootPlusPlugin extends FusePlugin {
   private onVehicle = false;
   private lastSeenVehicle = "";
   private hostVisible = true;
-  private showInBattle = true;
-  private showInHangar = false;
+  private showIn = new Set(DEFAULT_SHOW_IN);
+  private scene = "";
+  private sceneTags: string[] = [];
   private inHangar = false;
-  private hangarSince = 0;
   private lastVisible: boolean | null = null;
 
   // A respawn can rebuild the HUD page without re-sending the vehicle slug.
@@ -128,7 +150,8 @@ export class CombatRebootPlusPlugin extends FusePlugin {
         vue_overlay_pos_fp: null,
         vue_width: DEFAULT_W,
         vue_height: DEFAULT_H,
-        show_in: ["battle"],
+        show_in: DEFAULT_SHOW_IN,
+        show_in_hangar: [],
         threshold_damage: 2000,
         window_s: 20,
         cooldown_s: 60,
@@ -139,8 +162,12 @@ export class CombatRebootPlusPlugin extends FusePlugin {
         sound_volume: 1,
       })
       .load();
+    const saved = strings(ctx.config.get<unknown>("show_in", DEFAULT_SHOW_IN), DEFAULT_SHOW_IN);
+    if (saved.includes("battle") || saved.includes("hangar")) {
+      ctx.config.set("show_in", [...new Set(saved.filter((v) => v !== "hangar").map((v) => (v === "battle" ? "alive" : v)))]);
+      if (saved.includes("hangar")) ctx.config.set("show_in_hangar", ALL_HANGAR_SCREENS);
+    }
 
-    // One declaration for both surfaces: the App panel and the stage inspector.
     const sections = this.sections();
     ctx.config.schema(sections);
 
@@ -164,7 +191,6 @@ export class CombatRebootPlusPlugin extends FusePlugin {
     this.pushData(true);
   }
 
-  /** The switch is checked by the caller, so the test button plays regardless. */
   private playSound(asset: string): void {
     if (!this.ctx.assets.exists(asset)) {
       if (!this.missingSounds.has(asset)) {
@@ -181,7 +207,7 @@ export class CombatRebootPlusPlugin extends FusePlugin {
       {
         id: "crb.display",
         label: "Display",
-        description: "Where the overlay shows. Both can be on.",
+        description: "Where the overlay shows. In a match, only while you drive the XM1-90.",
         order: 10,
         controls: [
           {
@@ -189,11 +215,16 @@ export class CombatRebootPlusPlugin extends FusePlugin {
             id: "show_in",
             key: "show_in",
             mode: "multi",
-            label: "Show in",
-            options: [
-              { value: "battle", label: "Battle", tooltip: "Live charge and cooldown while driving the XM1-90." },
-              { value: "hangar", label: "Hangar", tooltip: "The overlay at rest while in the hangar." },
-            ],
+            label: "Show in match",
+            options: SHOW_IN_OPTIONS,
+          },
+          {
+            type: "buttons",
+            id: "show_in_hangar",
+            key: "show_in_hangar",
+            mode: "multi",
+            label: "Show in hangar",
+            options: HANGAR_OPTIONS,
           },
         ],
       },
@@ -322,10 +353,10 @@ export class CombatRebootPlusPlugin extends FusePlugin {
   }
 
   private readConfig(): void {
-    const showIn = this.ctx.config.get<unknown>("show_in", ["battle"]);
-    const places = Array.isArray(showIn) ? showIn : ["battle"];
-    this.showInBattle = places.includes("battle");
-    this.showInHangar = places.includes("hangar");
+    this.showIn = new Set([
+      ...strings(this.ctx.config.get<unknown>("show_in", DEFAULT_SHOW_IN), DEFAULT_SHOW_IN),
+      ...strings(this.ctx.config.get<unknown>("show_in_hangar", []), []),
+    ]);
     this.threshold = Number(this.ctx.config.get("threshold_damage", 2000)) || 2000;
     this.windowMs = (Number(this.ctx.config.get("window_s", 20)) || 20) * 1000;
     this.cooldownMs = (Number(this.ctx.config.get("cooldown_s", 60)) || 60) * 1000;
@@ -381,17 +412,17 @@ export class CombatRebootPlusPlugin extends FusePlugin {
     this.latchedVehicleId = null;
   }
 
-  /** In battle on the vehicle and/or in the hangar, per config; hidden everywhere else. */
+  /** A picked scene tag is on; in a match, only on the XM1-90. */
   private applyVisibility(): void {
     if (this.ctx.state === "calibrate") return;
-    const wanted = (this.showInBattle && this.active && this.onVehicle) || (this.showInHangar && this.inHangar);
+    const hit = this.sceneTags.some((tag) => this.showIn.has(tag));
+    const wanted = hit && (this.active ? this.onVehicle : this.inHangar);
     const visible = this.hostVisible && wanted;
     if (visible === this.lastVisible) return;
     this.lastVisible = visible;
     this.ctx.logger.info(
-      `combat_reboot_plus: ${visible ? "shown" : "hidden"} (show_battle=${this.showInBattle} show_hangar=${this.showInHangar}` +
-        ` in_hangar=${this.inHangar} match=${this.active} vehicle=${this.onVehicle} host=${this.hostVisible}` +
-        ` battle_state=${String(this.rd("battle_state"))} match_state=${String(this.rd("match_state"))}` +
+      `combat_reboot_plus: ${visible ? "shown" : "hidden"} (tags=${this.sceneTags.join(",")} show_in=${[...this.showIn].join(",")}` +
+        ` vehicle=${this.onVehicle} host=${this.hostVisible}` +
         ` slug="${this.lastSeenVehicle}" held=${this.vehicleLatched} roster_id=${String(this.latchedVehicleId)})`,
     );
     this.ov?.setVisible(visible);
@@ -497,23 +528,18 @@ export class CombatRebootPlusPlugin extends FusePlugin {
     return `${name}=${typeof v} ${JSON.stringify(v)}`;
   }
 
-  /**
-   * Hangar = its page is up and the battle HUD's isn't. It has to hold for a moment
-   * first, so a HUD page reconnecting mid-battle isn't taken for a trip to the hangar.
-   */
-  private updateHangar(now: number): void {
-    const raw = Boolean(this.acc?.connectedHangar) && !this.acc?.connected;
-    if (!raw) {
-      this.hangarSince = 0;
-      this.inHangar = false;
-      return;
+  /** Accessors' scene. Reaching the hangar ends the match for the charge too. */
+  private updateScene(): void {
+    const scene = this.acc?.read("scene");
+    this.scene = typeof scene === "string" ? scene : "";
+    this.sceneTags = strings(this.acc?.read("scene_tags"), []);
+    const inHangar = this.scene === "hangar";
+    if (inHangar && !this.inHangar) {
+      this.active = false;
+      this.onVehicle = false;
+      this.resetAll();
     }
-    if (this.hangarSince === 0) this.hangarSince = now;
-    if (this.inHangar || now - this.hangarSince < HANGAR_SETTLE_MS) return;
-    this.inHangar = true;
-    this.active = false;
-    this.onVehicle = false;
-    this.resetAll();
+    this.inHangar = inHangar;
   }
 
   override tick(dt: number): void {
@@ -527,7 +553,7 @@ export class CombatRebootPlusPlugin extends FusePlugin {
       this.logGate(!this.acc ? "idle: no accessors service" : `idle: host ${this.ctx.state}`);
       return;
     }
-    this.updateHangar(Date.now());
+    this.updateScene();
     if (!this.acc.connected) {
       this.logGate(this.inHangar ? "idle: in the hangar" : "idle: battle HUD not connected");
       // Out of battle only the hangar can change what's shown; the charge rests at zero there.
@@ -539,9 +565,7 @@ export class CombatRebootPlusPlugin extends FusePlugin {
     const fp = this.rd("multiplayer_is_fp_view");
     this.updateView(fp == null ? null : Boolean(Number(fp)));
 
-    const battle = this.numOrNull("battle_state");
-    const matchState = this.rd("match_state");
-    const isActive = battle === BATTLE_ACTIVE && matchState !== MS_FINISH;
+    const isActive = MATCH_SCENES.has(this.scene);
 
     // Checked before refreshing, so a long spell out of battle (the hangar) also counts.
     const nowMs = Date.now();
@@ -561,7 +585,7 @@ export class CombatRebootPlusPlugin extends FusePlugin {
     this.applyVisibility();
 
     if (!isActive) {
-      this.logGate(`idle: not an active battle (${this.describe("battle_state")}, ${this.describe("match_state")})`);
+      this.logGate(`idle: not in a match (scene=${this.scene || "none"})`);
       this.prevDead = false;
       this.pushData();
       return;
@@ -574,7 +598,7 @@ export class CombatRebootPlusPlugin extends FusePlugin {
     }
 
     const hp = this.numOrNull("health");
-    const isDead = hp === 0 || this.numOrNull("player_is_dead") === 1;
+    const isDead = hp === 0 || this.scene === "dead" || this.numOrNull("player_is_dead") === 1;
     if (isDead && !this.prevDead) {
       this.resetAll();
       this.ctx.logger.info(`combat_reboot_plus: death (hp=${String(hp)}) - reset`);

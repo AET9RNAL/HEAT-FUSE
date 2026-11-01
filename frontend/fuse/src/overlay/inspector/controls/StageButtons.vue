@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { motion } from "motion-v";
-import Icons from "../../../components/Icons.vue";
+import Icons from "../../../components/ui/Icons.vue";
 import { Dynamics } from "../../../composables/useMotion";
 import { useTipDirective } from "../tooltip";
 import type { Option } from "../types";
@@ -43,7 +43,7 @@ function pick(v: unknown): void {
     <motion.button
       v-for="o in options"
       :key="String(o.value)"
-      v-tip="o.tooltip"
+      v-tip="o.tooltip || o.label"
       type="button"
       class="btn"
       :class="{ active: isOn(o.value), 'icon-only': !!o.icon && !o.label }"
@@ -58,7 +58,7 @@ function pick(v: unknown): void {
       @click="pick(o.value)"
     >
       <Icons v-if="o.icon" :kind="o.icon as never" size="small" color="var(--ico)" />
-      <span v-if="o.label">{{ o.label }}</span>
+      <span v-if="o.label" class="label">{{ o.label }}</span>
     </motion.button>
   </div>
 </template>
@@ -67,6 +67,7 @@ function pick(v: unknown): void {
 .stage-buttons {
   position: relative;
   display: flex;
+  flex-wrap: wrap;
   gap: var(--space-0);
   padding: var(--space-0);
   box-sizing: border-box;
@@ -78,12 +79,14 @@ function pick(v: unknown): void {
 
 .btn {
   --ico: var(--text-muted);
-  flex: 1;
+  flex: 1 1 auto;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: var(--space-1);
   min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
   height: 22px;
   padding: 0 var(--space-2);
   border: none;
@@ -94,6 +97,12 @@ function pick(v: unknown): void {
   white-space: nowrap;
   corner-shape: bevel;
   border-radius: 6px 0 6px 0;
+}
+
+.label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .btn.icon-only {

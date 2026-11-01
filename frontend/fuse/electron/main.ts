@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import fs from 'node:fs'
 import { unzipSync, strFromU8 } from 'fflate'
-import { initOverlayStage, startOverlayStage, stopOverlayStage } from './overlayStage'
+import { getStageWindow, initOverlayStage, setFrameSources, startOverlayStage, stopOverlayStage } from './overlayStage'
 import { handleIpc, onIpc, onceIpc, trustSurface } from './ipcGuard'
 import { PermissionStore } from './permissionStore'
 import { SecretStore } from './secretStore'
@@ -67,7 +67,8 @@ interface PluginManifest {
   description?: string
   author?: string
   config_schema?: unknown[]
-  hotkeys?: unknown[]
+  /** Action name -> default combo. */
+  hotkeys?: Record<string, string>
   core?: boolean
 }
 
@@ -164,8 +165,15 @@ function writeHostConfig(cfg: HostConfig) {
   fs.writeFileSync(path.join(PATHS.configs, 'fuse_host.json'), JSON.stringify(cfg, null, 2), 'utf-8')
 }
 
+/** The manifest hotkeys as the App lists them while the runtime is down: action names, with the combos saved under them. */
+function manifestHotkeys(hotkeys: PluginManifest['hotkeys'], saved: Record<string, string> = {}) {
+  return Object.entries(hotkeys ?? {}).map(([action, combo]) => ({ action, combo: saved[action] ?? String(combo), label: action }))
+}
+
 function scanPluginsDir(dir: string) {
   if (!fs.existsSync(dir)) return []
+  let saved: HostConfig['hotkey_overrides'] = {}
+  try { saved = readHostConfig().hotkey_overrides ?? {} } catch { /* an unreadable host config: the defaults show */ }
   return fs.readdirSync(dir)
     .filter(f => f.endsWith('.fuse'))
     .flatMap(file => {
@@ -176,15 +184,16 @@ function scanPluginsDir(dir: string) {
         const manifestKey = Object.keys(entries).find(k => k.endsWith('/manifest.json'))
         if (!manifestKey) return []
         const m: PluginManifest = JSON.parse(strFromU8(entries[manifestKey]))
+        const pluginId = m.plugin_id ?? m.id ?? path.basename(file, '.fuse')
         return [{
-          plugin_id:    m.plugin_id ?? m.id ?? path.basename(file, '.fuse'),
+          plugin_id:    pluginId,
           name:         m.name        ?? path.basename(file, '.fuse'),
           version:      m.version     ?? '0.0.0',
           description:  m.description ?? '',
           author:       m.author,
           status:       'pending' as const,
           configSchema: m.config_schema ?? [],
-          hotkeys:      m.hotkeys      ?? [],
+          hotkeys:      manifestHotkeys(m.hotkeys, saved?.[pluginId]),
           core:         m.core         ?? false,
           filePath:     path.join(dir, file),
           checksum,
@@ -252,6 +261,38 @@ async function answerRuntime(proc: ChildProcess, msg: Record<string, unknown>): 
   }
 }
 
+const STAGE_PROCESS_CHECK_MS = 2000
+let stageProcessTimer: ReturnType<typeof setInterval> | null = null
+let lastStageProcesses = ''
+
+/** The runtime measures the stage's renderer and Chromium's GPU process; it's told their ids whenever they change. */
+function reportStageProcesses(proc: ChildProcess): void {
+  if (!proc.connected) return
+  const stage = getStageWindow()
+  let rendererPid = 0
+  try {
+    if (stage && !stage.webContents.isDestroyed()) rendererPid = stage.webContents.getOSProcessId()
+  } catch { /* renderer not started yet */ }
+  const gpuPid = app.getAppMetrics().find(m => m.type === 'GPU')?.pid ?? 0
+  const key = `${rendererPid}:${gpuPid}`
+  if (key === lastStageProcesses) return
+  lastStageProcesses = key
+  proc.send({ type: 'stage:processes', rendererPid, gpuPid })
+}
+
+function stopStageProcessReports(): void {
+  if (stageProcessTimer) clearInterval(stageProcessTimer)
+  stageProcessTimer = null
+  lastStageProcesses = ''
+}
+
+/** Only while the runtime says the widget is on; off means nothing samples, here or there. */
+function startStageProcessReports(proc: ChildProcess): void {
+  stopStageProcessReports()
+  stageProcessTimer = setInterval(() => reportStageProcesses(proc), STAGE_PROCESS_CHECK_MS)
+  reportStageProcesses(proc)
+}
+
 /** Inspector port the sidecar was spawned with, and the DevTools window attached to it. */
 let runtimeInspectPort = 9229
 let runtimeDevtoolsWindow: BrowserWindow | null = null
@@ -274,12 +315,91 @@ function buildObsUrl(display?: string | null): string | null {
   return `${VITE_DEV_SERVER_URL}overlay.html?${q.toString()}`
 }
 
-// Game process watcher 
+// Game process watcher
 
 let gameWatcher: ReturnType<typeof setInterval> | null = null
 let focusWatcher: ReturnType<typeof setInterval> | null = null
 let gameDetected = false
 let gameFocused = false
+
+// Game config (coldwar.project)
+
+const PROJECT_FILE = 'coldwar.project'
+const DEFAULT_CDP_PORT = 17503
+const ENABLE_RE = /"Enable Debugger"\s*:\s*(true|false)/
+const PORT_RE = /"Debugger Port"\s*:\s*(\d+)/
+
+interface GameConfigRead {
+  success: boolean
+  enabled?: boolean
+  /** null when the file carries no "Debugger Port" key. */
+  port?: number | null
+  error?: string
+}
+
+// Read, never parse: the file is JSON-like and the game may keep comments in it.
+function _readGameConfig(dirPath: string): GameConfigRead {
+  try {
+    const content = fs.readFileSync(path.join(dirPath, PROJECT_FILE), 'utf-8')
+    const enable = content.match(ENABLE_RE)
+    const port = content.match(PORT_RE)
+    return { success: true, enabled: enable?.[1] === 'true', port: port ? Number(port[1]) : null }
+  } catch (e: unknown) {
+    return { success: false, error: (e as Error).message }
+  }
+}
+
+function _validPort(port: number): boolean {
+  return Number.isInteger(port) && port >= 1024 && port <= 65535
+}
+
+function _writeGameConfig(dirPath: string, opts: { enabled?: boolean; port?: number }): { success: boolean; error?: string } {
+  try {
+    const projectPath = path.join(dirPath, PROJECT_FILE)
+    let content = fs.readFileSync(projectPath, 'utf-8')
+    if (opts.port !== undefined) {
+      if (!_validPort(opts.port)) return { success: false, error: `Port ${opts.port} is outside 1024-65535` }
+      if (!PORT_RE.test(content)) return { success: false, error: `No "Debugger Port" key in ${PROJECT_FILE}` }
+      content = content.replace(new RegExp(PORT_RE.source, 'g'), `"Debugger Port": ${opts.port}`)
+    }
+    if (opts.enabled !== undefined) {
+      if (!ENABLE_RE.test(content)) return { success: false, error: `No "Enable Debugger" key in ${PROJECT_FILE}` }
+      content = content.replace(new RegExp(ENABLE_RE.source, 'g'), `"Enable Debugger": ${opts.enabled}`)
+    }
+    fs.writeFileSync(projectPath, content, 'utf-8')
+    return { success: true }
+  } catch (e: unknown) {
+    return { success: false, error: (e as Error).message }
+  }
+}
+
+let projectWatcher: fs.FSWatcher | null = null
+let projectWatchDir = ''
+
+/**
+ * Watch the game folder, because the game replaces the file rather than editing
+ * it. The renderer decides what a change means; nothing is written back.
+ */
+function _watchGameConfig(dirPath: string): void {
+  const dir = dirPath ? path.resolve(dirPath) : ''
+  if (dir === projectWatchDir) return
+  projectWatcher?.close()
+  projectWatcher = null
+  projectWatchDir = dir
+  if (!dir || !fs.existsSync(dir)) return
+  let debounce: ReturnType<typeof setTimeout> | null = null
+  try {
+    const w = fs.watch(dir, (_event: unknown, filename: unknown) => {
+      if (filename !== PROJECT_FILE) return
+      if (debounce) clearTimeout(debounce)
+      debounce = setTimeout(() => {
+        win?.webContents.send('game:config:changed', _readGameConfig(dir))
+      }, 150)
+    })
+    w.on('error', () => { w.close(); if (projectWatcher === w) { projectWatcher = null; projectWatchDir = '' } })
+    projectWatcher = w
+  } catch { /* an unreadable folder just gets no watcher */ }
+}
 
 // Persistent PowerShell session for Win32 foreground-window queries.
 let psRunner: ChildProcess | null = null
@@ -910,7 +1030,7 @@ app.whenReady().then(() => {
     }
   })
 
-  handleIpc('fuse:spawn', async (_event, opts?: { autoLock?: boolean }) => {
+  handleIpc('fuse:spawn', async (_event, opts?: { autoLock?: boolean; language?: string; cdpPort?: number; gameDirs?: Record<string, string> }) => {
     if (fuseProcess) return { success: false, error: 'already running' }
 
     // The runtime is a Node sidecar (runtime/dist/index.js). We run it with
@@ -942,6 +1062,11 @@ app.whenReady().then(() => {
       FUSE_DATA_DIR: USER_DATA_DIR,
       FUSE_USER_PLUGINS_DIR: PATHS.pluginsUser,
       FUSE_AUTO_LOCK: opts?.autoLock ? '1' : '0',
+      FUSE_APP_LANGUAGE: typeof opts?.language === 'string' ? opts.language : '',
+      FUSE_CDP_PORT: String(_validPort(Number(opts?.cdpPort)) ? opts!.cdpPort : DEFAULT_CDP_PORT),
+      FUSE_GAME_DIRS: JSON.stringify(Object.fromEntries(
+        Object.entries(opts?.gameDirs ?? {}).filter(([, dir]) => typeof dir === 'string'),
+      )),
     }
 
     return new Promise<{ success: boolean; pid?: number; port?: number; connectionToken?: string; obsUrl?: string | null; error?: string }>((resolve) => {
@@ -960,6 +1085,11 @@ app.whenReady().then(() => {
           requestConsent(msg as unknown as ConsentRequest)
         } else if (msg?.type === 'secrets' || msg?.type === 'links:open') {
           void answerRuntime(proc, msg)
+        } else if (msg?.type === 'stage:perf') {
+          if (msg.enabled === true) startStageProcessReports(proc)
+          else stopStageProcessReports()
+        } else if (msg?.type === 'stage:frames') {
+          setFrameSources(msg.sources)
         }
       })
 
@@ -1018,7 +1148,9 @@ app.whenReady().then(() => {
                   fuseProcess = null
                   fusePort = null
                   obsToken = null
+                  stopStageProcessReports()
                   stopOverlayStage()
+                  setFrameSources([])
                   resetConsent()
                   // Leave the OBS listener bound (its URL must stay valid) and
                   // just clear the params - the captured page polls until FUSE
@@ -1062,6 +1194,7 @@ app.whenReady().then(() => {
   })
 
   handleIpc('fuse:kill', async () => {
+    stopStageProcessReports()
     stopOverlayStage()
     resetConsent()
     setObsParams(null)
@@ -1528,40 +1661,20 @@ app.whenReady().then(() => {
     }
   })
 
-  handleIpc('game:check-debugger', (_event, dirPath: string) => {
-    try {
-      const projectPath = path.join(dirPath, 'coldwar.project')
-      const content = fs.readFileSync(projectPath, 'utf-8')
-      const enabled = /"Enable Debugger"\s*:\s*true/.test(content)
-      return { success: true, enabled }
-    } catch (e: unknown) {
-      return { success: false, error: (e as Error).message }
-    }
-  })
+  handleIpc('game:check-debugger', (_event, dirPath: string) => _readGameConfig(dirPath))
 
-  handleIpc('game:enable-debugger', (_event, dirPath: string) => {
-    try {
-      const projectPath = path.join(dirPath, 'coldwar.project')
-      let content = fs.readFileSync(projectPath, 'utf-8')
-      content = content.replace(/"Debugger Port"\s*:\s*\d+/g, '"Debugger Port": 9222')
-      content = content.replace(/"Enable Debugger"\s*:\s*false/g, '"Enable Debugger": true')
-      fs.writeFileSync(projectPath, content, 'utf-8')
-      return { success: true }
-    } catch (e: unknown) {
-      return { success: false, error: (e as Error).message }
-    }
-  })
+  handleIpc('game:enable-debugger', (_event, dirPath: string, port?: number) =>
+    _writeGameConfig(dirPath, { enabled: true, port: port ?? DEFAULT_CDP_PORT }))
 
-  handleIpc('game:disable-debugger', (_event, dirPath: string) => {
-    try {
-      const projectPath = path.join(dirPath, 'coldwar.project')
-      let content = fs.readFileSync(projectPath, 'utf-8')
-      content = content.replace(/"Enable Debugger"\s*:\s*true/g, '"Enable Debugger": false')
-      fs.writeFileSync(projectPath, content, 'utf-8')
-      return { success: true }
-    } catch (e: unknown) {
-      return { success: false, error: (e as Error).message }
-    }
+  handleIpc('game:disable-debugger', (_event, dirPath: string) =>
+    _writeGameConfig(dirPath, { enabled: false }))
+
+  handleIpc('game:set-debugger-port', (_event, dirPath: string, port: number) =>
+    _writeGameConfig(dirPath, { port }))
+
+  handleIpc('game:config:watch', (_event, dirPath: string) => {
+    _watchGameConfig(dirPath)
+    return { success: true }
   })
 
   handleIpc('fileassoc:is-registered', () => _isFileAssocRegistered())

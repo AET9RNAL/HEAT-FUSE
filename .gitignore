@@ -28,8 +28,14 @@ fuseadmin/
 # Node runtime port — build artifacts
 runtime/dist/
 runtime/node_modules/
+
+# Libraries plugins import, installed from plugins-src/package.json
+plugins-src/node_modules/
 plugins-dist/
 plugins-cache/
 frontend/fuse/.rive-gate/
 
 TO-DO.md
+heat_stats_backend
+tools/
+docs/

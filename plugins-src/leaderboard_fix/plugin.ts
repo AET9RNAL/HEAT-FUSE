@@ -2,6 +2,20 @@ import fs from "node:fs";
 import path from "node:path";
 import { FusePlugin, type FuseContext } from "@fuse/plugin-sdk";
 
+const DEFAULT_CDP_PORT = 17503;
+
+interface GameConfigService {
+  get(): { port?: number };
+}
+
+function cdpPort(ctx: FuseContext): number {
+  const served = Number(ctx.services.get<GameConfigService>("game_config")?.get()?.port);
+  if (Number.isInteger(served) && served >= 1024 && served <= 65535) return served;
+  const env = Number(process.env.FUSE_CDP_PORT);
+  if (Number.isInteger(env) && env >= 1024 && env <= 65535) return env;
+  return DEFAULT_CDP_PORT;
+}
+
 /** One CDP WebSocket to the meta page, reconnecting on demand. */
 class MetaCdp {
   private ws: WebSocket | null = null;
@@ -9,7 +23,8 @@ class MetaCdp {
   private pending = new Map<number, { resolve: (v: unknown) => void; timer: NodeJS.Timeout }>();
   private connecting = false;
 
-  constructor(private port: number) {}
+  /** The port is read per call: the App can change it while FUSE runs. */
+  constructor(private port: () => number) {}
 
   get connected(): boolean {
     return this.ws !== null;
@@ -30,7 +45,7 @@ class MetaCdp {
 
   private async discover(): Promise<string | null> {
     try {
-      const resp = await fetch(`http://localhost:${this.port}/json`, { signal: AbortSignal.timeout(2000) });
+      const resp = await fetch(`http://localhost:${this.port()}/json`, { signal: AbortSignal.timeout(2000) });
       const targets = (await resp.json()) as Array<Record<string, unknown>>;
       if (!Array.isArray(targets)) return null;
       for (const t of targets) {
@@ -162,8 +177,7 @@ export class LeaderboardFixPlugin extends FusePlugin {
 
   setup(ctx: FuseContext): void {
     this.ctx = ctx;
-    const port = Number(process.env.FUSE_CDP_PORT ?? 9222) || 9222;
-    this.cdp = new MetaCdp(port);
+    this.cdp = new MetaCdp(() => cdpPort(ctx));
     this.script = fs.readFileSync(path.join(ctx.packageRoot, "js", "leaderboard_sort.js"), "utf-8");
     this.upSvg = svgMarkup(path.join(ctx.packageRoot, "assets", "up.svg"));
     this.downSvg = svgMarkup(path.join(ctx.packageRoot, "assets", "down.svg"));

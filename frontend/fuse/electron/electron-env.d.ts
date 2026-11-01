@@ -21,6 +21,14 @@ declare namespace NodeJS {
   }
 }
 
+/** What coldwar.project says. `port` is null when the file carries no port key. */
+interface GameConfigRead {
+  success: boolean
+  enabled?: boolean
+  port?: number | null
+  error?: string
+}
+
 // Used in Renderer process, expose in `preload.ts`
 interface Window {
   /** Stage window only. */
@@ -28,6 +36,8 @@ interface Window {
     setIgnore: (ignore: boolean) => void
     setFocusable: (focusable: boolean) => void
     connection: () => Promise<{ port: number; token: string } | null>
+    primaryDisplay: () => Promise<{ x: number; y: number; w: number; h: number } | null>
+    onPrimaryDisplay: (cb: (rect: { x: number; y: number; w: number; h: number }) => void) => void
   }
   /** Consent view only. */
   consentAPI?: {
@@ -111,9 +121,13 @@ interface Window {
   }
   gameAPI: {
     scanDir: (dirPath: string) => Promise<{ version?: string; hasProject: boolean; error?: string }>
-    checkDebugger: (dirPath: string) => Promise<{ success: boolean; enabled?: boolean; error?: string }>
-    enableDebugger: (dirPath: string) => Promise<{ success: boolean; error?: string }>
+    checkDebugger: (dirPath: string) => Promise<GameConfigRead>
+    enableDebugger: (dirPath: string, port?: number) => Promise<{ success: boolean; error?: string }>
     disableDebugger: (dirPath: string) => Promise<{ success: boolean; error?: string }>
+    setDebuggerPort: (dirPath: string, port: number) => Promise<{ success: boolean; error?: string }>
+    watchConfig: (dirPath: string) => Promise<{ success: boolean }>
+    onConfigChanged: (cb: (cfg: GameConfigRead) => void) => void
+    offConfigChanged: () => void
   }
   discordAPI: {
     setEnabled: (enabled: boolean) => Promise<{ success: boolean }>
@@ -156,7 +170,7 @@ interface Window {
     getIP: () => Promise<string | null>
   }
   fuseAPI: {
-    spawn: (opts?: { autoLock?: boolean }) => Promise<{ success: boolean; pid?: number; port?: number; connectionToken?: string; obsUrl?: string | null; error?: string }>
+    spawn: (opts?: { autoLock?: boolean; language?: string; cdpPort?: number; gameDirs?: Record<string, string> }) => Promise<{ success: boolean; pid?: number; port?: number; connectionToken?: string; obsUrl?: string | null; error?: string }>
     kill: () => Promise<{ success: boolean }>
     status: () => Promise<{ running: boolean; pid: number | null; port: number | null; obsUrl: string | null }>
     onExited: (cb: (data: { code: number | null; signal: string | null }) => void) => void

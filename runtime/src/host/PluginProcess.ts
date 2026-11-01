@@ -3,6 +3,7 @@
  * Owns the spawn flags, the heartbeat, and the runtime end of every `ctx` call.
  */
 import { fork, type ChildProcess, type ForkOptions } from "node:child_process";
+import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -11,7 +12,7 @@ import { Channel, asRecord, errorText } from "../ipc/channel.js";
 import type { InitMessage, WireMessage } from "../ipc/protocol.js";
 import type { StatePatch } from "../ipc/serviceState.js";
 import type { ConfigSchemaItem } from "../sdk/configSchema.js";
-import type { HotkeyRegistry } from "../sdk/hotkeys.js";
+import { HotkeyRegistry } from "../sdk/hotkeys.js";
 import type { InputPhase, InspectorSection } from "../sdk/inspector.js";
 import type { OverlayDeclaration, OverlayHandle, OverlayManager, Rect, Size } from "../sdk/overlay.js";
 import type { StageNotificationInit, StageNotifier } from "../sdk/notifications.js";
@@ -54,6 +55,27 @@ const ENV_ALLOWLIST = [
   "FUSE_CDP_PORT",
 ];
 
+/** Profile folders a started program, such as the game, reads. Only with `processes`, which can read them anyway. */
+const PROGRAM_ENV = [
+  "LOCALAPPDATA",
+  "APPDATA",
+  "ProgramData",
+  "ProgramFiles",
+  "ProgramFiles(x86)",
+  "ProgramW6432",
+  "CommonProgramFiles",
+  "CommonProgramFiles(x86)",
+  "ALLUSERSPROFILE",
+  "PUBLIC",
+  "USERPROFILE",
+  "HOMEDRIVE",
+  "HOMEPATH",
+  "USERNAME",
+  "USERDOMAIN",
+  "COMPUTERNAME",
+  "OS",
+];
+
 function bootstrapPath(): string {
   return (
     process.env.FUSE_PLUGIN_BOOTSTRAP ?? path.join(path.dirname(fileURLToPath(import.meta.url)), "plugin-host.js")
@@ -72,11 +94,17 @@ export interface PluginProcessDeps {
   config: PluginConfig;
   overlays: OverlayManager;
   hotkeys: HotkeyRegistry;
+  /** The combo the user saved for a hotkey of this plugin: by its label, else by its manifest action name. */
+  hotkeyOverride(label: string, action: string | null): string | undefined;
   events: EventBus;
   notifications: StageNotifier;
   audio: HostAudio;
   permissions: PermissionManager;
   services: ServiceHub;
+  /** Folders a `game_files` grant may read: the replays and each whole game folder. */
+  gameReadPaths(): string[];
+  /** The plugin's own folder for the `files` scope. */
+  filesDir: string;
   /** Brokered services, already bound to this plugin and checked against its permissions. */
   storage(op: string, collection: string, args: unknown[]): Promise<unknown>;
   secrets(op: string, key: unknown, value: unknown): Promise<unknown>;
@@ -92,6 +120,10 @@ export interface ProcessMetrics {
   cpu: number | null;
   /** Round trip of the last heartbeat, in ms. */
   ping: number;
+  /** Bytes the plugin's own database holds on disk; absent when it stores nothing. */
+  storage?: number;
+  /** The ceiling `storage` is measured against. */
+  storageLimit?: number;
   /** host: measured by the runtime. plugin: reported by the plugin's bootstrap, which a hostile plugin could forge. */
   source: "host" | "plugin";
 }
@@ -103,8 +135,8 @@ export class PluginProcess implements ServiceConsumer {
   readonly log: Logger;
   requiresCalibration = false;
   calibrationStages = 1;
-  /** Network was granted when this process started; a different answer later means a restart. */
-  netAllowed = false;
+  /** The permission flags this process started with. A different set later means a restart. */
+  private startGrants = "";
   /** Started under the permission model. False only while debugging with FUSE_PLUGIN_INSPECT. */
   sandboxed = true;
 
@@ -112,6 +144,8 @@ export class PluginProcess implements ServiceConsumer {
   private channel: Channel | null = null;
   private handles = new Map<string, OverlayHandle>();
   private forwarders = new Map<string, EventHandler>();
+  /** Each hotkey the plugin registered, by its id: the label the registry knows it by, and its manifest action name. */
+  private hotkeyIds = new Map<string, { label: string; action: string | null }>();
   private stopping = false;
   private lastPong = Date.now();
   private pingSentAt = 0;
@@ -142,12 +176,13 @@ export class PluginProcess implements ServiceConsumer {
   /** Spawn, load the plugin's class, and resolve once it's ready for `setup()`. */
   async start(): Promise<void> {
     const { node, config, permissions } = this.deps;
-    this.netAllowed = permissions.has(this.pluginId, "network");
+    this.startGrants = this.grantFlags().join("\n");
+    if (permissions.has(this.pluginId, "files")) fs.mkdirSync(this.deps.filesDir, { recursive: true });
     // ForkOptions' typings omit windowsHide, but fork passes it on to spawn.
     const options: ForkOptions & { windowsHide: boolean } = {
       execPath: node.execPath,
       execArgv: this.flags(),
-      env: { ...pickEnv(), ...node.env },
+      env: { ...pickEnv(permissions.has(this.pluginId, "processes")), ...node.env },
       cwd: this.spec.packageRoot,
       stdio: ["ignore", "inherit", "inherit", "ipc"],
       serialization: "json",
@@ -202,6 +237,7 @@ export class PluginProcess implements ServiceConsumer {
       manifestHotkeys: { ...(this.spec.manifest.hotkeys ?? {}) },
       config: { path: config.configPath, defaults: config.defaultsSnapshot(), disk: config.readDisk() },
       state: this.state,
+      filesDir: permissions.has(this.pluginId, "files") ? this.deps.filesDir : null,
       permissions: this.permissionStates(),
       services: this.deps.services.snapshotsFor(this.pluginId),
       logLevel: process.env.FUSE_LOG_LEVEL ?? "info",
@@ -286,6 +322,11 @@ export class PluginProcess implements ServiceConsumer {
     this.send(msg);
   }
 
+  /** A process-kind grant or a game folder changed since the spawn. */
+  get grantsChanged(): boolean {
+    return this.grantFlags().join("\n") !== this.startGrants;
+  }
+
   // --- internals ------------------------------------------------------------
 
   private flags(): string[] {
@@ -294,14 +335,27 @@ export class PluginProcess implements ServiceConsumer {
       this.log.warning("FUSE_PLUGIN_INSPECT: running WITHOUT the permission model so a debugger can attach");
       return ["--inspect=0"];
     }
-    const flags = [
+    return [
       "--permission",
       `--allow-fs-read=${path.dirname(bootstrapPath())}`,
       // The package's parent holds the `package.json` that marks the bundle as ESM.
       `--allow-fs-read=${path.dirname(this.spec.packageRoot)}`,
       "--disable-warning=ExperimentalWarning",
+      ...this.grantFlags(),
     ];
-    if (this.netAllowed && this.deps.node.netFlag) flags.push("--allow-net");
+  }
+
+  /** The flags the process-kind scopes add. */
+  private grantFlags(): string[] {
+    const { permissions, node } = this.deps;
+    const has = (scope: string): boolean => permissions.has(this.pluginId, scope);
+    const flags: string[] = [];
+    if (has("network") && node.netFlag) flags.push("--allow-net");
+    if (has("files")) flags.push(`--allow-fs-read=${this.deps.filesDir}`, `--allow-fs-write=${this.deps.filesDir}`);
+    if (has("game_files")) for (const dir of this.deps.gameReadPaths()) flags.push(`--allow-fs-read=${dir}`);
+    // A worker can start without the permission flags (its own execArgv or NODE_OPTIONS), the same as a child
+    // process. So worker threads come only with `processes`.
+    if (has("processes")) flags.push("--allow-child-process", "--allow-worker");
     return flags;
   }
 
@@ -495,11 +549,15 @@ export class PluginProcess implements ServiceConsumer {
       }
 
       case "hotkey.register":
-        this.registerHotkey(String(msg.combo ?? ""), String(msg.id ?? ""), String(msg.label ?? ""));
+        this.registerHotkey(String(msg.combo ?? ""), String(msg.id ?? ""), String(msg.label ?? ""), false);
+        return;
+      case "hotkey.hold":
+        this.registerHotkey(String(msg.combo ?? ""), String(msg.id ?? ""), String(msg.label ?? ""), true);
         return;
       case "hotkey.unregister": {
         const combo = String(msg.combo ?? "");
         if (this.ownsHotkey(combo)) d.hotkeys.unregister(combo);
+        this.hotkeyIds.delete(String(msg.id ?? ""));
         return;
       }
       case "hotkey.reregister": {
@@ -663,8 +721,25 @@ export class PluginProcess implements ServiceConsumer {
     }
   }
 
-  private registerHotkey(combo: string, id: string, label: string): void {
-    if (!combo || !id) return;
+  /**
+   * Bind a hotkey of the plugin. `combo` is its default: a combo the user saved for it replaces the
+   * default here, so a saved rebind holds on every start (queue, enable, restart, a late register).
+   */
+  private registerHotkey(defaultCombo: string, id: string, label: string, hold: boolean): void {
+    if (!defaultCombo || !id) return;
+    const name = label || defaultCombo;
+    const action = this.manifestAction(defaultCombo);
+    let combo = defaultCombo;
+    const saved = this.deps.hotkeyOverride(name, action);
+    if (saved && saved !== defaultCombo) {
+      try {
+        const savedOwner = this.deps.hotkeys.ownerOf(saved);
+        if (savedOwner === undefined || savedOwner === this.pluginId) combo = saved;
+        else this.log.warning(`saved hotkey '${saved}' for '${name}' is bound by '${savedOwner || "host"}' - default '${defaultCombo}' used`);
+      } catch (e) {
+        this.log.warning(`saved hotkey '${saved}' for '${name}': ${errorText(e)} - default '${defaultCombo}' used`);
+      }
+    }
     let owner: string | undefined;
     try {
       owner = this.deps.hotkeys.ownerOf(combo);
@@ -676,7 +751,55 @@ export class PluginProcess implements ServiceConsumer {
       this.log.warning(`hotkey '${combo}' is already bound by '${owner || "host"}' - not taken over`);
       return;
     }
-    this.deps.hotkeys.register(combo, () => this.send({ t: "hotkey", id }), label, this.pluginId);
+    this.hotkeyIds.set(id, { label: name, action });
+    if (hold) {
+      const handlers = {
+        onDown: () => this.send({ t: "hotkey", id, phase: "down" }),
+        onUp: () => this.send({ t: "hotkey", id, phase: "up" }),
+      };
+      this.deps.hotkeys.hold(combo, handlers, name, this.pluginId);
+    } else {
+      this.deps.hotkeys.register(combo, () => this.send({ t: "hotkey", id }), name, this.pluginId);
+    }
+    if (combo !== defaultCombo) {
+      this.log.info(`hotkey '${name}' => '${combo}' (saved)`);
+      this.syncHotkeys();
+    }
+  }
+
+  /** The manifest `hotkeys` name whose default is this combo, or null. */
+  private manifestAction(combo: string): string | null {
+    const norm = (c: string): string => {
+      const { mods, key } = HotkeyRegistry.parse(c);
+      return `${[...mods].sort().join("+")}|${key}`;
+    };
+    let want: string;
+    try {
+      want = norm(combo);
+    } catch {
+      return null;
+    }
+    const names = Object.entries(this.spec.manifest.hotkeys ?? {}).filter(([, c]) => {
+      try {
+        return norm(String(c)) === want;
+      } catch {
+        return false;
+      }
+    });
+    return names.length === 1 ? names[0]![0] : null;
+  }
+
+  /** The manifest action name of one of this plugin's bindings, by the label the registry knows it by. */
+  hotkeyAction(label: string): string | null {
+    for (const h of this.hotkeyIds.values()) if (h.label === label) return h.action;
+    return null;
+  }
+
+  /** Tell the plugin the combo each of its hotkeys has now, so its `listBindings()` shows the user's rebinds. */
+  syncHotkeys(): void {
+    const live = this.deps.hotkeys.listBindings(this.pluginId);
+    const list = [...this.hotkeyIds].map(([id, h]) => ({ id, combo: live.find((b) => b.label === h.label)?.combo ?? null }));
+    if (list.length) this.send({ t: "hotkey.bindings", list });
   }
 
   private ownsHotkey(combo: string): boolean {
@@ -695,9 +818,9 @@ export class PluginProcess implements ServiceConsumer {
   }
 }
 
-function pickEnv(): Record<string, string> {
+function pickEnv(programs: boolean): Record<string, string> {
   const env: Record<string, string> = {};
-  for (const key of ENV_ALLOWLIST) {
+  for (const key of programs ? [...ENV_ALLOWLIST, ...PROGRAM_ENV] : ENV_ALLOWLIST) {
     const value = process.env[key];
     if (value !== undefined) env[key] = value;
   }

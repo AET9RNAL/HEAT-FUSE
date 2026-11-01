@@ -6,11 +6,12 @@
   "description": "Exercises every overlay-inspector control type and the plugin APIs, with self-tests. Development aid, not a gameplay overlay.",
   "entry": "plugin:InspectorDemoPlugin",
   "runtime": "node",
-  "min_host_version": "6.0.0",
+  "min_host_version": "5.0.0",
   "permissions": {
     "storage": { "reason": "Keeps a click counter and the self-test's sample records." },
     "secrets": { "reason": "Saves a sample token to test encrypted values." },
     "network": { "reason": "Only there so you can test allowing and denying a dangerous permission." },
+    "language": { "reason": "Reads the App's language to test FUSE's language service." },
     "inspector_demo.admin": { "reason": "Tests a permission this plugin defines for its own service." }
   },
   "provides": {

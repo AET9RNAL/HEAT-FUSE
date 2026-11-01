@@ -10,6 +10,12 @@ if (SURFACE === 'stage') {
     setFocusable: (focusable: boolean): void => ipcRenderer.send('overlay:set-focusable', !!focusable),
     /** The runtime socket's port and stage token, answered once per page load. */
     connection: (): Promise<{ port: number; token: string } | null> => ipcRenderer.invoke('overlay:connection'),
+    /** Where the primary display sits inside the stage window. */
+    primaryDisplay: (): Promise<{ x: number; y: number; w: number; h: number } | null> =>
+      ipcRenderer.invoke('overlay:primary-display'),
+    onPrimaryDisplay: (cb: (rect: { x: number; y: number; w: number; h: number }) => void): void => {
+      ipcRenderer.on('overlay:primary-display-changed', (_e, rect) => cb(rect))
+    },
   })
 }
 
@@ -36,6 +42,14 @@ if (SURFACE === 'consent') {
 
 function exposeApp(key: string, api: Record<string, unknown>): void {
   if (SURFACE === 'app') contextBridge.exposeInMainWorld(key, api)
+}
+
+/** What coldwar.project says. `port` is null when the file carries no port key. */
+interface GameConfigRead {
+  success: boolean
+  enabled?: boolean
+  port?: number | null
+  error?: string
 }
 
 exposeApp('safeStorageAPI', {
@@ -143,12 +157,20 @@ exposeApp('updateAPI', {
 exposeApp('gameAPI', {
   scanDir: (dirPath: string): Promise<{ version?: string; hasProject: boolean; error?: string }> =>
     ipcRenderer.invoke('game:scan-dir', dirPath),
-  checkDebugger: (dirPath: string): Promise<{ success: boolean; enabled?: boolean; error?: string }> =>
+  checkDebugger: (dirPath: string): Promise<GameConfigRead> =>
     ipcRenderer.invoke('game:check-debugger', dirPath),
-  enableDebugger: (dirPath: string): Promise<{ success: boolean; error?: string }> =>
-    ipcRenderer.invoke('game:enable-debugger', dirPath),
+  enableDebugger: (dirPath: string, port?: number): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke('game:enable-debugger', dirPath, port),
   disableDebugger: (dirPath: string): Promise<{ success: boolean; error?: string }> =>
     ipcRenderer.invoke('game:disable-debugger', dirPath),
+  setDebuggerPort: (dirPath: string, port: number): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke('game:set-debugger-port', dirPath, port),
+  watchConfig: (dirPath: string): Promise<{ success: boolean }> =>
+    ipcRenderer.invoke('game:config:watch', dirPath),
+  onConfigChanged: (cb: (cfg: GameConfigRead) => void) =>
+    ipcRenderer.on('game:config:changed', (_event, cfg) => cb(cfg)),
+  offConfigChanged: () =>
+    ipcRenderer.removeAllListeners('game:config:changed'),
 })
 
 exposeApp('discordAPI', {
@@ -217,7 +239,7 @@ exposeApp('deviceAPI', {
 })
 
 exposeApp('fuseAPI', {
-  spawn: (opts?: { autoLock?: boolean }): Promise<{ success: boolean; pid?: number; port?: number; connectionToken?: string; obsUrl?: string | null; error?: string }> =>
+  spawn: (opts?: { autoLock?: boolean; language?: string; cdpPort?: number; gameDirs?: Record<string, string> }): Promise<{ success: boolean; pid?: number; port?: number; connectionToken?: string; obsUrl?: string | null; error?: string }> =>
     ipcRenderer.invoke('fuse:spawn', opts),
   kill: (): Promise<{ success: boolean }> =>
     ipcRenderer.invoke('fuse:kill'),

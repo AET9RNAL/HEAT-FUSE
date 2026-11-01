@@ -14,7 +14,10 @@ export interface SimpleCell {
   squad: number;
 }
 
-const props = defineProps<{ cell: SimpleCell; assetBase: string; side: "ally" | "enemy" }>();
+const props = withDefaults(
+  defineProps<{ cell: SimpleCell; assetBase: string; side: "ally" | "enemy"; teamColor?: string }>(),
+  { teamColor: "" },
+);
 
 // Same palette and index rule as eSquadCell, so a squad reads identically here.
 const SQUAD_PALETTE = ["#a3fcb7", "#f95252", "#f9ee52", "#52f95a", "#52f9ee", "#5255f9", "#c752f9"];
@@ -132,7 +135,14 @@ const flameShapeStyle = computed(() => {
 });
 const ALLY_FLAME: [number, number, number] = [0.48, 0.74, 0.86]; // --woth-ally #7abfdf
 const ENEMY_FLAME: [number, number, number] = [1.0, 0.43, 0.28]; // --woth-enemy #ff6d46
-const flameColor = computed(() => (props.side === "enemy" ? ENEMY_FLAME : ALLY_FLAME));
+
+/** "#RRGGBB" to the 0..1 channels the flame shader takes. */
+function rgb01(hex: string): [number, number, number] | null {
+  const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})/i.exec(hex);
+  if (!m) return null;
+  return [Number.parseInt(m[1] ?? "0", 16) / 255, Number.parseInt(m[2] ?? "0", 16) / 255, Number.parseInt(m[3] ?? "0", 16) / 255];
+}
+const flameColor = computed(() => rgb01(props.teamColor) ?? (props.side === "enemy" ? ENEMY_FLAME : ALLY_FLAME));
 
 onBeforeUnmount(() => {
   cancelAnimationFrame(flameRaf);

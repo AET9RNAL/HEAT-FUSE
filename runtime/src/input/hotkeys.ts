@@ -14,16 +14,26 @@ function nutKeyFor(char: string): number | null {
 export type MouseCallback = (x: number, y: number, button: number, pressed: boolean) => void;
 
 interface InputCallbacks {
-  onKey: (mods: Set<string>, key: string | null, pressed: boolean) => void;
+  onKey: (mods: Set<string>, key: string, pressed: boolean) => void;
   onMouse: MouseCallback;
 }
 
 const UK = UiohookKey as unknown as Record<string, number>;
-const MODIFIER_CODES = new Set<number>(
-  [UK.Ctrl, UK.CtrlRight, UK.Shift, UK.ShiftRight, UK.Alt, UK.AltRight, UK.Meta, UK.MetaRight].filter(
-    (v): v is number => typeof v === "number",
-  ),
-);
+// Left and right keys share one name.
+const MODIFIER_BY_KEYCODE = new Map<number, string>();
+for (const [enumName, name] of [
+  ["Ctrl", "ctrl"],
+  ["CtrlRight", "ctrl"],
+  ["Shift", "shift"],
+  ["ShiftRight", "shift"],
+  ["Alt", "alt"],
+  ["AltRight", "alt"],
+  ["Meta", "meta"],
+  ["MetaRight", "meta"],
+] as const) {
+  const code = UK[enumName];
+  if (typeof code === "number") MODIFIER_BY_KEYCODE.set(code, name);
+}
 
 const CHAR_BY_KEYCODE = new Map<number, string>();
 for (let c = 65; c <= 90; c++) {
@@ -173,10 +183,22 @@ export class HotkeyInput {
     this.started = false;
   }
 
+  private modifierHeld(mod: string): boolean {
+    for (const code of this.heldKeycodes) if (MODIFIER_BY_KEYCODE.get(code) === mod) return true;
+    return false;
+  }
+
   private onKeyDown(e: UiohookKeyboardEvent): void {
     const mods = modsFromEvent(e);
-    if (MODIFIER_CODES.has(e.keycode)) {
-      this.cb.onKey(mods, null, true);
+    const mod = MODIFIER_BY_KEYCODE.get(e.keycode);
+    if (mod) {
+      if (this.heldKeycodes.has(e.keycode)) return; // suppress auto-repeat
+      const sideHeld = this.modifierHeld(mod);
+      this.heldKeycodes.add(e.keycode);
+      if (sideHeld) return; // the other side already holds it
+      this.keyboard.markPressed(mod);
+      mods.delete(mod);
+      this.cb.onKey(mods, mod, true);
       return;
     }
     const char = resolveChar(e.keycode);
@@ -190,8 +212,13 @@ export class HotkeyInput {
 
   private onKeyUp(e: UiohookKeyboardEvent): void {
     const mods = modsFromEvent(e);
-    if (MODIFIER_CODES.has(e.keycode)) {
-      this.cb.onKey(mods, null, false);
+    const mod = MODIFIER_BY_KEYCODE.get(e.keycode);
+    if (mod) {
+      this.heldKeycodes.delete(e.keycode);
+      if (this.modifierHeld(mod)) return; // the other side still holds it
+      this.keyboard.markReleased(mod);
+      mods.delete(mod);
+      this.cb.onKey(mods, mod, false);
       return;
     }
     this.heldKeycodes.delete(e.keycode);

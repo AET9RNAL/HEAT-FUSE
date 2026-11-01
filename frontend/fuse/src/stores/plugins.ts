@@ -11,6 +11,8 @@ export interface PluginHotkey {
     action: string
     combo: string
     label: string
+    /** A hold bind: it may be a bare modifier such as "shift". */
+    hold?: boolean
 }
 
 export interface PluginRecord {

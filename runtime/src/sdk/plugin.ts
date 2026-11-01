@@ -56,9 +56,15 @@ export interface FuseContext {
 
   state: HostState;
   packageRoot: string;
+  /** A folder only this plugin reads and writes. Needs `files`, else null. */
+  filesDir: string | null;
   manifestHotkeys: Record<string, string>;
   extras: Map<string, unknown>;
 
+  /**
+   * The manifest default combo of a hotkey: register with it. The runtime binds the combo the user saved
+   * instead, so show keys from `hotkeys.listBindings()` (by label) and refresh them in `hotkeys.onChange`.
+   */
   hotkeyFor(name: string, fallback?: string): string;
 }
 

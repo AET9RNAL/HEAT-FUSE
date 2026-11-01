@@ -1,27 +1,28 @@
 <script setup lang="ts">
-import Titlebar from './components/Titlebar.vue'
-import AppMain from './components/AppMain.vue'
-import AppWelcome from './components/AppWelcome.vue'
-import AppResetPassword from './components/AppResetPassword.vue'
-import eNotification from './components/eNotification.vue'
-import ePluginConfig from './components/ePluginConfig.vue'
-import eSimpleModal from './components/eSimpleModal.vue'
-import eLicense from './components/eLicense.vue'
-import eReleaseNotes from './components/eReleaseNotes.vue'
-import eTooltip from './components/eTooltip.vue'
+import Titlebar from './components/layout/Titlebar.vue'
+import AppMain from './components/layout/AppMain.vue'
+import AppWelcome from './components/welcome/AppWelcome.vue'
+import AppResetPassword from './components/welcome/AppResetPassword.vue'
+import eNotification from './components/ui/eNotification.vue'
+import ePluginConfig from './components/plugins/ePluginConfig.vue'
+import eSimpleModal from './components/dialogs/eSimpleModal.vue'
+import eLicense from './components/dialogs/eLicense.vue'
+import eReleaseNotes from './components/dialogs/eReleaseNotes.vue'
+import eTooltip from './components/ui/eTooltip.vue'
+import eFtue from './components/ftue/eFtue.vue'
 import { useAppStore } from './stores/app'
 import { useAuthStore } from './stores/auth'
 import { useExtendedAuthStore } from './stores/extendedauth'
 import { usePluginsStore } from './stores/plugins'
 import { useNavigationStore } from './stores/navigation'
-import { useHeatStatsStore } from './stores/heatStats'
 import { useSuspension } from './composables/useSuspension'
 import { useFuseControl } from './composables/useFuseControl'
 import { useFuseLogs } from './composables/useFuseLogs'
 import { useDiscordPresence } from './composables/useDiscordPresence'
 import { usePostHog } from './composables/usePostHog'
+import { useAppTour } from './composables/useAppTour'
 import { eventBus } from './events/eventBus'
-import { useI18n } from './composables/useI18n'
+import { useI18n, setI18nLocale } from './composables/useI18n'
 import { ref, computed, watch, onUnmounted } from 'vue'
 import { AnimatePresence, motion } from 'motion-v'
 import packageJson from '../package.json'
@@ -31,8 +32,8 @@ const authStore = useAuthStore()
 useExtendedAuthStore()
 const pluginsStore = usePluginsStore()
 const navStore = useNavigationStore()
-useHeatStatsStore()
 const { t } = useI18n()
+watch(() => appStore.appLanguage, setI18nLocale, { immediate: true })
 
 // Register deep-link listener early (before any component mounts)
 // Handles second-instance deep links while app is running
@@ -68,6 +69,29 @@ const showResetPassword = computed(() => authStore.screen === 'reset-password')
 const showReleaseNotes = computed(() =>
     appStore.releaseNotesOpen && appStore.licenseAccepted && !showWelcome.value && !showResetPassword.value
 )
+
+const ftueLabels = computed(() => ({
+    skip: t('ftue.skip'),
+    start: t('ftue.start'),
+    back: t('ftue.back'),
+    next: t('ftue.next'),
+    done: t('ftue.done'),
+    skipHold: [t('ftue.skipHold1'), t('ftue.skipHold2'), t('ftue.skipHold3')],
+    sample: t('ftue.sample'),
+}))
+
+// auth.screen starts as 'main' before auth decides, so the tour also waits for boot.
+const bootDone = ref(false)
+const appTour = useAppTour()
+const tourReady = computed(() =>
+    bootDone.value
+    && appStore.onboardingComplete
+    && authStore.screen === 'main'
+    && !showWelcome.value
+    && !showResetPassword.value
+    && !appStore.releaseNotesOpen
+)
+watch(tourReady, (ready) => { if (ready) appTour.runOnce() })
 
 function showNotification(payload: { title?: string; message: string; type?: NotificationType }) {
     notification.value = payload
@@ -106,6 +130,28 @@ function handleUpdateError({ message }: { message: string }) {
     })
 }
 
+
+function watchGameConfig() {
+    appStore.watchGameConfig((cfg) => {
+        const prevEnabled = appStore.gameConfigEnabled
+        const prevPort = appStore.gameConfigPort
+        appStore.applyGameConfigRead(cfg)
+        if (appStore.gameConfigEnabled === prevEnabled && appStore.gameConfigPort === prevPort) return
+        const parts: string[] = []
+        if (appStore.gameConfigEnabled !== prevEnabled) {
+            parts.push(t(appStore.gameConfigEnabled ? 'appsettings.gameConfig.nowEnabled' : 'appsettings.gameConfig.nowDisabled'))
+        }
+        if (appStore.gameConfigPort !== prevPort) {
+            parts.push(t('appsettings.gameConfig.portNow', { port: String(appStore.gameConfigPort ?? '-') }))
+        }
+        showNotification({
+            title: t('appsettings.gameConfig.changedTitle'),
+            message: parts.join(' '),
+            type: appStore.gameConfigValid ? 'success' : 'warning',
+        })
+    })
+}
+
 let appInitialized = false
 
 watch(() => appStore.licenseAccepted, async (accepted) => {
@@ -118,7 +164,11 @@ watch(() => appStore.licenseAccepted, async (accepted) => {
 
     appStore.appVersion = packageJson.version
     const dir = appStore.gameDirPaths[appStore.gamePlatform]
-    if (dir) appStore.scanGameDir(dir)
+    if (dir) {
+        appStore.scanGameDir(dir)
+        void appStore.refreshGameConfig(dir)
+    }
+    watchGameConfig()
 
     eventBus.on('notification', showNotification)
     eventBus.on('plugin-config:open', openPluginConfig)
@@ -140,6 +190,7 @@ watch(() => appStore.licenseAccepted, async (accepted) => {
         // After auth: lastSeenVersion is the DB value, not just the local one.
         // Runs even if session restore failed - notes are not auth-gated.
         await appStore.checkReleaseNotes()
+        bootDone.value = true
     }
 }, { immediate: true })
 
@@ -150,6 +201,7 @@ onUnmounted(() => {
     eventBus.off('update:downloading', handleUpdateDownloading)
     eventBus.off('update:installed', handleUpdateInstalled)
     eventBus.off('update:error', handleUpdateError)
+    appStore.unwatchGameConfig()
 })
 </script>
 
@@ -213,6 +265,9 @@ onUnmounted(() => {
 
   <!-- Unsaved changes bar -->
   <eSimpleModal />
+
+  <!-- FTUE tours: card and highlight for every v-ftue target -->
+  <eFtue :labels="ftueLabels" />
 
   <!-- Shared tooltip for every v-tip -->
   <eTooltip />

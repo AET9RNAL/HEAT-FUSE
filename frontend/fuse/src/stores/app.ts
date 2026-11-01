@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, watch, type Ref } from 'vue'
+import { computed, ref, watch, type Ref } from 'vue'
 import { logger, setDiagnosticsConsent } from '../utils/logger'
 import { supabase } from '../composables/supabase-client'
 import { eventBus } from '../events/eventBus'
@@ -12,7 +12,8 @@ function debounce<T extends (...args: any[]) => any>(fn: T, ms: number) {
     }
 }
 
-export type AppLanguage = 'en'
+// "ua", not ISO "uk": the plugins' catalogs use the same code (they alias "uk" to it).
+export type AppLanguage = 'en' | 'fr' | 'ru' | 'ua'
 
 export const useAppStore = defineStore('app', () => {
 
@@ -31,6 +32,14 @@ export const useAppStore = defineStore('app', () => {
     const fileAssoc = ref<boolean>(false)
     const gamePlatform = ref<'steam' | 'wgc'>('steam')
     const gameDirPaths = ref<Record<string, string>>({ steam: '', wgc: '' })
+    // The game's CoHTML debugger port: written into coldwar.project, handed to the runtime
+    const cdpPort = ref<number>(17503)
+    // Last read of coldwar.project. null = the file could not be read.
+    const gameConfigEnabled = ref<boolean | null>(null)
+    const gameConfigPort = ref<number | null>(null)
+    // The file carries the enabled flag and the port this App expects.
+    const gameConfigValid = computed(() => gameConfigEnabled.value === true && gameConfigPort.value === cdpPort.value)
+    const gameRunning = ref<boolean>(false)
     const backendVersion = ref<string>('')
     const gameVersion = ref<string>('')
     const licenseAccepted = ref<boolean>(false)
@@ -45,6 +54,10 @@ export const useAppStore = defineStore('app', () => {
     // Master level for plugin audio on the stage window, 0-100.
     const audioVolume = ref<number>(80)
     const audioMuted = ref<boolean>(false)
+    // The stage's own CPU, memory, GPU and FPS, drawn on the stage.
+    const stagePerfWidget = ref<boolean>(true)
+    // FTUE tour ids the user finished or skipped. Local to this device.
+    const ftueSeen = ref<string[]>([])
 
     // Setting registry
     // Each entry maps a ref to a DB column key and a load default.
@@ -69,6 +82,7 @@ export const useAppStore = defineStore('app', () => {
         fileAssoc:              { ref: fileAssoc,              db: 'file_assoc',                 default: true },
         gamePlatform:           { ref: gamePlatform,           db: 'game_platform',              default: 'steam' },
         gameDirPaths:           { ref: gameDirPaths,           db: 'game_dir_paths',             default: { steam: '', wgc: '' } },
+        cdpPort:                { ref: cdpPort,                db: 'cdp_port',                   default: 17503 },
         analyticsConsent:       { ref: analyticsConsent,       db: 'analytics_consent',          default: false },
         diagnosticsConsent:     { ref: diagnosticsConsent,     db: 'diagnostics_consent',        default: false },
         allowApiAccess:         { ref: allowApiAccess,         db: 'allow_api_access',            default: false },
@@ -76,6 +90,7 @@ export const useAppStore = defineStore('app', () => {
         autoLockOverlays:       { ref: autoLockOverlays,       db: 'auto_lock_overlays',          default: false },
         audioVolume:            { ref: audioVolume,            db: 'audio_volume',                default: 80 },
         audioMuted:             { ref: audioMuted,             db: 'audio_muted',                 default: false },
+        stagePerfWidget:        { ref: stagePerfWidget,        db: 'stage_perf_widget',           default: true },
     }
 
     // Batched save system (wire DB when auth is ready)
@@ -135,8 +150,10 @@ export const useAppStore = defineStore('app', () => {
         window.discordAPI?.setEnabled(value)
     }, { immediate: true })
 
-    watch(startWithGame, (value) => {
-        window.gameProcessAPI?.setWatchEnabled(value)
+    // The runtime needs the game's running state too: a closed port only matters
+    // while the game runs.
+    watch([startWithGame, enableFuse], ([withGame, fuseOn]) => {
+        window.gameProcessAPI?.setWatchEnabled(withGame || fuseOn)
     }, { immediate: true })
 
     watch(hideOnFocusLoss, (value) => {
@@ -151,6 +168,11 @@ export const useAppStore = defineStore('app', () => {
     watch(diagnosticsConsent, (value) => {
         setDiagnosticsConsent(value)
     }, { immediate: true })
+
+    // The coldwar.project watcher follows the selected platform's folder.
+    watch([gameDirPaths, gamePlatform], () => {
+        void window.gameAPI?.watchConfig(gameDirPaths.value[gamePlatform.value] ?? '')
+    }, { immediate: true, deep: true })
 
     // Load / init
 
@@ -209,12 +231,13 @@ export const useAppStore = defineStore('app', () => {
         const { data: { user } } = await supabase.auth.getUser()
         if (!user) return
 
+        // Seed a new profile from this device, or the column defaults wipe onboarding's picks.
+        const seed: Record<string, any> = { user_id: user.id }
+        for (const entry of Object.values(registry)) seed[entry.db] = entry.ref.value
+
         const { error: upsertError } = await supabase
             .from('user_profiles')
-            .upsert(
-                { user_id: user.id },
-                { onConflict: 'user_id', ignoreDuplicates: true }
-            )
+            .upsert(seed, { onConflict: 'user_id', ignoreDuplicates: true })
 
         if (upsertError) {
             logger.error('Failed to init profile:', { error: upsertError })
@@ -388,12 +411,44 @@ export const useAppStore = defineStore('app', () => {
         return window.gameAPI.checkDebugger(dirPath)
     }
 
+    /** Reads the file and keeps the result, so every screen and the runtime agree. */
+    async function refreshGameConfig(dirPath?: string): Promise<GameConfigRead> {
+        const dir = dirPath ?? gameDirPaths.value[gamePlatform.value] ?? ''
+        if (!dir) {
+            gameConfigEnabled.value = null
+            gameConfigPort.value = null
+            return { success: false, error: 'No game folder' }
+        }
+        const result = await window.gameAPI.checkDebugger(dir)
+        applyGameConfigRead(result)
+        return result
+    }
+
+    function applyGameConfigRead(result: GameConfigRead) {
+        gameConfigEnabled.value = result.success ? (result.enabled ?? false) : null
+        gameConfigPort.value = result.success ? (result.port ?? null) : null
+    }
+
     async function enableDebugger(dirPath: string) {
-        return window.gameAPI.enableDebugger(dirPath)
+        return window.gameAPI.enableDebugger(dirPath, cdpPort.value)
     }
 
     async function disableDebugger(dirPath: string) {
         return window.gameAPI.disableDebugger(dirPath)
+    }
+
+    /** Aligns the file with the port setting, without touching the enabled flag. */
+    async function applyDebuggerPort(dirPath: string) {
+        return window.gameAPI.setDebuggerPort(dirPath, cdpPort.value)
+    }
+
+    // The game, an update or the user can change the file at any time; the App only reports it.
+    function watchGameConfig(onChanged: (cfg: GameConfigRead) => void) {
+        window.gameAPI?.onConfigChanged(onChanged)
+    }
+
+    function unwatchGameConfig() {
+        window.gameAPI?.offConfigChanged()
     }
 
     return {
@@ -411,6 +466,11 @@ export const useAppStore = defineStore('app', () => {
         fileAssoc,
         gamePlatform,
         gameDirPaths,
+        cdpPort,
+        gameConfigEnabled,
+        gameConfigPort,
+        gameConfigValid,
+        gameRunning,
         gameVersion,
         licenseAccepted,
         onboardingComplete,
@@ -422,6 +482,8 @@ export const useAppStore = defineStore('app', () => {
         autoLockOverlays,
         audioVolume,
         audioMuted,
+        stagePerfWidget,
+        ftueSeen,
         releaseNotes,
         releaseNotesLoading,
         releaseNotesOpen,
@@ -433,8 +495,13 @@ export const useAppStore = defineStore('app', () => {
         setGameDirPath,
         scanGameDir,
         checkDebugger,
+        refreshGameConfig,
+        applyGameConfigRead,
         enableDebugger,
         disableDebugger,
+        applyDebuggerPort,
+        watchGameConfig,
+        unwatchGameConfig,
         loadDefaults,
         loadSettings,
         initUserProfile,
@@ -454,6 +521,7 @@ export const useAppStore = defineStore('app', () => {
             'fileAssoc',
             'gamePlatform',
             'gameDirPaths',
+            'cdpPort',
             'gameVersion',
             'backendVersion',
             'licenseAccepted',
@@ -466,6 +534,8 @@ export const useAppStore = defineStore('app', () => {
             'autoLockOverlays',
             'audioVolume',
             'audioMuted',
+            'stagePerfWidget',
+            'ftueSeen',
         ],
     },
 })

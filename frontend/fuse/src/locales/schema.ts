@@ -54,6 +54,10 @@ export interface TranslationSchema {
         }
     }
     appsettings: {
+        language: {
+            label: string
+            desc: string
+        }
         gameInstallation: {
             title: string
             platform: string
@@ -78,6 +82,7 @@ export interface TranslationSchema {
             title: string
             startWithGame: string
             hideOnFocusLoss: string
+            stagePerfWidget: string
         }
         audio: {
             title: string
@@ -177,6 +182,38 @@ export interface TranslationSchema {
                 warn: string
                 info: string
             }
+        }
+    }
+    ftue: {
+        skip: string
+        start: string
+        back: string
+        next: string
+        done: string
+        skipHold1: string
+        skipHold2: string
+        skipHold3: string
+        sample: string
+    }
+    apptour: Record<
+        | 'welcome' | 'nav' | 'plugins' | 'pluginTypes' | 'search' | 'views'
+        | 'discover' | 'discoverTools' | 'account'
+        | 'settings' | 'platform' | 'gameDir' | 'gameConfig' | 'keybinds'
+        | 'launch' | 'about', {
+        title: string
+        body: string
+    }>
+    stagetour: Record<
+        | 'unlock' | 'welcome' | 'overlay' | 'info' | 'perms' | 'inspector' | 'toolbar'
+        | 'plugins' | 'done' | 'interactive' | 'click' | 'leave' | 'help', {
+        title: string
+        body: string
+    }> & {
+        demo: {
+            name: string
+            count: string
+            networkReason: string
+            storageReason: string
         }
     }
 }

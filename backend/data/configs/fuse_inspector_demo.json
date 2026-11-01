@@ -1,7 +1,7 @@
 {
   "demo_pos": {
-    "x": 1631,
-    "y": 337,
+    "x": 18,
+    "y": 2454,
     "w": 460,
     "h": 560
   },
@@ -25,5 +25,5 @@
   "tint": "#84FFB1FF",
   "anchor": "center",
   "combo": "ctrl+alt+d",
-  "last_teardown": "disable at 5:04:30 PM"
+  "last_teardown": "disable at 4:58:40 AM"
 }

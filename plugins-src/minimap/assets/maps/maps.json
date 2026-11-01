@@ -1,0 +1,252 @@
+{
+ "01": {
+  "scene": "01_beirut_conquest",
+  "image": "maps/01.webp",
+  "radar": "maps/01_radar.jpg",
+  "center": [
+   0.0,
+   0.0
+  ],
+  "m_per_px": 0.5,
+  "size_px": [
+   5120,
+   2880
+  ],
+  "wide": "maps/01_wide.webp",
+  "wide_m_per_px": 2.0,
+  "wide_size_px": [
+   2560,
+   1440
+  ],
+  "radar_m_per_px": 1.0,
+  "radar_size_px": [
+   2560,
+   2880
+  ]
+ },
+ "02": {
+  "scene": "02_vietnam_conquest",
+  "image": "maps/02.webp",
+  "radar": "maps/02_radar.jpg",
+  "center": [
+   0.0,
+   0.0
+  ],
+  "m_per_px": 0.5,
+  "size_px": [
+   5120,
+   2880
+  ],
+  "wide": "maps/02_wide.webp",
+  "wide_m_per_px": 2.0,
+  "wide_size_px": [
+   2560,
+   1440
+  ],
+  "radar_m_per_px": 1.0,
+  "radar_size_px": [
+   2560,
+   2880
+  ]
+ },
+ "03": {
+  "scene": "03_sunstroke_conquest",
+  "image": "maps/03.webp",
+  "radar": "maps/03_radar.jpg",
+  "center": [
+   0.0,
+   0.0
+  ],
+  "m_per_px": 0.5,
+  "size_px": [
+   5120,
+   2880
+  ],
+  "wide": "maps/03_wide.webp",
+  "wide_m_per_px": 2.0,
+  "wide_size_px": [
+   2560,
+   1440
+  ],
+  "radar_m_per_px": 1.0,
+  "radar_size_px": [
+   2560,
+   2880
+  ]
+ },
+ "04": {
+  "scene": "04_nordoko_conquest",
+  "image": "maps/04.webp",
+  "radar": "maps/04_radar.jpg",
+  "center": [
+   0.0,
+   0.0
+  ],
+  "m_per_px": 0.5,
+  "size_px": [
+   5120,
+   2880
+  ],
+  "wide": "maps/04_wide.webp",
+  "wide_m_per_px": 2.0,
+  "wide_size_px": [
+   2560,
+   1440
+  ],
+  "radar_m_per_px": 1.0,
+  "radar_size_px": [
+   2560,
+   2880
+  ]
+ },
+ "05": {
+  "scene": "05_friendshipdam_conquest",
+  "image": "maps/05.webp",
+  "radar": "maps/05_radar.jpg",
+  "center": [
+   0.0,
+   0.0
+  ],
+  "m_per_px": 0.5,
+  "size_px": [
+   5120,
+   2880
+  ],
+  "wide": "maps/05_wide.webp",
+  "wide_m_per_px": 2.0,
+  "wide_size_px": [
+   2560,
+   1440
+  ],
+  "radar_m_per_px": 1.0,
+  "radar_size_px": [
+   2560,
+   2880
+  ]
+ },
+ "06": {
+  "scene": "06_aircraft_carrier_conquest",
+  "image": "maps/06.webp",
+  "radar": "maps/06_radar.jpg",
+  "center": [
+   0.0,
+   0.0
+  ],
+  "m_per_px": 0.5,
+  "size_px": [
+   5120,
+   2880
+  ],
+  "wide": "maps/06_wide.webp",
+  "wide_m_per_px": 2.0,
+  "wide_size_px": [
+   2560,
+   1440
+  ],
+  "radar_m_per_px": 1.0,
+  "radar_size_px": [
+   2560,
+   2880
+  ]
+ },
+ "07": {
+  "scene": "07_projectphoenix_conquest",
+  "image": "maps/07.webp",
+  "radar": "maps/07_radar.jpg",
+  "center": [
+   0.0,
+   0.0
+  ],
+  "m_per_px": 0.5,
+  "size_px": [
+   5120,
+   2880
+  ],
+  "wide": "maps/07_wide.webp",
+  "wide_m_per_px": 2.0,
+  "wide_size_px": [
+   2560,
+   1440
+  ],
+  "radar_m_per_px": 1.0,
+  "radar_size_px": [
+   2560,
+   2880
+  ]
+ },
+ "08": {
+  "scene": "08_inferno_conquest",
+  "image": "maps/08.webp",
+  "radar": "maps/08_radar.jpg",
+  "center": [
+   0.0,
+   0.0
+  ],
+  "m_per_px": 0.5,
+  "size_px": [
+   5120,
+   2880
+  ],
+  "wide": "maps/08_wide.webp",
+  "wide_m_per_px": 2.0,
+  "wide_size_px": [
+   2560,
+   1440
+  ],
+  "radar_m_per_px": 1.0,
+  "radar_size_px": [
+   2560,
+   2880
+  ]
+ },
+ "09": {
+  "scene": "09_moonshot_conquest",
+  "image": "maps/09.webp",
+  "radar": "maps/09_radar.jpg",
+  "center": [
+   0.0,
+   0.0
+  ],
+  "m_per_px": 0.5,
+  "size_px": [
+   5120,
+   2880
+  ],
+  "wide": "maps/09_wide.webp",
+  "wide_m_per_px": 2.0,
+  "wide_size_px": [
+   2560,
+   1440
+  ],
+  "radar_m_per_px": 1.0,
+  "radar_size_px": [
+   2560,
+   2880
+  ]
+ },
+ "10": {
+  "scene": "10_eden_conquest",
+  "image": "maps/10.webp",
+  "radar": "maps/10_radar.jpg",
+  "center": [
+   0.0,
+   0.0
+  ],
+  "m_per_px": 0.5,
+  "size_px": [
+   5120,
+   2880
+  ],
+  "wide": "maps/10_wide.webp",
+  "wide_m_per_px": 2.0,
+  "wide_size_px": [
+   2560,
+   1440
+  ],
+  "radar_m_per_px": 1.0,
+  "radar_size_px": [
+   2560,
+   2880
+  ]
+ }
+}

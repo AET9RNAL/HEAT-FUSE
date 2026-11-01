@@ -7,6 +7,7 @@ import './style.css'
 import App from './App.vue'
 import vTruncateTitle from './directives/vTruncateTitle'
 import { vTip } from './directives/vTip'
+import { vFtue } from './directives/vFtue'
 
 if (import.meta.env.VITE_SENTRY_DSN) {
     Sentry.init({ dsn: import.meta.env.VITE_SENTRY_DSN as string })
@@ -25,5 +26,6 @@ pinia.use(piniaPluginPersistedstate)
 app.use(pinia)
 app.directive('truncate-title', vTruncateTitle)
 app.directive('tip', vTip)
+app.directive('ftue', vFtue)
 
 app.mount('#app')

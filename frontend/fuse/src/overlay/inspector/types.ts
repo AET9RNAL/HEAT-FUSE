@@ -107,6 +107,7 @@ export interface ColorControl extends ControlBase {
   alpha?: boolean;
   withOpacitySlider?: boolean;
   swatches?: string[];
+  default?: string;
 }
 
 export interface RadioControl extends ControlBase {
@@ -130,6 +131,7 @@ export interface ButtonRowControl extends ControlBase {
 export interface KeybindControl extends ControlBase {
   type: "keybind";
   action?: string;
+  hold?: boolean;
 }
 
 export interface NoteControl extends ControlBase {

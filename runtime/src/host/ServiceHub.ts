@@ -14,8 +14,17 @@ export interface ServiceConsumer {
 
 export type ServiceInvoke = (method: string, args: unknown[]) => Promise<unknown>;
 
-/** Whether `consumerId` holds `<service>.<scope>`, a scope `owner` guards its service with. */
-export type ServiceAuthorizer = (consumerId: string, service: string, scope: string, owner: string) => boolean;
+/**
+ * Whether `consumerId` holds a scope `owner` guards its service with: `<service>.<scope>`
+ * for a plugin's service, the scope itself for FUSE's. `use` is a state read or a method call.
+ */
+export type ServiceAuthorizer = (
+  consumerId: string,
+  service: string,
+  scope: string,
+  owner: string,
+  use: "read" | "call",
+) => boolean;
 
 export interface ServiceDecl {
   state?: Record<string, unknown>;
@@ -37,6 +46,8 @@ interface HostProvider {
   state: () => Record<string, unknown>;
   last: Record<string, unknown>;
 }
+
+const HOST = "host";
 
 export class ServiceHub {
   private services = new Map<string, Entry>();
@@ -67,19 +78,30 @@ export class ServiceHub {
     return true;
   }
 
-  /** A service the runtime itself provides; `publishHost` sends what changed in its state. */
+  /** A service the runtime itself provides; `publishHost` sends what changed in its state. Its scopes are permission ids. */
   provideHost(
     name: string,
     target: object,
-    decl: { reads?: Record<string, string>; methods: string[]; state: () => Record<string, unknown> },
+    decl: {
+      reads?: Record<string, string>;
+      methods: string[];
+      state: () => Record<string, unknown>;
+      scopes?: Record<string, string>;
+      stateScope?: string;
+    },
   ): void {
     const state = jsonClone(decl.state());
     this.hostProviders.set(name, { state: decl.state, last: state });
-    this.provide("host", name, { state, reads: decl.reads, methods: decl.methods }, async (method, args) => {
-      const fn = (target as Record<string, unknown>)[method];
-      if (typeof fn !== "function") throw new Error(`service '${name}' has no method '${method}'`);
-      return fn.apply(target, args) as unknown;
-    });
+    this.provide(
+      HOST,
+      name,
+      { state, reads: decl.reads, methods: decl.methods, scopes: decl.scopes, stateScope: decl.stateScope },
+      async (method, args) => {
+        const fn = (target as Record<string, unknown>)[method];
+        if (typeof fn !== "function") throw new Error(`service '${name}' has no method '${method}'`);
+        return fn.apply(target, args) as unknown;
+      },
+    );
   }
 
   publishHost(name: string): void {
@@ -89,7 +111,7 @@ export class ServiceHub {
     const patch = diffState(provider.last, next);
     if (!patch) return;
     provider.last = next;
-    this.publish("host", name, patch);
+    this.publish(HOST, name, patch);
   }
 
   publish(owner: string, name: string, patch: StatePatch): void {
@@ -128,8 +150,8 @@ export class ServiceHub {
       return Promise.reject(new Error(`service '${name}' has no method '${method}'`));
     }
     const scope = entry.methodScopes[method];
-    if (scope && !this.authorize(consumerId, name, scope, entry.owner)) {
-      return Promise.reject(new Error(`'${name}.${method}' needs the '${name}.${scope}' permission`));
+    if (scope && !this.authorize(consumerId, name, scope, entry.owner, "call")) {
+      return Promise.reject(new Error(`'${name}.${method}' needs the '${permissionId(entry, scope)}' permission`));
     }
     return entry.invoke(method, args);
   }
@@ -155,7 +177,7 @@ export class ServiceHub {
   }
 
   private canRead(consumerId: string, entry: Entry): boolean {
-    return !entry.stateScope || this.authorize(consumerId, entry.name, entry.stateScope, entry.owner);
+    return !entry.stateScope || this.authorize(consumerId, entry.name, entry.stateScope, entry.owner, "read");
   }
 
   private snapshotFor(consumerId: string, entry: Entry): ServiceSnapshot {
@@ -170,6 +192,10 @@ export class ServiceHub {
   private deliverState(consumer: ServiceConsumer, entry: Entry): void {
     consumer.deliver({ t: "service.state", name: entry.name, snapshot: this.snapshotFor(consumer.pluginId, entry) });
   }
+}
+
+function permissionId(entry: Entry, scope: string): string {
+  return entry.owner === HOST ? scope : `${entry.name}.${scope}`;
 }
 
 function cleanMap(raw: unknown): Record<string, string> {

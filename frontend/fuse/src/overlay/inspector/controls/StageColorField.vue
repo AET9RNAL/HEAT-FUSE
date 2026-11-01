@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { AnimatePresence, motion } from "motion-v";
-import eColorPicker from "../../../components/eColorPicker.vue";
+import eColorPicker from "../../../components/inputs/eColorPicker.vue";
 import { Dynamics } from "../../../composables/useMotion";
 import StageSlider from "./StageSlider.vue";
 
@@ -11,9 +11,11 @@ const props = withDefaults(
     alpha?: boolean;
     withOpacitySlider?: boolean;
     swatches?: string[];
+    /** Double-click target. */
+    default?: string;
     disabled?: boolean;
   }>(),
-  { alpha: true, withOpacitySlider: false, swatches: () => [], disabled: false },
+  { alpha: true, withOpacitySlider: false, swatches: () => [], default: undefined, disabled: false },
 );
 
 const emit = defineEmits<{ live: [value: string]; commit: [value: string] }>();
@@ -55,6 +57,26 @@ function close(): void {
   if (pending !== null) onPicked(pending);
 }
 
+const DOUBLE_CLICK_MS = 500;
+let openedAt = 0;
+let swatchBox: DOMRect | null = null;
+
+/**
+ * The first click opens the popover, whose full-screen layer then covers the swatch,
+ * so the swatch never sees a dblclick. A second press on the swatch area soon after resets.
+ */
+function onLayerDown(e: MouseEvent): void {
+  const b = swatchBox;
+  const onSwatch = !!b && e.clientX >= b.left && e.clientX <= b.right && e.clientY >= b.top && e.clientY <= b.bottom;
+  if (onSwatch && props.default && Date.now() - openedAt < DOUBLE_CLICK_MS) {
+    open.value = false;
+    pending = null;
+    emit("commit", props.default);
+    return;
+  }
+  close();
+}
+
 function toggle(e: MouseEvent): void {
   if (props.disabled) return;
   if (open.value) {
@@ -62,6 +84,8 @@ function toggle(e: MouseEvent): void {
     return;
   }
   const box = (e.currentTarget as HTMLElement).getBoundingClientRect();
+  swatchBox = box;
+  openedAt = Date.now();
   const PW = 264;
   const PH = 300;
   let top = box.bottom + 6;
@@ -103,7 +127,7 @@ function toggle(e: MouseEvent): void {
 
     <Teleport to="body">
       <AnimatePresence>
-        <div v-if="open" class="color-layer stage-ui" @mousedown.self="close">
+        <div v-if="open" class="color-layer stage-ui" @mousedown.self="onLayerDown">
           <motion.div
             class="color-pop"
             :style="{ left: `${pos.left}px`, top: `${pos.top}px` }"

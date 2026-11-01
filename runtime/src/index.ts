@@ -2,6 +2,14 @@ import { logger, setLevel, type LogLevel } from "./log.js";
 import { WsServer } from "./server/WsServer.js";
 import { FuseHost } from "./host/FuseHost.js";
 
+function parseJson(raw: string | undefined): unknown {
+  try {
+    return raw ? JSON.parse(raw) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 async function run(): Promise<void> {
   const level = (process.env.FUSE_LOG_LEVEL as LogLevel) ?? "info";
   setLevel(level);
@@ -19,6 +27,15 @@ async function run(): Promise<void> {
     if (msg && typeof msg === "object") host.onElectronMessage(msg as Record<string, unknown>);
   });
   host.setAutoLockOnStart(process.env.FUSE_AUTO_LOCK === "1");
+  host.setAppLanguage(process.env.FUSE_APP_LANGUAGE);
+  // The App re-sends this over `app.setGameConfig` as soon as it connects.
+  // The folders come now, so a plugin's first spawn already has its `game_files` flags.
+  host.setGameConfig({
+    port: Number(process.env.FUSE_CDP_PORT),
+    enabled: true,
+    valid: true,
+    dirs: parseJson(process.env.FUSE_GAME_DIRS),
+  });
 
   let port: number;
   try {

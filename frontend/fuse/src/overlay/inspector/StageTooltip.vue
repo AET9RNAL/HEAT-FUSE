@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import Icons from "../../components/Icons.vue";
+import Icons from "../../components/ui/Icons.vue";
 import { tip } from "./tooltip";
 
 const style = computed(() => ({

@@ -23,16 +23,19 @@ const emit = defineEmits<{
 const c = computed(() => props.control);
 
 const FULL_ROW = new Set(["radio", "button", "buttonRow", "note", "divider", "segmented", "buttons"]);
+// Small controls sit at the right edge and give the label the rest of the row.
+const COMPACT = new Set(["switch", "toggle"]);
 const stacked = computed(() => {
   if (c.value.type === "divider") return true;
   return c.value.width === "full" || !c.value.label || FULL_ROW.has(c.value.type);
 });
+const compact = computed(() => !stacked.value && COMPACT.has(c.value.type));
 </script>
 
 <template>
   <div v-if="c.type === 'divider'" class="ctl-divider"></div>
 
-  <div v-else class="ctl-row" :class="{ stacked, disabled }">
+  <div v-else class="ctl-row" :class="{ stacked, compact, disabled }">
     <div v-if="c.label" v-tip="c.tooltip" class="ctl-label">
       <span class="ctl-label-text">{{ c.label }}</span>
     </div>
@@ -68,11 +71,16 @@ const stacked = computed(() => {
   margin-bottom: var(--space-1);
 }
 
+.ctl-row.compact {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
 .ctl-label {
   min-width: 0;
 }
 
 .ctl-label-text {
+  display: block;
   font-family: var(--font-primary);
   font-size: var(--main-font-size-4);
   font-weight: var(--font-weight-3);
@@ -90,6 +98,11 @@ const stacked = computed(() => {
 
 .ctl-body {
   min-width: 0;
+}
+
+.ctl-row.compact .ctl-body {
+  display: flex;
+  justify-content: flex-end;
 }
 
 .ctl-hint {

@@ -41,6 +41,27 @@ const COLOR_SWATCHES = [DEFAULT_COLOR_HIGH, DEFAULT_COLOR_MID, DEFAULT_COLOR_LOW
 const POS_KEY_TP = "bar_custom_pos";
 const POS_KEY_FP = "bar_custom_pos_fp";
 
+/** Accessors' `scene_tags` offered in the two Show in controls. */
+const SHOW_IN_OPTIONS = [
+  { value: "alive", label: "Alive", tooltip: "While you drive, aim or use an ability." },
+  { value: "map", label: "Map", tooltip: "While the tactical map is open." },
+  { value: "dead", label: "Death screen", tooltip: "From the fatal hit until the deploy screen." },
+  { value: "deploy", label: "Deploy", tooltip: "On the deploy screen and during the spawn drop." },
+];
+const HANGAR_OPTIONS = [
+  { value: "hangar.base", label: "Base camp", tooltip: "The hangar's main screen." },
+  { value: "hangar.select", label: "Select", tooltip: "Agent and vehicle selection." },
+  { value: "hangar.agent", label: "Agent", tooltip: "Agent details, skills, cosmetics and progression." },
+  { value: "hangar.vehicle", label: "Vehicle", tooltip: "Vehicle overview, workshop, equipment, cosmetics and progression." },
+  { value: "hangar.missions", label: "Missions", tooltip: "Missions and operations." },
+  { value: "hangar.modes", label: "Modes", tooltip: "Game mode selection." },
+  { value: "hangar.career", label: "Career", tooltip: "Career, stats, friends and clans." },
+  { value: "hangar.results", label: "Results", tooltip: "Results of the last battle." },
+  { value: "hangar.settings", label: "Settings", tooltip: "The settings screens." },
+  { value: "queue", label: "In queue", tooltip: "While matchmaking runs, on any hangar screen." },
+];
+const DEFAULT_SHOW_IN = ["alive"];
+
 function hexToArgb(hexStr: unknown, fallback: number): number {
   try {
     const s = String(hexStr).trim().replace(/^#/, "");
@@ -72,6 +93,8 @@ export class EnergyBarPlugin extends FusePlugin {
   private strokeWeight = 1.5;
   private rotation = 0.0;
   private curFp: boolean | null = null;
+  private hostVisible = true;
+  private lastVisible: boolean | null = null;
 
   private energyColor(pct: number): number {
     if (pct > 60) return this.colorHigh;
@@ -81,6 +104,30 @@ export class EnergyBarPlugin extends FusePlugin {
 
   private sections(): InspectorSection[] {
     return [
+      {
+        id: "eb.display",
+        label: "Display",
+        description: "Where the bar shows.",
+        order: 10,
+        controls: [
+          {
+            type: "buttons",
+            id: "show_in",
+            key: "show_in",
+            mode: "multi",
+            label: "Show in match",
+            options: SHOW_IN_OPTIONS,
+          },
+          {
+            type: "buttons",
+            id: "show_in_hangar",
+            key: "show_in_hangar",
+            mode: "multi",
+            label: "Show in hangar",
+            options: HANGAR_OPTIONS,
+          },
+        ],
+      },
       {
         id: "eb.colors",
         label: "Colors",
@@ -167,6 +214,8 @@ export class EnergyBarPlugin extends FusePlugin {
         color_low: DEFAULT_COLOR_LOW,
         stroke_weight: 1.5,
         rotation: 0,
+        show_in: DEFAULT_SHOW_IN,
+        show_in_hangar: [],
       })
       .load();
 
@@ -258,10 +307,27 @@ export class EnergyBarPlugin extends FusePlugin {
     this.curFp = null; // force updateView() to reposition on the next locked tick
     this.ov.setBool("isSetupComplete", true);
     this.ov.setString("state", "COMPLETE");
+    this.lastVisible = null;
+  }
+
+  /** Accessors' scene tags against both Show in picks. */
+  private applyVisibility(): void {
+    if (this.ctx.state === "calibrate") return;
+    const want = new Set<string>();
+    for (const key of ["show_in", "show_in_hangar"]) {
+      const raw = this.ctx.config.get<unknown>(key, key === "show_in" ? DEFAULT_SHOW_IN : []);
+      if (Array.isArray(raw)) for (const v of raw) want.add(String(v));
+    }
+    const tags = this.acc?.read("scene_tags");
+    const visible = this.hostVisible && Array.isArray(tags) && tags.some((tag) => want.has(String(tag)));
+    if (visible === this.lastVisible) return;
+    this.lastVisible = visible;
+    this.ov?.setVisible(visible);
   }
 
   override tick(_dt: number): void {
     this.ctx.config.checkReload();
+    this.applyVisibility();
     if (!this.ov || this.ctx.state !== "locked") return;
 
     let pct = 0;
@@ -292,8 +358,9 @@ export class EnergyBarPlugin extends FusePlugin {
   }
 
   override setOverlayVisible(visible: boolean): void {
-    if (this.ctx.state === "calibrate") return;
-    this.ov?.setVisible(visible);
+    this.hostVisible = visible;
+    this.lastVisible = null;
+    this.applyVisibility();
   }
 
   override teardown(): void {

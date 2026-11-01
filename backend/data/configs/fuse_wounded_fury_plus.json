@@ -1,7 +1,7 @@
 {
   "vue_overlay_pos": {
     "x": 1121,
-    "y": 1086,
+    "y": 1234,
     "w": 319,
     "h": 62
   },
@@ -14,9 +14,9 @@
   "vue_width": 225,
   "vue_height": 44,
   "show_in": [
-    "battle",
-    "hangar"
+    "alive"
   ],
+  "show_in_hangar": [],
   "threshold_damage": 4000,
   "duration_s": 30,
   "cooldown_s": 40,

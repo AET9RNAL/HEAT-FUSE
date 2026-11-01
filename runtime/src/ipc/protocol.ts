@@ -30,6 +30,8 @@ export interface InitMessage {
   manifestHotkeys: Record<string, string>;
   config: { path: string; defaults: Record<string, unknown>; disk: Record<string, unknown> };
   state: HostState;
+  /** Set only with the `files` permission. */
+  filesDir: string | null;
   permissions: Record<string, PermissionState>;
   services: Record<string, ServiceSnapshot>;
   logLevel: string;

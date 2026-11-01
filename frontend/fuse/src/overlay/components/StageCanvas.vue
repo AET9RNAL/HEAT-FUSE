@@ -8,8 +8,30 @@ import SnapGuides from "./SnapGuides.vue";
 import StageGrid from "./StageGrid.vue";
 import StageTooltip from "../inspector/StageTooltip.vue";
 import StageNotices from "./StageNotices.vue";
-import { hostState, overlays, viewport } from "../overlayClient";
+import StagePerfBar from "./StagePerfBar.vue";
+import eFtue, { type FtueLabels } from "../../components/ftue/eFtue.vue";
+import { useI18n } from "../../composables/useI18n";
+import { hostState, overlays, primaryDisplay, stageSettings, viewport } from "../overlayClient";
 import { dim } from "../stageState";
+import { DEMO_OVERLAY_ID } from "../stageTour";
+
+const { t } = useI18n();
+
+const ftueLabels = computed<FtueLabels>(() => ({
+  skip: t("ftue.skip"),
+  start: t("ftue.start"),
+  back: t("ftue.back"),
+  next: t("ftue.next"),
+  done: t("ftue.done"),
+  skipHold: [t("ftue.skipHold1"), t("ftue.skipHold2"), t("ftue.skipHold3")],
+  sample: t("ftue.sample"),
+}));
+
+// The stage covers every display. The tour stays on the primary one.
+const ftueBounds = computed(() => {
+  const d = primaryDisplay.value;
+  return d ? { x: d.x, y: d.y, width: d.w, height: d.h } : null;
+});
 
 const list = computed(() => [...overlays.values()]);
 const calibrating = computed(() => hostState.value === "calibrate");
@@ -33,14 +55,21 @@ const dimStyle = computed(() => ({ background: `rgba(0, 0, 0, ${dim.value})` }))
     <div v-if="calibrating && dim > 0" class="stage-dim" :style="dimStyle"></div>
     <StageGrid v-if="calibrating" />
     <div class="stage-view" :style="viewStyle">
-      <OverlayWrapper v-for="d in list" :key="d.overlayId" :descriptor="d" />
+      <OverlayWrapper
+        v-for="d in list"
+        :key="d.overlayId"
+        v-ftue="d.overlayId === DEMO_OVERLAY_ID ? 'stage-overlay' : undefined"
+        :descriptor="d"
+      />
     </div>
     <SnapGuides v-if="calibrating" />
     <OverlayInspector v-if="calibrating" />
     <StagePluginList v-if="calibrating" />
     <StageToolbar v-if="calibrating" />
+    <StagePerfBar v-if="stageSettings.perfWidget" />
     <StageNotices />
     <StageTooltip />
+    <eFtue :labels="ftueLabels" :bounds="ftueBounds" layer-class="stage-ui" />
   </div>
 </template>
 

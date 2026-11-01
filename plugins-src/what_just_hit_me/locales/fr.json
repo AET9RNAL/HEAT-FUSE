@@ -1,0 +1,46 @@
+{
+  "config": {
+    "section": "Journal des dégâts",
+    "sectionTip": "Ce que le journal affiche pour la vie en cours.",
+    "rows": "Lignes",
+    "rowsTip": "Derniers coups affichés. Les coups plus anciens comptent toujours dans le total. Double-clic pour réinitialiser.",
+    "selfDamage": "Dégâts auto-infligés",
+    "selfDamageTip": "Affiche les chutes et les autres dégâts que le jeu vous attribue.",
+    "language": "Langue",
+    "languageAuto": "Automatique",
+    "languageTip": "Langue de What Just Hit Me. Automatique suit l'application FUSE.",
+    "showIn": "Afficher"
+  },
+  "overlay": {
+    "damageLog": "Journal des dégâts",
+    "destroyed": "Détruit",
+    "life": "Vie",
+    "kia": "MORT",
+    "destroyedBy": "Détruit par",
+    "you": "Vous",
+    "unknown": "Inconnu",
+    "noHits": "Aucun coup reçu dans cette vie",
+    "older": "Anciens",
+    "missed": "Manqués"
+  },
+  "source": {
+    "shell": "Obus",
+    "ramming": "Choc",
+    "falling": "Chute",
+    "indirect": "Capacité",
+    "periodic": "Continu",
+    "hit": "Coup"
+  },
+  "scene": {
+    "alive": "En vie",
+    "aliveTip": "Pendant la conduite, la visée ou une capacité.",
+    "map": "Carte",
+    "mapTip": "Quand la carte tactique est ouverte.",
+    "dead": "Écran de mort",
+    "deadTip": "Du coup fatal jusqu'à l'écran de déploiement. Montre qui vous a détruit.",
+    "deploy": "Déploiement",
+    "deployTip": "Sur l'écran de déploiement et pendant la descente.",
+    "results": "Résultats",
+    "resultsTip": "Après la fin du match, sur les écrans de résultats."
+  }
+}

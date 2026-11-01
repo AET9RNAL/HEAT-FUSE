@@ -1,9 +1,38 @@
 import fs from "node:fs";
 import { FusePlugin, type FuseContext, type InspectorSection, type OverlayHandle } from "@fuse/plugin-sdk";
 
+/**
+ * HEAT Stats' tags, when it is installed
+ */
+interface TagsService {
+  tagsFor(name: string): string[] | undefined;
+  colors: Record<string, string>;
+  icons: Record<string, string>;
+  slots: number;
+}
+
 interface Accessors {
   read(name: string): unknown;
   readonly connected: boolean;
+}
+
+const SHOW_IN_OPTIONS = [
+  { value: "alive", label: "Alive", tooltip: "While you drive, aim or use an ability." },
+  { value: "map", label: "Map", tooltip: "While the tactical map is open." },
+  { value: "dead", label: "Death screen", tooltip: "From the fatal hit until the deploy screen." },
+  { value: "deploy", label: "Deploy", tooltip: "On the deploy screen and during the spawn drop." },
+];
+const DEFAULT_SHOW_IN = ["alive", "dead", "deploy"];
+
+// The game's own affiliation colours.
+const ALLY_COLOR = "#7ABFDFFF";
+const ENEMY_COLOR = "#FF6D46FF";
+const COLOR_SWATCHES = ["#7ABFDFFF", "#FF6D46FF", "#78D098FF", "#FFD85CFF", "#0072B2FF", "#E69F00FF"];
+
+/** A valid "#RRGGBB[AA]" as "#RRGGBB" (the overlay has no alpha), else the fallback's. */
+function rgbHex(value: unknown, fallback: string): string {
+  const ok = typeof value === "string" && /^#(?:[0-9a-f]{6}|[0-9a-f]{8})$/i.test(value);
+  return (ok ? (value as string) : fallback).slice(0, 7);
 }
 
 /** One player's slim record as emitted by read_all.js `sb_warriors`. */
@@ -39,6 +68,8 @@ interface ScoreRow {
 interface Cell {
   tank: string | null;
   agent: string | null;
+  /** Tag icons this player carries, resolved to data URIs and colours already. */
+  marks: Array<{ icon: string; color: string }>;
   role: string;
   dead: boolean;
   respawning: boolean;
@@ -100,7 +131,16 @@ const DISPLAY_SLUGS: Record<string, string> = {
   "M551A1": "a05_m551a1_sheridan",
   "M3E1": "a08_m3_bradley",
   "Marder 1A3": "g07_marder1a3",
+  "T-72SH": "r02_t_72a",
+  "M60A3E2": "a03_m60a3",
 };
+
+/** Callsigns are punctuated inconsistently across builds; the art is not. */
+const displayKey = (name: string): string => name.toUpperCase().replace(/[\s._-]/g, "");
+
+const DISPLAY_BY_KEY: Record<string, string> = Object.fromEntries(
+  Object.entries(DISPLAY_SLUGS).map(([name, slug]) => [displayKey(name), slug]),
+);
 
 const SIM_NAMES = [
   "VOLKOV", "HARLAN", "KESTREL", "DRAGO", "NOVAK",
@@ -126,6 +166,8 @@ export class HudScoreboardPlugin extends FusePlugin {
 
   private ctx!: FuseContext;
   private acc: Accessors | undefined;
+  /** Undefined unless HEAT Stats is installed; the scoreboard never requires it. */
+  private tags: TagsService | undefined;
   private ov: OverlayHandle | undefined;
   private lastJson = "";
   private slugMap: Record<string, string> = {};
@@ -135,6 +177,8 @@ export class HudScoreboardPlugin extends FusePlugin {
   private simEventIn = 0;
   private allyLeader: string | null = null;
   private enemyLeader: string | null = null;
+  private hostVisible = true;
+  private lastVisible: boolean | null = null;
 
   private rd(name: string): unknown {
     return this.acc ? this.acc.read(name) : undefined;
@@ -155,6 +199,22 @@ export class HudScoreboardPlugin extends FusePlugin {
 
   private sections(): InspectorSection[] {
     return [
+      {
+        id: "hs.display",
+        label: "Display",
+        description: "Where the strip shows.",
+        order: 9,
+        controls: [
+          {
+            type: "buttons",
+            id: "show_in",
+            key: "show_in",
+            mode: "multi",
+            label: "Show in",
+            options: SHOW_IN_OPTIONS,
+          },
+        ],
+      },
       {
         id: "hs.layout",
         label: "Layout",
@@ -187,12 +247,41 @@ export class HudScoreboardPlugin extends FusePlugin {
           },
         ],
       },
+      {
+        id: "hs.colors",
+        label: "Team Colours",
+        description: "Health bars, frames, flames and column headers follow these.",
+        order: 11,
+        controls: [
+          {
+            type: "color",
+            id: "ally_color",
+            key: "ally_color",
+            label: "Allies",
+            alpha: false,
+            default: ALLY_COLOR,
+            swatches: COLOR_SWATCHES,
+            tooltip: "Double-click the swatch to reset to the game's colour.",
+          },
+          {
+            type: "color",
+            id: "enemy_color",
+            key: "enemy_color",
+            label: "Enemies",
+            alpha: false,
+            default: ENEMY_COLOR,
+            swatches: COLOR_SWATCHES,
+            tooltip: "Double-click the swatch to reset to the game's colour.",
+          },
+        ],
+      },
     ];
   }
 
   setup(ctx: FuseContext): void {
     this.ctx = ctx;
     this.acc = ctx.services.get<Accessors>("accessors");
+    this.tags = ctx.services.get<TagsService>("heat_stats.tags");
 
     ctx.config
       .defaults({
@@ -203,6 +292,9 @@ export class HudScoreboardPlugin extends FusePlugin {
         show_names: false,
         layout: "scoreboard",
         vehicle_slugs: {},
+        show_in: DEFAULT_SHOW_IN,
+        ally_color: ALLY_COLOR,
+        enemy_color: ENEMY_COLOR,
       })
       .load();
 
@@ -237,9 +329,23 @@ export class HudScoreboardPlugin extends FusePlugin {
     this.allyLeader = null;
     this.enemyLeader = null;
     this.lastJson = "";
+    this.lastVisible = null;
   }
   override setOverlayVisible(visible: boolean): void {
+    this.hostVisible = visible;
+    this.lastVisible = null;
+    this.applyVisibility();
+  }
+
+  /** Accessors' scene tags against the Show in pick. */
+  private applyVisibility(): void {
     if (this.ctx.state === "calibrate") return;
+    const raw = this.ctx.config.get<unknown>("show_in", DEFAULT_SHOW_IN);
+    const showIn = new Set(Array.isArray(raw) ? raw.map(String) : DEFAULT_SHOW_IN);
+    const tags = this.rd("scene_tags");
+    const visible = this.hostVisible && Array.isArray(tags) && tags.some((tag) => showIn.has(String(tag)));
+    if (visible === this.lastVisible) return;
+    this.lastVisible = visible;
     this.ov?.setVisible(visible);
   }
 
@@ -250,6 +356,7 @@ export class HudScoreboardPlugin extends FusePlugin {
       return;
     }
     if (this.ctx.state !== "locked") return;
+    this.applyVisibility();
     // Not in a battle (e.g. hangar - battle_hud not connected): hide the board so
     // the calibration placeholder doesn't linger until the first match runs.
     if (!this.acc || !this.acc.connected) {
@@ -339,17 +446,33 @@ export class HudScoreboardPlugin extends FusePlugin {
     return w.platoon_number > 0 ? w.platoon_number : 0;
   }
 
+  /**
+   * The marks HEAT Stats holds for a player*/
+  private marksFor(name: string): Array<{ icon: string; color: string }> {
+    const svc = this.tags;
+    if (!svc || !name) return [];
+    const held = svc.tagsFor(name);
+    if (!held?.length) return [];
+    return held
+      .slice(0, svc.slots || 3)
+      .map((id) => ({ icon: svc.icons[id] ?? "", color: svc.colors[id] ?? "" }))
+      .filter((mark) => mark.icon);
+  }
+
   private groupByClass(rows: Warrior[], myName: string, reverse: boolean, leader: string | null): ClassGroup[] {
     const byRole = new Map<string, Cell[]>();
     const sorted = [...rows].sort(
       (a, b) => classRank(a.role) - classRank(b.role) || (a.place ?? 99) - (b.place ?? 99),
     );
     for (const w of sorted) {
-      const slug =
-        (w.vehicle_id != null ? this.slugMap[String(w.vehicle_id)] : undefined) ??
-        (w.vehicle_disp ? DISPLAY_SLUGS[w.vehicle_disp] : undefined);
+      // First candidate that has art wins
+      const candidates = [
+        w.vehicle_id != null ? this.slugMap[String(w.vehicle_id)] : undefined,
+        w.vehicle_disp ? DISPLAY_BY_KEY[displayKey(w.vehicle_disp)] : undefined,
+      ];
       const cell: Cell = {
-        tank: slug && this.knownTanks.has(slug) ? slug : null,
+        tank: candidates.find((slug) => slug && this.knownTanks.has(slug)) ?? null,
+        marks: this.marksFor(w.name),
         agent: w.agent_icon && this.knownAgents.has(w.agent_icon) ? w.agent_icon : null,
         role: w.role,
         dead: w.is_dead === 1,
@@ -376,6 +499,21 @@ export class HudScoreboardPlugin extends FusePlugin {
     return list.length ? list[Math.floor(Math.random() * list.length)] : undefined;
   }
 
+  /**
+   * Marks for a calibration cell
+   */
+  private simMarks(index: number): Array<{ icon: string; color: string }> {
+    const svc = this.tags;
+    const ids = svc ? Object.keys(svc.icons ?? {}) : [];
+    if (!ids.length) return [];
+    const marks: Array<{ icon: string; color: string }> = [];
+    for (let i = 0; i < index % 3; i++) {
+      const id = ids[(index + i) % ids.length]!;
+      marks.push({ icon: svc!.icons[id] ?? "", color: svc!.colors[id] ?? "" });
+    }
+    return marks.filter((mark) => mark.icon);
+  }
+
   /** Seed the calibration roster: random art per cell so the strip reads as a real board. */
   private initSim(): void {
     const tanks = [...this.knownTanks];
@@ -384,6 +522,7 @@ export class HudScoreboardPlugin extends FusePlugin {
     const mk = (role: string, ally: boolean, self: boolean, squad: number): SimCell => ({
       tank: this.pick(tanks) ?? null,
       agent: this.pick(agents) ?? null,
+      marks: this.simMarks(n),
       role,
       dead: false,
       respawning: false,
@@ -505,9 +644,14 @@ export class HudScoreboardPlugin extends FusePlugin {
 
   private pushData(payload: Record<string, unknown>): void {
     if (!this.ov) return;
-    const json = JSON.stringify(payload);
+    const board = {
+      ...payload,
+      allyColor: rgbHex(this.ctx.config.get("ally_color", ALLY_COLOR), ALLY_COLOR),
+      enemyColor: rgbHex(this.ctx.config.get("enemy_color", ENEMY_COLOR), ENEMY_COLOR),
+    };
+    const json = JSON.stringify(board);
     if (json === this.lastJson) return;
     this.lastJson = json;
-    this.ov.setJson("board", payload);
+    this.ov.setJson("board", board);
   }
 }

@@ -9,6 +9,8 @@ import FlameWrap from "canvas_ui/ui/FlameWrap.vue";
 export interface Cell {
   tank: string | null;
   agent: string | null;
+  /** HEAT Stats' tags */
+  marks: Array<{ icon: string; color: string }>;
   role: string;
   dead: boolean;
   respawning: boolean;
@@ -24,8 +26,8 @@ export interface Cell {
 }
 
 const props = withDefaults(
-  defineProps<{ cell: Cell; assetBase: string; side: "ally" | "enemy"; variant?: "tile" | "row" }>(),
-  { variant: "tile" },
+  defineProps<{ cell: Cell; assetBase: string; side: "ally" | "enemy"; variant?: "tile" | "row"; teamColor?: string }>(),
+  { variant: "tile", teamColor: "" },
 );
 
 const assetRoot = computed(() => `${props.assetBase ?? ""}/assets`);
@@ -156,7 +158,14 @@ const flameGeom = computed(() => {
 });
 const ALLY_FLAME: [number, number, number] = [0.48, 0.74, 0.86]; // --woth-ally #7abfdf
 const ENEMY_FLAME: [number, number, number] = [1.0, 0.43, 0.28]; // --woth-enemy #ff6d46
-const flameColor = computed(() => (props.side === "enemy" ? ENEMY_FLAME : ALLY_FLAME));
+
+/** "#RRGGBB" to the 0..1 channels the flame shader takes. */
+function rgb01(hex: string): [number, number, number] | null {
+  const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})/i.exec(hex);
+  if (!m) return null;
+  return [Number.parseInt(m[1] ?? "0", 16) / 255, Number.parseInt(m[2] ?? "0", 16) / 255, Number.parseInt(m[3] ?? "0", 16) / 255];
+}
+const flameColor = computed(() => rgb01(props.teamColor) ?? (props.side === "enemy" ? ENEMY_FLAME : ALLY_FLAME));
 
 onBeforeUnmount(() => {
   cancelAnimationFrame(swapRaf);
@@ -212,6 +221,22 @@ onBeforeUnmount(() => {
             <img v-else-if="fallbackUrl" class="ecell-img ecell-img--fallback" :src="fallbackUrl" :alt="cell.role" />
           </div>
           <span v-if="variant === 'row'" class="ecell-name">{{ cell.name }}</span>
+          <span v-if="cell.marks.length" class="ecell-marks">
+
+            <span
+              v-for="(mark, i) in cell.marks"
+              :key="i"
+              class="ecell-mark"
+              :style="{ '--mark-color': mark.color }"
+            >
+              <span class="ecell-mark-fill">
+                <span
+                  class="ecell-mark-glyph"
+                  :style="{ maskImage: `url('${mark.icon}')`, WebkitMaskImage: `url('${mark.icon}')` }"
+                />
+              </span>
+            </span>
+          </span>
           <div class="ecell-veil" />
           <div v-if="cell.squad > 0" class="ecell-squad"><eSquadCell :squad="cell.squad" /></div>
           <span v-if="cell.hasBomb" class="ecell-bomb" />
@@ -376,6 +401,63 @@ onBeforeUnmount(() => {
   bottom: var(--bw);
   height: clamp(2px, 4cqh, 4px);
   z-index: 3;
+}
+
+.ecell-marks {
+  position: absolute;
+  left: var(--bw);
+  top: var(--bw);
+  z-index: 4;
+  display: flex;
+  gap: clamp(1px, 2cqh, 3px);
+  padding: clamp(1px, 2cqh, 3px);
+  pointer-events: none;
+}
+
+.ecell-mark {
+  width: clamp(16px, 28cqh, 22px);
+  height: clamp(16px, 28cqh, 22px);
+  display: grid;
+  place-items: center;
+  background: var(--black-1);
+  outline: 1px solid var(--mark-color);
+  outline-offset: 0;
+  corner-shape: bevel;
+  border-radius: 4px 0 4px 0;
+}
+
+.ecell-mark-fill {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+}
+
+
+.ecell-mark-glyph {
+  width: 84%;
+  height: 84%;
+  background: var(--mark-color);
+  mask-size: contain;
+  mask-repeat: no-repeat;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  filter: drop-shadow(0.6px 0 0 var(--mark-color)) drop-shadow(-0.6px 0 0 var(--mark-color))
+    drop-shadow(0 0.6px 0 var(--mark-color)) drop-shadow(0 -0.6px 0 var(--mark-color));
+}
+
+.ecell.row .ecell-marks {
+  position: relative;
+  left: auto;
+  top: auto;
+  flex: none;
+  padding: 0;
+}
+
+.ecell.dead .ecell-mark {
+  opacity: 0.7;
 }
 
 .ecell-squad {

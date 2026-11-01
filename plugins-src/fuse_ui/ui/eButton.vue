@@ -1,216 +1,264 @@
 <script lang="ts">
-export type ButtonSize = 'slim' | 'half' | 'full' | 'flex'
-export type SystemState = 'idle' | 'processing' | 'success' | 'error'
+export type ButtonMode = "default" | "confirm" | "hold" | "toggle";
+export type ButtonVariant = "default" | "accent" | "danger" | "ghost";
 </script>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { motion, AnimatePresence } from 'motion-v'
+import { computed, onUnmounted, ref } from "vue";
+import { motion } from "motion-v";
+import Icons from "./Icons.vue";
+import { Dynamics } from "./dynamics.mjs";
 
-interface Props {
-    size?: ButtonSize
-    label?: string
-    systemState?: SystemState
-    disabled?: boolean
-    // State labels are props (no i18n in the overlay scope). Defaults are English.
-    processingLabel?: string
-    successLabel?: string
-    errorLabel?: string
-}
-
-const props = withDefaults(defineProps<Props>(), {
-    size: 'slim',
-    label: '',
-    systemState: 'idle',
+const props = withDefaults(
+  defineProps<{
+    text: string;
+    variant?: ButtonVariant;
+    mode?: ButtonMode;
+    icon?: string;
+    /** confirm: label while armed. On a default button it also turns confirm on. */
+    confirm?: string;
+    /** hold: press duration before the click fires. */
+    holdMs?: number;
+    /** toggle: current state. */
+    modelValue?: boolean;
+    /** toggle: label while on. */
+    activeText?: string;
+    /** toggle: body while off */
+    offTone?: "clear" | "danger";
+    disabled?: boolean;
+  }>(),
+  {
+    variant: "default",
+    mode: "default",
+    icon: "",
+    confirm: "",
+    holdMs: 600,
+    modelValue: false,
+    activeText: "",
+    offTone: "clear",
     disabled: false,
-    processingLabel: 'Working…',
-    successLabel: 'Done',
-    errorLabel: 'Error',
-})
+  },
+);
 
-const emit = defineEmits<{ click: [event: MouseEvent] }>()
+const emit = defineEmits<{ click: []; "update:modelValue": [value: boolean] }>();
 
-function handleClick(event: MouseEvent) {
-    if (props.systemState === 'idle' && !props.disabled) {
-        emit('click', event)
-    }
+const CONFIRM_TIMEOUT_MS = 3000;
+
+const activeMode = computed<ButtonMode>(() => (props.mode === "default" && props.confirm ? "confirm" : props.mode));
+
+// confirm
+const armed = ref(false);
+let armTimer: number | null = null;
+
+function disarm(): void {
+  armed.value = false;
+  if (armTimer !== null) window.clearTimeout(armTimer);
+  armTimer = null;
 }
 
-const sizeMap: Record<Exclude<ButtonSize, 'flex'>, { width: number; height: number }> = {
-    slim: { width: 48,  height: 32 },
-    half: { width: 140, height: 32 },
-    full: { width: 280, height: 32 },
+// hold
+const holding = ref(false);
+let holdTimer: number | null = null;
+
+function startHold(e: PointerEvent): void {
+  if (activeMode.value !== "hold" || props.disabled || e.button !== 0) return;
+  holding.value = true;
+  holdTimer = window.setTimeout(() => {
+    holdTimer = null;
+    holding.value = false;
+    emit("click");
+  }, props.holdMs);
 }
 
-const containerStyle = computed(() => {
-    if (props.size === 'flex') return { width: '100%', height: '32px' }
-    const { width, height } = sizeMap[props.size]
-    return { width: `${width}px`, height: `${height}px` }
-})
+function cancelHold(): void {
+  if (holdTimer !== null) window.clearTimeout(holdTimer);
+  holdTimer = null;
+  holding.value = false;
+}
 
-const isInteractive = computed(() => props.systemState === 'idle' && !props.disabled)
+function onLeave(): void {
+  cancelHold();
+  disarm();
+}
 
-const stateLabel = computed(() => {
-    switch (props.systemState) {
-        case 'processing': return props.processingLabel
-        case 'success':    return props.successLabel
-        case 'error':      return props.errorLabel
-        default:           return props.label
-    }
-})
+function onClick(): void {
+  if (props.disabled) return;
+  switch (activeMode.value) {
+    // Fires from the hold timer, never from the click itself.
+    case "hold":
+      return;
+    case "confirm":
+      if (!armed.value) {
+        armed.value = true;
+        armTimer = window.setTimeout(disarm, CONFIRM_TIMEOUT_MS);
+        return;
+      }
+      disarm();
+      emit("click");
+      return;
+    case "toggle":
+      emit("update:modelValue", !props.modelValue);
+      emit("click");
+      return;
+    default:
+      emit("click");
+  }
+}
 
-// Polygon stroke
-const CUT = 6
-const containerEl = ref<HTMLElement | null>(null)
-const elW = ref(0)
-const elH = ref(0)
+onUnmounted(() => {
+  disarm();
+  cancelHold();
+});
 
-const svgPoints = computed(() => {
-    const w = elW.value
-    const h = elH.value
-    if (!w || !h) return ''
-    const cx = (CUT / w) * 100
-    const cy = (CUT / h) * 100
-    return `${cx},0 100,0 100,${100 - cy} ${100 - cx},100 0,100 0,${cy}`
-})
+const toggleOn = computed(() => activeMode.value === "toggle" && props.modelValue);
+const toggleOffDanger = computed(() => activeMode.value === "toggle" && !props.modelValue && props.offTone === "danger");
 
-let ro: ResizeObserver | null = null
-onMounted(() => {
-    if (!containerEl.value) return
-    ro = new ResizeObserver(([entry]) => {
-        const box = entry.borderBoxSize?.[0]
-        elW.value = box ? box.inlineSize : entry.contentRect.width
-        elH.value = box ? box.blockSize  : entry.contentRect.height
-    })
-    ro.observe(containerEl.value)
-})
-onUnmounted(() => ro?.disconnect())
+const label = computed(() => {
+  if (armed.value) return props.confirm || "Confirm";
+  if (toggleOn.value) return props.activeText || props.text;
+  return props.text;
+});
 </script>
 
 <template>
-    <div ref="containerEl" class="ebutton-wrap" :style="containerStyle">
-        <motion.button
-            class="ebutton"
-            :disabled="!isInteractive"
-            :whileHover="isInteractive ? { backgroundColor: 'rgba(30, 30, 28, 0.75)' } : {}"
-            :whileTap="isInteractive ? { scale: 0.94, backgroundColor: 'rgba(8, 8, 8, 0.8)' } : {}"
-            :transition="{ duration: 0.15 }"
-            @click="handleClick"
-        >
-            <AnimatePresence mode="wait">
-                <motion.div
-                    :key="systemState"
-                    :initial="{ opacity: 0, y: -8 }"
-                    :animate="{ opacity: 1, y: 0 }"
-                    :exit="{ opacity: 0, y: 8 }"
-                    :transition="{ duration: 0.15 }"
-                    class="button-content"
-                >
-                    <span v-if="systemState === 'processing'" class="spinner" />
-                    <span v-if="stateLabel && props.size !== 'slim'" class="label">
-                        {{ stateLabel }}
-                    </span>
-                </motion.div>
-            </AnimatePresence>
-        </motion.button>
-
-        <svg
-            v-if="svgPoints"
-            class="btn-stroke"
-            viewBox="0 0 100 100"
-            preserveAspectRatio="none"
-            xmlns="http://www.w3.org/2000/svg"
-        >
-            <polygon
-                :points="svgPoints"
-                fill="none"
-                stroke="#525252"
-                stroke-width="0.4"
-                vector-effect="non-scaling-stroke"
-            />
-        </svg>
-    </div>
+  <motion.button
+    type="button"
+    class="stage-button"
+    :class="[variant, `mode-${activeMode}`, { armed, disabled, 'toggle-on': toggleOn, 'toggle-off-danger': toggleOffDanger }]"
+    :disabled="disabled"
+    :aria-pressed="activeMode === 'toggle' ? modelValue : undefined"
+    :while-press="disabled ? {} : { scale: 0.97 }"
+    :transition="Dynamics.quick"
+    @click="onClick"
+    @pointerdown="startHold"
+    @pointerup="cancelHold"
+    @pointercancel="cancelHold"
+    @pointerleave="onLeave"
+  >
+    <motion.span
+      v-if="activeMode === 'hold'"
+      class="hold-fill"
+      :initial="false"
+      :animate="{ scaleX: holding ? 1 : 0 }"
+      :transition="holding ? { duration: holdMs / 1000, ease: 'linear' } : { duration: 0.2 }"
+    />
+    <Icons v-if="icon" :kind="icon" size="small" color="var(--ico)" />
+    <span v-if="label" class="label">{{ label }}</span>
+  </motion.button>
 </template>
 
 <style scoped>
-.ebutton-wrap {
-    position: relative;
-    clip-path: polygon(
-        6px 0%,
-        100% 0%,
-        100% calc(100% - 6px),
-        calc(100% - 6px) 100%,
-        0% 100%,
-        0% 6px
-    );
+.stage-button {
+  --ico: var(--text-muted);
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  width: 100%;
+  height: 26px;
+  padding: 0 var(--space-2);
+  box-sizing: border-box;
+  overflow: hidden;
+  background: var(--black-1-a);
+  border: 1px solid var(--base-600);
+  font-family: var(--font-primary);
+  font-size: var(--main-font-size-4);
+  font-weight: var(--font-weight-2);
+  color: var(--text-muted);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.15s, background 0.15s, border-color 0.15s, filter 0.15s;
+  corner-shape: bevel;
+  border-radius: 8px 0 8px 0;
 }
 
-.ebutton {
-    width: 100%;
-    height: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: var(--space-1);
-    padding: var(--space-1) var(--space-2);
-    border: none;
-    background: var(--black-1-a);
-    color: var(--text-main);
-    cursor: pointer;
-    font-family: var(--font-primary);
-    font-size: var(--main-font-size-3);
-    font-weight: var(--font-weight-3);
-    user-select: none;
-    -webkit-user-select: none;
+.stage-button > :not(.hold-fill) {
+  position: relative;
 }
 
-.btn-stroke {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    pointer-events: none;
-    overflow: visible;
-    z-index: 1;
+.stage-button:hover:not(:disabled) {
+  --ico: var(--text-main);
+  color: var(--text-main);
+  border-color: var(--accent-200);
 }
 
-.button-content {
-    position: relative;
-    z-index: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: var(--space-1);
+.stage-button.accent {
+  --ico: var(--base-1000);
+  background: var(--accent-200);
+  border-color: var(--accent-200);
+  color: var(--base-1000);
+}
+
+.stage-button.accent:hover:not(:disabled) {
+  --ico: var(--base-1000);
+  color: var(--base-1000);
+  background: var(--tea-green);
+  border-color: var(--tea-green);
+}
+
+.stage-button.ghost {
+  background: transparent;
+  border-color: transparent;
+}
+
+.stage-button.ghost:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: transparent;
+}
+
+.stage-button.danger:hover:not(:disabled),
+.stage-button.armed {
+  --ico: var(--text-main);
+  background: var(--error-color);
+  border-color: var(--error-base);
+  color: var(--text-main);
+}
+
+.stage-button.toggle-on {
+  --ico: var(--base-1000);
+  background: var(--accent-200);
+  border-color: var(--accent-200);
+  color: var(--base-1000);
+}
+
+.stage-button.toggle-on:hover:not(:disabled) {
+  --ico: var(--base-1000);
+  color: var(--base-1000);
+  background: var(--tea-green);
+  border-color: var(--tea-green);
+}
+
+.stage-button.toggle-off-danger {
+  --ico: var(--base-1000);
+  background: var(--error-highlight);
+  border-color: var(--error-highlight);
+  color: var(--base-1000);
+}
+
+.stage-button.toggle-off-danger:hover:not(:disabled) {
+  --ico: var(--base-1000);
+  color: var(--base-1000);
+  border-color: var(--error-highlight);
+  filter: brightness(1.08);
+}
+
+.hold-fill {
+  position: absolute;
+  inset: 0;
+  transform-origin: left center;
+  background: rgba(132, 255, 177, 0.25);
+  pointer-events: none;
 }
 
 .label {
-    user-select: none;
-    -webkit-user-select: none;
-    white-space: nowrap;
-    color: inherit;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.spinner {
-    width: 12px;
-    height: 12px;
-    border: 2px solid rgba(255, 255, 255, 0.25);
-    border-top-color: var(--accent-200);
-    border-radius: 50%;
-    animation: spin 0.8s linear infinite;
-}
-
-.ebutton:focus-visible {
-    outline: 2px solid var(--accent-200);
-    outline-offset: 2px;
-}
-
-.ebutton:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
-}
-
-@keyframes spin {
-    from { transform: rotate(0deg); }
-    to   { transform: rotate(360deg); }
+.stage-button.disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 </style>

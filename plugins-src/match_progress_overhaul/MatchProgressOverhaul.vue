@@ -40,12 +40,27 @@ interface Board {
   time?: string;
   leads?: number;
   overtime?: Overtime | null;
+  /** User-picked team colours, "#RRGGBB". */
+  allyColor?: string;
+  enemyColor?: string;
 }
 
 const props = defineProps<{ data: Partial<{ board: Board }> }>();
 
 const board = computed<Board>(() => props.data?.board ?? { inMatch: false });
 const inMatch = computed(() => !!board.value.inMatch);
+
+const allyColor = computed(() => board.value.allyColor || "#7abfdf");
+const enemyColor = computed(() => board.value.enemyColor || "#ff6d46");
+// The bars, glows, scores and lead track all read these two tokens.
+const teamVars = computed(() => ({ "--woth-ally": allyColor.value, "--woth-enemy": enemyColor.value }));
+
+/** "#RRGGBB" to the 0..1 channels the flame shader takes. */
+function rgb01(hex: string, fallback: [number, number, number]): [number, number, number] {
+  const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})/i.exec(hex);
+  if (!m) return fallback;
+  return [Number.parseInt(m[1] ?? "0", 16) / 255, Number.parseInt(m[2] ?? "0", 16) / 255, Number.parseInt(m[3] ?? "0", 16) / 255];
+}
 
 const ALLY_PATH =
   "M270.875 4.04199V15.0977L266.937 19.0352L218.634 19.0439L205.984 11.373L205.955 11.3555H205.92L21.4902 11.3447L0.499023 0.133789L266.958 0.125L270.875 4.04199Z";
@@ -161,8 +176,8 @@ const flameIntensity = computed(() => {
   const t = Math.min(Math.max((flameGap.value - FLAME_MIN_GAP) / span, 0), 1);
   return FLAME_MIN + (FLAME_MAX - FLAME_MIN) * t;
 });
-const allyFlameColor: [number, number, number] = [0.48, 0.74, 0.86]; // --woth-ally #7abfdf
-const enemyFlameColor: [number, number, number] = [1.0, 0.43, 0.28]; // --woth-enemy #ff6d46
+const allyFlameColor = computed(() => rgb01(allyColor.value, [0.48, 0.74, 0.86]));
+const enemyFlameColor = computed(() => rgb01(enemyColor.value, [1.0, 0.43, 0.28]));
 
 // In/Outs
 const FLAME_IN_MS = 100;
@@ -232,7 +247,7 @@ const enemyFlameShape = computed(() => flameShapeFor(enemyFlameIntensity.value))
 </script>
 
 <template>
-  <div v-if="inMatch" class="mph">
+  <div v-if="inMatch" class="mph" :style="teamVars">
     <svg width="0" height="0" class="mph-defs" aria-hidden="true">
       <defs>
         <filter
@@ -272,7 +287,7 @@ const enemyFlameShape = computed(() => flameShapeFor(enemyFlameIntensity.value))
         :class="{ trailing: enhanced && leader === 'enemy', near: enhanced && board.allyNear, 'mph-bar--flamed': allyFlameOn }"
       >
         <svg class="mph-svg" viewBox="0 0 271 20" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
-          <path :d="ALLY_PATH" fill="#0b0b0b" fill-opacity="0.5" stroke="#8abddc" stroke-width="0.25" />
+          <path :d="ALLY_PATH" fill="#0b0b0b" fill-opacity="0.5" :stroke="allyColor" stroke-width="0.25" />
         </svg>
         <FlameWrap
           v-if="allyFlameOn"
@@ -307,7 +322,7 @@ const enemyFlameShape = computed(() => flameShapeFor(enemyFlameIntensity.value))
         <motion.div class="mph-fill" :style="{ clipPath: ally.clip, filter: ally.filter }">
           <svg class="mph-svg" viewBox="0 0 271 20" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
             <path :d="ALLY_PATH" fill="var(--woth-ally)" />
-            <path :d="ALLY_INNER" transform="translate(8.5 2)" fill="#7abfdf" filter="url(#mphInnerGlow)" />
+            <path :d="ALLY_INNER" transform="translate(8.5 2)" :fill="allyColor" filter="url(#mphInnerGlow)" />
           </svg>
           <motion.div class="mph-sweep" :style="{ left: ally.sweepLeft, opacity: ally.sweepOpacity }" />
         </motion.div>
@@ -321,7 +336,7 @@ const enemyFlameShape = computed(() => flameShapeFor(enemyFlameIntensity.value))
         :class="{ trailing: enhanced && leader === 'ally', near: enhanced && board.enemyNear, 'mph-bar--flamed': enemyFlameOn }"
       >
         <svg class="mph-svg" viewBox="0 0 271 20" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
-          <path :d="ENEMY_PATH" fill="#0b0b0b" fill-opacity="0.5" stroke="#ff6d46" stroke-width="0.25" />
+          <path :d="ENEMY_PATH" fill="#0b0b0b" fill-opacity="0.5" :stroke="enemyColor" stroke-width="0.25" />
         </svg>
         <FlameWrap
           v-if="enemyFlameOn"
@@ -356,7 +371,7 @@ const enemyFlameShape = computed(() => flameShapeFor(enemyFlameIntensity.value))
         <motion.div class="mph-fill" :style="{ clipPath: enemy.clip, filter: enemy.filter }">
           <svg class="mph-svg" viewBox="0 0 271 20" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
             <path :d="ENEMY_PATH" fill="var(--woth-enemy)" />
-            <path :d="ENEMY_INNER" transform="translate(1.5 2)" fill="#ff6d46" filter="url(#mphInnerGlow)" />
+            <path :d="ENEMY_INNER" transform="translate(1.5 2)" :fill="enemyColor" filter="url(#mphInnerGlow)" />
           </svg>
           <motion.div class="mph-sweep" :style="{ left: enemy.sweepLeft, opacity: enemy.sweepOpacity }" />
         </motion.div>

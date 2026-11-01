@@ -7,8 +7,10 @@
   "entry": "plugin:AccessorsPlugin",
   "core": true,
   "runtime": "node",
+  "min_host_version": "5.0.0",
   "permissions": {
-    "network": { "reason": "Reads live match data from the game's debugger on this PC." }
+    "network": { "reason": "Reads live match data from the game's CDP on this PC." },
+    "game_config": { "reason": "Needs the CDP port the FUSE App configured for the game." }
   },
   "provides": {
     "accessors": {
@@ -23,9 +25,10 @@
     }
   },
   "default_config": {
-    "cdp_port": 9222,
+    "cdp_port": 0,
     "connect_timeout_s": 8.0,
     "reconnect_interval_s": 5.0,
-    "poll_interval_s": 0.1
+    "poll_interval_s": 0.1,
+    "hangar_poll_interval_s": 2.0
   }
 }

@@ -1,9 +1,9 @@
 {
   "plugin_id": "fuse_ui",
   "name": "FUSE UI",
-  "version": "1.2.0",
+  "version": "2.0.0",
   "author": "AETERNAL",
-  "description": "Shared Vue UI components for plugin overlays, imported via @fuse/ui.",
+  "description": "Shared Vue UI components for plugin overlays: the stage's inputs, icons and design tokens, imported via @fuse/ui.",
   "entry": "plugin:FuseUiPlugin",
   "runtime": "node"
 }

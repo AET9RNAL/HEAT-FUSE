@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { AnimatePresence, motion } from "motion-v";
-import Icons, { type IconKind } from "../../components/Icons.vue";
+import Icons, { type IconKind } from "../../components/ui/Icons.vue";
 import StagePanel from "./StagePanel.vue";
 import StageButton from "../inspector/controls/StageButton.vue";
 import { Dynamics } from "../../composables/useMotion";
@@ -12,8 +12,9 @@ import {
   hostHotkeys,
   pluginMetrics,
   sendPermissionReview,
-  stagePlugins,
+  stageRoster,
 } from "../overlayClient";
+import { DEMO_OVERLAY_ID } from "../stageTour";
 import type { OverlayDescriptor, StageScope } from "../types";
 
 const props = withDefaults(defineProps<{ descriptor: OverlayDescriptor; selected?: boolean }>(), {
@@ -22,7 +23,10 @@ const props = withDefaults(defineProps<{ descriptor: OverlayDescriptor; selected
 
 const root = ref<HTMLElement | null>(null);
 
-const plugin = computed(() => stagePlugins.value.find((p) => p.plugin_id === props.descriptor.pluginId));
+const plugin = computed(() => stageRoster.value.find((p) => p.plugin_id === props.descriptor.pluginId));
+
+// The stage tour points at the DEMO frame's tab and lock.
+const isDemo = computed(() => props.descriptor.overlayId === DEMO_OVERLAY_ID);
 
 const name = computed(() => plugin.value?.name ?? props.descriptor.overlayId.split(":")[1] ?? props.descriptor.overlayId);
 
@@ -49,10 +53,25 @@ const metrics = computed(() => pluginMetrics.value[props.descriptor.pluginId]);
 
 function formatBytes(bytes: number): string {
   const mb = bytes / (1024 * 1024);
-  return mb >= 1024 ? `${(mb / 1024).toFixed(1)} GB` : `${Math.round(mb)} MB`;
+  if (mb >= 1024) return `${(mb / 1024).toFixed(1)} GB`;
+  return mb >= 1 ? `${Math.round(mb)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
 }
 
 const ramText = computed(() => (metrics.value ? formatBytes(metrics.value.ram) : ""));
+
+const storage = computed(() => {
+  const m = metrics.value;
+  if (m?.storage == null) return null;
+  const limit = m.storageLimit ?? 0;
+  return { text: formatBytes(m.storage), share: limit ? m.storage / limit : 0, limit };
+});
+
+const storageTip = computed(() => {
+  const s = storage.value;
+  if (!s) return undefined;
+  const of = s.limit ? ` of the ${formatBytes(s.limit)} a plugin may keep` : "";
+  return `Space this plugin occupies on disk of this PC${of}. Uninstalling it removes them.`;
+});
 
 const cpuText = computed(() => {
   const cpu = metrics.value?.cpu;
@@ -125,6 +144,7 @@ onBeforeUnmount(() => window.removeEventListener("pointerdown", onWindowPointerD
   <!-- Zero-height host spanning the overlay: gives the tab a width container without containing the overlay itself -->
   <div ref="root" class="info-host">
     <motion.div
+      v-ftue="isDemo ? 'stage-overlay-info' : undefined"
       class="info-tab"
       :class="{ selected }"
       :initial="{ opacity: 0, y: 4 }"
@@ -159,10 +179,20 @@ onBeforeUnmount(() => window.removeEventListener("pointerdown", onWindowPointerD
           <Icons kind="cpu" size="small" color="var(--ico)" />
           <span class="seg-text">{{ cpuText }}</span>
         </span>
+        <span
+          v-if="storage"
+          v-tip="storageTip"
+          class="seg seg--metric seg--storage"
+          :class="{ full: storage.share >= 0.9 }"
+        >
+          <Icons kind="database" size="small" color="var(--ico)" />
+          <span class="seg-text">{{ storage.text }}</span>
+        </span>
       </template>
 
       <button
         v-if="scopes.length"
+        v-ftue="isDemo ? 'stage-perms' : undefined"
         v-tip="permsTip"
         type="button"
         class="seg seg--perms"
@@ -314,6 +344,15 @@ onBeforeUnmount(() => window.removeEventListener("pointerdown", onWindowPointerD
 .seg--metric .seg-text {
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
+}
+
+.seg--storage.full {
+  --ico: var(--warning-color);
+  background: rgba(255, 219, 140, 0.08);
+}
+
+.seg--storage.full .seg-text {
+  color: var(--warning-color);
 }
 
 .seg--perms {

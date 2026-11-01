@@ -164,6 +164,7 @@ function fromSeg(options: Option[], raw: string): unknown {
     :alpha="c.alpha !== false"
     :with-opacity-slider="c.withOpacitySlider"
     :swatches="c.swatches ?? []"
+    :default="c.default"
     :disabled="disabled"
     @live="live"
     @commit="commit"
@@ -180,6 +181,7 @@ function fromSeg(options: Option[], raw: string): unknown {
   <StageKeybindField
     v-else-if="c.type === 'keybind'"
     :model-value="str"
+    :hold="c.hold"
     :disabled="disabled"
     @commit="commit"
   />

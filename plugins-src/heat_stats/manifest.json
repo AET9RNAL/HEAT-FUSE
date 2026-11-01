@@ -6,24 +6,49 @@
   "description": "Records per-match performance data.",
   "entry": "plugin:HeatStatsPlugin",
   "runtime": "node",
-  "dependencies": ["accessors", "fuse_ui"],
+  "dependencies": ["accessors", "fuse_ui", "canvas_ui"],
+  "min_host_version": "5.0.0",
+  "provides": {
+    "heat_stats.tags": {
+      "description": "Player tags, keyed by nickname, for any plugin that draws players."
+    }
+  },
   "permissions": {
-    "network": { "reason": "Loads your match history from the HEAT Stats API." }
+    "network": { "reason": "Signs you in, syncs your matches, and reaches the game's debugger on this PC" },
+    "language": { "reason": "Shows HEAT Stats in the FUSE App's language until you pick one." },
+    "game_config": { "reason": "Needs the CDP port the FUSE App configured for the game." },
+    "storage": { "reason": "Keeps your matches on this PC, whether or not you have an account." },
+    "secrets": { "reason": "Keeps you signed in to HEAT Stats." },
+    "game_files": { "reason": "Lists your replays and checks which game build can play each one." },
+    "files": { "reason": "Keeps the replays you choose after the game deletes its own copy." },
+    "processes": { "reason": "Starts the game to play a replay you pick." }
+  },
+  "frames": ["https://heatlabs.net", "https://*.heatlabs.net"],
+  "hotkeys": {
+    "toggle_window": "ctrl+alt+s"
   },
   "default_config": {
-    "sample_interval_s": 5,
     "summarize_hold_s": 5.0,
-    "vue_overlay_pos": null,
-    "vue_width": 440,
-    "vue_height": 300,
-    "api_key": "fuse_Qlj84POyYh4xHy8YkUeV0AuADlRnLgboJRSVIl8sjUY",
     "player_name": "",
-    "session_started_at": 0,
-    "mode": "default",
-    "scene_time_s": 8.0,
     "hide_in_battle": false,
-    "graph_scale": "auto",
-    "graph_points": 20,
-    "graph_value_scale": 1.0
+    "streak_length": 75,
+    "locale": "",
+    "window_open": true,
+    "window_rect": null,
+    "widgets": [],
+    "widget_show_in": ["alive", "dead"],
+    "widget_dpm_rect": null,
+    "widget_spm_rect": null,
+    "widget_kpm_rect": null,
+    "widget_dpm_reset": "battle",
+    "widget_spm_reset": "battle",
+    "widget_kpm_reset": "battle",
+    "tag_color_danger": "#8FFFB8",
+    "tag_color_lowSkill": "#8FFFB8",
+    "tag_color_friend": "#8FFFB8",
+    "tag_color_trash": "#8FFFB8",
+    "tag_color_target": "#8FFFB8",
+    "tag_color_blocked": "#8FFFB8",
+    "block_resume": false
   }
 }

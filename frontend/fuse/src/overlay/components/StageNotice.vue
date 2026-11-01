@@ -6,7 +6,7 @@
  */
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { motion } from "motion-v";
-import Icons, { type IconKind } from "../../components/Icons.vue";
+import Icons, { type IconKind } from "../../components/ui/Icons.vue";
 import { vTip } from "../inspector/tooltip";
 import type { StageNotification, StageNotificationType } from "../notifications";
 

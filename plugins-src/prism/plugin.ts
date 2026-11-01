@@ -1,265 +1,137 @@
 import { FusePlugin, type FuseContext, type InspectorControl, type InspectorSection } from "@fuse/plugin-sdk";
-import { HUD } from "../_shared/hudSelectors.js";
+import { GAME, PAGES, SECTIONS, TEAM_LABEL, type Page, type PrismEl } from "./catalog.js";
+import {
+  ALL_ITEMS,
+  TEAMS,
+  K_PICK,
+  K_ROT,
+  K_SCALE,
+  K_STATE,
+  K_TEAM_COLOR,
+  K_TEAM_TINT,
+  K_TINT,
+  buildCss,
+  elementDefaults,
+  hex8,
+  teamDefaults,
+} from "./css.js";
 
 interface Accessors {
   readonly connected: boolean;
-  injectStylesheet(css: string | null, styleId?: string): void;
-  injectStylesheetMarkers(css: string | null, styleId?: string): void;
+  isConnected(page: Page): boolean | undefined;
+  injectStylesheetOn(page: Page, css: string | null, styleId?: string): Promise<boolean>;
 }
 
-/** Class-substring selector helper for elements not in the shared HUD map. */
-const c = (name: string) => `[class*="${name}"]`;
-
-type ColorProp = "color" | "background-color" | "border-color";
-interface ColorTarget {
-  sel: string;
-  prop: ColorProp;
-}
-
-
-interface PrismEl {
-  key: string;
-  label: string;
-  color?: ColorTarget[];
-  xformSel: string[];
-}
-
-interface Section {
-  category: string;
-  items: PrismEl[];
-}
-
-const SECTIONS: Section[] = [
-  {
-    category: "HP",
-    items: [
-      { key: "hp_bar", label: "HP Bar", color: [{ sel: HUD.HP_PROGRESS_INNER, prop: "background-color" }], xformSel: [HUD.HP_BASE] },
-      { key: "hp_label", label: "HP Label", color: [{ sel: HUD.HP_VALUE, prop: "color" }], xformSel: [HUD.HP_VALUE_WRAPPER] },
-    ],
-  },
-  {
-    category: "Energy",
-    items: [
-      { key: "en_bar", label: "Energy Bar", color: [{ sel: HUD.MANA_PROGRESS, prop: "background-color" }], xformSel: [HUD.MANA_BASE] },
-      { key: "en_label", label: "Energy Label", color: [{ sel: HUD.MANA_VALUE, prop: "color" }], xformSel: [HUD.MANA_VALUE_WRAPPER] },
-    ],
-  },
-  {
-    category: "Abilities & Equipment",
-    // They seem to be using .pngs hero so can't recolor anything
-    items: [
-      { key: "abilities", label: "Ability Panel", xformSel: [HUD.ABILITY_PANEL] },
-      { key: "equipment", label: "Equipment", xformSel: [HUD.EQUIPMENT] },
-    ],
-  },
-  {
-    category: "Speedometer",
-    items: [
-      {
-        key: "speedo_bar",
-        label: "Speedometer / Boost",
-        // glow behind the value + the boost/sprint drain bar
-        color: [
-          { sel: HUD.SPEEDOMETER_GLOW, prop: "background-color" },
-          { sel: HUD.SPRINT_GLOW, prop: "background-color" },
-          { sel: HUD.SPRINT_DRAIN, prop: "background-color" },
-        ],
-        xformSel: [HUD.SPEEDOMETER],
-      },
-      {
-        key: "speedo_label",
-        label: "Speed Label",
-        color: [
-          { sel: HUD.SPEEDOMETER_VALUE, prop: "color" },
-          { sel: HUD.SPEEDOMETER_UNIT, prop: "color" },
-        ],
-        xformSel: [HUD.SPEEDOMETER_VALUE, HUD.SPEEDOMETER_UNIT],
-      },
-    ],
-  },
-  {
-    category: "System",
-    items: [
-      {
-        key: "perf",
-        label: "Ping / FPS",
-        color: [
-          { sel: HUD.PERF_PING, prop: "color" }, // values
-          { sel: c("PerfInfo_statName"), prop: "color" }, // "Ping" / "FPS" labels
-        ],
-        xformSel: [HUD.PERF_INFO],
-      },
-    ],
-  },
-  {
-    category: "Crosshair",
-    items: [
-      { key: "aim", label: "Aim Circle", color: [{ sel: HUD.DEFAULT_AIM_CIRCLE, prop: "border-color" }], xformSel: [HUD.AIM_SWITCHER] },
-      { key: "mark", label: "Center Mark", color: [{ sel: HUD.CROSSHAIR_MARK, prop: "background-color" }], xformSel: [HUD.CROSSHAIR_MARK] },
-      // Same here, 100% a .png
-      { key: "reticle", label: "Reticle (scale/rotate)", xformSel: [HUD.DEFAULT_RETICLE] },
-    ],
-  },
-  {
-    category: "Weapons",
-    items: [
-      { key: "shell", label: "Shell Type", color: [{ sel: c("DefaultLoader_caption"), prop: "color" }], xformSel: [HUD.AMMO_LOADER] },
-      { key: "reload", label: "Reload Ring", color: [{ sel: c("DefaultLoader_progress"), prop: "border-color" }], xformSel: [c("DefaultLoader_reloader")] },
-      // Kept separate from the ring/minigame so it can stay a contrasting colour
-      { key: "reload_label", label: "Reload Time", color: [{ sel: `${c("ReloadTimer_base")} div`, prop: "color" }], xformSel: [c("ReloadTimer_base")] },
-      {
-        key: "reload_mini",
-        label: "Reload Minigame",
-        // fast-reload hit zones & timer bar; the moving indicator is left white for contrast
-        color: [
-          { sel: HUD.ACTIVE_RELOAD_TIMER, prop: "background-color" },
-          { sel: HUD.RELOAD_HIT_PERFECT, prop: "background-color" },
-          { sel: HUD.RELOAD_HIT_SECONDARY, prop: "background-color" },
-        ],
-        xformSel: [HUD.ACTIVE_RELOAD],
-      },
-    ],
-  },
-];
-
-const ALL_ITEMS: PrismEl[] = SECTIONS.flatMap((s) => s.items);
 const STYLE_ID = "__fuse_prism__";
-const STYLE_ID_MARKERS = "__fuse_prism_m__";
-
-// Global team colours 
-// Vehicle markers carry don't carry an ally/enemy class, so we do a crutch check by the color.
-const ENEMY_MARK = '[class*="VehicleMarker_base"][style*="--hero-color: #FF6D46"]';
-const ALLY_MARK = '[class*="VehicleMarker_base"]:not([style*="--hero-color: #FF6D46"])';
-
-function markerRules(prefix: string, rgba: string): string[] {
-  return [
-    `${prefix} [class*="VehicleMarker_heroLabel"] { color: ${rgba} !important; }`,
-    `${prefix} [class*="VehicleMarker_userName"] { color: ${rgba} !important; }`,
-    `${prefix} [class*="RoleIcon_base"] path { fill: ${rgba} !important; }`,
-    `${prefix} [class*="HealthPanel"] [class*="ProgressBar_progressBg"] { background-color: ${rgba} !important; }`,
-    `${prefix} [class*="StickDirectionPointer"] path { fill: ${rgba} !important; }`,
-  ];
-}
-
-function scoreObjRules(team: "ally" | "enemy", rgba: string): string[] {
-  return [
-    `[class*="ScoreProgress_progressWrapper__${team}"] [class*="ProgressBar_progressBg"] { background-color: ${rgba} !important; }`,
-    `[class*="ObjectiveProgress_base"] [class*="__${team}"] [class*="ProgressBar_progressBg"] { background-color: ${rgba} !important; }`,
-  ];
-}
-
-const K_TINT = (k: string) => `${k}_tint`;
-const K_COLOR = (k: string) => `${k}_color`;
-const K_SCALE = (k: string) => `${k}_scale`;
-const K_ROT = (k: string) => `${k}_rot`;
+// Prism 2 kept the markers rules under their own id.
+const LEGACY_MARKERS_ID = "__fuse_prism_m__";
 
 const PRESET_NONE = "None";
-const WHITE = "#FFFFFFFF";
+const WHITE8 = "#FFFFFFFF";
 
-function cbPreset(hp: string, en: string, speed: string, reload: string, mark: string): Record<string, boolean | string> {
+function cbPreset(team: Record<"ally" | "enemy" | "squad" | "you", string>, hp: string, en: string, speed: string, reload: string, mark: string): Record<string, boolean | string> {
   return {
+    ally_tint: true, ally_color: team.ally,
+    enemy_tint: true, enemy_color: team.enemy,
+    squad_tint: true, squad_color: team.squad,
+    you_tint: true, you_color: team.you,
     hp_bar_tint: true, hp_bar_color: hp,
-    hp_label_tint: true, hp_label_color: WHITE,
     en_bar_tint: true, en_bar_color: en,
-    en_label_tint: true, en_label_color: WHITE,
     speedo_bar_tint: true, speedo_bar_color: speed,
-    speedo_label_tint: true, speedo_label_color: WHITE,
-    perf_tint: true, perf_color: WHITE,
-    shell_tint: true, shell_color: WHITE,
-    reload_tint: true, reload_color: reload, // ring
-    reload_mini_tint: true, reload_mini_color: reload, // minigame zones + revealed container
-    reload_label_tint: true, reload_label_color: WHITE, // stays white so it reads over that container
+    reload_tint: true, reload_color: reload,
+    reload_mini_tint: true, reload_mini_color: reload,
     mark_tint: true, mark_color: mark,
-    aim_tint: true, aim_color: WHITE,
   };
 }
 
 const PRESETS: Record<string, Record<string, boolean | string | number>> = {
-  "Colourblind - Deuteranopia": cbPreset("#0072B2FF", "#E69F00FF", "#56B4E9FF", "#E69F00FF", "#F0E442FF"),
-  "Colourblind - Protanopia": cbPreset("#0072B2FF", "#F0E442FF", "#56B4E9FF", "#F0E442FF", "#E69F00FF"),
-  "Colourblind - Tritanopia": cbPreset("#D55E00FF", "#009E73FF", "#CC79A7FF", "#CC79A7FF", "#D55E00FF"),
+  "Colourblind - Deuteranopia": cbPreset(
+    { ally: "#0072B2FF", enemy: "#E69F00FF", squad: "#56B4E9FF", you: "#F0E442FF" },
+    "#0072B2FF", "#E69F00FF", "#56B4E9FF", "#E69F00FF", "#F0E442FF",
+  ),
+  "Colourblind - Protanopia": cbPreset(
+    { ally: "#0072B2FF", enemy: "#F0E442FF", squad: "#56B4E9FF", you: "#FFFFFFFF" },
+    "#0072B2FF", "#F0E442FF", "#56B4E9FF", "#F0E442FF", "#E69F00FF",
+  ),
+  "Colourblind - Tritanopia": cbPreset(
+    { ally: "#009E73FF", enemy: "#D55E00FF", squad: "#56B4E9FF", you: "#CC79A7FF" },
+    "#D55E00FF", "#009E73FF", "#CC79A7FF", "#CC79A7FF", "#D55E00FF",
+  ),
   "High Contrast": {
+    ally_tint: true, ally_color: "#00E5FFFF",
+    enemy_tint: true, enemy_color: "#FF2D2DFF",
+    squad_tint: true, squad_color: "#00FF66FF",
+    you_tint: true, you_color: "#FFEE00FF",
     hp_bar_tint: true, hp_bar_color: "#00FF66FF",
     en_bar_tint: true, en_bar_color: "#00E5FFFF",
-    hp_label_tint: true, hp_label_color: "#FFFFFFFF",
-    en_label_tint: true, en_label_color: "#FFFFFFFF",
     mark_tint: true, mark_color: "#FFEE00FF",
     aim_tint: true, aim_color: "#FFEE00FF",
   },
 };
 const PRESET_CHOICES = [PRESET_NONE, ...Object.keys(PRESETS)];
 
-/** "#RRGGBB" / "#RRGGBBAA" -> "rgba(r, g, b, a)" (CoHTML-safe), or null. */
-function hexToRgba(hex: unknown): string | null {
-  if (typeof hex !== "string") return null;
-  let s = hex.trim().replace(/^#/, "");
-  if (s.length === 3) s = s.split("").map((ch) => ch + ch).join("");
-  if (s.length === 6) s += "ff";
-  if (s.length !== 8 || /[^0-9a-fA-F]/.test(s)) return null;
-  const r = parseInt(s.slice(0, 2), 16);
-  const g = parseInt(s.slice(2, 4), 16);
-  const b = parseInt(s.slice(4, 6), 16);
-  const a = parseInt(s.slice(6, 8), 16) / 255;
-  return `rgba(${r}, ${g}, ${b}, ${a.toFixed(3)})`;
-}
-
-function num(v: unknown, fallback: number): number {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : fallback;
-}
-
 export class PrismPlugin extends FusePlugin {
   static override requiresCalibration = false;
 
   private ctx!: FuseContext;
   private acc: Accessors | undefined;
-  private dirty = true;
-  private lastConnected = false;
+  private dirty = new Set<Page>(PAGES);
+  private wasConnected = new Map<Page, boolean>();
 
   private sections(): InspectorSection[] {
-    const itemControls = (it: PrismEl): InspectorControl[] => {
+    const itemControls = (sec: string, it: PrismEl): InspectorControl[] => {
+      const when = { key: K_PICK(sec), eq: it.key };
       const out: InspectorControl[] = [];
-      if (it.color) {
-        out.push({
-          type: "switch",
-          id: K_TINT(it.key),
-          key: K_TINT(it.key),
-          label: `${it.label}: Tint`,
-          tooltip: "Enable the colour override.",
-        });
+      if (it.hint) out.push({ type: "note", id: `${it.key}_note`, text: it.hint, tone: "muted", when });
+      out.push({
+        type: "switch",
+        id: K_TINT(it.key),
+        key: K_TINT(it.key),
+        label: "Recolour",
+        tooltip: "Use the colours below instead of the game's own. A colour left at its default follows Team Colours.",
+        when,
+      });
+      for (const s of it.states) {
         out.push({
           type: "color",
-          id: K_COLOR(it.key),
-          key: K_COLOR(it.key),
-          label: `${it.label}: Colour`,
+          id: K_STATE(it, s),
+          key: K_STATE(it, s),
+          label: s.label,
+          default: hex8(s.def),
+          tooltip: "Double-click the swatch to reset to the game's colour.",
+          when,
           disabledWhen: { key: K_TINT(it.key), truthy: false },
         });
       }
-      out.push({
-        type: "slider",
-        id: K_SCALE(it.key),
-        key: K_SCALE(it.key),
-        label: `${it.label}: Scale`,
-        min: 0.1,
-        max: 5,
-        step: 0.05,
-        unit: "×",
-        default: 1,
-        tooltip: "Double-click to reset.",
-      });
-      out.push({
-        type: "slider",
-        id: K_ROT(it.key),
-        key: K_ROT(it.key),
-        label: `${it.label}: Rotation`,
-        min: -180,
-        max: 180,
-        step: 1,
-        unit: "°",
-        default: 0,
-        bipolar: true,
-        tooltip: "Double-click to reset.",
-      });
+      if (it.xform) {
+        out.push({
+          type: "slider",
+          id: K_SCALE(it.key),
+          key: K_SCALE(it.key),
+          label: "Scale",
+          min: 0.1,
+          max: 5,
+          step: 0.05,
+          unit: "×",
+          default: 1,
+          tooltip: "Double-click to reset.",
+          when,
+        });
+        out.push({
+          type: "slider",
+          id: K_ROT(it.key),
+          key: K_ROT(it.key),
+          label: "Rotation",
+          min: -180,
+          max: 180,
+          step: 1,
+          unit: "°",
+          default: 0,
+          bipolar: true,
+          tooltip: "Double-click to reset.",
+          when,
+        });
+      }
       return out;
     };
 
@@ -282,48 +154,41 @@ export class PrismPlugin extends FusePlugin {
       {
         id: "prism.team",
         label: "Team Colours",
-        controls: [
-          {
-            type: "switch",
-            id: "enemy_tint",
-            key: "enemy_tint",
-            label: "Recolour Enemies",
-            hint: "Enemy markers (icon / name / health), score bar + objective",
-          },
+        description:
+          "Recolours everything tied to a side at once. Darker and lighter variants follow automatically.",
+        controls: TEAMS.flatMap((tm): InspectorControl[] => [
+          { type: "switch", id: K_TEAM_TINT(tm), key: K_TEAM_TINT(tm), label: `Recolour ${TEAM_LABEL[tm]}` },
           {
             type: "color",
-            id: "enemy_color",
-            key: "enemy_color",
-            label: "Enemy Colour",
-            disabledWhen: { key: "enemy_tint", truthy: false },
+            id: K_TEAM_COLOR(tm),
+            key: K_TEAM_COLOR(tm),
+            label: `${TEAM_LABEL[tm]} Colour`,
+            default: hex8(GAME[tm].base),
+            tooltip: "Double-click the swatch to reset to the game's colour.",
+            disabledWhen: { key: K_TEAM_TINT(tm), truthy: false },
           },
-          {
-            type: "switch",
-            id: "ally_tint",
-            key: "ally_tint",
-            label: "Recolour Allies",
-            hint: "Ally markers (icon / name / health), score bar + objective",
-          },
-          {
-            type: "color",
-            id: "ally_color",
-            key: "ally_color",
-            label: "Ally Colour",
-            disabledWhen: { key: "ally_tint", truthy: false },
-          },
-        ],
+        ]),
       },
-      // Every element's tint, colour, scale and rotation - long, so each group starts folded.
+      // One picker per section keeps each long list to the element being edited.
       ...SECTIONS.map(
         (sec): InspectorSection => ({
-          id: `prism.${sec.category.toLowerCase().replace(/[^a-z0-9]+/g, "_")}`,
-          label: sec.category,
+          id: `prism.${sec.id}`,
+          label: sec.label,
+          description: sec.description,
           collapsible: true,
           defaultCollapsed: true,
-          controls: sec.items.flatMap((it, i): InspectorControl[] => [
-            ...(i > 0 ? [{ type: "divider" as const, id: `${it.key}_divider` }] : []),
-            ...itemControls(it),
-          ]),
+          controls: [
+            {
+              type: "select",
+              id: K_PICK(sec.id),
+              key: K_PICK(sec.id),
+              label: "Element",
+              searchable: sec.items.length > 8,
+              options: sec.items.map((it) => ({ value: it.key, label: it.label })),
+            },
+            { type: "divider", id: `${sec.id}_divider` },
+            ...sec.items.flatMap((it) => itemControls(sec.id, it)),
+          ],
         }),
       ),
     ];
@@ -336,114 +201,85 @@ export class PrismPlugin extends FusePlugin {
 
     const defaults: Record<string, unknown> = {
       preset: PRESET_NONE,
-      enemy_tint: false, enemy_color: "#FF6D46FF",
-      ally_tint: false, ally_color: "#84FFB1FF",
+      ...teamDefaults(),
+      ...elementDefaults(),
+      ...Object.fromEntries(SECTIONS.map((s) => [K_PICK(s.id), s.items[0].key])),
     };
-    for (const it of ALL_ITEMS) {
-      if (it.color) {
-        defaults[K_TINT(it.key)] = false;
-        defaults[K_COLOR(it.key)] = "#FFFFFFFF";
-      }
-      defaults[K_SCALE(it.key)] = 1.0;
-      defaults[K_ROT(it.key)] = 0.0;
-    }
     ctx.config.defaults(defaults).load();
+    this.migrateLegacyWhite();
 
-    // App panel only: Prism restyles the game's own HUD and has no overlay.
+    // App panel only: Prism restyles the game's own UI and has no overlay.
     ctx.config.schema(this.sections());
 
     ctx.config.watch("preset", (v) => this.applyPreset(String(v)));
-    for (const k of ["enemy_tint", "enemy_color", "ally_tint", "ally_color"]) {
-      ctx.config.watch(k, () => (this.dirty = true));
+    const markAll = () => PAGES.forEach((p) => this.dirty.add(p));
+    for (const tm of TEAMS) {
+      ctx.config.watch(K_TEAM_TINT(tm), markAll);
+      ctx.config.watch(K_TEAM_COLOR(tm), markAll);
+    }
+    for (const it of ALL_ITEMS) {
+      const keys = [K_TINT(it.key), ...it.states.map((s) => K_STATE(it, s))];
+      if (it.xform) keys.push(K_SCALE(it.key), K_ROT(it.key));
+      for (const k of keys) ctx.config.watch(k, markAll);
     }
 
-    for (const it of ALL_ITEMS) {
-      const keys = [K_SCALE(it.key), K_ROT(it.key)];
-      if (it.color) keys.push(K_TINT(it.key), K_COLOR(it.key));
-      for (const k of keys) ctx.config.watch(k, () => (this.dirty = true));
-    }
+    // A recreated document (respawn, new match, hangar return) starts without our style.
+    ctx.events.subscribe("accessors.page_connected", (p) => {
+      if (PAGES.includes(p.page as Page)) this.dirty.add(p.page as Page);
+    });
   }
 
-  /** Reset every element to its default, then overlay the chosen preset. */
-  private applyPreset(name: string): void {
-    const bundle: Record<string, boolean | string | number> = {};
+  /** Prism 2 stored white as every colour's default; untouched ones take the game's real colour. */
+  private migrateLegacyWhite(): void {
+    const cfg = this.ctx.config;
+    const patch: Record<string, string> = {};
     for (const it of ALL_ITEMS) {
-      if (it.color) {
-        bundle[K_TINT(it.key)] = false;
-        bundle[K_COLOR(it.key)] = "#FFFFFFFF";
+      if (Boolean(cfg.get(K_TINT(it.key)))) continue;
+      for (const s of it.states) {
+        const k = K_STATE(it, s);
+        if (String(cfg.get(k)).toUpperCase() === WHITE8 && hex8(s.def) !== WHITE8) patch[k] = hex8(s.def);
       }
-      bundle[K_SCALE(it.key)] = 1.0;
-      bundle[K_ROT(it.key)] = 0.0;
     }
+    if (Object.keys(patch).length) cfg.update(patch);
+  }
+
+  /** Reset every element and team colour to its default, then overlay the chosen preset. */
+  private applyPreset(name: string): void {
+    const bundle: Record<string, boolean | string | number> = { ...teamDefaults(), ...elementDefaults() };
     Object.assign(bundle, PRESETS[name] ?? {});
     this.ctx.config.update(bundle);
-    this.dirty = true;
+    PAGES.forEach((p) => this.dirty.add(p));
   }
 
   override tick(_dt: number): void {
     this.ctx.config.checkReload();
     if (!this.acc) return;
 
-    const connected = this.acc.connected;
-    if (connected && !this.lastConnected) this.dirty = true; // re-apply on (re)connect
-    this.lastConnected = connected;
+    for (const page of PAGES) {
+      const now = Boolean(this.acc.isConnected(page));
+      if (now && !this.wasConnected.get(page)) this.dirty.add(page);
+      this.wasConnected.set(page, now);
+    }
 
-    if (this.dirty && connected) this.apply();
+    const ready = [...this.dirty].filter((p) => this.wasConnected.get(p));
+    if (ready.length) this.apply(ready);
   }
 
-  private apply(): void {
-    const cfg = this.ctx.config;
-    const rules: string[] = [];
-
-    for (const it of ALL_ITEMS) {
-      // Colour
-      if (it.color && Boolean(cfg.get(K_TINT(it.key)))) {
-        const rgba = hexToRgba(cfg.get(K_COLOR(it.key)));
-        if (rgba) {
-          for (const t of it.color) rules.push(`${t.sel} { ${t.prop}: ${rgba} !important; }`);
-        }
-      }
-      // Scale + rotation
-      const scale = num(cfg.get(K_SCALE(it.key)), 1.0);
-      const rot = num(cfg.get(K_ROT(it.key)), 0.0);
-      if (Math.abs(scale - 1.0) > 1e-4 || Math.abs(rot) > 1e-4) {
-        const xf = `scale(${scale}) rotate(${rot}deg)`;
-        for (const sel of it.xformSel) {
-          rules.push(`${sel} { transform: ${xf} !important; transform-origin: center !important; }`);
-        }
-      }
+  private apply(pages: Page[]): void {
+    const css = buildCss((k) => this.ctx.config.get(k));
+    for (const page of pages) {
+      this.dirty.delete(page);
+      const retry = () => setTimeout(() => this.dirty.add(page), 2000);
+      this.acc!.injectStylesheetOn(page, css[page].join("\n"), STYLE_ID).then((ok) => ok || retry(), retry);
+      if (page === "markers") this.acc!.injectStylesheetOn(page, null, LEGACY_MARKERS_ID).catch(() => undefined);
     }
-
-    // Global team colours
-    const markerCss: string[] = [];
-    if (Boolean(cfg.get("enemy_tint"))) {
-      const rgba = hexToRgba(cfg.get("enemy_color"));
-      if (rgba) {
-        rules.push(...scoreObjRules("enemy", rgba));
-        markerCss.push(...markerRules(ENEMY_MARK, rgba));
-      }
-    }
-    if (Boolean(cfg.get("ally_tint"))) {
-      const rgba = hexToRgba(cfg.get("ally_color"));
-      if (rgba) {
-        rules.push(...scoreObjRules("ally", rgba));
-        markerCss.push(...markerRules(ALLY_MARK, rgba));
-      }
-    }
-
-    this.acc!.injectStylesheet(rules.join("\n"), STYLE_ID);
-    this.acc!.injectStylesheetMarkers(markerCss.join("\n"), STYLE_ID_MARKERS);
-    this.dirty = false;
   }
 
   override teardown(): void {
-    if (this.acc?.connected) {
-      try {
-        this.acc.injectStylesheet("", STYLE_ID);
-        this.acc.injectStylesheetMarkers("", STYLE_ID_MARKERS);
-      } catch {
-        /* ignore */
-      }
+    if (!this.acc) return;
+    for (const page of PAGES) {
+      if (!this.acc.isConnected(page)) continue;
+      this.acc.injectStylesheetOn(page, null, STYLE_ID).catch(() => undefined);
     }
   }
 }

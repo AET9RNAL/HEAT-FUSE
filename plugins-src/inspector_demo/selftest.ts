@@ -752,6 +752,28 @@ function cases(ctx: FuseContext, startedAt: number): Case[] {
     },
     {
       group: "services",
+      name: "FUSE's language service has the App's language, and get() agrees",
+      async run(t) {
+        const lang = await serviceNamed<{ language?: string; get(): Promise<string> }>("language");
+        if (!lang) return t.skip("FUSE's language service isn't running");
+        if (!perms.has("language")) return t.skip(`language is ${perms.state("language")}`);
+        t.ok(/^[a-z]{2,3}(-[A-Za-z0-9]{2,8})?$/.test(String(lang.language)), `'${String(lang.language)}' is a language code`);
+        t.equal(await lang.get(), lang.language, "get()");
+      },
+    },
+    {
+      group: "services",
+      name: "without the language permission, the service reads empty and get() is refused",
+      async run(t) {
+        const lang = await serviceNamed<{ language?: string; get(): Promise<string> }>("language");
+        if (!lang) return t.skip("FUSE's language service isn't running");
+        if (perms.has("language")) return t.skip("language is allowed");
+        t.equal(lang.language, undefined, "language");
+        await t.rejects(lang.get(), "'language' permission");
+      },
+    },
+    {
+      group: "services",
       name: "unlisted methods stay hidden, and a withdrawn service fails cleanly",
       async run(t) {
         type Temp = { ping(): Promise<string>; secret?: unknown; up?: boolean };

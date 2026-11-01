@@ -324,6 +324,19 @@
         r.sb_warriors = _warriors;
         if (tacticalInfoModel.currentPlayer && tacticalInfoModel.currentPlayer.team != null)
           r.sb_my_team = tacticalInfoModel.currentPlayer.team;
+
+        // Full tactical roster: every field the model exposes, deep-normalized
+        // (account.platform / inputScheme / crossplayEnabled, live K/D/A,
+        // confirms/denies, damage, role points, respawn/bomb state, platoon
+        // grouping). sb_warriors above stays the slim compat view.
+        try {
+          r.roster = {
+            players: __fuseDeep(__fuseArr(tacticalInfoModel.players), 8),
+            me: __fuseDeep(tacticalInfoModel.currentPlayer, 8),
+            teams: __fuseDeep(__fuseArr(tacticalInfoModel.teams), 6),
+            is_free: tacticalInfoModel.isFree ? 1 : 0,
+          };
+        } catch(e) {}
       }
     } catch(e) {}
 
@@ -340,6 +353,112 @@
           }
         }
         if (Object.keys(_slugs).length) r.sb_vehicle_slugs = _slugs;
+      }
+    } catch(e) {}
+
+    // Scene signals: the engine's camera slot and the view states the HUD itself switches on.
+    try {
+      var _vsOf = function(n) { try { var v = window[n]; return v && typeof v === 'object' ? v : null; } catch(e) { return null; } };
+      var _cam = '';
+      var _camFrom = ['player_panel_view_state', 'battle_info_view_state', 'ability_panel_view_state', 'doll_view_state', 'role_points_view_state', 'shoot_indicator_view_state'];
+      for (var _ci = 0; _ci < _camFrom.length && !_cam; _ci++) {
+        var _cv = _vsOf(_camFrom[_ci]);
+        if (_cv && _cv.activeCameraSlot) _cam = String(_cv.activeCameraSlot);
+      }
+      var _on = function(n) { var v = _vsOf(n); return v && v.active ? 1 : 0; };
+      r.scene_hud = {
+        camera:      _cam,
+        hud:         _on('player_panel_view_state'),
+        map:         _on('tactical_map_view_state'),
+        kill_card:   _on('kill_card_view_state'),
+        respawn:     (typeof respawnInfoModel !== 'undefined' && respawnInfoModel && respawnInfoModel.active) ? 1 : 0,
+        observer:    (typeof observerInfoModel !== 'undefined' && observerInfoModel && observerInfoModel.isActive) ? 1 : 0,
+        finished:    (typeof battleInfoModel !== 'undefined' && battleInfoModel && battleInfoModel.isFinished) ? 1 : 0
+      };
+    } catch(e) {}
+
+    // Radar spotting sectors: 8 world-fixed 45° sectors, index 4 spans 0-45° clockwise from north. The HUD turns them by -camera.
+    try {
+      if (typeof radarSectorsModel !== 'undefined' && radarSectorsModel && radarSectorsModel.sectors) {
+        var _rs = radarSectorsModel.sectors, _sec = [];
+        for (var _si = 0; _si < _rs.length; _si++) {
+          var _in = _rs[_si].inside || {}, _out = _rs[_si].outside || {};
+          _sec.push({
+            inside: Number(_in.value) || 0, inside_new: _in.isNew ? 1 : 0,
+            outside: Number(_out.value) || 0, outside_new: _out.isNew ? 1 : 0
+          });
+        }
+        var _rd = typeof radarDynamicModel !== 'undefined' && radarDynamicModel ? radarDynamicModel : null;
+        var _rst = typeof radarStaticModel !== 'undefined' && radarStaticModel ? radarStaticModel : null;
+        var _rm = typeof radarMapModel !== 'undefined' && radarMapModel ? radarMapModel : null;
+        // Blips: only what the HUD draws. Hidden entries never leave the page.
+        var _obj = [], _ro = typeof radarObjectsModel !== 'undefined' && radarObjectsModel ? radarObjectsModel.objects : null;
+        if (_ro) for (var _oi = 0; _oi < _ro.length; _oi++) {
+          var _o = _ro[_oi];
+          if (!_o || !_o.isVisible) continue;
+          _obj.push({ trigger: Number(_o.trigger) || 0, type: Number(_o.type) || 0, aff: Number(_o.affiliation) || 0,
+            platoon: Number(_o.platoonMateNumber) || 0, x: Number(_o.toX) || 0, y: Number(_o.toY) || 0, rot: Number(_o.rotation) || 0 });
+        }
+        var _bas = [], _rb = typeof radarCaptureBaseData !== 'undefined' && radarCaptureBaseData ? radarCaptureBaseData.objects : null;
+        if (_rb) for (var _bi = 0; _bi < _rb.length; _bi++) {
+          var _b = _rb[_bi];
+          if (!_b) continue;
+          _bas.push({ id: String(_b.id), sign: String(_b.sign || ''), status: Number(_b.status) || 0,
+            progress: Number(_b.progress) || 0, x: Number(_b.toX) || 0, y: Number(_b.toY) || 0,
+            icon: String(_b.labelIcon || ''), icon_blink: _b.isLabelIconBlinking ? 1 : 0 });
+        }
+        var _bp = [];
+        if (_rst && _rst.breakpoints) for (var _pi = 0; _pi < _rst.breakpoints.length; _pi++) {
+          _bp.push([Number(_rst.breakpoints[_pi].distance) || 0, Number(_rst.breakpoints[_pi].size) || 0]);
+        }
+        r.radar = {
+          visible: (_rst && _rst.isVisible) ? 1 : 0,
+          camera:  _rd ? Number(_rd.cameraRotation) || 0 : 0,
+          turret:  _rd ? Number(_rd.turretRotation) || 0 : 0,
+          sectors: _sec,
+          pos:     _rm ? [Number(_rm.mapOffsetX) || 0, Number(_rm.mapOffsetY) || 0] : null,
+          // Maps with an old radar image count pos from its corner: world = pos - map_size / 2.
+          map_size: _rm && _rm.size ? [Number(_rm.size.x) || 0, Number(_rm.size.y) || 0] : [0, 0],
+          circle:  _rst ? Number(_rst.circleRadius) || 0 : 0,
+          range:   _rst ? Number(_rst.distanceRadius) || 0 : 0,
+          cone:    _rst ? Number(_rst.coneAngle) || 0 : 0,
+          breakpoints: _bp,
+          objects: _obj,
+          bases:   _bas
+        };
+      }
+    } catch(e) {}
+
+    // Damage taken: the engine keeps the last 5 entries and grows `value` in place when hits merge.
+    try {
+      if (typeof battleDamageLogModel !== 'undefined' && battleDamageLogModel && battleDamageLogModel.logs) {
+        var _dl = battleDamageLogModel.logs, _dlo = [];
+        for (var _dj = 0; _dj < _dl.length; _dj++) {
+          var _de = _dl[_dj];
+          if (!_de || _de.id == null) continue;
+          _dlo.push({
+            id:      Number(_de.id),
+            source:  Number(_de.damageSource) || 0,
+            effect:  Number(_de.effectKind) || 0,
+            value:   Number(_de.value) || 0,
+            name:    _de.playerName || '',
+            vehicle: _de.vehicleName || ''
+          });
+        }
+        r.dmg_log = _dlo;
+      }
+      if (typeof deathInfoModel !== 'undefined' && deathInfoModel && deathInfoModel.isKilledBy && deathInfoModel.killedByInfo) {
+        var _kb = deathInfoModel.killedByInfo;
+        var _kbIcon = String(_kb.frontmanBig || '').match(/([^/]+)\.png$/i);
+        r.dmg_killer = {
+          unique_name: _kb.uniqueName || '',
+          name:        _kb.displayName || '',
+          vehicle_id:  _kb.vehicleId != null ? Number(_kb.vehicleId) : null,
+          vehicle_key: _kb.vehicleName || '',
+          team:        _kb.team != null ? Number(_kb.team) : null,
+          role:        _kb.role || '',
+          agent_icon:  _kbIcon ? _kbIcon[1] : null
+        };
       }
     } catch(e) {}
 

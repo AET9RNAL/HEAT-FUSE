@@ -37,6 +37,18 @@ export interface RuntimeBridge {
   rpcSetEnabled(params: Record<string, unknown>): Promise<Record<string, unknown>>;
   rpcHotkeyRebind(params: Record<string, unknown>): Record<string, unknown>;
   rpcOverlaySetVisible(params: Record<string, unknown>): Promise<Record<string, unknown>>;
+  /** The App's setting for the stage's performance widget. */
+  rpcStageSetPerfWidget(params: Record<string, unknown>): Record<string, unknown>;
+  /** Stage-only settings, for a newly connected stage window. */
+  stageSettings(): { perfWidget: boolean; tour: boolean };
+  /** The App's request for the stage tour. */
+  rpcStageSetTour(params: Record<string, unknown>): Record<string, unknown>;
+  /** The stage finished or skipped its tour. */
+  onStageTourDone(): void;
+  /** The App's language, served to plugins as the `language` service. */
+  rpcAppSetLanguage(params: Record<string, unknown>): Record<string, unknown>;
+  /** The App's view of coldwar.project, served to plugins as the `game_config` service. */
+  rpcAppSetGameConfig(params: Record<string, unknown>): Record<string, unknown>;
 
   /** Current overlay descriptors (hydration for a newly-connected overlay client). */
   overlayHydration(): Array<Record<string, unknown>>;
@@ -65,6 +77,8 @@ export interface RuntimeBridge {
 
   /** Resolve an overlay asset request to an absolute file path, or null. */
   resolveAsset(pluginId: string, relPath: string): string | null;
+  /** Resolve a request for a file in the plugin's `filesDir/overlay/` folder, or null (no `files` permission, outside the folder). */
+  resolvePluginFile(pluginId: string, relPath: string): string | null;
 }
 
 /** control: the App. stage: the Electron stage window. view: OBS browser sources, receive-only. */
@@ -137,14 +151,18 @@ export class WsServer {
       return;
     }
     if (url.startsWith("/overlay-asset/")) {
-      this.serveAsset(url.slice("/overlay-asset/".length), res);
+      this.serveAsset(url.slice("/overlay-asset/".length), res, (id, rel) => this.bridge.resolveAsset(id, rel));
+      return;
+    }
+    if (url.startsWith("/overlay-file/")) {
+      this.serveAsset(url.slice("/overlay-file/".length), res, (id, rel) => this.bridge.resolvePluginFile(id, rel));
       return;
     }
     res.writeHead(404);
     res.end();
   }
 
-  private serveAsset(rest: string, res: http.ServerResponse): void {
+  private serveAsset(rest: string, res: http.ServerResponse, resolve: (pluginId: string, relPath: string) => string | null): void {
     const decoded = decodeURIComponent(rest.split("?")[0] ?? "");
     const slash = decoded.indexOf("/");
     if (slash <= 0) {
@@ -159,8 +177,8 @@ export class WsServer {
       res.end();
       return;
     }
-    const abs = this.bridge.resolveAsset(pluginId, relPath);
-    if (!abs || !fs.existsSync(abs)) {
+    const abs = resolve(pluginId, relPath);
+    if (!abs || !fs.existsSync(abs) || !fs.statSync(abs).isFile()) {
       res.writeHead(404);
       res.end();
       return;
@@ -271,6 +289,7 @@ export class WsServer {
       const audio = this.bridge.audioHydration();
       send(ws, { type: "audio:master", ...audio.master });
       if (audio.preload.length) send(ws, { type: "audio:preload", urls: audio.preload });
+      if (role === "stage") send(ws, { type: "stage:settings", ...this.bridge.stageSettings() });
       const hs = this.bridge.hostState();
       send(ws, { type: "host:state_changed", state: hs.state, calib_stage: hs.calib_stage });
     }
@@ -315,6 +334,10 @@ export class WsServer {
       this.bridge.onHostRequest(String(msg.state ?? ""));
       return;
     }
+    if (role === "stage" && msg.type === "stage:tour_done") {
+      this.bridge.onStageTourDone();
+      return;
+    }
     if (role === "stage" && msg.type === "permissions:review") {
       const pluginId = String(msg.pluginId ?? "");
       const scope = String(msg.scope ?? "");
@@ -349,6 +372,18 @@ export class WsServer {
         case "overlay.setVisible":
           result = await this.bridge.rpcOverlaySetVisible(params);
           break;
+        case "stage.setPerfWidget":
+          result = this.bridge.rpcStageSetPerfWidget(params);
+          break;
+        case "stage.setTour":
+          result = this.bridge.rpcStageSetTour(params);
+          break;
+        case "app.setLanguage":
+          result = this.bridge.rpcAppSetLanguage(params);
+          break;
+        case "app.setGameConfig":
+          result = this.bridge.rpcAppSetGameConfig(params);
+          break;
         default:
           send(ws, {
             jsonrpc: "2.0",
@@ -373,6 +408,12 @@ export class WsServer {
   broadcastOverlay(obj: Record<string, unknown>): void {
     const text = JSON.stringify(obj);
     for (const ws of this.overlay) trySend(ws, text, this.overlay);
+  }
+
+  /** The Electron stage window only, never OBS views. */
+  broadcastStage(obj: Record<string, unknown>): void {
+    const text = JSON.stringify(obj);
+    for (const ws of this.stageClients) trySend(ws, text, this.stageClients);
   }
 
   /** A stage window is connected; OBS views don't count. */

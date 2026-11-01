@@ -1,4 +1,6 @@
 <script lang="ts">
+import { cancelFrame, createSurface, requestFrame } from "./gl-host.mjs";
+
 export interface DecryptRevealOptions {
   /** Decrypt radius around the cursor in CSS pixels. */
   radius?: number;
@@ -51,8 +53,10 @@ export interface DecryptRevealElements {
   source: HTMLCanvasElement;
   /** The element inside the source canvas that gets captured. */
   content: HTMLElement;
-  /** Canvas the WebGL effect renders to. */
+  /** 2D canvas that shows the effect frame. */
   output: HTMLCanvasElement;
+  /** Called after the shared WebGL context is lost. The instance is dead then. */
+  onLost?: () => void;
 }
 
 export interface DecryptRevealInstance {
@@ -503,14 +507,12 @@ export function createDecryptReveal(
   const config = { ...DEFAULTS, ...options };
   const { source, content, output } = elements;
 
-  const gl = output.getContext("webgl2", {
-    alpha: true,
-    depth: false,
-    stencil: false,
-    antialias: false,
+  const surface = createSurface(output, {
     premultipliedAlpha: false,
+    onLost: elements.onLost,
   });
-  if (!gl || gl.isContextLost()) return null;
+  if (!surface) return null;
+  const { gl } = surface;
 
   const sourceCtx = source.getContext("2d") as ElementImageContext | null;
   const paintable = source as PaintableCanvas;
@@ -567,6 +569,8 @@ export function createDecryptReveal(
   const cellPass = link(CELL_FRAG);
   const mainPass = link(MAIN_FRAG);
 
+  const vao = gl.createVertexArray();
+  gl.bindVertexArray(vao);
   const quad = gl.createBuffer();
   gl.bindBuffer(gl.ARRAY_BUFFER, quad);
   gl.bufferData(
@@ -576,6 +580,7 @@ export function createDecryptReveal(
   );
   gl.enableVertexAttribArray(0);
   gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+  gl.bindVertexArray(null);
 
   function makeTexture(filter: number) {
     const texture = gl!.createTexture()!;
@@ -820,6 +825,7 @@ export function createDecryptReveal(
   }
 
   function render() {
+    if (!surface!.begin()) return;
     uploadContent();
     if (config.background !== bgKey) {
       bgKey = config.background;
@@ -832,6 +838,7 @@ export function createDecryptReveal(
     }
     rebuildAtlas();
     syncCellGrid();
+    gl!.bindVertexArray(vao);
     renderCells();
 
     const w = Math.max(output.clientWidth, 1);
@@ -880,9 +887,9 @@ export function createDecryptReveal(
     gl!.uniform1f(u.uTime, time);
     gl!.uniform1f(u.uMaxX, contentMaxX);
     gl!.uniform1f(u.uCrisp, reducedMotion || !htmlInCanvas ? 1 : 0);
-    gl!.bindFramebuffer(gl!.FRAMEBUFFER, null);
-    gl!.viewport(0, 0, output.width, output.height);
+    surface!.bindOutput();
     gl!.drawArrays(gl!.TRIANGLE_STRIP, 0, 4);
+    surface!.end();
   }
 
   let raf = 0;
@@ -924,14 +931,14 @@ export function createDecryptReveal(
       running = false;
       return;
     }
-    raf = requestAnimationFrame(frame);
+    raf = requestFrame(frame);
   }
 
   function start() {
     if (destroyed || running || !visible) return;
     running = true;
     lastTime = performance.now();
-    raf = requestAnimationFrame(frame);
+    raf = requestFrame(frame);
   }
 
   wake = start;
@@ -1019,7 +1026,7 @@ export function createDecryptReveal(
     },
     destroy() {
       destroyed = true;
-      cancelAnimationFrame(raf);
+      cancelFrame(raf);
       observer.disconnect();
       intersection.disconnect();
       motionQuery.removeEventListener("change", onMotionChange);
@@ -1037,10 +1044,8 @@ export function createDecryptReveal(
       gl!.deleteShader(mainPass.vs);
       gl!.deleteShader(mainPass.fs);
       gl!.deleteBuffer(quad);
-      // Deleting GL objects does NOT release the context - it stays attached to
-      // the canvas until GC, so churning instances exhausts the browser's live
-      // context cap and it force-loses the oldest ones (older effects go white).
-      gl!.getExtension("WEBGL_lose_context")?.loseContext();
+      gl!.deleteVertexArray(vao);
+      surface!.release();
       if (htmlInCanvas) paintable.onpaint = null;
     },
   };
@@ -1060,7 +1065,7 @@ const native = ref(false);
 let instance: DecryptRevealInstance | null = null;
 let disposed = false;
 
-onMounted(async () => {
+async function mount() {
   native.value = supportsHtmlInCanvas();
   await nextTick();
   if (disposed) return;
@@ -1070,6 +1075,7 @@ onMounted(async () => {
         source: sourceEl.value,
         content: contentEl.value,
         output: outputEl.value,
+        onLost: remount,
       },
       props,
     );
@@ -1083,13 +1089,23 @@ onMounted(async () => {
             source: sourceEl.value,
             content: contentEl.value,
             output: outputEl.value,
+            onLost: remount,
           },
           props,
         );
       }
     }
   }
-});
+}
+
+/** The shared context died: rebuild on a new one. */
+function remount() {
+  instance?.destroy();
+  instance = null;
+  if (!disposed) void mount();
+}
+
+onMounted(mount);
 
 onBeforeUnmount(() => {
   disposed = true;

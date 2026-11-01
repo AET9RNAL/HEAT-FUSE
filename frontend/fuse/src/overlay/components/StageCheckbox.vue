@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import eCheckbox from "../../components/eCheckbox.vue";
+import eCheckbox from "../../components/inputs/eCheckbox.vue";
 
 withDefaults(defineProps<{ modelValue: boolean; label?: string; disabled?: boolean }>(), {
   label: "",

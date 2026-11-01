@@ -7,6 +7,7 @@
   "entry": "plugin:EnergyBarPlugin",
   "runtime": "node",
   "dependencies": ["accessors"],
+  "min_host_version": "5.0.0",
   "hotkeys": {},
   "default_config": {
     "bar_custom_pos": null,
@@ -17,6 +18,8 @@
     "color_mid": "FF9800",
     "color_low": "FF3935",
     "stroke_weight": "1.5",
-    "rotation": "0.0"
+    "rotation": "0.0",
+    "show_in": ["alive"],
+    "show_in_hangar": []
   }
 }

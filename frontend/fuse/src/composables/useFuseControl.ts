@@ -40,6 +40,60 @@ function _sendAudioMaster() {
     void send('audio.setMaster', { volume: appStore.audioVolume / 100, muted: appStore.audioMuted }).catch(() => {})
 }
 
+/** Same for the stage's performance widget: sent on connect and on every change. */
+function _sendStageSettings() {
+    if (fuseState.value !== 'running') return
+    const appStore = useAppStore()
+    const { send } = useFuseConnection()
+    void send('stage.setPerfWidget', { enabled: appStore.stagePerfWidget }).catch(() => {})
+}
+
+const STAGE_TOUR_ID = 'stage-intro'
+
+/** The App keeps "seen" for the stage tour. The runtime relays the request to the stage window. */
+function _sendStageTour() {
+    if (fuseState.value !== 'running') return
+    const appStore = useAppStore()
+    const { send } = useFuseConnection()
+    void send('stage.setTour', { show: !appStore.ftueSeen.includes(STAGE_TOUR_ID) }).catch(() => {})
+}
+
+function _markStageTourSeen() {
+    const appStore = useAppStore()
+    if (!appStore.ftueSeen.includes(STAGE_TOUR_ID)) appStore.ftueSeen = [...appStore.ftueSeen, STAGE_TOUR_ID]
+}
+
+/** The stage shows its tour at the next calibration, or at once if it is calibrating now. */
+function replayStageTour() {
+    const appStore = useAppStore()
+    appStore.ftueSeen = appStore.ftueSeen.filter((id) => id !== STAGE_TOUR_ID)
+}
+
+/** Plugins read the App's language through the runtime's `language` service. */
+function _sendAppLanguage() {
+    if (fuseState.value !== 'running') return
+    const appStore = useAppStore()
+    const { send } = useFuseConnection()
+    void send('app.setLanguage', { language: appStore.appLanguage }).catch(() => {})
+}
+
+/**
+ * The game's debugger port and the state of coldwar.project. Plugins read this
+ * through the runtime's `game_config` service
+ */
+function _sendGameConfig() {
+    if (fuseState.value !== 'running') return
+    const appStore = useAppStore()
+    const { send } = useFuseConnection()
+    void send('app.setGameConfig', {
+        port: appStore.cdpPort,
+        enabled: appStore.gameConfigEnabled === true,
+        valid: appStore.gameConfigValid,
+        gameRunning: appStore.gameRunning,
+        dirs: { ...appStore.gameDirPaths },
+    }).catch(() => {})
+}
+
 // ── Start / stop ───────────────────────────────────────────────────────────
 
 async function startFuse(): Promise<boolean> {
@@ -52,7 +106,13 @@ async function startFuse(): Promise<boolean> {
         eventBus.emit('agent:spawning')
         logger.info('FUSE: spawning process')
 
-        const result = await window.fuseAPI.spawn({ autoLock: useAppStore().autoLockOverlays })
+        await useAppStore().refreshGameConfig()
+        const result = await window.fuseAPI.spawn({
+            autoLock: useAppStore().autoLockOverlays,
+            language: useAppStore().appLanguage,
+            cdpPort: useAppStore().cdpPort,
+            gameDirs: { ...useAppStore().gameDirPaths },
+        })
 
         if (!result.success || !result.port || !result.connectionToken) {
             const msg = result.error ?? 'spawn failed'
@@ -89,6 +149,8 @@ async function startFuse(): Promise<boolean> {
             } else if (type === 'host:state_changed') {
                 const state = msg['state'] as string
                 runtimeState.value = state === 'locked' ? 'locked' : state === 'calibrate' ? 'calibrate' : null
+            } else if (type === 'stage:tour_done') {
+                _markStageTourSeen()
             } else if (type === 'host:hotkeys') {
                 hostHotkeys.value = {
                     lock: typeof msg['lock'] === 'string' ? msg['lock'] : hostHotkeys.value.lock,
@@ -112,6 +174,10 @@ async function startFuse(): Promise<boolean> {
 
         _setState('running')
         _sendAudioMaster()
+        _sendStageSettings()
+        _sendStageTour()
+        _sendAppLanguage()
+        _sendGameConfig()
         eventBus.emit('agent:connected')
         logger.info('FUSE: connected', { port: result.port })
 
@@ -177,9 +243,13 @@ export function useFuseControl() {
         window.fuseAPI.onObsUrl?.((url) => { obsUrl.value = url })
 
         window.gameProcessAPI?.onProcessDetected(() => {
+            appStore.gameRunning = true
+            _sendGameConfig()
             if (appStore.startWithGame) appStore.enableFuse = true
         })
         window.gameProcessAPI?.onProcessLost(() => {
+            appStore.gameRunning = false
+            _sendGameConfig()
             if (appStore.startWithGame) appStore.enableFuse = false
         })
         window.gameProcessAPI?.onFocusChanged((inFocus: boolean) => {
@@ -198,6 +268,10 @@ export function useFuseControl() {
         })
 
         watch(() => [appStore.audioVolume, appStore.audioMuted], _sendAudioMaster)
+        watch(() => appStore.stagePerfWidget, _sendStageSettings)
+        watch(() => appStore.ftueSeen.includes(STAGE_TOUR_ID), _sendStageTour)
+        watch(() => appStore.appLanguage, _sendAppLanguage)
+        watch(() => [appStore.cdpPort, appStore.gameConfigEnabled, appStore.gameConfigPort, appStore.gameDirPaths], _sendGameConfig)
 
         watch(() => appStore.enableFuse, async (enabled) => {
             if (enabled) {
@@ -218,5 +292,6 @@ export function useFuseControl() {
         obsUrl: readonly(obsUrl),
         startFuse,
         stopFuse,
+        replayStageTour,
     }
 }

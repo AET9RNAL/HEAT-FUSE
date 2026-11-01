@@ -11,9 +11,9 @@ const comp = shallowRef<any>(null);
 const loadError = ref<string | null>(null);
 
 // Dev source revision for plugins
-function withRev(url: string): string {
-  if (!sourceRev.value) return url;
-  return url + (url.includes("?") ? "&" : "?") + `v=${sourceRev.value}`;
+function withRev(url: string, rev = sourceRev.value): string {
+  if (!rev) return url;
+  return url + (url.includes("?") ? "&" : "?") + `v=${rev}`;
 }
 
 const fullUrl = computed(() => withRev(assetBase() + props.descriptor.assetUrl));
@@ -33,6 +33,23 @@ function emitAction(action: string, payload?: unknown): void {
 // cross-plugin import `<pluginId>/<path>` and fetched from that plugin's assets
 // - so a plugin can ship a reusable component library with no app changes.
 const HOST_MODULES = new Set(["vue", "motion-v", "@rive-app/canvas", "chart.js", "chart.js/auto"]);
+
+let hostLibs: Promise<Record<string, unknown>> | null = null;
+
+function loadHostLibs(): Promise<Record<string, unknown>> {
+  hostLibs ??= (async () => {
+    const [vue, motion, rive, chart] = await Promise.all([
+      import("vue"),
+      import("motion-v"),
+      import("@rive-app/canvas"),
+      // `chart.js/auto` self-registers every controller/scale, so overlays can
+      // `new Chart(...)` without wiring up registrations themselves.
+      import("chart.js/auto"),
+    ]);
+    return { vue, "motion-v": motion, "@rive-app/canvas": rive, "chart.js": chart, "chart.js/auto": chart };
+  })();
+  return hostLibs;
+}
 // De-duped stylesheet injection (e.g. a UI library's tokens imported by many
 // overlays), keyed by URL without the dev revision so a reload updates the one
 // existing <style> in place rather than appending another.
@@ -45,28 +62,25 @@ const injectedCss = new Map<string, { url: string; el: HTMLStyleElement }>();
  */
 let ownStyles: HTMLStyleElement[] = [];
 
+/** Only the newest load may mount. Unmount bumps it too, so an in-flight load drops itself. */
+let loadSeq = 0;
+
 async function loadComponent(url: string): Promise<void> {
+  const seq = ++loadSeq;
+  // Children use the revision this load started on, never a newer one.
+  const rev = sourceRev.value;
+  const superseded = (): void => {
+    if (seq !== loadSeq) throw new Error("superseded");
+  };
   loadError.value = null;
   const pendingStyles: HTMLStyleElement[] = [];
   try {
-    const [{ loadModule }, vue, motion, rive, chart] = await Promise.all([
-      import("vue3-sfc-loader"),
-      import("vue"),
-      import("motion-v"),
-      import("@rive-app/canvas"),
-      // `chart.js/auto` self-registers every controller/scale, so overlays can
-      // `new Chart(...)` without wiring up registrations themselves.
-      import("chart.js/auto"),
-    ]);
+    const [{ loadModule }, libs] = await Promise.all([import("vue3-sfc-loader"), loadHostLibs()]);
+    // The loader calls addStyle only for a module it compiles, so a load shares no modules with another load.
+    const moduleCache: Record<string, unknown> = Object.assign(Object.create(null), libs);
     const overlayAssetRoot = `${assetBase()}/overlay-asset`;
     const mod = await loadModule(url, {
-      moduleCache: {
-        vue,
-        "motion-v": motion,
-        "@rive-app/canvas": rive,
-        "chart.js": chart,
-        "chart.js/auto": chart,
-      },
+      moduleCache,
       pathResolve({ refPath, relPath }: { refPath: string | undefined; relPath: string }) {
         const rel = String(relPath);
         if (HOST_MODULES.has(rel)) return rel;
@@ -74,16 +88,17 @@ async function loadComponent(url: string): Promise<void> {
         // Every plugin-served URL carries the revision too, or a reload would
         // recompile the entry against stale children. `new URL` drops the
         // referrer's query, so it is re-applied here rather than inherited.
-        if (rel.startsWith(".") && refPath) return withRev(new URL(rel, String(refPath)).href);
+        if (rel.startsWith(".") && refPath) return withRev(new URL(rel, String(refPath)).href, rev);
         const lastSeg = rel.split("/").pop() ?? "";
         const suffix = lastSeg.includes(".") ? "" : "/index.js";
-        return withRev(`${overlayAssetRoot}/${rel}${suffix}`);
+        return withRev(`${overlayAssetRoot}/${rel}${suffix}`, rev);
       },
       // Lazy fetch: content is only pulled when a handler actually reads it, so
       // asset-URL imports (below) don't download the file twice.
       async getFile(u: string) {
         return {
           getContentData: async (asBinary: boolean) => {
+            superseded();
             const resp = await fetch(u);
             if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
             return asBinary ? new Uint8Array(await resp.arrayBuffer()) : await resp.text();
@@ -98,6 +113,8 @@ async function loadComponent(url: string): Promise<void> {
           // Same URL means same revision — already injected, nothing to do.
           if (prev && prev.url === url_) return {};
           const text = String(await getContentData(false));
+          // A stale load must not write older text over a newer load's.
+          superseded();
           if (prev) {
             prev.el.textContent = text;
             prev.url = url_;
@@ -119,12 +136,18 @@ async function loadComponent(url: string): Promise<void> {
         pendingStyles.push(el);
       },
     });
+    // A newer load started while this one compiled: drop this one whole.
+    if (seq !== loadSeq) {
+      for (const el of pendingStyles) el.remove();
+      return;
+    }
     comp.value = mod.default ?? mod;
     for (const el of ownStyles) el.remove();
     ownStyles = pendingStyles;
   } catch (e) {
     // The previous component stays mounted, so its styles must stay too.
     for (const el of pendingStyles) el.remove();
+    if (seq !== loadSeq) return;
     loadError.value = String(e instanceof Error ? e.message : e);
   }
 }
@@ -170,8 +193,11 @@ overlayBus.on(props.descriptor.overlayId, onData);
 
 onBeforeUnmount(() => {
   overlayBus.off(props.descriptor.overlayId, onData);
+  loadSeq++;
   for (const el of ownStyles) el.remove();
   ownStyles = [];
+  for (const { el } of injectedCss.values()) el.remove();
+  injectedCss.clear();
 });
 </script>
 

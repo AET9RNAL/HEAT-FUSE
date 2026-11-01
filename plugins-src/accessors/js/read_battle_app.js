@@ -6,6 +6,17 @@
     var _sb = document.querySelector('[class*="ScoreBoard_base"]');
     r.sb_open = (_sb && window.getComputedStyle(_sb).display !== 'none') ? 1 : 0;
 
+    // SPA route (deploy, vehicle swap, menus, results). The store reference is cached: the fiber walk is not free.
+    try {
+      var _rs = window.__fuseRouterStore;
+      if (!_rs) {
+        var _rctx = __fuseFindContext(function(v) { return v && v.RouterStore; });
+        _rs = _rctx ? _rctx.RouterStore : null;
+        if (_rs) window.__fuseRouterStore = _rs;
+      }
+      if (_rs && _rs.pathName != null) r.scene_route = String(_rs.pathName);
+    } catch(e) {}
+
     // Map display name + game mode display name
     // BattleInfo_mapName is a flex div whose SimpleText_track children hold both strings.
     var _bi = document.querySelector('[class*="BattleInfo_mapName"]');
@@ -14,6 +25,14 @@
       if (_tracks.length >= 1) r.sb_map_name       = (_tracks[0].textContent || '').trim() || null;
       if (_tracks.length >= 2) r.sb_game_mode_name  = (_tracks[1].textContent || '').trim() || null;
     }
+
+    // Map slug: matchInfoModel lives on battle_app in this build (2026-10-15), not on battle_hud.
+    try {
+      if (typeof matchInfoModel !== 'undefined' && matchInfoModel && matchInfoModel.background) {
+        var _bgm = String(matchInfoModel.background).match(/\/worlds\/([^/]+)\//);
+        if (_bgm) r.map_slug = _bgm[1];
+      }
+    } catch(e) {}
 
     // Team scores from JS model (available even when scoreboard closed)
     try {
@@ -57,69 +76,57 @@
     // against sb_ally_rows. See Accessors._match_local_row().
 
     // ── Post-match results (postbattleScene) — populated only on the results screen.
-    // Each player record spreads the FULL deep stats object (~90 fields) and merges
-    // identity + assists/confirms/denies/kills/rolePoints from tacticalInfoModel
-    // (the stats object lacks those). One assembled roster the plugin can aggregate.
+    // __fusePmNormalize (composed from postmatch.js) preserves the FULL native
+    // record: per-player stats, currencies/rewards, entitlements, coefs,
+    // boosters, tokens and per-loadout stats, merged with tactical identity.
+    // pm_players stays a flattened compat view; pm_result is the complete tree,
+    // sent only on polls where the wrapper sets __FUSE_WANT_PM (first capture).
     try {
-      var _pb = (typeof postbattleScene !== 'undefined') ? postbattleScene : null;
-      var _common = _pb && _pb.results && _pb.results.common;
-      if (_common && _common.teams && _common.gameMode) {
-        var _num = function(v){ return typeof v === 'bigint' ? Number(v) : v; };
-        // Identity/live map from tacticalInfoModel, keyed by playerId.
-        var _tm = (typeof tacticalInfoModel !== 'undefined') ? tacticalInfoModel : null;
-        var _idm = {};
-        if (_tm && _tm.players) {
-          for (var _pi2 = 0; _pi2 < _tm.players.length; _pi2++) {
-            var _tp = _tm.players[_pi2], _ac = _tp.account || {};
-            _idm[_tp.playerId] = {
-              name: _tp.userName || (_ac.uniqueName || ''),
-              clanTag: _ac.clanTag || '',
-              role: _tp.role, vehicleName: _tp.vehicleName, vehicleId: _tp.vehicleId,
-              agentName: _tp.agentName, level: _tp.level,
-              isBot: _tp.isBot ? 1 : 0, isPlayer: _tp.isPlayer ? 1 : 0,
-              assists: _tp.assists, killConfirmed: _tp.killConfirmed,
-              killDenied: _tp.killDenied, kills: _tp.kills, rolePoints: _tp.rolePoints
-            };
-          }
-        }
-        var _players = [], _teamScores = {};
-        for (var _t = 0; _t < _common.teams.length; _t++) {
-          var _te = _common.teams[_t], _tps = _te.players || {}, _teamNo = null;
-          for (var _pid in _tps) {
-            var _pr = _tps[_pid], _st = _pr.stats || {}, _piInfo = _pr.playerInfo || {};
-            _teamNo = _piInfo.team;
-            var _idn = _idm[_pid] || {};
-            var _rec = {};
-            for (var _k in _st) _rec[_k] = _num(_st[_k]);        // FULL stats object
-            _rec.playerId      = parseInt(_pid);
-            _rec.team          = _teamNo;
-            _rec.name          = _idn.name || '';
-            _rec.clanTag       = _idn.clanTag || '';
-            _rec.role          = _idn.role || null;
-            _rec.vehicleName   = _idn.vehicleName || null;
-            _rec.vehicleId     = _idn.vehicleId != null ? _idn.vehicleId : null;
-            _rec.agentName     = _idn.agentName || null;
-            _rec.level         = _idn.level != null ? _idn.level : null;
-            _rec.isBot         = _idn.isBot != null ? _idn.isBot : 0;
-            _rec.isPlayer      = _idn.isPlayer != null ? _idn.isPlayer : 0;
-            _rec.assists       = _idn.assists != null ? _idn.assists : (_st.killAssist != null ? _st.killAssist : null);
-            _rec.killConfirmed = _idn.killConfirmed != null ? _idn.killConfirmed : (_st.killConfirmed != null ? _st.killConfirmed : null);
-            _rec.killDenied    = _idn.killDenied != null ? _idn.killDenied : (_st.killDenied != null ? _st.killDenied : null);
-            _rec.kills         = _st.frags != null ? _st.frags : (_idn.kills != null ? _idn.kills : null);
-            _rec.rolePoints    = _idn.rolePoints != null ? _idn.rolePoints : (_st.rolePoints != null ? _st.rolePoints : null);
-            _players.push(_rec);
-          }
-          if (_teamNo != null) _teamScores[_teamNo] = _num(_te.score);
-        }
+      var _pbs = (typeof postbattleScene !== 'undefined') ? postbattleScene : null;
+      var _tm = (typeof tacticalInfoModel !== 'undefined') ? tacticalInfoModel : null;
+      var _pm = __fusePmNormalize(_pbs && _pbs.results, _pbs && _pbs.topPlayers, _tm);
+      if (_pm) {
         r.pm_available    = 1;
-        r.pm_game_mode    = _common.gameMode;
-        r.pm_map_slug     = (String(_common.battleWorld || '').match(/\/worlds\/(.+?)\.world/) || [])[1] || null;
-        r.pm_started_at   = _num(_common.startedAt);
-        r.pm_finished_at  = _num(_common.finishedAt);
-        r.pm_my_player_id = _pb.results.battlePlayerId != null ? _num(_pb.results.battlePlayerId) : null;
-        r.pm_my_team      = (_tm && _tm.currentPlayer) ? _tm.currentPlayer.team : null;
-        r.pm_team_scores  = _teamScores;
-        r.pm_players      = _players;
+        r.pm_game_mode    = _pm.gameMode;
+        r.pm_map_slug     = _pm.mapSlug;
+        r.pm_started_at   = _pm.startedAt;
+        r.pm_finished_at  = _pm.finishedAt;
+        r.pm_battle_id    = _pm.battleId;
+        r.pm_game_source  = _pm.gameSource;
+        r.pm_my_player_id = _pm.myPlayerId;
+        r.pm_my_team      = _pm.myTeam;
+        r.pm_team_scores  = _pm.teamScores;
+        r.pm_fingerprint  = String(_pm.battleId) + ':' + String(_pm.finishedAt);
+        r.pm_players      = _pm.players.map(function(p) {
+          var o = {};
+          for (var k in (p.stats || {})) o[k] = p.stats[k];
+          // playerId is the battle's slot number; profileId is the account, and
+          // the only one of the two worth keeping past this battle.
+          o.playerId = p.playerId; o.profileId = p.profileId; o.team = p.team;
+          o.name = p.name; o.uniqueName = p.uniqueName; o.clanTag = p.clanTag;
+          o.platform = p.platform; o.inputScheme = p.inputScheme;
+          o.role = p.role; o.vehicleName = p.vehicleName; o.vehicleId = p.vehicleId;
+          o.agentName = p.agentName; o.frontmanId = p.frontmanId; o.level = p.level;
+          o.place = p.place;
+          o.isBot = p.isBot; o.isPlayer = p.isPlayer;
+          o.kills = p.kills; o.deaths = p.deaths; o.assists = p.assists;
+          o.damage = p.damage; o.rolePoints = p.rolePoints;
+          o.killConfirmed = p.killConfirmed; o.killDenied = p.killDenied;
+          o.currenciesEarned = p.currenciesEarned;
+          // {code: amount} for the battle's XP, level and skill-point rewards.
+          o.entitlementsEarned = p.entitlementsEarned;
+          // Which loadouts were played, ids only: the id is agent.vehicle.slot,
+          // so vehicleId and frontmanId alone cannot name the slot. Per-loadout
+          // stats stay in pm_result - this view is re-sent on every poll.
+          o.loadouts = (p.loadouts || []).map(function(l) {
+            return { loadoutId: l && l.loadoutId != null ? String(l.loadoutId) : null,
+                     vehicleId: l && l.vehicleId != null ? l.vehicleId : null,
+                     frontmanId: l && l.frontmanId != null ? l.frontmanId : null };
+          });
+          return o;
+        });
+        var _wantPm = (typeof __FUSE_WANT_PM === 'undefined') ? true : !!__FUSE_WANT_PM;
+        if (_wantPm) r.pm_result = _pm;
       } else {
         r.pm_available = 0;
       }

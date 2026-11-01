@@ -9,8 +9,9 @@ import { logger } from "../log.js";
 import { DATA_DIR } from "../utils/paths.js";
 
 const STORAGE_DIR = path.join(DATA_DIR, "storage");
-const MAX_DB_BYTES = 50 * 1024 * 1024;
-const MAX_DOC_BYTES = 1024 * 1024;
+
+const MAX_DB_BYTES = 250 * 1024 * 1024;
+const MAX_DOC_BYTES = 10 * 1024 * 1024;
 const MAX_ROWS = 1000;
 const MAX_ID_LENGTH = 256;
 const COLLECTION_RE = /^[A-Za-z0-9_.-]{1,64}$/;
@@ -31,6 +32,8 @@ function loadSqlite(): Promise<typeof Sqlite | null> {
 
 export class StorageHub {
   private dbs = new Map<string, Promise<Sqlite.DatabaseSync>>();
+  /** The same handles once resolved, so `usage()` can read them without awaiting. */
+  private opened = new Map<string, Sqlite.DatabaseSync>();
 
   async handle(pluginId: string, op: string, collection: string, args: unknown[]): Promise<unknown> {
     if (!COLLECTION_RE.test(collection)) {
@@ -85,11 +88,40 @@ export class StorageHub {
     }
   }
 
+  /**
+   * Bytes this plugin's database occupies, and the ceiling it is measured
+   * against. Read from the open handle when there is one, so it costs nothing;
+   * otherwise from the file, so a stopped plugin still reports.
+   *
+   * Returns null when the plugin has never written anything.
+   */
+  usage(pluginId: string): { bytes: number; limit: number } | null {
+    const pending = this.dbs.get(pluginId);
+    if (!pending) {
+      try {
+        const file = path.join(STORAGE_DIR, `${encodeURIComponent(pluginId)}.db`);
+        return { bytes: fs.statSync(file).size, limit: MAX_DB_BYTES };
+      } catch {
+        return null;
+      }
+    }
+    const db = this.opened.get(pluginId);
+    if (!db) return null;
+    try {
+      const pages = Number(db.prepare("PRAGMA page_count").get()?.page_count ?? 0);
+      const pageSize = Number(db.prepare("PRAGMA page_size").get()?.page_size ?? 4096);
+      return { bytes: pages * pageSize, limit: MAX_DB_BYTES };
+    } catch {
+      return null;
+    }
+  }
+
   /** The plugin stopped; its file stays on disk. */
   close(pluginId: string): void {
     const pending = this.dbs.get(pluginId);
     if (!pending) return;
     this.dbs.delete(pluginId);
+    this.opened.delete(pluginId);
     void pending.then(
       (db) => {
         try {
@@ -118,6 +150,7 @@ export class StorageHub {
             "CREATE TABLE IF NOT EXISTS docs (collection TEXT NOT NULL, id TEXT NOT NULL, data TEXT NOT NULL, " +
             "updated_at INTEGER NOT NULL, PRIMARY KEY (collection, id)) WITHOUT ROWID;",
         );
+        this.opened.set(pluginId, db);
         return db;
       });
       pending.catch(() => this.dbs.delete(pluginId));

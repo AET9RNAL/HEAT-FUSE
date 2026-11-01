@@ -8,6 +8,7 @@
   "core": false,
   "runtime": "node",
   "dependencies": ["accessors", "fuse_ui", "canvas_ui"],
+  "min_host_version": "5.0.0",
   "permissions": {
     "audio": { "reason": "Plays a sound when Wounded Fury activates and when 10 seconds are left." }
   },
@@ -16,7 +17,8 @@
     "vue_overlay_pos_fp": null,
     "vue_width": 225,
     "vue_height": 44,
-    "show_in": ["battle"],
+    "show_in": ["alive"],
+    "show_in_hangar": [],
     "threshold_damage": 4000,
     "duration_s": 30,
     "cooldown_s": 40,

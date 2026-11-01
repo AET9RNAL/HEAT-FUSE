@@ -36,6 +36,14 @@ export const CONFIGS_DIR: string = path.join(DATA_DIR, "configs");
 export const LOGS_DIR: string = path.join(DATA_DIR, "logs");
 
 export const PLUGINS_CACHE_DIR: string = path.join(DATA_DIR, "plugins-cache");
+/** One folder per plugin that holds the `files` permission. */
+export const PLUGIN_FILES_DIR: string = path.join(DATA_DIR, "plugin-files");
+
+/** HEAT writes its replays here, whichever platform installed it. Null off Windows. */
+export const GAME_REPLAYS_DIR: string | null =
+  process.platform === "win32" && process.env.LOCALAPPDATA
+    ? path.join(process.env.LOCALAPPDATA, ".broengine", "coldwar", "replays")
+    : null;
 
 
 export const DEV_PLUGINS_SRC: string = process.env.FUSE_DEV_PLUGINS_SRC

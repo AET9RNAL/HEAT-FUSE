@@ -34,8 +34,28 @@ interface Accessors {
   readonly connected: boolean;
 }
 
-const BATTLE_ACTIVE = 8;
-const MS_FINISH = "ActiveFinish";
+/** Accessors' `scene` values where the vehicle can drive: cruise holds W only there. */
+const DRIVE_SCENES = new Set(["alive", "map"]);
+/** Accessors' `scene_tags` offered in the two Show in controls. */
+const SHOW_IN_OPTIONS = [
+  { value: "alive", label: "Alive", tooltip: "While you drive, aim or use an ability." },
+  { value: "map", label: "Map", tooltip: "While the tactical map is open." },
+  { value: "dead", label: "Death screen", tooltip: "From the fatal hit until the deploy screen." },
+  { value: "deploy", label: "Deploy", tooltip: "On the deploy screen and during the spawn drop." },
+];
+const HANGAR_OPTIONS = [
+  { value: "hangar.base", label: "Base camp", tooltip: "The hangar's main screen." },
+  { value: "hangar.select", label: "Select", tooltip: "Agent and vehicle selection." },
+  { value: "hangar.agent", label: "Agent", tooltip: "Agent details, skills, cosmetics and progression." },
+  { value: "hangar.vehicle", label: "Vehicle", tooltip: "Vehicle overview, workshop, equipment, cosmetics and progression." },
+  { value: "hangar.missions", label: "Missions", tooltip: "Missions and operations." },
+  { value: "hangar.modes", label: "Modes", tooltip: "Game mode selection." },
+  { value: "hangar.career", label: "Career", tooltip: "Career, stats, friends and clans." },
+  { value: "hangar.results", label: "Results", tooltip: "Results of the last battle." },
+  { value: "hangar.settings", label: "Settings", tooltip: "The settings screens." },
+  { value: "queue", label: "In queue", tooltip: "While matchmaking runs, on any hangar screen." },
+];
+const DEFAULT_SHOW_IN = ["alive", "map"];
 
 export class CruiseControlPlugin extends FusePlugin {
   static override requiresCalibration = true;
@@ -49,9 +69,37 @@ export class CruiseControlPlugin extends FusePlugin {
   private handoff = false; // off, but W left down for the player's own hold
   private inFocus = true;
   private toggleCombo = "c";
+  private showIn = new Set(DEFAULT_SHOW_IN);
+  private lastVisible: boolean | null = null;
 
   private sections(): InspectorSection[] {
-    return [renderSizeSection("cc")];
+    return [
+      {
+        id: "cc.display",
+        label: "Display",
+        description: "Where the overlay shows. Cruise itself works only while you drive.",
+        order: 10,
+        controls: [
+          {
+            type: "buttons",
+            id: "show_in",
+            key: "show_in",
+            mode: "multi",
+            label: "Show in match",
+            options: SHOW_IN_OPTIONS,
+          },
+          {
+            type: "buttons",
+            id: "show_in_hangar",
+            key: "show_in_hangar",
+            mode: "multi",
+            label: "Show in hangar",
+            options: HANGAR_OPTIONS,
+          },
+        ],
+      },
+      renderSizeSection("cc"),
+    ];
   }
 
   setup(ctx: FuseContext): void {
@@ -61,7 +109,9 @@ export class CruiseControlPlugin extends FusePlugin {
     this.acc = ctx.services.get<Accessors>("accessors");
     if (!this.acc) ctx.logger.error("cruise_control: 'accessors' service not available - plugin inactive");
 
-    ctx.config.defaults({ overlay_pos: null, anim_width: 300, anim_height: 300 }).load();
+    ctx.config
+      .defaults({ overlay_pos: null, anim_width: 300, anim_height: 300, show_in: DEFAULT_SHOW_IN, show_in_hangar: [] })
+      .load();
 
     // One declaration for both surfaces: the App panel and the stage inspector.
     const sections = this.sections();
@@ -100,10 +150,29 @@ export class CruiseControlPlugin extends FusePlugin {
     this.ov?.setBool("isCruiseOn", on);
   }
 
-  /** battle_hud only exists in battle; state 8 is the live phase. */
+  private get scene(): string {
+    const scene = this.acc?.read("scene");
+    return typeof scene === "string" ? scene : "";
+  }
+
   private get inBattle(): boolean {
-    if (!this.acc?.connected) return false;
-    return this.acc.read("battle_state") === BATTLE_ACTIVE && this.acc.read("match_state") !== MS_FINISH;
+    return DRIVE_SCENES.has(this.scene);
+  }
+
+  /** Accessors' scene tags against both Show in picks. */
+  private applyVisibility(): void {
+    if (this.ctx.state === "calibrate") return;
+    const want = new Set<string>();
+    for (const key of ["show_in", "show_in_hangar"]) {
+      const raw = this.ctx.config.get<unknown>(key, key === "show_in" ? DEFAULT_SHOW_IN : []);
+      if (Array.isArray(raw)) for (const v of raw) want.add(String(v));
+    }
+    this.showIn = want;
+    const tags = this.acc?.read("scene_tags");
+    const visible = this.inFocus && Array.isArray(tags) && tags.some((tag) => want.has(String(tag)));
+    if (visible === this.lastVisible) return;
+    this.lastVisible = visible;
+    this.ov?.setVisible(visible);
   }
 
   private onToggle(): void {
@@ -133,10 +202,13 @@ export class CruiseControlPlugin extends FusePlugin {
   override enterLocked(): void {
     this.ov?.setBool("isSetupComplete", true);
     this.ov?.setBool("isCruiseOn", false);
+    this.lastVisible = null;
+    this.applyVisibility();
   }
 
   override tick(_dt: number): void {
     this.ctx.config.checkReload();
+    this.applyVisibility();
     if (!this.kbd) return;
     if (this.handoff) {
       // Cruise is off but W stays down under the player's own hold - end it on their key-up.
@@ -157,7 +229,8 @@ export class CruiseControlPlugin extends FusePlugin {
     this.inFocus = visible;
     if (this.ctx.state === "calibrate") return;
     if (!visible) this.hardRelease();
-    this.ov?.setVisible(visible);
+    this.lastVisible = null;
+    this.applyVisibility();
   }
 
   override teardown(): void {

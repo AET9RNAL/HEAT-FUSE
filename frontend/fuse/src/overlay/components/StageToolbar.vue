@@ -3,13 +3,14 @@ import { computed, ref } from "vue";
 import { AnimatePresence, motion } from "motion-v";
 import StagePanel from "./StagePanel.vue";
 import StageNumberField from "./StageNumberField.vue";
-import Icons from "../../components/Icons.vue";
+import Icons from "../../components/ui/Icons.vue";
 import { Dynamics } from "../../composables/useMotion";
 import StageSlider from "../inspector/controls/StageSlider.vue";
 import { vTip } from "../inspector/tooltip";
 import { canRedo, canUndo, redo, undo } from "../history";
 import { calibStage, formatCombo, hostHotkeys, overlays, sendHostRequest, stagePlugins, viewport } from "../overlayClient";
 import { dim, grid, pluginListOpen, selectedId, type SnapMode } from "../stageState";
+import { replayStageTour } from "../stageTour";
 
 const SNAP_MODES: { value: SnapMode; label: string; tip: string }[] = [
   { value: "smart", label: "Smart", tip: "Snap to other overlays' edges and centres" },
@@ -52,7 +53,7 @@ const doneTip = computed(() => {
 </script>
 
 <template>
-  <div class="stage-toolbar stage-ui">
+  <div v-ftue="'stage-toolbar'" class="stage-toolbar stage-ui">
     <StagePanel class="bar" :cut="12" blur>
       <div class="bar-inner">
         <motion.button
@@ -162,6 +163,18 @@ const doneTip = computed(() => {
         <span class="sep"></span>
 
         <motion.button
+          v-ftue="'stage-help'"
+          v-tip="'Show the stage tour'"
+          type="button"
+          class="bar-btn"
+          :while-press="{ scale: 0.95 }"
+          :transition="Dynamics.quick"
+          @click="replayStageTour"
+        >
+          <Icons kind="about" size="normal" color="var(--ico)" />
+        </motion.button>
+
+        <motion.button
           v-tip="'Plugins on this stage'"
           type="button"
           class="bar-btn wide"
@@ -177,6 +190,7 @@ const doneTip = computed(() => {
         </motion.button>
 
         <motion.button
+          v-ftue="'stage-done'"
           v-tip="doneTip"
           type="button"
           class="bar-btn wide done"

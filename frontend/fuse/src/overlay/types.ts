@@ -13,7 +13,8 @@ export interface OverlayRect {
 export interface OverlayDescriptor {
   overlayId: string;
   pluginId: string;
-  kind: "rive" | "vue";
+  /** `demo`: a stage-only frame for the tour, drawn by the stage itself. */
+  kind: "rive" | "vue" | "demo";
   assetUrl: string;
   size: { w: number; h: number };
   artboard: string | null;
@@ -51,6 +52,23 @@ export interface PluginMetrics {
   ping: number;
   /** host: measured by the runtime. plugin: reported by the plugin itself. */
   source: "host" | "plugin";
+  /** Bytes the plugin's own database holds; absent when it stores nothing. */
+  storage?: number;
+  /** The ceiling `storage` is measured against. */
+  storageLimit?: number;
+}
+
+/** Mirrors `StageMetrics` in runtime/src/host/stageMeter.ts. */
+export interface StageProcessMetrics {
+  /** Percent of all cores; null until two samples. */
+  cpu: number | null;
+  /** Private working set, bytes. */
+  ram: number;
+}
+
+export interface StageMetrics {
+  renderer: StageProcessMetrics | null;
+  gpuProcess: (StageProcessMetrics & { gpu: number | null; engine: string | null }) | null;
 }
 
 /** One row of the stage's plugin list (read-only mirror of the host's roster). */

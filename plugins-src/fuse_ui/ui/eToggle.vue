@@ -1,121 +1,101 @@
 <script setup lang="ts">
-import { Rive, Layout, Fit, Alignment } from "@rive-app/canvas";
-import { onMounted, onUnmounted, ref, watch } from 'vue'
-// Asset imports return their served URL at runtime (loader handleModule),
-// mirroring Vite's `?url`. No host helper or plugin-id needed.
-import riveFile from './eToggle.riv'
+// had to drop Rive cuz every instance consumes WebGL context
+import { motion } from "motion-v";
+import Icons from "./Icons.vue";
+import { Dynamics } from "./dynamics.mjs";
 
-interface Props {
-    width?: number
-    height?: number
-    modelValue?: boolean
-}
+withDefaults(defineProps<{ modelValue: boolean; label?: string; disabled?: boolean }>(), {
+  label: "",
+  disabled: false,
+});
 
-const props = withDefaults(defineProps<Props>(), {
-    width: 64,
-    height: 32,
-    modelValue: false
-})
-
-const emit = defineEmits<{
-    'update:modelValue': [value: boolean]
-}>()
-
-const riveCanvas = ref<HTMLCanvasElement | null>(null)
-let riveInstance: Rive | null = null
-let isOnProperty: any = null
-let lastIsOnValue: boolean = false
-let isRiveReady = false
-let isSyncing = false  // Prevent feedback loops
-
-// Sync prop value to Rive
-function syncToRive(value: boolean) {
-    if (!isOnProperty || isOnProperty.value === value) return
-    isSyncing = true
-    isOnProperty.value = value
-    lastIsOnValue = value
-    // Let Rive state machine settle before allowing polling to emit
-    setTimeout(() => { isSyncing = false }, 100)
-}
-
-// Watch for external v-model changes
-watch(() => props.modelValue, (newValue) => {
-    if (isRiveReady) {
-        syncToRive(newValue)
-    }
-})
-
-// Poll ViewModel for changes (Rive doesn't have onChange callback for VM properties)
-function startPolling() {
-    const checkValue = () => {
-        if (isOnProperty && !isSyncing) {
-            const currentValue = isOnProperty.value
-            if (currentValue !== lastIsOnValue) {
-                lastIsOnValue = currentValue
-                emit('update:modelValue', currentValue)
-            }
-        }
-        if (riveInstance) requestAnimationFrame(checkValue)
-    }
-    requestAnimationFrame(checkValue)
-}
-
-onMounted(() => {
-    if (riveCanvas.value) {
-        riveInstance = new Rive({
-            src: riveFile,
-            artboard: "TOGGLEBOARD",
-            canvas: riveCanvas.value,
-            stateMachines: "toggleEngine",
-            autoplay: true,
-            autoBind: true,
-            layout: new Layout({
-                fit: Fit.Contain,
-                alignment: Alignment.Center
-            }),
-            onLoad: () => {
-                riveInstance?.resizeDrawingSurfaceToCanvas()
-
-                // Access ViewModel's isOn property
-                const vmi = (riveInstance as any)?.viewModelInstance
-                if (vmi) {
-                    isOnProperty = vmi.boolean("isOn")
-                    if (isOnProperty) {
-                        // Delay initial sync to let Rive state machine fully initialize
-                        setTimeout(() => {
-                            isOnProperty.value = props.modelValue
-                            lastIsOnValue = props.modelValue
-                            isRiveReady = true
-                            startPolling()
-                        }, 50)
-                    }
-                }
-            },
-            onLoadError: () => {
-                console.error("Failed to load: " + riveFile)
-            },
-        })
-    }
-})
-
-onUnmounted(() => {
-    riveInstance?.cleanup()
-    riveInstance = null
-})
+const emit = defineEmits<{ "update:modelValue": [value: boolean] }>();
 </script>
 
 <template>
-    <canvas
-        ref="riveCanvas"
-        :width="props.width"
-        :height="props.height"
-        class="rive-canvas"
-    ></canvas>
+  <button
+    type="button"
+    class="stage-toggle"
+    :class="{ on: modelValue, disabled }"
+    :disabled="disabled"
+    @click="emit('update:modelValue', !modelValue)"
+  >
+    <motion.span
+      class="box"
+      :animate="{
+        backgroundColor: modelValue ? 'var(--accent-200)' : 'rgba(0,0,0,0.6)',
+        borderColor: modelValue ? 'var(--accent-200)' : 'var(--base-600)',
+      }"
+      :transition="Dynamics.quick"
+    >
+      <motion.span
+        class="check"
+        :initial="false"
+        :animate="{ opacity: modelValue ? 1 : 0, scale: modelValue ? 1 : 0.5 }"
+        :transition="Dynamics.snappy"
+      >
+        <Icons kind="checkmark" size="small" color="var(--base-1000)" />
+      </motion.span>
+    </motion.span>
+    <span v-if="label" class="label">{{ label }}</span>
+  </button>
 </template>
 
 <style scoped>
-.rive-canvas {
-    cursor: pointer;
-    touch-action: none;
+.stage-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  user-select: none;
+}
+
+.box {
+  position: relative;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  box-sizing: border-box;
+  border: 1px solid var(--base-600);
+  corner-shape: bevel;
+  border-radius: 5px 0 5px 0;
+}
+
+.check {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+}
+
+.stage-toggle:hover:not(.disabled) .box {
+  border-color: var(--base-200);
+}
+
+.stage-toggle.on:hover:not(.disabled) .box {
+  border-color: var(--accent-200);
+}
+
+.label {
+  font-family: var(--font-primary);
+  font-size: var(--main-font-size-4);
+  font-weight: var(--font-weight-3);
+  color: var(--text-muted);
+  line-height: 1;
+}
+
+.stage-toggle:hover:not(.disabled) .label {
+  color: var(--text-main);
+}
+
+.stage-toggle.disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 </style>

@@ -52,7 +52,9 @@
       "fuseDisabledTitle": "Incomplete Game Configuration",
       "fuseDisabledMessage": "FUSE Configuration Not Applied",
       "noGamePathTitle": "Game Path Required",
-      "noGamePathMessage": "Select a valid game directory before launching."
+      "noGamePathMessage": "Select a valid game directory before launching.",
+      "portMismatchTitle": "Wrong Game Debugger Port",
+      "portMismatchMessage": "The game uses port {filePort}, FUSE expects {appPort}. Apply the game configuration again."
     }
   },
   "appsettings": {
@@ -69,8 +71,25 @@
       "general": "General",
       "qol": "Quality Of Life",
       "audio": "Audio",
+      "advanced": "Advanced",
       "privacy": "Privacy & Telemetry",
+      "language": "Language",
       "keybinds": "{brandName} Keybinds"
+    },
+    "language": {
+      "label": "App Language",
+      "desc": "Plugins that support it use this language too"
+    },
+    "advanced": {
+      "cdpPort": "Game CDP Port",
+      "cdpPortDesc": "The port {brandName} uses to interact with the game. Change it only if another program holds it.",
+      "cdpPortMismatch": "The game configuration still says port {port}. Turn the game configuration off and on to apply this port."
+    },
+    "gameConfig": {
+      "changedTitle": "Game Configuration Changed",
+      "nowEnabled": "The game CDP is on.",
+      "nowDisabled": "The game CDP is off.",
+      "portNow": "The game now uses port {port}."
     },
     "hotkeys": {
       "reloadDesc": "Reload All Active Plugins",
@@ -101,7 +120,8 @@
     "qol": {
       "title": "Quality of Life",
       "startWithGame": "Start FUSE With Game",
-      "hideOnFocusLoss": "Hide Overlays When Game Is Not In Focus"
+      "hideOnFocusLoss": "Hide Overlays When Game Is Not In Focus",
+      "stagePerfWidget": "Show Stage Performance On Stage"
     },
     "audio": {
       "title": "Audio",
@@ -139,6 +159,11 @@
     "wip": "WORK IN PROGRESS",
     "launcherVersion": "LAUNCHER VERSION",
     "whatsNew": "What's New",
+    "tours": "TOURS",
+    "tourLauncher": "Launcher",
+    "tourLauncherTip": "Shows the launcher tour now.",
+    "tourStage": "Stage",
+    "tourStageTip": "Shows the stage tour the next time the stage is in calibrate mode.",
     "disclaimer": "Heat Fuse is an unofficial community project and is not affiliated with, endorsed by, or sponsored by Wargaming.",
     "supportLinks": "SUPPORT & LINKS",
     "linkGithub": "Project GitHub",
@@ -278,6 +303,7 @@
     "forgot": "FORGOT?",
     "back": "Back",
     "backToLogIn": "Back to log in",
+    "backToSignUp": "Back to sign up",
     "welcomeToFuse": "Welcome to FUSE",
     "createAccount": "Create your account",
     "recoveryTitleLine1": "Momma always said",
@@ -373,6 +399,10 @@
     "dirSelector": {
       "placeholder": "Select directory..."
     },
+    "select": {
+      "search": "Search",
+      "noMatches": "No matches"
+    },
     "pluginList": {
       "columnPlugin": "Plugin",
       "columnVersion": "Version",
@@ -452,5 +482,142 @@
     "applying": "Applying configuration...",
     "applyFailed": "Couldn't apply the configuration",
     "retry": "Retry"
+  },
+  "ftue": {
+    "skip": "SKIP",
+    "start": "START",
+    "back": "BACK",
+    "next": "NEXT",
+    "done": "DONE",
+    "skipHold1": "HOLD",
+    "skipHold2": "ARE YOU SURE?",
+    "skipHold3": "FINE",
+    "sample": "DEMO"
+  },
+  "apptour": {
+    "welcome": {
+      "title": "Welcome to FUSE",
+      "body": "FUSE is a mod runtime for WoT:HEAT. Mods here are called \"Plugins\". They change the HUD, add overlays and give you new tools. This tour shows the main parts of the launcher in about two minutes."
+    },
+    "nav": {
+      "title": "Navigation",
+      "body": "Use the sidebar to go to Home, Discover, Settings and About. Your account is at the bottom."
+    },
+    "plugins": {
+      "title": "Your plugins",
+      "body": "Each plugin is a self-contained piece of code with its own files and settings. Turn a plugin on or off here. Open the menu of a plugin (three dots icon) to change its configuration when FUSE is running."
+    },
+    "pluginTypes": {
+      "title": "Plugin types",
+      "body": "Plugins add overlays, change the in-game UI, or give you tools and data. Libraries give shared code to other plugins, so those plugins depend on them. For example, HEATStats needs Accessors, FUSE UI and Canvas UI. If a dependency is not installed, FUSE skips the plugin and tells you."
+    },
+    "search": {
+      "title": "Find plugins",
+      "body": "Search your installed plugins by name. Discover opens the marketplace, where you get new plugins."
+    },
+    "views": {
+      "title": "Views",
+      "body": "Switch between your plugins, the FUSE files and the live console log."
+    },
+    "discover": {
+      "title": "Marketplace",
+      "body": "FUSE is a community project. People from the community make the plugins in the marketplace, and each author maintains their own plugins. Browse shows all published plugins."
+    },
+    "discoverTools": {
+      "title": "Search the marketplace",
+      "body": "Search by name, apply search tags and order filters. Open a plugin page to see its details, versions and authors description. If a plugin requires dependencies, these are usually listed in the description."
+    },
+    "account": {
+      "title": "Account",
+      "body": "You need an account to download plugins. Sign in or create an account here. With an account, the My Plugins tab in Discover also lets you publish your own plugins."
+    },
+    "settings": {
+      "title": "Core settings",
+      "body": "This is the most important part of the setup. FUSE needs these three settings before it can run in the game."
+    },
+    "platform": {
+      "title": "Platform",
+      "body": "Select the client that you play with: Steam or Wargaming Game Center."
+    },
+    "gameDir": {
+      "title": "Game folder",
+      "body": "Select the folder where the game is installed. FUSE reads the game files and applies its configuration in this folder."
+    },
+    "gameConfig": {
+      "title": "Game configuration",
+      "body": "Apply the FUSE configuration to the game. Game updates usually reset this configuration, so apply it again after each game update. The status shows when the configuration is missing."
+    },
+    "keybinds": {
+      "title": "{brandName} keybinds",
+      "body": "These keys work while FUSE runs. By default, Ctrl+L switches between calibrate and lock. In calibrate mode, you move and resize the overlays. Lock keeps them in place. Ctrl+I turns on interactive mode, where overlays take your clicks and keys. Ctrl+R reloads the active plugins, and Ctrl+P shuts FUSE down. Change any key here."
+    },
+    "launch": {
+      "title": "Launch",
+      "body": "When the setup is complete, Launch starts FUSE and loads your enabled plugins. The panel also shows the FUSE, launcher and game versions."
+    },
+    "about": {
+      "title": "About",
+      "body": "See the launcher version and what is new. Start this tour again from here at any time."
+    }
+  },
+  "stagetour": {
+    "unlock": {
+      "title": "Stage tour",
+      "body": "FUSE locked your overlays, so your clicks go to the game. Press {lock} to open calibrate mode and start the tour. To skip the tour after that, hold Esc."
+    },
+    "welcome": {
+      "title": "Welcome to FUSE Stage",
+      "body": "FUSE draws overlays here, on top of the game. You are in calibrate mode: put each overlay where you want it on your screen. This tour uses a DEMO overlay, and FUSE removes it at the end."
+    },
+    "overlay": {
+      "title": "Overlays",
+      "body": "Each frame is one overlay. Drag the DEMO frame to move it. Pull a corner to change its size. Frames snap to each other, and Alt stops the snap while you drag."
+    },
+    "info": {
+      "title": "Info tab",
+      "body": "The tab above each frame shows the plugin name and its calibration stage. Because each plugin is it's own process, FUSE can measure and display the RAM, memory, GPU and CPU usage. INTERACTIVE badge means an overlay supports interactive mode."
+    },
+    "perms": {
+      "title": "FUSE Permissions model",
+      "body": "Each plugin lists the permissions it needs and why. Normal ones are on by default. Dangerous ones, such as networking, wait for your answer on a modal card. Click the lock to see them. In a real plugin, click one to change your answer. If a plugin lacks a permission, it may not work as expected."
+    },
+    "inspector": {
+      "title": "Inspector",
+      "body": "Set the exact position, size, rotation and opacity of the selected frame here. Below these, a plugin can add its own settings. They are the same settings as in the App."
+    },
+    "toolbar": {
+      "title": "Toolbar",
+      "body": "Show the grid and set its step. Choose how frames snap: to other frames, to the grid, or not at all. Undo and redo with Ctrl+Z and Ctrl+Y. Dim the game to see the frames better."
+    },
+    "plugins": {
+      "title": "Plugins on the stage",
+      "body": "This list shows each plugin, its state and its overlays. Click an overlay in the list to select its frame, it will be highlighted and the inspector will open for it."
+    },
+    "done": {
+      "title": "Locking overlays",
+      "body": "Done, or {lock}, locks the overlays and closes calibrate mode. You can't interect or click at locked overlays. Some plugins need more than one calibration stage. Then this button says Next until the last stage."
+    },
+    "interactive": {
+      "title": "Interactive mode",
+      "body": "Some overlays have buttons or fields. In interactive mode, the frames take your clicks. Press {interactive} now to try it."
+    },
+    "click": {
+      "title": "Try it",
+      "body": "Click the button on the DEMO frame. The overlay gets the click."
+    },
+    "leave": {
+      "title": "Back to the game",
+      "body": "Press {interactive} to leave interactive mode. The overlays then lock, and become transparent to clicks. Press {lock} to come back to calibrate mode and finish the tour."
+    },
+    "help": {
+      "title": "Tour",
+      "body": "Click here to see this tour again at any time."
+    },
+    "demo": {
+      "name": "DEMO",
+      "count": "count is {n}",
+      "networkReason": "Gets sample data for the demo.",
+      "storageReason": "Keeps the click count."
+    }
   }
 }

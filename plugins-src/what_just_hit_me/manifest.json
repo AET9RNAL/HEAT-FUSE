@@ -1,0 +1,23 @@
+{
+  "plugin_id": "what_just_hit_me",
+  "name": "What Just Hit Me",
+  "version": "1.0.0",
+  "author": "AETERNAL",
+  "description": "Informative damage log",
+  "entry": "plugin:WhatJustHitMePlugin",
+  "runtime": "node",
+  "dependencies": ["accessors", "fuse_ui"],
+  "min_host_version": "5.0.0",
+  "permissions": {
+    "language": { "reason": "Shows WJHM in the FUSE App's language until you pick one." }
+  },
+  "hotkeys": {},
+  "default_config": {
+    "vue_overlay_pos": null,
+    "vue_width": 350,
+    "vue_height": 200,
+    "max_rows": 3,
+    "show_self": true,
+    "locale": ""
+  }
+}

@@ -12,9 +12,55 @@ interface Accessors {
   readonly connectedHangar: boolean;
 }
 
+/** The part of Accessors' `damage_log` read this plugin uses. */
+interface DamageLogRead {
+  match?: number;
+  /** Counts up at each respawn, 0-based inside the match. */
+  life?: number;
+  rev?: number;
+  entries?: Array<{ id?: number; value?: number }>;
+}
 
-const BATTLE_ACTIVE = 8;
-const MS_FINISH = "ActiveFinish";
+/** Accessors' `scene` values that are part of a running match. */
+const MATCH_SCENES = new Set(["alive", "map", "dead", "deploy", "spawning"]);
+
+/**
+ * `match_state` values that end a round inside one match. Control shows
+ * RoundResult for 6 s, then Countdown for 10 s, then the next Active phase.
+ * Countdown also runs at the match start, where a reset costs nothing.
+ */
+const ROUND_EDGE_STATES = new Set(["RoundResult", "Countdown"]);
+
+/** Engine camera slots for the round-result screen and the drop into the next round. */
+const ROUND_EDGE_CAMERAS = new Set(["RoundResultCamera", "RebornCamera"]);
+
+/** The two round signals land about 2 s apart, and the whole edge lasts about 16 s. */
+const ROUND_EDGE_DEBOUNCE_MS = 20_000;
+/** Accessors' `scene_tags` offered in the two Show in controls. */
+const SHOW_IN_OPTIONS = [
+  { value: "alive", label: "Alive", tooltip: "Live charge, buff and cooldown while driving the vehicle." },
+  { value: "map", label: "Map", tooltip: "While the tactical map is open." },
+  { value: "dead", label: "Death screen", tooltip: "From the fatal hit until the deploy screen." },
+  { value: "deploy", label: "Deploy", tooltip: "On the deploy screen and during the spawn drop." },
+];
+const HANGAR_OPTIONS = [
+  { value: "hangar.base", label: "Base camp", tooltip: "The hangar's main screen." },
+  { value: "hangar.select", label: "Select", tooltip: "Agent and vehicle selection." },
+  { value: "hangar.agent", label: "Agent", tooltip: "Agent details, skills, cosmetics and progression." },
+  { value: "hangar.vehicle", label: "Vehicle", tooltip: "Vehicle overview, workshop, equipment, cosmetics and progression." },
+  { value: "hangar.missions", label: "Missions", tooltip: "Missions and operations." },
+  { value: "hangar.modes", label: "Modes", tooltip: "Game mode selection." },
+  { value: "hangar.career", label: "Career", tooltip: "Career, stats, friends and clans." },
+  { value: "hangar.results", label: "Results", tooltip: "Results of the last battle." },
+  { value: "hangar.settings", label: "Settings", tooltip: "The settings screens." },
+  { value: "queue", label: "In queue", tooltip: "While matchmaking runs, on any hangar screen." },
+];
+const ALL_HANGAR_SCREENS = HANGAR_OPTIONS.map((o) => o.value).filter((v) => v !== "queue");
+const DEFAULT_SHOW_IN = ["alive"];
+
+function strings(raw: unknown, fallback: string[]): string[] {
+  return Array.isArray(raw) ? raw.map(String) : fallback;
+}
 
 const POS_KEY_TP = "vue_overlay_pos";
 const POS_KEY_FP = "vue_overlay_pos_fp";
@@ -39,9 +85,6 @@ const DEFAULT_H = 44;
 /** How long a confirmed vehicle survives out-of-battle reads (respawn transitions) before it's forgotten. */
 const VEHICLE_LATCH_GRACE_MS = 15_000;
 
-const HANGAR_SETTLE_MS = 3000;
-
-/** Default phase colours: the overlay's `--accent-200`, `--error-highlight` and `--text-main`, as config hex. */
 const CHARGE_COLOR = "#8FFFB8FF";
 const ACTIVE_COLOR = "#FF6A62FF";
 const COOLDOWN_COLOR = "#F2F2F2FF";
@@ -49,10 +92,8 @@ const ACTIVE_SOUND = "wfActive.wav";
 const TEN_LEFT_SOUND = "10sLeft.wav";
 const TEN_LEFT_AT_MS = 11_000;
 
-/** colors offered in the pickers. */
 const COLOR_SWATCHES = ["#8FFFB8FF", "#FFF87AFF", "#FF6A62FF", "#F2F2F2FF", "#7ABFDFFF", "#FF6D46FF"];
 
-/** A config colour, or the fallback when it isn't a #RRGGBB / #RRGGBBAA hex. */
 function hexOr(value: unknown, fallback: string): string {
   return typeof value === "string" && /^#(?:[0-9a-f]{6}|[0-9a-f]{8})$/i.test(value) ? value : fallback;
 }
@@ -83,7 +124,14 @@ export class WoundedFuryPlusPlugin extends FusePlugin {
   // Damage *taken* accumulates from spawn with no time window - the modifier
   // fires once the vehicle has soaked `threshold` before being destroyed.
   private damageSum = 0;
-  private prevHp: number | null = null;
+  // Last value counted per damage-log entry; the game grows an entry in place.
+  private counted = new Map<number, number>();
+  private lastDmgRev = -1;
+  private lastDmgMatch = -1;
+  private lastDmgLife = -1;
+  private prevMatchState: string | null = null;
+  private prevCamera: string | null = null;
+  private lastRoundEdge = 0;
   private phase: Phase = "charge";
   private phaseUntil = 0; // epoch ms; end of the active or cooldown phase
   private tagHeld = false;
@@ -97,10 +145,10 @@ export class WoundedFuryPlusPlugin extends FusePlugin {
   private onVehicle = false;
   private lastSeenVehicle = "";
   private hostVisible = true;
-  private showInBattle = true;
-  private showInHangar = false;
+  private showIn = new Set(DEFAULT_SHOW_IN);
+  private scene = "";
+  private sceneTags: string[] = [];
   private inHangar = false;
-  private hangarSince = 0;
   private lastVisible: boolean | null = null;
 
   private lastProgress = -1;
@@ -138,7 +186,8 @@ export class WoundedFuryPlusPlugin extends FusePlugin {
         vue_overlay_pos_fp: null,
         vue_width: DEFAULT_W,
         vue_height: DEFAULT_H,
-        show_in: ["battle"],
+        show_in: DEFAULT_SHOW_IN,
+        show_in_hangar: [],
         threshold_damage: 4000,
         duration_s: 30,
         cooldown_s: 40,
@@ -153,6 +202,11 @@ export class WoundedFuryPlusPlugin extends FusePlugin {
         vehicle_slug: M1E1_SLUG,
       })
       .load();
+    const saved = strings(ctx.config.get<unknown>("show_in", DEFAULT_SHOW_IN), DEFAULT_SHOW_IN);
+    if (saved.includes("battle") || saved.includes("hangar")) {
+      ctx.config.set("show_in", [...new Set(saved.filter((v) => v !== "hangar").map((v) => (v === "battle" ? "alive" : v)))]);
+      if (saved.includes("hangar")) ctx.config.set("show_in_hangar", ALL_HANGAR_SCREENS);
+    }
 
     // One declaration for both surfaces: the App panel and the stage inspector.
     const sections = this.sections();
@@ -195,7 +249,7 @@ export class WoundedFuryPlusPlugin extends FusePlugin {
       {
         id: "wf.display",
         label: "Display",
-        description: "Where the overlay shows. Both can be on.",
+        description: "Where the overlay shows. In a match, only while you drive the configured vehicle.",
         order: 10,
         controls: [
           {
@@ -203,11 +257,16 @@ export class WoundedFuryPlusPlugin extends FusePlugin {
             id: "show_in",
             key: "show_in",
             mode: "multi",
-            label: "Show in",
-            options: [
-              { value: "battle", label: "Battle", tooltip: "Live charge, buff and cooldown while driving the vehicle." },
-              { value: "hangar", label: "Hangar", tooltip: "The overlay at rest while in the hangar." },
-            ],
+            label: "Show in match",
+            options: SHOW_IN_OPTIONS,
+          },
+          {
+            type: "buttons",
+            id: "show_in_hangar",
+            key: "show_in_hangar",
+            mode: "multi",
+            label: "Show in hangar",
+            options: HANGAR_OPTIONS,
           },
         ],
       },
@@ -349,10 +408,10 @@ export class WoundedFuryPlusPlugin extends FusePlugin {
   }
 
   private readConfig(): void {
-    const showIn = this.ctx.config.get<unknown>("show_in", ["battle"]);
-    const places = Array.isArray(showIn) ? showIn : ["battle"];
-    this.showInBattle = places.includes("battle");
-    this.showInHangar = places.includes("hangar");
+    this.showIn = new Set([
+      ...strings(this.ctx.config.get<unknown>("show_in", DEFAULT_SHOW_IN), DEFAULT_SHOW_IN),
+      ...strings(this.ctx.config.get<unknown>("show_in_hangar", []), []),
+    ]);
     this.threshold = Number(this.ctx.config.get("threshold_damage", 4000)) || 4000;
     this.durationMs = (Number(this.ctx.config.get("duration_s", 30)) || 30) * 1000;
     this.cooldownMs = (Number(this.ctx.config.get("cooldown_s", 40)) || 40) * 1000;
@@ -412,17 +471,17 @@ export class WoundedFuryPlusPlugin extends FusePlugin {
     this.latchedVehicleId = null;
   }
 
-  /** In battle on the vehicle and/or in the hangar, per config; hidden everywhere else. */
+  /** A picked scene tag is on; in a match, only on the configured vehicle. */
   private applyVisibility(): void {
     if (this.ctx.state === "calibrate") return;
-    const wanted = (this.showInBattle && this.inMatch && this.onVehicle) || (this.showInHangar && this.inHangar);
+    const hit = this.sceneTags.some((tag) => this.showIn.has(tag));
+    const wanted = hit && (this.inMatch ? this.onVehicle : this.inHangar);
     const visible = this.hostVisible && wanted;
     if (visible === this.lastVisible) return;
     this.lastVisible = visible;
     this.ctx.logger.info(
-      `wounded_fury_plus: ${visible ? "shown" : "hidden"} (show_battle=${this.showInBattle} show_hangar=${this.showInHangar}` +
-        ` in_hangar=${this.inHangar} match=${this.inMatch} vehicle=${this.onVehicle} host=${this.hostVisible}` +
-        ` battle_state=${String(this.rd("battle_state"))} match_state=${String(this.rd("match_state"))}` +
+      `wounded_fury_plus: ${visible ? "shown" : "hidden"} (tags=${this.sceneTags.join(",")} show_in=${[...this.showIn].join(",")}` +
+        ` vehicle=${this.onVehicle} host=${this.hostVisible}` +
         ` slug="${this.lastSeenVehicle}" held=${this.vehicleLatched} roster_id=${String(this.latchedVehicleId)})`,
     );
     this.ov?.setVisible(visible);
@@ -511,10 +570,97 @@ export class WoundedFuryPlusPlugin extends FusePlugin {
   /** Full reset: accumulator + phase (death / match / round start). */
   private resetAll(): void {
     this.resetCharge();
-    this.prevHp = null;
+    this.baselineLog();
+    this.resetPushed();
     this.phase = "charge";
     this.phaseUntil = 0;
     this.tagHeld = false;
+  }
+
+  /** Entries already on record must not charge the next phase. */
+  private baselineLog(): void {
+    this.counted.clear();
+    const log = this.damageLog();
+    this.lastDmgRev = typeof log?.rev === "number" ? log.rev : -1;
+    for (const e of log?.entries ?? []) {
+      if (typeof e?.id === "number" && typeof e?.value === "number") this.counted.set(e.id, e.value);
+    }
+  }
+
+  private damageLog(): DamageLogRead | null {
+    const v = this.rd("damage_log");
+    return v && typeof v === "object" ? (v as DamageLogRead) : null;
+  }
+
+  /**
+   * Damage taken since the last tick. The game's own log carries every hit,
+   * while an HP delta loses a small hit to regen, repair or absorption.
+   */
+  private takenFromLog(): number {
+    const log = this.damageLog();
+    if (!log) return 0;
+    const rev = typeof log.rev === "number" ? log.rev : -1;
+    if (rev === this.lastDmgRev) return 0;
+    this.lastDmgRev = rev;
+    let taken = 0;
+    for (const e of log.entries ?? []) {
+      if (typeof e?.id !== "number" || typeof e?.value !== "number") continue;
+      const prev = this.counted.get(e.id) ?? 0;
+      if (e.value > prev) taken += e.value - prev;
+      this.counted.set(e.id, e.value);
+    }
+    return taken;
+  }
+
+  /** Reset edges the scene cannot see: a new match, a respawn, and a Control round. */
+  private checkBoundaries(): void {
+    const log = this.damageLog();
+    const match = typeof log?.match === "number" ? log.match : null;
+    const life = typeof log?.life === "number" ? log.life : null;
+
+    if (match !== null && match !== this.lastDmgMatch) {
+      const first = this.lastDmgMatch === -1;
+      this.lastDmgMatch = match;
+      this.lastDmgLife = life ?? -1;
+      if (!first) {
+        this.counted.clear();
+        this.resetAll();
+        this.ctx.logger.info(`wounded_fury_plus: match ${match} - reset`);
+      }
+    } else if (life !== null && life !== this.lastDmgLife) {
+      const first = this.lastDmgLife === -1;
+      this.lastDmgLife = life;
+      if (!first) this.resetAll();
+    }
+
+    const state = this.rd("match_state");
+    const nextState = typeof state === "string" ? state : null;
+    if (nextState !== this.prevMatchState) {
+      const was = this.prevMatchState;
+      this.prevMatchState = nextState;
+      if (was !== null && nextState !== null && ROUND_EDGE_STATES.has(nextState)) {
+        this.roundEdge(`match_state ${was} -> ${nextState}`);
+      }
+    }
+
+    const info = this.rd("scene_info") as { camera?: unknown } | null | undefined;
+    const camera = typeof info?.camera === "string" ? info.camera : null;
+    if (camera !== this.prevCamera) {
+      const was = this.prevCamera;
+      this.prevCamera = camera;
+      if (was !== null && camera !== null && ROUND_EDGE_CAMERAS.has(camera)) {
+        this.roundEdge(`camera ${was} -> ${camera}`);
+      }
+    }
+  }
+
+  /** Both round signals land within about 2 s, so only the first one resets. */
+  private roundEdge(reason: string): void {
+    const now = Date.now();
+    if (now - this.lastRoundEdge < ROUND_EDGE_DEBOUNCE_MS) return;
+    this.lastRoundEdge = now;
+    this.resetAll();
+    this.ctx.logger.info(`wounded_fury_plus: round edge (${reason}) - reset`);
   }
 
   private fire(now: number, reason: string): void {
@@ -527,23 +673,18 @@ export class WoundedFuryPlusPlugin extends FusePlugin {
     if (this.soundOn) this.playSound(ACTIVE_SOUND);
   }
 
-  /**
-   * Hangar = its page is up and the battle HUD's isn't. It has to hold for a moment
-   * first, so a HUD page reconnecting mid-battle isn't taken for a trip to the hangar.
-   */
-  private updateHangar(now: number): void {
-    const raw = Boolean(this.acc?.connectedHangar) && !this.acc?.connected;
-    if (!raw) {
-      this.hangarSince = 0;
-      this.inHangar = false;
-      return;
+  /** Accessors' scene. Reaching the hangar ends the match for the charge too. */
+  private updateScene(): void {
+    const scene = this.acc?.read("scene");
+    this.scene = typeof scene === "string" ? scene : "";
+    this.sceneTags = strings(this.acc?.read("scene_tags"), []);
+    const inHangar = this.scene === "hangar";
+    if (inHangar && !this.inHangar) {
+      this.inMatch = false;
+      this.onVehicle = false;
+      this.resetAll();
     }
-    if (this.hangarSince === 0) this.hangarSince = now;
-    if (this.inHangar || now - this.hangarSince < HANGAR_SETTLE_MS) return;
-    this.inHangar = true;
-    this.inMatch = false;
-    this.onVehicle = false;
-    this.resetAll();
+    this.inHangar = inHangar;
   }
 
   override tick(dt: number): void {
@@ -554,7 +695,15 @@ export class WoundedFuryPlusPlugin extends FusePlugin {
       return;
     }
     if (this.ctx.state !== "locked" || !this.acc) return;
-    this.updateHangar(Date.now());
+    this.updateScene();
+
+    const isMatch = MATCH_SCENES.has(this.scene);
+    if (isMatch !== this.inMatch) {
+      this.inMatch = isMatch;
+      this.resetAll();
+    }
+    this.checkBoundaries();
+
     if (!this.acc.connected) {
       // Out of battle only the hangar can change what's shown; the charge rests at zero there.
       this.applyVisibility();
@@ -565,19 +714,10 @@ export class WoundedFuryPlusPlugin extends FusePlugin {
     const fp = this.rd("multiplayer_is_fp_view");
     this.updateView(fp == null ? null : Boolean(Number(fp)));
 
-    const battle = this.numOrNull("battle_state");
-    const matchState = this.rd("match_state");
-    const isMatch = battle === BATTLE_ACTIVE && matchState !== MS_FINISH;
-
     // Checked before refreshing, so a long spell out of battle (the hangar) also counts.
     const nowMs = Date.now();
     if (this.vehicleLatched && nowMs - this.lastMatchAt > VEHICLE_LATCH_GRACE_MS) this.forgetVehicle();
     if (isMatch) this.lastMatchAt = nowMs;
-
-    if (isMatch !== this.inMatch) {
-      this.inMatch = isMatch;
-      this.resetAll();
-    }
 
     const onVehicle = isMatch && this.matchesVehicle();
     if (onVehicle !== this.onVehicle) {
@@ -605,23 +745,16 @@ export class WoundedFuryPlusPlugin extends FusePlugin {
     const tagSeen = this.buffTag !== "" && tags.includes(this.buffTag);
 
     const hp = this.numOrNull("health");
-    const isDead = hp === 0 || this.numOrNull("player_is_dead") === 1;
+    const isDead = hp === 0 || this.scene === "dead" || this.numOrNull("player_is_dead") === 1;
     if (isDead && !this.prevDead) {
       this.resetAll();
       this.ctx.logger.info(`wounded_fury_plus: death (hp=${String(hp)}) - reset`);
     }
     this.prevDead = isDead;
 
-    // Track HP every tick regardless of phase, so re-entering the charge phase
-    // never sees one giant delta accumulated while the buff was up.
-    let taken = 0;
-    if (hp !== null) {
-      if (this.prevHp === null) this.prevHp = hp;
-      const delta = hp - this.prevHp;
-      this.prevHp = hp;
-      // Positive deltas are regen / repair / respawn - only losses count.
-      if (delta < 0) taken = -delta;
-    }
+    // Read every tick regardless of phase, so re-entering the charge phase never
+    // sees one giant delta accumulated while the buff was up.
+    const taken = this.takenFromLog();
 
     switch (this.phase) {
       case "charge": {

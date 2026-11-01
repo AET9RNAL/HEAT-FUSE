@@ -14,8 +14,9 @@
   "vue_width": 225,
   "vue_height": 44,
   "show_in": [
-    "battle"
+    "alive"
   ],
+  "show_in_hangar": [],
   "threshold_damage": 2000,
   "window_s": 20,
   "cooldown_s": 60,

@@ -8,7 +8,9 @@
  * after the first authenticated WS client connects.
  */
 import os from "node:os";
+import path from "node:path";
 import { logger } from "../log.js";
+import { GAME_REPLAYS_DIR, PLUGIN_FILES_DIR } from "../utils/paths.js";
 import { ConfigManager, PluginConfig } from "./config.js";
 import { EventBus } from "./EventBus.js";
 import { OverlayHub } from "./OverlayManager.js";
@@ -19,14 +21,18 @@ import { PluginProcess, type HostAudio, type ProcessMetrics } from "./PluginProc
 import { ServiceHub } from "./ServiceHub.js";
 import { StorageHub } from "./StorageHub.js";
 import { ElectronBridge } from "./ElectronBridge.js";
+import { StageMeter } from "./stageMeter.js";
 import { resolvePluginNode, type PluginNode } from "./pluginNode.js";
 import { DevWatcher } from "./devWatch.js";
+import { GameProbe } from "./gameProbe.js";
 import { discover } from "./discovery.js";
 import { resolveLoadOrder } from "./resolver.js";
 import { PluginState } from "./types.js";
 import type { DiscoveredPlugin } from "./types.js";
 import { HotkeyRegistry } from "../sdk/hotkeys.js";
 import { serializeSchema } from "../sdk/configSchema.js";
+import { OVERLAY_FILES_DIR } from "../sdk/overlay.js";
+import { resolveInside } from "./pluginFiles.js";
 import type { HostState, TeardownReason } from "../sdk/plugin.js";
 import { HotkeyInput, type MouseCallback } from "../input/hotkeys.js";
 import type { PluginHydration, RuntimeBridge, WsServer } from "../server/WsServer.js";
@@ -44,11 +50,57 @@ const METRICS_EVERY_MS = 1_000;
 const SECRET_KEY_RE = /^[A-Za-z0-9._-]{1,128}$/;
 const MAX_SECRET_BYTES = 16 * 1024;
 const MAX_LINK_LENGTH = 2048;
+const LANGUAGE_RE = /^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})?$/;
+const DEFAULT_CDP_PORT = 17503;
+const GAME_PORT_NOTICE_ID = "game-port";
 const CORES = os.availableParallelism();
 /** Resource warnings, once per plugin per session: half a core for 30 s, or 1 GB. */
 const HOG_CORE_SHARE = 0.5;
 const HOG_CPU_SECONDS = 30;
 const HOG_RAM_BYTES = 1024 ** 3;
+
+interface GameInstall {
+  /** The App's platform key: "steam" or "wgc". */
+  platform: string;
+  dir: string;
+}
+
+interface GameConfigState {
+  port: number;
+  enabled: boolean;
+  valid: boolean;
+  reachable: boolean;
+  checkedAt: number;
+  /** The game folders the App knows, one per platform. */
+  installs: GameInstall[];
+  replaysDir: string | null;
+  [key: string]: unknown;
+}
+
+/** A site, or every subdomain of one. https only, with no port, path or query. */
+const FRAME_SOURCE_RE = /^https:\/\/(\*\.)?[a-z0-9-]+(\.[a-z0-9-]+)+$/;
+
+function frameSources(raw: unknown, pluginId: string): string[] {
+  if (raw === undefined) return [];
+  if (!Array.isArray(raw)) {
+    logger.warning(`${pluginId}: manifest 'frames' is not a list - ignored`);
+    return [];
+  }
+  return raw.flatMap((entry) => {
+    const source = String(entry).trim().toLowerCase().replace(/\/$/, "");
+    if (FRAME_SOURCE_RE.test(source)) return [source];
+    logger.warning(`${pluginId}: frames entry '${String(entry)}' ignored - use https://site.net or https://*.site.net`);
+    return [];
+  });
+}
+
+/** `{ steam: "C:\\...", wgc: "" }` from the App; empty and relative folders drop out. */
+function parseInstalls(raw: unknown): GameInstall[] | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  return Object.entries(raw as Record<string, unknown>).flatMap(([platform, dir]) =>
+    typeof dir === "string" && path.isAbsolute(dir) ? [{ platform, dir: path.resolve(dir) }] : [],
+  );
+}
 
 interface HostConfigState {
   enabled_plugins: string[] | null;
@@ -118,6 +170,23 @@ export class FuseHost implements RuntimeBridge {
   /** Consecutive seconds each plugin has been over the CPU threshold. */
   private busySeconds = new Map<string, number>();
   private resourceWarned = new Set<string>();
+  private stageMeter = new StageMeter();
+  private stagePerfWidget = false;
+  /** The App asks the stage to show its tour. The App keeps "seen", this only relays it. */
+  private stageTour = false;
+  private appLanguage = "en";
+  /** What the App last said about coldwar.project, plus what the probe found. */
+  private gameConfig: GameConfigState = {
+    port: DEFAULT_CDP_PORT,
+    enabled: false,
+    valid: false,
+    reachable: false,
+    checkedAt: 0,
+    installs: [],
+    replaysDir: GAME_REPLAYS_DIR,
+  };
+  private gameProbe: GameProbe;
+  private sendToElectron: ((msg: Record<string, unknown>) => void) | null;
   private overlayHub: OverlayHub;
   private notificationHub: NotificationHub;
   private audioHub: AudioHub;
@@ -159,12 +228,21 @@ export class FuseHost implements RuntimeBridge {
   constructor(server: WsServer, send: ((msg: Record<string, unknown>) => void) | null = null) {
     this.server = server;
     this.overlayHub = new OverlayHub(server);
+    this.overlayHub.setHotkeyBridge({
+      combo: (pluginId, action) => this.hotkeys.listBindings(pluginId).find((b) => b.label === action)?.combo,
+      rebind: (pluginId, action, combo) => this.rpcHotkeyRebind({ plugin_id: pluginId, action, combo }).ok === true,
+    });
+    this.hotkeys.onChange = (owner) => {
+      this.overlayHub.refreshKeybinds(owner);
+      this.procs.get(owner)?.syncHotkeys();
+    };
     this.notificationHub = new NotificationHub(server);
     this.permissions = new PermissionManager(this.notificationHub, send);
     this.permissions.onChange((pluginId) => this.onPermissionsChanged(pluginId));
     this.bridge = new ElectronBridge(send);
-    this.services = new ServiceHub((consumer, service, scope, owner) =>
-      this.authorizeService(consumer, service, scope, owner),
+    this.sendToElectron = send;
+    this.services = new ServiceHub((consumer, service, scope, owner, use) =>
+      this.authorizeService(consumer, service, scope, owner, use),
     );
     this.audioHub = new AudioHub(server, (pluginId, rel) => this.overlayHub.resolveAsset(pluginId, rel));
     this.devWatcher = new DevWatcher(server);
@@ -184,6 +262,21 @@ export class FuseHost implements RuntimeBridge {
       methods: ["press", "release", "tap"],
       state: () => ({ held: Object.fromEntries(keyboard.heldKeys().map((k) => [k, true])) }),
     });
+    this.services.provideHost("language", { get: () => this.appLanguage }, {
+      methods: ["get"],
+      state: () => ({ language: this.appLanguage }),
+      scopes: { get: "language" },
+      stateScope: "language",
+    });
+    // One owned port for every plugin that talks to the game; no plugin guesses it.
+    this.services.provideHost("game_config", { get: () => ({ ...this.gameConfig }) }, {
+      methods: ["get"],
+      state: () => ({ ...this.gameConfig }),
+      scopes: { get: "game_config" },
+      stateScope: "game_config",
+    });
+
+    this.gameProbe = new GameProbe(this.gameConfig.port, (probe, notice) => this.onProbe(probe, notice));
 
     this.hostCfgState = this.hostConfig.load<HostConfigState>({
       enabled_plugins: null,
@@ -193,6 +286,10 @@ export class FuseHost implements RuntimeBridge {
 
     this.registerGlobalHotkeys();
     this.applyHotkeyOverrides("host");
+
+    // A page loss can mean the game closed or the port moved; ask the port again.
+    this.events.subscribe("accessors.disconnected", () => this.gameProbe.recheck(), "core");
+    this.events.subscribe("accessors.page_disconnected", () => this.gameProbe.recheck(), "core");
 
     this.events.subscribe(
       "host_state_changed",
@@ -255,6 +352,18 @@ export class FuseHost implements RuntimeBridge {
       if (!orderedIds.has(spec.pluginId)) this.pluginStates.set(spec.pluginId, PluginState.SKIPPED);
     }
     this.setupPending = [...ordered];
+    this.publishFrames();
+  }
+
+  /** The sites enabled plugins declared in `frames`. Electron lets the stage show only these in an iframe. */
+  private publishFrames(): void {
+    const sources = new Set<string>();
+    for (const [pluginId, spec] of this.discovered) {
+      const state = this.pluginStates.get(pluginId);
+      if (state === PluginState.DISABLED || state === PluginState.SKIPPED) continue;
+      for (const source of frameSources(spec.manifest.frames, pluginId)) sources.add(source);
+    }
+    this.sendToElectron?.({ type: "stage:frames", sources: [...sources] });
   }
 
   private async instantiate(spec: DiscoveredPlugin): Promise<void> {
@@ -273,11 +382,18 @@ export class FuseHost implements RuntimeBridge {
         config: cfg,
         overlays,
         hotkeys: this.hotkeys,
+        hotkeyOverride: (label, action) => {
+          const saved = this.hostCfgState.hotkey_overrides?.[spec.pluginId] ?? {};
+          // a manifest-name entry comes from a rebind while the plugin was not running: newer than a label entry
+          return (action ? saved[action] : undefined) ?? saved[label];
+        },
         events: this.events,
         notifications: this.notificationHub.scoped(spec.pluginId),
         audio: this.hostAudio(spec.pluginId),
         permissions: this.permissions,
         services: this.services,
+        gameReadPaths: () => this.gameReadPaths(),
+        filesDir: path.join(PLUGIN_FILES_DIR, spec.pluginId),
         storage: (op, collection, args) => this.brokerStorage(spec.pluginId, op, collection, args),
         secrets: (op, key, value) => this.brokerSecrets(spec.pluginId, op, key, value),
         openLink: (url) => this.openLink(spec.pluginId, url),
@@ -338,6 +454,11 @@ export class FuseHost implements RuntimeBridge {
   /** Messages from Electron main: answers to bridge requests, link callbacks, permission decisions. */
   onElectronMessage(msg: Record<string, unknown>): void {
     if (this.bridge.onMessage(msg)) return;
+    if (msg.type === "stage:processes") {
+      // Ids still in flight when the widget was turned off don't reopen anything.
+      if (this.stagePerfWidget) this.stageMeter.setProcesses(Number(msg.rendererPid) || 0, Number(msg.gpuPid) || 0);
+      return;
+    }
     if (msg.type === "links:callback") {
       const pluginId = String(msg.pluginId ?? "");
       const proc = this.procs.get(pluginId);
@@ -348,7 +469,9 @@ export class FuseHost implements RuntimeBridge {
     this.permissions.onMessage(msg);
   }
 
-  private authorizeService(consumerId: string, service: string, scope: string, owner: string): boolean {
+  private authorizeService(consumerId: string, service: string, scope: string, owner: string, use: "read" | "call"): boolean {
+    // Every plugin reads every service's state at start, so only a call counts as undeclared use.
+    if (owner === "host") return use === "call" ? this.permissions.check(consumerId, scope) : this.permissions.has(consumerId, scope);
     const id = `${service}.${scope}`;
     if (!this.permissions.isServiceScope(id, owner)) {
       if (!this.warnedScopes.has(id)) {
@@ -405,10 +528,20 @@ export class FuseHost implements RuntimeBridge {
     const metrics: Record<string, ProcessMetrics> = {};
     for (const [pluginId, proc] of this.procs) {
       if (!proc.metrics) continue;
-      metrics[pluginId] = proc.metrics;
+      // Disk is the plugin's, not its process's, so it is joined on here rather
+      // than measured with RAM and CPU.
+      const disk = this.storage.usage(pluginId);
+      metrics[pluginId] = disk
+        ? { ...proc.metrics, storage: disk.bytes, storageLimit: disk.limit }
+        : proc.metrics;
       this.watchResources(proc);
     }
     if (this.server.hasOverlayClient()) this.server.broadcastOverlay({ type: "plugin:metrics", metrics });
+    // Sampled only while someone can see it.
+    if (this.stagePerfWidget && this.server.hasOverlayClient()) {
+      const stage = this.stageMeter.sample();
+      if (stage) this.server.broadcastStage({ type: "stage:metrics", ...stage });
+    }
   }
 
   /** Warns, never stops: a plugin can be busy for a good reason. */
@@ -481,7 +614,6 @@ export class FuseHost implements RuntimeBridge {
     if (!this.setupPending.length) {
       logger.info("All plugins initialized.");
       this.autoLockQueue = false;
-      this.applyHotkeyOverrides();
       this._state = "locked";
       this.calibStage = 1;
       this.syncStates();
@@ -525,16 +657,18 @@ export class FuseHost implements RuntimeBridge {
     this.events.emit("host_state_changed", { state: this._state, calib_stage: this.setupCalibStage });
   }
 
-  private applyHotkeyOverrides(onlyOwner?: string): void {
+  /** The host's own saved rebinds. A plugin's saved rebinds apply when it registers each hotkey (PluginProcess). */
+  private applyHotkeyOverrides(onlyOwner: "host"): void {
     const overrides = this.hostCfgState.hotkey_overrides ?? {};
     for (const [pluginId, bindings] of Object.entries(overrides)) {
-      if (onlyOwner !== undefined && pluginId !== onlyOwner) continue;
+      if (pluginId !== onlyOwner) continue;
       for (const [action, newCombo] of Object.entries(bindings)) {
         const current = this.hotkeys.listBindings(pluginId).find((b) => b.label === action);
         if (!current) {
           logger.warning(`hotkey_overrides: action '${action}' not found for '${pluginId}' - skipped.`);
           continue;
         }
+        if (current.combo === newCombo) continue;
         if (this.hotkeys.reregister(current.mods, current.key, newCombo)) {
           logger.info(`Applied hotkey override: ${pluginId}/${action} => '${newCombo}'`);
         } else {
@@ -549,6 +683,8 @@ export class FuseHost implements RuntimeBridge {
   // ======================================================================
 
   setOverlaysVisible(visible: boolean): void {
+    // The game lost focus: no held combo outlives it.
+    if (!visible) this.hotkeys.releaseAll();
     for (const proc of this.procs.values()) proc.setOverlayVisible(visible);
   }
 
@@ -561,6 +697,7 @@ export class FuseHost implements RuntimeBridge {
     }
     this.pluginStates.set(pluginId, PluginState.DISABLED);
     this.notifyPluginStatusChanged(pluginId, PluginState.DISABLED);
+    this.publishFrames();
 
     const proc = this.procs.get(pluginId);
     if (!proc) return;
@@ -588,6 +725,7 @@ export class FuseHost implements RuntimeBridge {
     this.crashes.delete(pluginId);
     await this.permissions.ensureConsent(pluginId);
     await this.instantiate(spec);
+    this.publishFrames();
     const proc = this.procs.get(pluginId);
     if (!proc) return;
     this.enterCurrentState(proc);
@@ -655,14 +793,29 @@ export class FuseHost implements RuntimeBridge {
     this.broadcastPluginList();
     const proc = this.procs.get(pluginId);
     if (!proc) return;
-    // Network is a spawn flag: a different answer needs a new process.
-    if (proc.netAllowed !== this.permissions.has(pluginId, "network")) {
-      logger.info(`${pluginId}: network permission changed - restarting its process`);
+    // Process-kind scopes are spawn flags: a different answer needs a new process.
+    if (proc.grantsChanged) {
+      logger.info(`${pluginId}: a process permission changed - restarting its process`);
       void this.restartForPermissions(proc);
       return;
     }
     proc.pushPermissions();
     this.services.refresh(proc);
+  }
+
+  /** A moved game folder changes the `game_files` flags. */
+  private restartForGameFolders(): void {
+    for (const proc of this.procs.values()) {
+      if (!proc.grantsChanged) continue;
+      logger.info(`${proc.pluginId}: the game folders changed - restarting its process`);
+      void this.restartForPermissions(proc);
+    }
+  }
+
+  private gameReadPaths(): string[] {
+    // The whole game folder
+    const paths = this.gameConfig.installs.map((i) => i.dir);
+    return this.gameConfig.replaysDir ? [this.gameConfig.replaysDir, ...paths] : paths;
   }
 
   private async restartForPermissions(proc: PluginProcess): Promise<void> {
@@ -793,8 +946,11 @@ export class FuseHost implements RuntimeBridge {
     this.mouseSubscribers.push(cb);
   }
 
-  private onKeyEvent(mods: Set<string>, key: string | null, pressed: boolean): void {
-    if (!pressed || key == null) return;
+  private onKeyEvent(mods: Set<string>, key: string, pressed: boolean): void {
+    if (!pressed) {
+      this.hotkeys.release(key);
+      return;
+    }
     if (this.capturingRebind) return;
     this.hotkeys.dispatch([...mods], key);
   }
@@ -820,6 +976,7 @@ export class FuseHost implements RuntimeBridge {
 
   start(): void {
     this.input.start();
+    this.gameProbe.start();
     this.lastTick = performance.now() / 1000;
     this.tickTimer = setInterval(() => this.tick(), 50);
     this.metricsTimer = setInterval(() => this.broadcastMetrics(), METRICS_EVERY_MS);
@@ -831,9 +988,12 @@ export class FuseHost implements RuntimeBridge {
     if (this.tickTimer) clearInterval(this.tickTimer);
     if (this.metricsTimer) clearInterval(this.metricsTimer);
     this.input.stop();
+    this.hotkeys.releaseAll();
+    this.gameProbe.stop();
     this.devWatcher.stop();
     await this.stopAll("shutdown");
     this.storage.closeAll();
+    this.stageMeter.close();
     process.exit(0);
   }
 
@@ -899,9 +1059,9 @@ export class FuseHost implements RuntimeBridge {
   onOverlayTransform(overlayId: string, rect: Record<string, number>): void {
     this.overlayHub.onOverlayTransform(overlayId, rect);
   }
-  // Stage input is what lets a plugin re-ask for a denied permission.
+  // Stage input is what lets a plugin re-ask for a denied permission. A `report:` action is overlay data, not input.
   onOverlayAction(overlayId: string, action: string, payload?: unknown): void {
-    this.permissions.noteUserAction(overlayId.split(":")[0] ?? "");
+    if (!action.startsWith("report:")) this.permissions.noteUserAction(overlayId.split(":")[0] ?? "");
     this.overlayHub.dispatchAction(overlayId, action, payload);
   }
   onInspectorSet(overlayId: string, controlId: string, value: unknown, phase: "live" | "commit"): void {
@@ -917,6 +1077,131 @@ export class FuseHost implements RuntimeBridge {
   }
   onPermissionReview(pluginId: string, scope: string): void {
     this.permissions.review(pluginId, scope);
+  }
+  rpcStageSetPerfWidget(params: Record<string, unknown>): Record<string, unknown> {
+    const enabled = params.enabled !== false;
+    if (enabled !== this.stagePerfWidget) {
+      this.stagePerfWidget = enabled;
+      // Off means nothing samples: Electron stops looking up the process ids, and the meters let go of their handles.
+      if (!enabled) this.stageMeter.close();
+      this.sendToElectron?.({ type: "stage:perf", enabled });
+    }
+    this.server.broadcastStage({ type: "stage:settings", ...this.stageSettings() });
+    return { ok: true, enabled: this.stagePerfWidget };
+  }
+  stageSettings(): { perfWidget: boolean; tour: boolean } {
+    return { perfWidget: this.stagePerfWidget, tour: this.stageTour };
+  }
+  rpcStageSetTour(params: Record<string, unknown>): Record<string, unknown> {
+    this.stageTour = params.show === true;
+    this.server.broadcastStage({ type: "stage:settings", ...this.stageSettings() });
+    return { ok: true, show: this.stageTour };
+  }
+  /** The stage finished or skipped its tour. The App marks it seen. */
+  onStageTourDone(): void {
+    this.stageTour = false;
+    this.server.broadcastStage({ type: "stage:settings", ...this.stageSettings() });
+    this.server.broadcastControl({ type: "stage:tour_done" });
+  }
+  rpcAppSetLanguage(params: Record<string, unknown>): Record<string, unknown> {
+    if (!this.setAppLanguage(params.language)) {
+      throw new Error(`'${String(params.language ?? "").slice(0, 16)}' isn't a language code`);
+    }
+    return { ok: true, language: this.appLanguage };
+  }
+
+  rpcAppSetGameConfig(params: Record<string, unknown>): Record<string, unknown> {
+    this.setGameConfig(params);
+    return { ok: true, ...this.gameConfig };
+  }
+
+  /**
+   * The App's view of coldwar.project. Served as the `game_config` service;
+   * plugins hear changes as `host_game_config_changed`.
+   */
+  setGameConfig(raw: Record<string, unknown>): void {
+    const port = Number(raw.port);
+    const next: GameConfigState = {
+      port: Number.isInteger(port) && port >= 1024 && port <= 65535 ? port : this.gameConfig.port,
+      enabled: raw.enabled === true,
+      valid: raw.valid === true,
+      reachable: this.gameConfig.reachable,
+      checkedAt: this.gameConfig.checkedAt,
+      // A message without `dirs` keeps the folders already known.
+      installs: parseInstalls(raw.dirs) ?? this.gameConfig.installs,
+      replaysDir: this.gameConfig.replaysDir,
+    };
+    if (typeof raw.gameRunning === "boolean") this.gameProbe.setGameRunning(raw.gameRunning);
+    if (next.port !== this.gameConfig.port) this.gameProbe.setPort(next.port);
+    const foldersMoved = JSON.stringify(next.installs) !== JSON.stringify(this.gameConfig.installs);
+    if (
+      !foldersMoved &&
+      next.port === this.gameConfig.port &&
+      next.enabled === this.gameConfig.enabled &&
+      next.valid === this.gameConfig.valid
+    ) {
+      return;
+    }
+    this.gameConfig = next;
+    // A plugin process started later reads this as its first-tick fallback.
+    process.env.FUSE_CDP_PORT = String(next.port);
+    this.publishGameConfig();
+    if (foldersMoved) this.restartForGameFolders();
+  }
+
+  /** Probe again after a page loss, so a stale reachable flag does not linger. */
+  recheckGamePort(): void {
+    this.gameProbe.recheck();
+  }
+
+  private onProbe(probe: { port: number; reachable: boolean; checkedAt: number }, notice: boolean): void {
+    if (probe.port !== this.gameConfig.port) return;
+    const changed = probe.reachable !== this.gameConfig.reachable;
+    this.gameConfig = { ...this.gameConfig, reachable: probe.reachable, checkedAt: probe.checkedAt };
+    if (changed) this.publishGameConfig();
+    this.notifyGamePort(notice, changed && probe.reachable);
+  }
+
+  private publishGameConfig(): void {
+    this.services.publishHost("game_config");
+    this.events.emit("host_game_config_changed", { ...this.gameConfig });
+  }
+
+  private notifyGamePort(notice: boolean, handshake: boolean): void {
+    const notifier = this.notificationHub.scoped("host");
+    if (handshake) {
+      notifier.notify({
+        id: GAME_PORT_NOTICE_ID,
+        title: "The game is connected",
+        message: `FUSE connected to HEAT at ${this.gameConfig.port}.`,
+        type: "success",
+        icon: "console",
+      });
+      return;
+    }
+    if (!notice) {
+      notifier.dismiss(GAME_PORT_NOTICE_ID);
+      return;
+    }
+    notifier.notify({
+      id: GAME_PORT_NOTICE_ID,
+      title: "The game does not answer",
+      message: `Port ${this.gameConfig.port} is closed. Check the game configuration in the FUSE launcher or restart WoT:HEAT`,
+      type: "warning",
+      icon: "console",
+      duration: 0,
+    });
+  }
+
+  /** Served as the `language` service; plugins hear changes as `host_language_changed`. False if `raw` isn't a language code. */
+  setAppLanguage(raw: unknown): boolean {
+    const language = typeof raw === "string" ? raw.trim() : "";
+    if (!LANGUAGE_RE.test(language)) return false;
+    if (language === this.appLanguage) return true;
+    this.appLanguage = language;
+    this.services.publishHost("language");
+    this.events.emit("host_language_changed", { language });
+    return true;
   }
 
   /**
@@ -987,6 +1272,10 @@ export class FuseHost implements RuntimeBridge {
   resolveAsset(pluginId: string, relPath: string): string | null {
     return this.overlayHub.resolveAsset(pluginId, relPath);
   }
+  resolvePluginFile(pluginId: string, relPath: string): string | null {
+    if (!this.permissions.has(pluginId, "files")) return null;
+    return resolveInside(path.join(PLUGIN_FILES_DIR, pluginId, OVERLAY_FILES_DIR), relPath);
+  }
 
   rpcConfigUpdate(params: Record<string, unknown>): Record<string, unknown> {
     const pluginId = params.plugin_id as string | undefined;
@@ -1021,21 +1310,41 @@ export class FuseHost implements RuntimeBridge {
     return { ok: true, plugin_id: pluginId, enabled };
   }
 
+  /**
+   * Rebind a hotkey and save the combo. `action` is the binding label (the live list), or the manifest
+   * action name (the list of a plugin that does not run). A plugin that does not run gets the combo at
+   * its next start.
+   */
   rpcHotkeyRebind(params: Record<string, unknown>): Record<string, unknown> {
     const pluginId = String(params.plugin_id ?? "");
     const action = String(params.action ?? "");
     const newCombo = String(params.combo ?? "");
     if (!pluginId || !action || !newCombo) return { ok: false, error: "missing params" };
-
-    const current = this.hotkeys.listBindings(pluginId).find((b) => b.label === action);
-    if (!current) return { ok: false, error: `action '${action}' not found for '${pluginId}'` };
-
-    if (!this.hotkeys.reregister(current.mods, current.key, newCombo)) {
-      return { ok: false, error: "rebind conflict or action not found" };
+    try {
+      HotkeyRegistry.parse(newCombo);
+    } catch (e) {
+      return { ok: false, error: String((e as Error)?.message ?? e) };
     }
 
-    const overrides = (this.hostCfgState.hotkey_overrides ??= {});
-    (overrides[pluginId] ??= {})[action] = newCombo;
+    const proc = this.procs.get(pluginId);
+    const live = this.hotkeys.listBindings(pluginId);
+    const current = live.find((b) => b.label === action) ?? (proc ? live.find((b) => proc.hotkeyAction(b.label) === action) : undefined);
+    if (current) {
+      if (!this.hotkeys.reregister(current.mods, current.key, newCombo)) {
+        return { ok: false, error: `'${newCombo}' is bound by another action` };
+      }
+    } else if (pluginId === "host" || proc) {
+      return { ok: false, error: `action '${action}' not found for '${pluginId}'` };
+    } else if (!this.discovered.has(pluginId)) {
+      return { ok: false, error: `no plugin '${pluginId}'` };
+    }
+
+    const mine = ((this.hostCfgState.hotkey_overrides ??= {})[pluginId] ??= {});
+    // one saved combo per binding: drop the entry under its other name
+    if (current) {
+      for (const other of [current.label, proc?.hotkeyAction(current.label)]) if (other && other !== action) delete mine[other];
+    }
+    mine[action] = newCombo;
     this.hostConfig.save(this.hostCfgState as unknown as Record<string, unknown>);
 
     this.server.broadcastControl({ type: "hotkey:rebound", plugin_id: pluginId, action, combo: newCombo });
@@ -1160,14 +1469,16 @@ export class FuseHost implements RuntimeBridge {
     this.broadcastPluginList();
   }
 
-  private hotkeysFor(pluginId: string): Array<{ action: string; combo: string; label: string }> {
+  private hotkeysFor(pluginId: string): Array<{ action: string; combo: string; label: string; hold?: boolean }> {
     const live = this.hotkeys.listBindings(pluginId);
-    if (live.length) return live.map((b) => ({ action: b.label, combo: b.combo, label: b.label }));
+    if (live.length) return live.map((b) => ({ action: b.label, combo: b.combo, label: b.label, hold: b.hold }));
     const spec = this.discovered.get(pluginId);
     if (!spec) return [];
+    // not running: the manifest names, with the combos saved under them
+    const saved = this.hostCfgState.hotkey_overrides?.[pluginId] ?? {};
     return Object.entries(spec.manifest.hotkeys ?? {}).map(([action, combo]) => ({
       action,
-      combo,
+      combo: saved[action] ?? combo,
       label: action,
     }));
   }

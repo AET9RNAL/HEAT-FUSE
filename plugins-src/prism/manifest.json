@@ -1,12 +1,13 @@
 {
   "plugin_id": "prism",
   "name": "Prism",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "author": "AETERNAL",
   "description": "Fine tune your native game UI",
   "entry": "plugin:PrismPlugin",
   "runtime": "node",
   "dependencies": ["accessors"],
+  "min_host_version": "5.0.0",
   "permissions": {
     "accessors.ui": { "reason": "Recolors and restyles the HUD." }
   },

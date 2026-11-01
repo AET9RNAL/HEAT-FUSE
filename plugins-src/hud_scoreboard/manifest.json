@@ -7,12 +7,17 @@
   "entry": "plugin:HudScoreboardPlugin",
   "runtime": "node",
   "dependencies": ["accessors", "fuse_ui", "canvas_ui"],
+  "optional_dependencies": ["heat_stats"],
+  "min_host_version": "5.0.0",
   "hotkeys": {},
   "default_config": {
     "vue_overlay_pos": null,
     "vue_width": 1500,
     "vue_height": 90,
     "mirror_enemies": true,
-    "show_names": false
+    "show_names": false,
+    "show_in": ["alive", "dead", "deploy"],
+    "ally_color": "#7ABFDFFF",
+    "enemy_color": "#FF6D46FF"
   }
 }

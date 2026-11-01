@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from "vue";
 import StagePanel from "./StagePanel.vue";
 import ControlRenderer from "../inspector/ControlRenderer.vue";
-import Icons from "../../components/Icons.vue";
+import Icons from "../../components/ui/Icons.vue";
 import { motion } from "motion-v";
 import { Dynamics } from "../../composables/useMotion";
 import { useInspectorModel, type BuiltinSource } from "../inspector/useInspectorModel";
@@ -281,7 +281,7 @@ onBeforeUnmount(() => window.removeEventListener("resize", onResize));
 </script>
 
 <template>
-  <aside v-if="descriptor" ref="root" class="inspector stage-ui" :style="panelStyle">
+  <aside v-if="descriptor" ref="root" v-ftue="'stage-inspector'" class="inspector stage-ui" :style="panelStyle">
     <StagePanel class="inspector-panel" :cut="8" blur>
       <header
         class="ins-header"

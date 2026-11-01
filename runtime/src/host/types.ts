@@ -25,6 +25,8 @@ export interface Manifest {
   sdkVersion?: string;
   /** Scope -> the author's reason, shown to the user. */
   permissions?: Record<string, { reason?: string }>;
+  /** https sites its overlays may show in an iframe: `https://site.net` or `https://*.site.net`. */
+  frames?: string[];
   /** Services this plugin provides, and the scopes consumers need for them (`<service>.<scope>`). */
   provides?: Record<
     string,
