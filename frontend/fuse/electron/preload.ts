@@ -1,4 +1,4 @@
-import { ipcRenderer, contextBridge } from 'electron'
+import { ipcRenderer, contextBridge, webUtils } from 'electron'
 
 // Set by Electron main per window. The stage page also runs plugin Vue overlays,
 // so it gets only what the stage itself needs. A window without one gets nothing.
@@ -91,10 +91,26 @@ exposeApp('pluginsAPI', {
   showFile: (filePath: string) => ipcRenderer.invoke('plugins:show-file', filePath),
   deleteFile: (filePath: string): Promise<{ success: boolean; error?: string }> =>
     ipcRenderer.invoke('plugins:delete', filePath),
-  downloadPlugin: (url: string, filename: string): Promise<{ success: boolean; filePath?: string; checksum?: string; error?: string }> =>
-    ipcRenderer.invoke('plugins:download-plugin', url, filename),
-  uploadToR2: (presignedUrl: string, fileBuffer: ArrayBuffer, contentType: string): Promise<{ success: boolean; error?: string }> =>
-    ipcRenderer.invoke('plugins:upload-to-r2', presignedUrl, fileBuffer, contentType),
+})
+
+exposeApp('registryAPI', {
+  /** The disk path of a dropped file. */
+  pathForFile: (file: File): string => webUtils.getPathForFile(file),
+  pickFile: (kind: 'package' | 'image') => ipcRenderer.invoke('registry:pick-file', kind),
+  inspectPackage: (filePath: string) => ipcRenderer.invoke('registry:inspect-package', filePath),
+  inspectImage: (filePath: string, kind: 'icon' | 'avatar') => ipcRenderer.invoke('registry:inspect-image', filePath, kind),
+  upload: (req: Record<string, unknown>) => ipcRenderer.invoke('registry:upload', req),
+  install: (req: Record<string, unknown>) => ipcRenderer.invoke('registry:install', req),
+  onUploadProgress: (cb: (p: { token: string; sent: number; total: number }) => void): (() => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, p: { token: string; sent: number; total: number }) => cb(p)
+    ipcRenderer.on('registry:upload-progress', listener)
+    return () => ipcRenderer.removeListener('registry:upload-progress', listener)
+  },
+  onInstallProgress: (cb: (p: { token: string; received: number; total: number }) => void): (() => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, p: { token: string; received: number; total: number }) => cb(p)
+    ipcRenderer.on('registry:install-progress', listener)
+    return () => ipcRenderer.removeListener('registry:install-progress', listener)
+  },
 })
 
 exposeApp('dialogAPI', {

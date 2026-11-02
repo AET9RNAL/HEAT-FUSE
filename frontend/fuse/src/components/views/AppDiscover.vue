@@ -1,21 +1,23 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { AnimatePresence, motion } from 'motion-v'
-import { useMarketplaceStore, type MarketplaceSort } from '../../stores/marketplace'
+import { useRegistryStore } from '../../stores/registry'
 import { useAuthStore } from '../../stores/auth'
 import { useI18n } from '../../composables/useI18n'
-import { eventBus } from '../../events/eventBus'
-import MarketplaceCard from '../marketplace/MarketplaceCard.vue'
-import MarketplaceProjectDetail from '../marketplace/MarketplaceProjectDetail.vue'
-import MarketplaceMyPlugins from '../marketplace/MarketplaceMyPlugins.vue'
+import type { SortKey } from '../../utils/registry-api'
+import RegistryCard from '../marketplace/RegistryCard.vue'
+import ProjectPage from '../marketplace/ProjectPage.vue'
+import CreatorPage from '../marketplace/CreatorPage.vue'
+import MyPlugins from '../marketplace/MyPlugins.vue'
 import eInputField from '../inputs/eInputField.vue'
 import eListSelector from '../inputs/eListSelector.vue'
+import eButton from '../inputs/eButton.vue'
 import eTabBrowser, { type BrowserTab } from '../inputs/eTabBrowser.vue'
 import eTagFilter from '../marketplace/eTagFilter.vue'
 
-const store  = useMarketplaceStore()
-const auth   = useAuthStore()
-const { t }  = useI18n()
+const registry = useRegistryStore()
+const auth = useAuthStore()
+const { t } = useI18n()
 
 type Tab = 'browse' | 'mine'
 const activeTab = ref<Tab>('browse')
@@ -26,42 +28,29 @@ const tabs = computed<BrowserTab[]>(() => {
     return list
 })
 
-function onNavigateDiscover({ projectId }: { projectId?: string }) {
-    activeTab.value = 'browse'
-    if (projectId) {
-        const project = store.projects.find(p => p.id === projectId)
-        if (project) store.selectProject(project)
-    }
+// The plugin page and the creator page sit on top of the grid, so Back keeps the scroll and filters.
+const view = computed(() => registry.selected ? 'project' : registry.creator ? 'creator' : 'grid')
+
+async function openCreator(username: string) {
+    registry.closeProject()
+    await registry.openCreator(username)
 }
 
-async function reconcileInstalls() {
-    try {
-        if (!window.pluginsAPI) return
-        const scanned = await window.pluginsAPI.scan()
-        store.reconcileInstallStates(scanned)
-    } catch { /* scan unavailable (e.g. web build) - leave states as-is */ }
+function back() {
+    if (registry.selected) registry.closeProject()
+    else registry.closeCreator()
 }
 
 onMounted(async () => {
-    await store.fetchTags()
-    await store.fetchProjects()
-    await reconcileInstalls()
-    eventBus.on('navigate:discover', onNavigateDiscover)
+    await Promise.all([registry.fetchTags(), registry.search(), registry.refreshInstalled()])
 })
 
-onUnmounted(() => {
-    eventBus.off('navigate:discover', onNavigateDiscover)
+watch(activeTab, (tab) => {
+    if (tab === 'browse') void registry.refreshInstalled()
 })
 
-watch(activeTab, async (tab) => {
-    if (tab === 'mine') store.fetchMyProjects()
-    else { await store.fetchProjects(); await reconcileInstalls() }
-})
-
-// Ordering only - tag filtering lives in the tags menu
-const SORT_VALUES: MarketplaceSort[] = ['views', 'downloads', 'updated', 'name']
+const SORT_VALUES: SortKey[] = ['downloads', 'views', 'updated', 'name']
 const sortLabels = computed(() => SORT_VALUES.map(v => t(`appdiscover.sort.${v}`)))
-
 </script>
 
 <template>
@@ -73,19 +62,30 @@ const sortLabels = computed(() => SORT_VALUES.map(v => t(`appdiscover.sort.${v}`
             @update:model-value="activeTab = $event as Tab"
         />
 
-        <!-- Browse tab -->
         <template v-if="activeTab === 'browse'">
             <AnimatePresence mode="wait">
                 <motion.div
-                    v-if="store.selectedProject"
-                    key="detail"
+                    v-if="view === 'project'"
+                    key="project"
                     :initial="{ opacity: 0, x: 24 }"
                     :animate="{ opacity: 1, x: 0 }"
                     :exit="{ opacity: 0, x: 24 }"
                     :transition="{ duration: 0.2 }"
                     class="panel-fill"
                 >
-                    <MarketplaceProjectDetail />
+                    <ProjectPage @back="back" @creator="openCreator" />
+                </motion.div>
+
+                <motion.div
+                    v-else-if="view === 'creator'"
+                    key="creator"
+                    :initial="{ opacity: 0, x: 24 }"
+                    :animate="{ opacity: 1, x: 0 }"
+                    :exit="{ opacity: 0, x: 24 }"
+                    :transition="{ duration: 0.2 }"
+                    class="panel-fill"
+                >
+                    <CreatorPage @back="back" />
                 </motion.div>
 
                 <motion.div
@@ -100,41 +100,43 @@ const sortLabels = computed(() => SORT_VALUES.map(v => t(`appdiscover.sort.${v}`
                     <div v-ftue="'discover-tools'" class="toolbar">
                         <eInputField
                             :label="t('appdiscover.searchPlaceholder')"
-                            v-model="store.filters.search"
+                            v-model="registry.filters.search"
                             size="flex"
                             orientation="both"
                         />
                         <div class="actions">
-                            <eTagFilter
-                                :tags="store.tags"
-                                :all-label="t('appdiscover.allTags')"
-                                v-model="store.filters.tagIds"
-                            />
+                            <eTagFilter :tags="registry.tags" :all-label="t('appdiscover.allTags')" v-model="registry.filters.tagIds" />
                             <eListSelector
                                 :label="t('appdiscover.sorting')"
                                 :options="sortLabels"
                                 :values="SORT_VALUES"
-                                :model-value="store.filters.sort"
-                                @update:model-value="store.filters.sort = $event as MarketplaceSort"
+                                :model-value="registry.filters.sort"
+                                @update:model-value="registry.filters.sort = $event as SortKey"
                             />
                         </div>
                     </div>
 
-                    <!-- Stroke is a sibling of the scroller: inside it, the
-                         clip-path and scroll offset would both eat it -->
                     <div class="plugin-list-wrap">
                         <div class="plugin-list">
-                            <div v-if="store.loading" class="empty-state">{{ t('components.loading') }}</div>
-                            <div v-else-if="store.filteredProjects.length === 0" class="empty-state">
-                                {{ t('appdiscover.noResults') }}
-                            </div>
+                            <div v-if="registry.loading && !registry.projects.length" class="empty-state">{{ t('components.loading') }}</div>
+                            <div v-else-if="!registry.projects.length" class="empty-state">{{ t('appdiscover.noResults') }}</div>
                             <template v-else>
-                                <MarketplaceCard
-                                    v-for="project in store.filteredProjects"
+                                <RegistryCard
+                                    v-for="project in registry.projects"
                                     :key="project.id"
                                     :project="project"
-                                    @select="store.selectProject(project)"
+                                    @select="registry.openProject(project.id)"
+                                    @creator="openCreator"
                                 />
+                                <div v-if="registry.hasMore" class="more">
+                                    <eButton
+                                        size="half"
+                                        variant="secondary"
+                                        :label="t('registry.loadMore', { shown: registry.projects.length, total: registry.total })"
+                                        :system-state="registry.loading ? 'processing' : 'idle'"
+                                        @click="registry.search(true)"
+                                    />
+                                </div>
                             </template>
                         </div>
                     </div>
@@ -142,9 +144,8 @@ const sortLabels = computed(() => SORT_VALUES.map(v => t(`appdiscover.sort.${v}`
             </AnimatePresence>
         </template>
 
-        <!-- My Plugins tab -->
         <template v-else-if="activeTab === 'mine'">
-            <MarketplaceMyPlugins />
+            <MyPlugins @view-in-discover="(id: string) => { activeTab = 'browse'; registry.openProject(id) }" />
         </template>
     </div>
 </template>
@@ -160,7 +161,6 @@ const sortLabels = computed(() => SORT_VALUES.map(v => t(`appdiscover.sort.${v}`
     box-sizing: border-box;
     overflow: hidden;
 }
-
 .panel-fill {
     flex: 1;
     min-height: 0;
@@ -214,6 +214,32 @@ const sortLabels = computed(() => SORT_VALUES.map(v => t(`appdiscover.sort.${v}`
     border: 1px solid var(--base-600);
     corner-shape: bevel;
     border-radius: 10px 0 10px 0;
+}
+
+/* The App scrollbar, the same as AppTab. */
+.plugin-list::-webkit-scrollbar {
+    width: 6px;
+}
+
+.plugin-list::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.plugin-list::-webkit-scrollbar-thumb {
+    background-color: hsla(0, 0%, 100%, 0.15);
+    border-radius: 4px;
+    border-left: 4px solid transparent;
+    background-clip: padding-box;
+}
+
+.plugin-list::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(255, 255, 255, 0.25);
+}
+
+.more {
+    display: flex;
+    justify-content: center;
+    padding: var(--space-2) 0;
 }
 
 .empty-state {

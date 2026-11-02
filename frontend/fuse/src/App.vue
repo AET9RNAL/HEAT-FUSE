@@ -10,6 +10,8 @@ import eLicense from './components/dialogs/eLicense.vue'
 import eReleaseNotes from './components/dialogs/eReleaseNotes.vue'
 import eTooltip from './components/ui/eTooltip.vue'
 import eFtue from './components/ftue/eFtue.vue'
+import InstallConfirm from './components/marketplace/InstallConfirm.vue'
+import { useRegistryStore } from './stores/registry'
 import { useAppStore } from './stores/app'
 import { useAuthStore } from './stores/auth'
 import { useExtendedAuthStore } from './stores/extendedauth'
@@ -37,9 +39,17 @@ watch(() => appStore.appLanguage, setI18nLocale, { immediate: true })
 
 // Register deep-link listener early (before any component mounts)
 // Handles second-instance deep links while app is running
+const registry = useRegistryStore()
 window.appAPI?.onDeepLink?.((route: string, params: Record<string, string>) => {
     if (route === 'reset-password') {
         authStore.handlePasswordRecoveryDeepLink(params)
+        return
+    }
+    // fuse://project/<id or slug> and fuse://file/<id> open the plugin page in Discover.
+    const [kind, ref] = route.split('/')
+    if ((kind === 'project' || kind === 'file') && ref) {
+        navStore.selectOption('discover')
+        void (kind === 'project' ? registry.openProject(ref) : registry.openFile(ref))
     }
 })
 
@@ -265,6 +275,9 @@ onUnmounted(() => {
 
   <!-- Unsaved changes bar -->
   <eSimpleModal />
+
+  <!-- Registry install confirm: dependencies and blockers before any download -->
+  <InstallConfirm />
 
   <!-- FTUE tours: card and highlight for every v-ftue target -->
   <eFtue :labels="ftueLabels" />

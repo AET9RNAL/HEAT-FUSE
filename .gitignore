@@ -22,6 +22,7 @@ frontend/fuse/release/
 frontend/fuse/.env
 .env
 .env.local
+.backfill.env
 deprecated/
 fuseadmin/
 
@@ -39,3 +40,5 @@ TO-DO.md
 heat_stats_backend
 tools/
 docs/
+
+workers

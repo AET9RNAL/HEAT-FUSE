@@ -7,7 +7,7 @@
   "entry": "plugin:CombatRebootPlusPlugin",
   "core": false,
   "runtime": "node",
-  "dependencies": ["accessors", "fuse_ui"],
+  "dependencies": { "accessors": ">=5.0.0", "fuse_ui": ">=2.0.0" },
   "min_host_version": "5.0.0",
   "permissions": {
     "audio": { "reason": "Plays a sound when Combat Reboot activates." }

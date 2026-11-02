@@ -99,6 +99,8 @@ export type IconKind =
   | 'database'  
   | 'calibration'
   | 'exe'
+  | 'upload'
+  | 'heatLogo'
 </script>
 
 <script setup lang="ts">

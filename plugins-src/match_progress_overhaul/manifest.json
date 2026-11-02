@@ -6,7 +6,7 @@
   "description": "Redesigned match progress bar",
   "entry": "plugin:MatchProgressOverhaulPlugin",
   "runtime": "node",
-  "dependencies": ["accessors", "fuse_ui", "canvas_ui"],
+  "dependencies": { "accessors": ">=5.0.0", "fuse_ui": ">=2.0.0", "canvas_ui": ">=2.0.0" },
   "min_host_version": "5.0.0",
   "permissions": {
     "accessors.ui": { "reason": "Hides the game's own match progress bar when the enhanced one is on." }

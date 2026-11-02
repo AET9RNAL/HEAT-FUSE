@@ -21,5 +21,6 @@
   "show_in": [
     "alive"
   ],
-  "show_in_hangar": []
+  "show_in_hangar": [],
+  "memory_chain": "multiplayer_vehicle_energy"
 }

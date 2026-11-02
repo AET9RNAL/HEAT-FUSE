@@ -5,9 +5,12 @@ import { motion } from 'motion-v'
 const props = withDefaults(defineProps<{
     progress?: number
     active?: boolean
+    /** danger semantics */
+    tone?: 'accent' | 'danger'
 }>(), {
     progress: 0,
     active: false,
+    tone: 'accent',
 })
 
 const GRID = 4
@@ -28,6 +31,7 @@ const litFronts = computed(() => Math.min(FRONTS, Math.floor(props.progress * FR
 <template>
     <svg
         class="e-throbber"
+        :class="`tone-${tone}`"
         :width="SIZE"
         :height="SIZE"
         :viewBox="`0 0 ${SIZE} ${SIZE}`"
@@ -68,5 +72,9 @@ const litFronts = computed(() => Math.min(FRONTS, Math.floor(props.progress * FR
 
 .dot-lit {
     fill: #84ffb1;
+}
+
+.tone-danger .dot-lit {
+    fill: var(--error-highlight);
 }
 </style>

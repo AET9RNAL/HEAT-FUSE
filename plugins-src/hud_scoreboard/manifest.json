@@ -6,7 +6,7 @@
   "description": "See the Ally and enemy roster without having to TAB every time.",
   "entry": "plugin:HudScoreboardPlugin",
   "runtime": "node",
-  "dependencies": ["accessors", "fuse_ui", "canvas_ui"],
+  "dependencies": { "accessors": ">=5.0.0", "fuse_ui": ">=2.0.0", "canvas_ui": ">=2.0.0" },
   "optional_dependencies": ["heat_stats"],
   "min_host_version": "5.0.0",
   "hotkeys": {},

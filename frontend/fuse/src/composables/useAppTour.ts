@@ -1,7 +1,7 @@
 import { useI18n } from './useI18n'
 import { useSamplePlugins } from './useSamplePlugins'
 import { useAppStore } from '../stores/app'
-import { useMarketplaceStore } from '../stores/marketplace'
+import { useRegistryStore } from '../stores/registry'
 import { useNavigationStore, type NavigationOption } from '../stores/navigation'
 import { startFtue, ftue, type FtueStep, type FtueTour } from '../directives/vFtue'
 
@@ -41,14 +41,14 @@ export function useAppTour() {
     const { t } = useI18n()
     const appStore = useAppStore()
     const navStore = useNavigationStore()
-    const marketplace = useMarketplaceStore()
+    const registry = useRegistryStore()
     const samples = useSamplePlugins()
     const showsSamples = (): boolean => samples.active.value
 
     function openTab(tab: NavigationOption): void {
         navStore.selectOption(tab)
-        // An open plugin page hides the marketplace grid and its toolbar.
-        if (tab === 'discover') marketplace.selectProject(null)
+        // An open plugin or creator page hides the marketplace grid and its toolbar.
+        if (tab === 'discover') { registry.closeProject(); registry.closeCreator() }
     }
 
     function build(): FtueTour {

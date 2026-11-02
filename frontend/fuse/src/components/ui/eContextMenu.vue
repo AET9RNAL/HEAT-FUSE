@@ -203,7 +203,7 @@ defineExpose({ close, isHovering, isPressed })
         </template>
     </div>
     <Teleport to="body">
-        <div v-if="show" ref="menuEl" class="more-menu" :class="'placement-' + placement" :style="{ top: menuPos.top + 'px', left: menuPos.left !== undefined ? menuPos.left + 'px' : 'auto', right: menuPos.right !== undefined ? menuPos.right + 'px' : 'auto' }" @click.stop @mouseenter="onMenuEnter" @mouseleave="onMenuLeave">
+        <div v-if="show" ref="menuEl" class="more-menu bb-strong" :class="'placement-' + placement" :style="{ top: menuPos.top + 'px', left: menuPos.left !== undefined ? menuPos.left + 'px' : 'auto', right: menuPos.right !== undefined ? menuPos.right + 'px' : 'auto' }" @click.stop @mouseenter="onMenuEnter" @mouseleave="onMenuLeave">
             <span
                 v-for="(option, i) in options"
                 :key="i"

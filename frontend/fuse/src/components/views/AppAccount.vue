@@ -1,50 +1,22 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useAuthStore } from '../../stores/auth'
 import { useExtendedAuthStore } from '../../stores/extendedauth'
-import { useAppStore } from '../../stores/app'
+import { useCreatorStore } from '../../stores/creator'
 import { useI18n } from '../../composables/useI18n'
 // import { supabase } from '../../composables/supabase-client'
 import eDevice from '../account/eDevice.vue'
 import eButton from '../inputs/eButton.vue'
-import eInputField from '../inputs/eInputField.vue'
 // import eCheckbox from '../inputs/eCheckbox.vue'
 import { eventBus } from '../../events/eventBus'
 
 const auth = useAuthStore()
 const exStore = useExtendedAuthStore()
-const appStore = useAppStore()
 const { t } = useI18n()
 
-const usernameInput = ref(appStore.username ?? '')
-
-const isUsernameDirty = computed(() =>
-    usernameInput.value.trim() !== (appStore.username ?? '')
-)
-
-watch(isUsernameDirty, (dirty) => {
-    if (dirty) {
-        eventBus.emit('modal:pending', {
-            label: t('appaccount.usernameUnsaved'),
-            saveLabel: t('appaccount.usernameSave'),
-            cancelLabel: t('common.cancel'),
-            onConfirm: async () => {
-                const result = await appStore.saveUsername(usernameInput.value)
-                if (!result.success) {
-                    eventBus.emit('notification', { title: 'Error', message: result.error ?? 'Failed to save username', type: 'error' })
-                    throw new Error(result.error)
-                }
-            },
-            onCancel: () => { usernameInput.value = appStore.username ?? '' },
-        })
-    } else {
-        eventBus.emit('modal:dismiss')
-    }
-})
-
-onUnmounted(() => {
-    if (isUsernameDirty.value) eventBus.emit('modal:dismiss')
-})
+// The username belongs to the creator profile, which Discover > My Plugins edits.
+const creator = useCreatorStore()
+onMounted(() => void creator.loadProfile())
 
 const revokingFingerprint = ref<string | null>(null)
 const copiedEmail = ref(false)
@@ -234,11 +206,7 @@ function copyEmail() {
 
             <div class="card-row username-row">
                 <span class="row-label">{{ t('appaccount.username') }}</span>
-                <eInputField
-                    :label="appStore.username ?? t('appaccount.usernamePlaceholder')"
-                    v-model="usernameInput"
-                    size="half"
-                />
+                <span v-tip="t('registry.account.usernameTip')" class="row-value">{{ creator.profile?.username ?? t('registry.account.noUsername') }}</span>
             </div>
         </section>
 

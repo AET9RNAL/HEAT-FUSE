@@ -6,7 +6,7 @@
   "description": "Allows to hide individual UI elements",
   "entry": "plugin:NoUiPlugin",
   "runtime": "node",
-  "dependencies": ["accessors"],
+  "dependencies": { "accessors": ">=5.0.0" },
   "min_host_version": "5.0.0",
   "permissions": {
     "accessors.ui": { "reason": "Hides the HUD elements you pick." }

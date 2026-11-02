@@ -12,19 +12,19 @@ import { useSuspension } from '../../composables/useSuspension'
 import { useAppStore } from '../../stores/app'
 import { useAppTour } from '../../composables/useAppTour'
 import { useFuseControl } from '../../composables/useFuseControl'
-import { useMarketplaceStore } from '../../stores/marketplace'
+import { useRegistryStore } from '../../stores/registry'
 import combinationMark from '../../assets/CombinationMark.svg'
 import welcomeAnimation from '../../assets/animationWelcome.webm?url'
 import packageJson from '../../../package.json'
 
 const { t } = useI18n()
 const store = useAppStore()
-const marketplace = useMarketplaceStore()
+const marketplace = useRegistryStore()
 const appTour = useAppTour()
 const { replayStageTour } = useFuseControl()
 const { isSuspended } = useSuspension()
 
-onMounted(() => void marketplace.fetchMarketplaceStats())
+onMounted(() => void marketplace.fetchStats())
 
 const videoEl = ref<HTMLVideoElement | null>(null)
 
@@ -71,8 +71,8 @@ const stats = computed<{ value: number; label: string }[]>(() => [
     { value: __SOURCE_STATS__.vueComponents,                label: 'appabout.statComponents' },
     { value: __SOURCE_STATS__.linesOfCode,                  label: 'appabout.statLines' },
     { value: daysSinceCreation.value,                       label: 'appabout.statDays' },
-    { value: marketplace.stats?.publishedProjects ?? 0,     label: 'appabout.statPlugins' },
-    { value: marketplace.stats?.totalDownloads ?? 0,        label: 'appabout.statDownloads' },
+    { value: marketplace.stats?.projects ?? 0,              label: 'appabout.statPlugins' },
+    { value: marketplace.stats?.downloads ?? 0,             label: 'appabout.statDownloads' },
 ])
 
 const tools: IconKind[] = ['vue', 'motion', 'canvasUI', 'rive', 'ae']

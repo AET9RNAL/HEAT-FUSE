@@ -47,7 +47,6 @@ export const useAppStore = defineStore('app', () => {
     const onboardingComplete = ref<boolean>(false)
     const analyticsConsent = ref<boolean>(false)
     const diagnosticsConsent = ref<boolean>(false)
-    const username = ref<string | null>(null)
     const allowApiAccess = ref<boolean>(false)
     const lastSeenVersion = ref<string>('')
     const autoLockOverlays = ref<boolean>(false)
@@ -217,7 +216,6 @@ export const useAppStore = defineStore('app', () => {
                 const dbValue = profile[entry.db]
                 entry.ref.value = dbValue ?? entry.default
             }
-            username.value = profile['username'] ?? null
             logger.info('Loaded settings from DB')
         } catch (err: any) {
             logger.error('Failed to load settings:', { error: err })
@@ -280,30 +278,6 @@ export const useAppStore = defineStore('app', () => {
         if (!dirPath) { gameVersion.value = ''; return }
         const result = await window.gameAPI.scanDir(dirPath)
         gameVersion.value = result.version ?? ''
-    }
-
-    async function saveUsername(value: string): Promise<{ success: boolean; error?: string }> {
-        const trimmed = value.trim()
-        if (!trimmed) return { success: false, error: 'Username cannot be empty' }
-        if (!/^[a-zA-Z0-9_]{3,24}$/.test(trimmed))
-            return { success: false, error: 'Username must be 3–24 characters: letters, numbers, underscores only' }
-
-        const { data: { user } } = await supabase.auth.getUser()
-        if (!user) return { success: false, error: 'Not signed in' }
-
-        const { error } = await supabase
-            .from('user_profiles')
-            .update({ username: trimmed })
-            .eq('user_id', user.id)
-
-        if (error) {
-            const msg = error.code === '23505'
-                ? 'Username already taken'
-                : error.message
-            return { success: false, error: msg }
-        }
-        username.value = trimmed
-        return { success: true }
     }
 
     // Release notes ("what's new" after an update)
@@ -476,7 +450,6 @@ export const useAppStore = defineStore('app', () => {
         onboardingComplete,
         analyticsConsent,
         diagnosticsConsent,
-        username,
         allowApiAccess,
         lastSeenVersion,
         autoLockOverlays,
@@ -491,7 +464,6 @@ export const useAppStore = defineStore('app', () => {
         checkReleaseNotes,
         openReleaseNotes,
         dismissReleaseNotes,
-        saveUsername,
         setGameDirPath,
         scanGameDir,
         checkDebugger,
@@ -528,7 +500,6 @@ export const useAppStore = defineStore('app', () => {
             'onboardingComplete',
             'analyticsConsent',
             'diagnosticsConsent',
-            'username',
             'allowApiAccess',
             'lastSeenVersion',
             'autoLockOverlays',

@@ -5,11 +5,8 @@ import eToggle from '../inputs/eToggle.vue'
 import eContextMenu, { type MenuOption } from '../ui/eContextMenu.vue'
 import Icons from '../ui/Icons.vue'
 import type { PluginRecord, PluginStatus } from '../../stores/plugins'
-import type { MarketplaceProject } from '../../stores/marketplace'
-import { useMarketplaceStore } from '../../stores/marketplace'
+import { cdnUrl, type RegistryProject } from '../../utils/registry-api'
 import { useI18n } from '../../composables/useI18n'
-
-const marketplaceStore = useMarketplaceStore()
 
 const { t } = useI18n()
 
@@ -19,11 +16,14 @@ const props = withDefaults(defineProps<{
   enabled: boolean
   thumbnail?: string
   menuOptions?: MenuOption[]
-  marketplaceProject?: MarketplaceProject | null
+  marketplaceProject?: RegistryProject | null
+  /** A newer registry version of this file. */
+  updateVersion?: string | null
 }>(), {
   selected: false,
   menuOptions: () => [],
   marketplaceProject: null,
+  updateVersion: null,
 })
 
 const emit = defineEmits<{
@@ -32,11 +32,7 @@ const emit = defineEmits<{
   'marketplace-click': [projectId: string]
 }>()
 
-const mpIconUrl = computed(() =>
-  props.marketplaceProject?.icon_key
-    ? marketplaceStore.buildPublicUrl(props.marketplaceProject.icon_key, props.marketplaceProject.updated_at)
-    : null
-)
+const mpIconUrl = computed(() => cdnUrl(props.marketplaceProject?.icon_key))
 
 const rowEl = ref<HTMLElement | null>(null)
 
@@ -92,14 +88,19 @@ const statusLabel = computed(() => t(`components.plugin.status.${props.plugin.st
           @click="marketplaceProject && emit('marketplace-click', marketplaceProject.id)"
         >{{ marketplaceProject?.name ?? plugin.name }}</span>
         <span class="by">{{ t('components.plugin.by') }}</span>
-        <span class="author">{{ marketplaceProject?.creator_username ?? plugin.author ?? '—' }}</span>
+        <span class="author">{{ marketplaceProject?.owner?.username ?? plugin.author ?? '—' }}</span>
       </div>
       <span class="description">{{ marketplaceProject?.summary ?? plugin.description }}</span>
     </div>
 
     <div class="col-version">
       <span class="version">{{ plugin.version }}</span>
-      <span class="filename">{{ filename }}</span>
+      <span
+        v-if="updateVersion && marketplaceProject"
+        class="update"
+        @click="emit('marketplace-click', marketplaceProject.id)"
+      >{{ t('registry.updateTo', { version: updateVersion }) }}</span>
+      <span v-else class="filename">{{ filename }}</span>
     </div>
 
     <div class="col-status">
@@ -253,6 +254,20 @@ const statusLabel = computed(() => t(`components.plugin.status.${props.plugin.st
   white-space: nowrap;
   user-select: none;
   -webkit-user-select: none;
+}
+
+.update {
+  font-family: var(--font-microcopy);
+  font-size: var(--secondary-font-size-4);
+  color: var(--accent-600);
+  text-transform: uppercase;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.update:hover {
+  text-decoration: underline;
 }
 
 .filename {

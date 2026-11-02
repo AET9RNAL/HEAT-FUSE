@@ -255,6 +255,439 @@
       "publishedOff": "Plugin is now hidden."
     }
   },
+  "registry": {
+    "pluginId": "Plugin ID",
+    "copyTip": "Copy",
+    "copied": "Copied {value}",
+    "updateTo": "Update to {version}",
+    "loadMore": "Show more ({shown} of {total})",
+    "installFailed": "Install failed",
+    "account": {
+      "noUsername": "Not set",
+      "usernameTip": "Your username is part of your creator profile. Edit it in Discover > My Plugins > Edit profile."
+    },
+    "card": {
+      "by": "by {name}",
+      "untitled": "Plugin name",
+      "noSummary": "One line about the plugin",
+      "notMarked": "Not marked for {version}",
+      "notMarkedTip": "The creator did not mark this file for your game version. It can still work."
+    },
+    "install": {
+      "install": "Install",
+      "downloading": "Installing...",
+      "installed": "Installed",
+      "update": "Update",
+      "replace": "Replace",
+      "retry": "Retry"
+    },
+    "notify": {
+      "installed": "Installed. Restart the runtime to load it.",
+      "installedWithDeps": "Installed with {count} dependencies. Restart the runtime to load them.",
+      "alreadyInstalled": "This version and its dependencies are installed."
+    },
+    "confirm": {
+      "kicker": "Install",
+      "title": "Install {name}?",
+      "installs": "Installs",
+      "alsoInstalls": "Also installs (required)",
+      "kept": "Already installed",
+      "worksWith": "Works with (optional, not installed)",
+      "blocked": "Install blocked",
+      "gameWarning": "Some files are not marked for game version {version}. They can still work.",
+      "total": "{count} files · {size}",
+      "install": "Install all",
+      "reason": {
+        "incompatible": "Incompatible. Remove it first.",
+        "file_unavailable": "The file is not available.",
+        "dependency_unavailable": "No published file of this dependency.",
+        "pin_conflict": "Two plugins require different versions.",
+        "error": "Error"
+      }
+    },
+    "stat": {
+      "downloads": "Downloads",
+      "views": "Views",
+      "versions": "Versions",
+      "latest": "Latest",
+      "updated": "Updated",
+      "projects": "Projects",
+      "joined": "Joined",
+      "plugins": "Plugins",
+      "live": "Live",
+      "awaiting": "Awaiting you"
+    },
+    "page": {
+      "noDescription": "The creator did not add a description.",
+      "requires": "Requires",
+      "noRequirements": "No dependencies.",
+      "worksWith": "Works with",
+      "incompatible": "Incompatible with",
+      "usedBy": "Used by · {count}"
+    },
+    "col": {
+      "plugin": "Plugin",
+      "status": "Status",
+      "latest": "Latest",
+      "version": "Version",
+      "channel": "Channel",
+      "game": "Game",
+      "fuse": "FUSE",
+      "size": "Size",
+      "downloads": "Downloads",
+      "views": "Views",
+      "updated": "Updated",
+      "released": "Released"
+    },
+    "channel": {
+      "release": "Release",
+      "beta": "Beta",
+      "alpha": "Alpha"
+    },
+    "channelHint": {
+      "release": "Stable build for everyone.",
+      "beta": "Feature complete. It can still have bugs.",
+      "alpha": "Early build for testers. Expect breaking changes."
+    },
+    "relation": {
+      "required": "Required",
+      "optional": "Optional",
+      "incompatible": "Incompatible"
+    },
+    "status": {
+      "live": "Live",
+      "hidden": "Hidden",
+      "review": "In review",
+      "changes": "Needs changes",
+      "draft": "Draft",
+      "withdrawn": "Withdrawn",
+      "checking": "Checking",
+      "invalid": "Invalid"
+    },
+    "compat": {
+      "gameTip": "Marked for game versions: {list}",
+      "gameNone": "Not marked for a game version",
+      "fuseTip": "Needs FUSE {version} or later",
+      "fuseNone": "No minimum FUSE version"
+    },
+    "creator": {
+      "kicker": "Creator",
+      "empty": "This creator has no listed plugins."
+    },
+    "slug": {
+      "ok": "Available",
+      "format": "a-z, 0-9 and dashes, 3 to 64",
+      "reserved": "Reserved word",
+      "taken": "Taken",
+      "checking": "Checking..."
+    },
+    "md": {
+      "write": "Write",
+      "preview": "Preview",
+      "bold": "Bold",
+      "italic": "Italic",
+      "code": "Code",
+      "list": "List",
+      "color": "Color. Type a hex value after the click.",
+      "underline": "Underline",
+      "strike": "Strikethrough",
+      "center": "Center"
+    },
+    "gameVersions": {
+      "add": "Add version",
+      "hint": "Suggested versions. Any X.Y.Z value is accepted.",
+      "yours": "Your game version"
+    },
+    "icon": {
+      "title": "Icon",
+      "none": "No icon. Discover shows the first letter of the name.",
+      "set": "Discover shows this icon.",
+      "rules": "PNG, JPG, GIF or WebP · max 2 MB · max 2048 × 2048",
+      "upload": "Upload icon",
+      "replace": "Replace icon",
+      "remove": "Remove icon"
+    },
+    "listing": {
+      "name": "Name",
+      "nameHint": "Do not add the game name or words like plugin or mod",
+      "slug": "Slug",
+      "slugHint": "From the name · a-z, 0-9 and dashes",
+      "summary": "Summary",
+      "summaryHint": "One line. Discover shows it under the name.",
+      "description": "Description",
+      "tags": "Tags",
+      "tagsCount": "{count} of 3",
+      "previewKicker": "Preview · Discover card",
+      "previewHint": "It updates as you type.",
+      "saved": "Listing saved."
+    },
+    "build": {
+      "package": "Package",
+      "drop": "Drop a .fuse file here, or click to select one",
+      "dropRules": ".fuse package · your file size limit applies",
+      "inspecting": "Reading",
+      "uploading": "Uploading",
+      "checking": "Checking",
+      "verified": "Verified",
+      "invalid": "Invalid",
+      "failed": "Failed",
+      "replace": "Replace file",
+      "fromManifest": "Read from manifest",
+      "requires": "Requires",
+      "gameVersions": "Game versions",
+      "changelog": "Changelog",
+      "channel": "Channel"
+    },
+    "dep": {
+      "title": "Dependencies",
+      "rows": "{count} rows",
+      "empty": "No dependencies. Add the plugins this one needs.",
+      "anyVersion": "Any version",
+      "add": "Add dependency",
+      "addTitle": "Add dependency",
+      "fromManifest": "Add from manifest",
+      "remove": "Remove",
+      "project": "Project",
+      "projectHint": "Project ID, slug or name",
+      "projectSub": "The row stores the Project ID. The name is for display.",
+      "version": "Version",
+      "relation": "Relation",
+      "duplicate": "This project is already in the list.",
+      "uncovered": "The manifest requires {ids}. No Required row points to it.",
+      "relationHint": {
+        "required": "Installs with this plugin. The runtime needs it.",
+        "optional": "Works with this plugin. Players install it if they want it.",
+        "incompatible": "Blocks the install while that plugin is installed."
+      }
+    },
+    "wizard": {
+      "step": {
+        "listing": "Listing",
+        "build": "Build",
+        "review": "Review"
+      },
+      "stepHint": {
+        "listing": "Name, summary, icon, tags",
+        "build": "Upload the .fuse package",
+        "review": "Check and submit"
+      },
+      "stepOf": "Step {n} of {total}",
+      "ready": "Ready to submit",
+      "next": "Next: {step}",
+      "saveDraft": "Save draft",
+      "submit": "Submit for review",
+      "draftSaved": "Draft saved.",
+      "submitted": "Submitted for review.",
+      "errorTitle": "Not saved",
+      "previewAfter": "This is what players see after approval.",
+      "version": "Version {version}",
+      "file": "File",
+      "checksum": "Checksum",
+      "beforeSubmit": "Before you submit",
+      "required": "Required",
+      "optional": "Optional",
+      "setUsername": "Set username",
+      "whatNext": "What happens next",
+      "next1": "A moderator checks the plugin.",
+      "next2": "The status on My Plugins changes to Live or Needs changes.",
+      "next3": "You turn on Listed in Discover when you are ready.",
+      "check": {
+        "listing": "Name and summary",
+        "tags": "At least one tag",
+        "icon": "Icon",
+        "package": "Package verified",
+        "dependencies": "Manifest dependencies have Required rows",
+        "changelog": "Changelog",
+        "username": "Creator username"
+      }
+    },
+    "overview": {
+      "noUsername": "No username",
+      "editProfile": "Edit profile",
+      "newPlugin": "New plugin",
+      "console": "Creator console",
+      "projects": "Projects",
+      "shown": "{shown} of {total}",
+      "usernameBanner": "Set a username before you publish. Players see it on your plugins.",
+      "search": "Search your plugins",
+      "reviewNote": "Review note",
+      "noReason": "The moderator gave no reason.",
+      "emptyTitle": "No plugins yet",
+      "emptyBody": "Create a listing, upload a .fuse package and submit it for review.",
+      "filter": {
+        "all": "All",
+        "live": "Live",
+        "hidden": "Hidden",
+        "review": "In review",
+        "draft": "Draft",
+        "changes": "Needs changes"
+      },
+      "sort": {
+        "action": "Needs action",
+        "updated": "Updated",
+        "downloads": "Downloads",
+        "name": "Name"
+      }
+    },
+    "action": {
+      "fix": "Fix issues",
+      "submit": "Submit for review",
+      "resubmit": "Resubmit",
+      "publish": "Publish",
+      "version": "New version",
+      "upload": "Upload build",
+      "queued": "Queued · {date}"
+    },
+    "menu": {
+      "open": "Open",
+      "listing": "Edit listing",
+      "copyId": "Copy Project ID",
+      "copyRef": "Copy reference",
+      "discover": "View in Discover",
+      "hide": "Hide from Discover",
+      "publish": "Show in Discover",
+      "delete": "Delete project",
+      "edit": "Edit version",
+      "withdraw": "Withdraw",
+      "cancelReview": "Cancel review",
+      "deleteFile": "Delete file",
+      "deleteFileConfirm": "Delete version {version}?"
+    },
+    "deleteProject": {
+      "title": "Delete project",
+      "body": "This deletes {name} with its draft state. This action is irreversible",
+      "prompt": "Type the slug to confirm",
+      "hold": "Hold to delete",
+      "hold1": "HOLD",
+      "hold2": "KEEP HOLDING",
+      "hold3": "DELETING",
+      "deleted": "{name} is deleted.",
+      "failed": "Not deleted"
+    },
+    "project": {
+      "vis": {
+        "label": "Discover",
+        "listed": "Listed",
+        "hidden": "Hidden",
+        "locked": "Not approved",
+        "tip": {
+          "listed": "Listed in Discover. Click to hide it. Links and installs still work.",
+          "hidden": "Hidden from Discover. Click to list it.",
+          "locked": "You can list the plugin after its first approval."
+        }
+      },
+      "viewInDiscover": "View in Discover",
+      "listingTab": "Listing",
+      "upload": "Upload version",
+      "latest": "Latest",
+      "noFiles": "No versions yet. Upload a .fuse package."
+    },
+    "version": {
+      "saved": "Version saved."
+    },
+    "profile": {
+      "title": "Profile",
+      "kicker": "Public profile",
+      "picture": "Profile picture",
+      "upload": "Upload image",
+      "remove": "Remove image",
+      "rules": "PNG, JPG or GIF · max 2 MB · max 2048 × 2048",
+      "imageBusy": "Checking the image...",
+      "username": "Username",
+      "usernameHint": "Unique, not case-sensitive · letters, numbers and _",
+      "bio": "Bio",
+      "bioHint": "A short text that tells players about you.",
+      "public": "Players see this profile in Discover and through the FUSE API.",
+      "limits": "Upload limits",
+      "maxFile": "Max file size",
+      "storage": "Storage",
+      "storageOf": "{used} of {quota}",
+      "limitsNote": "A moderator can raise these limits. Withdrawn files still count, because their links stay valid.",
+      "previewCreator": "Creator page",
+      "previewLine": "{projects} projects · {downloads} downloads · joined {joined}",
+      "unsaved": "Unsaved changes",
+      "allSaved": "All changes saved",
+      "discard": "Discard",
+      "save": "Save changes",
+      "saved": "Profile saved.",
+      "name": {
+        "ok": "Available",
+        "format": "3 to 24 letters, numbers or _",
+        "taken": "Taken",
+        "checking": "Checking..."
+      }
+    },
+    "error": {
+      "not_authenticated": "Sign in first.",
+      "banned": "Your account cannot upload.",
+      "rate_limited": "Too many requests. Wait one minute.",
+      "not_found": "Not found.",
+      "forbidden": "You do not own this project.",
+      "slug_taken": "Another project uses this slug.",
+      "slug_format": "The slug uses a-z, 0-9 and dashes, 3 to 64.",
+      "slug_reserved": "This slug is a reserved word.",
+      "plugin_id_locked": "The plugin ID cannot change after approval.",
+      "file_locked": "An approved file cannot change.",
+      "username_format": "The username uses 3 to 24 letters, numbers or _.",
+      "username_taken": "Another creator uses this username.",
+      "username_required": "Set a username in your profile first.",
+      "bio_length": "The bio is longer than 160 characters.",
+      "name_length": "The name must have 2 to 64 characters.",
+      "summary_length": "The summary is longer than 120 characters.",
+      "summary_required": "Add a summary.",
+      "tags_required": "Add at least one tag.",
+      "too_many_tags": "Use 3 tags or fewer.",
+      "game_version_format": "Game versions use the X.Y.Z format.",
+      "dependency_unpublished": "A dependency has no published file.",
+      "dependency_not_found": "A dependency project does not exist.",
+      "dependency_file_invalid": "The pinned file is not a published file of that project.",
+      "dependency_cycle": "The Required dependencies loop back to this plugin.",
+      "self_dependency": "A plugin cannot depend on itself.",
+      "duplicate_dependency": "A project is in the list two times.",
+      "too_many_dependencies": "Use 32 dependencies or fewer.",
+      "file_not_ready": "The package check is not complete.",
+      "file_unavailable": "The file is not available.",
+      "file_too_large": "The file is larger than your file size limit.",
+      "quota_exceeded": "The upload exceeds your storage quota.",
+      "duplicate_file": "This exact file is already in the registry.",
+      "duplicate_file_own": "This exact file is already in {project} (version {version}). Delete it there or upload a different build.",
+      "upload_expired": "The upload link expired. Upload the file again.",
+      "project_published": "A published project cannot be deleted. Hide it instead.",
+      "project_in_use": "Other plugins depend on this project.",
+      "file_in_use": "Other plugins pin this file.",
+      "hash_mismatch": "The uploaded bytes do not match the checksum.",
+      "package_invalid": "The file is not a valid .fuse package.",
+      "plugin_id_invalid": "The manifest plugin_id is missing or invalid.",
+      "plugin_id_mismatch": "The manifest plugin_id differs from this project.",
+      "plugin_id_taken": "Another project owns this plugin_id.",
+      "version_invalid": "The manifest version is missing or invalid.",
+      "version_exists": "This project already has this version.",
+      "path_unsafe": "The package has an unsafe file path.",
+      "entry_encrypted": "The package has an encrypted entry.",
+      "zip_bomb": "The package expands to an unsafe size.",
+      "manifest_missing": "The package has no manifest.json.",
+      "manifest_ambiguous": "The package has more than one manifest.json.",
+      "manifest_too_large": "The manifest.json is too large.",
+      "manifest_invalid": "The manifest.json is not valid JSON.",
+      "entry_missing": "The manifest has no entry.",
+      "min_host_version_invalid": "The manifest min_host_version is invalid.",
+      "compression_unsupported": "The package uses an unsupported compression.",
+      "processing_timeout": "The check takes too long. Open the version later to see the result.",
+      "image_type": "Use PNG, JPG, GIF or WebP.",
+      "image_size": "The image is larger than 2 MB.",
+      "image_unreadable": "The image cannot be read.",
+      "image_type_mismatch": "The file type does not match its content.",
+      "image_dimensions": "The image is larger than 2048 × 2048.",
+      "image_timeout": "The image check takes too long. Try again.",
+      "not_a_package": "Select a .fuse file.",
+      "checksum_mismatch": "The download does not match its checksum. Nothing was installed.",
+      "size_mismatch": "The download size is wrong. Nothing was installed.",
+      "download_failed": "The download failed. Check your connection.",
+      "upload_failed": "The upload failed. Check your connection.",
+      "dependency_unavailable": "A dependency has no published file.",
+      "pin_conflict": "Two plugins require different versions of one dependency."
+    }
+  },
   "appwelcome": {
     "tagline": "",
     "getStarted": "Get Started"
@@ -529,7 +962,7 @@
     },
     "account": {
       "title": "Account",
-      "body": "You need an account to download plugins. Sign in or create an account here. With an account, the My Plugins tab in Discover also lets you publish your own plugins."
+      "body": "Sign in or create an account here. With an account, the My Plugins tab in Discover lets you publish your own plugins and edit your creator profile. You do not need an account to install plugins."
     },
     "settings": {
       "title": "Core settings",

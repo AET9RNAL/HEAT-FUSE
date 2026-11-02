@@ -1,8 +1,16 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
+import { AnimatePresence, motion } from 'motion-v'
 
 export type FieldSize = 'full' | 'half' | 'flex'
 export type FieldOrientation = 'default' | 'mirrored' | 'both'
+
+/** One row of the optional suggestion list under the field. */
+export interface FieldSuggestion {
+    value: string
+    label: string
+    hint?: string
+}
 
 interface Props {
     label: string
@@ -14,6 +22,11 @@ interface Props {
     modelValue?: string
     type?: string
     autofocus?: boolean
+    maxlength?: number
+    /** Error stroke, e.g. a taken slug. */
+    invalid?: boolean
+    /** Shown under the focused field. Picking one emits `select`. */
+    suggestions?: FieldSuggestion[]
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -25,12 +38,51 @@ const props = withDefaults(defineProps<Props>(), {
     modelValue: '',
     type: 'text',
     autofocus: false,
+    maxlength: undefined,
+    invalid: false,
+    suggestions: () => [],
 })
 
 const emit = defineEmits<{
     'update:modelValue': [value: string]
     'keydown': [event: KeyboardEvent]
+    'select': [suggestion: FieldSuggestion]
 }>()
+
+defineSlots<{
+    /** Custom content of one suggestion row. The default shows the label and the hint. */
+    suggestion?: (props: { item: FieldSuggestion; active: boolean }) => unknown
+}>()
+
+const active = ref(-1)
+const showSuggestions = computed(() => isFocused.value && props.suggestions.length > 0)
+watch(() => props.suggestions, () => { active.value = -1 })
+
+function pick(s: FieldSuggestion) {
+    emit('select', s)
+    active.value = -1
+}
+
+// Arrow keys move through the list and Enter picks. Every other key goes to the parent.
+function handleKeydown(event: KeyboardEvent) {
+    const n = props.suggestions.length
+    if (showSuggestions.value && event.key === 'ArrowDown') {
+        event.preventDefault()
+        active.value = (active.value + 1) % n
+        return
+    }
+    if (showSuggestions.value && event.key === 'ArrowUp') {
+        event.preventDefault()
+        active.value = (active.value - 1 + n) % n
+        return
+    }
+    if (showSuggestions.value && event.key === 'Enter' && active.value >= 0) {
+        event.preventDefault()
+        pick(props.suggestions[active.value])
+        return
+    }
+    emit('keydown', event)
+}
 
 const inputValue = ref(props.modelValue)
 const isFocused = ref(false)
@@ -65,7 +117,7 @@ onMounted(() => {
 <template>
     <div
         class="input-wrap"
-        :class="[`size-${props.size}`, `orientation-${props.orientation}`, { focused: isFocused, disabled: props.disabled, locked: props.locked }]"
+        :class="[`size-${props.size}`, `orientation-${props.orientation}`, { focused: isFocused, disabled: props.disabled, locked: props.locked, invalid: props.invalid }]"
         :style="{ borderRadius }"
     >
         <span v-if="!isFocused && !hasValue" class="label">{{ props.label }}</span>
@@ -76,12 +128,39 @@ onMounted(() => {
             :disabled="props.disabled"
             :readonly="props.locked"
             :tabindex="props.locked ? -1 : undefined"
+            :maxlength="props.maxlength"
             :value="inputValue"
             @input="handleInput"
-            @keydown="$emit('keydown', $event)"
+            @keydown="handleKeydown"
             @focus="isFocused = true"
             @blur="isFocused = false"
         />
+        <AnimatePresence>
+            <motion.div
+                v-if="showSuggestions"
+                key="suggestions"
+                class="suggestions"
+                :initial="{ opacity: 0, y: -4 }"
+                :animate="{ opacity: 1, y: 0 }"
+                :exit="{ opacity: 0, y: -4 }"
+                :transition="{ duration: 0.12 }"
+            >
+                <!-- mousedown, not click: the input blur closes the list before a click lands -->
+                <div
+                    v-for="(item, i) in props.suggestions"
+                    :key="item.value"
+                    class="suggestion"
+                    :class="{ active: i === active }"
+                    @mousedown.prevent="pick(item)"
+                    @mouseenter="active = i"
+                >
+                    <slot name="suggestion" :item="item" :active="i === active">
+                        <span class="suggestion-label">{{ item.label }}</span>
+                        <span v-if="item.hint" class="suggestion-hint">{{ item.hint }}</span>
+                    </slot>
+                </div>
+            </motion.div>
+        </AnimatePresence>
     </div>
 </template>
 
@@ -146,5 +225,54 @@ onMounted(() => {
 }
 
 .input:disabled { cursor: not-allowed; }
+
+.input-wrap.invalid {
+    border-color: var(--error-highlight);
+}
+
+.suggestions {
+    position: absolute;
+    z-index: 20;
+    top: calc(100% + 2px);
+    left: -1px;
+    right: -1px;
+    display: flex;
+    flex-direction: column;
+    background: hsla(142, 10%, 6%, 0.98);
+    border: 1px solid var(--base-600);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+.suggestion {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2);
+    cursor: pointer;
+}
+
+.suggestion.active {
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.suggestion-label {
+    flex: 1;
+    min-width: 0;
+    font-family: var(--font-primary);
+    font-weight: var(--font-weight-2);
+    font-size: var(--main-font-size-4);
+    color: var(--text-main);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.suggestion-hint {
+    flex-shrink: 0;
+    font-family: var(--font-microcopy);
+    font-size: 10px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
 
 </style>

@@ -85,8 +85,30 @@ interface Window {
     }>>
     showFile: (filePath: string) => Promise<void>
     deleteFile: (filePath: string) => Promise<{ success: boolean; error?: string }>
-    downloadPlugin: (url: string, filename: string) => Promise<{ success: boolean; filePath?: string; checksum?: string; error?: string }>
-    uploadToR2: (presignedUrl: string, fileBuffer: ArrayBuffer, contentType: string) => Promise<{ success: boolean; error?: string }>
+  }
+  registryAPI: {
+    pathForFile: (file: File) => string
+    pickFile: (kind: 'package' | 'image') => Promise<string | null>
+    inspectPackage: (filePath: string) => Promise<{
+      success: boolean; error?: string
+      filePath?: string; fileName?: string; size?: number; sha256?: string
+      manifest?: Record<string, unknown> | null; problem?: string | null
+    }>
+    inspectImage: (filePath: string, kind: 'icon' | 'avatar') => Promise<{
+      success: boolean; error?: string
+      filePath?: string; size?: number; type?: string; width?: number; height?: number
+      preview?: string; problem?: string | null
+    }>
+    upload: (req: {
+      token: string; filePath: string; kind: 'package' | 'image'
+      mode: 'single' | 'multipart'; url?: string; headers?: Record<string, string>
+      partSize?: number; parts?: { n: number; url: string; size: number }[]
+    }) => Promise<{ success: boolean; error?: string; parts?: { n: number; etag: string }[] }>
+    install: (req: {
+      token: string; url: string; sha256: string; size: number; fileName: string; replace?: string[]
+    }) => Promise<{ success: boolean; error?: string; filePath?: string }>
+    onUploadProgress: (cb: (p: { token: string; sent: number; total: number }) => void) => () => void
+    onInstallProgress: (cb: (p: { token: string; received: number; total: number }) => void) => () => void
   }
   pluginConfigAPI: {
     readPlugin: (pluginId: string) => Promise<Record<string, unknown>>

@@ -6,7 +6,7 @@
   "description": "A pack of custom made reticles",
   "entry": "plugin:CrosshairPlugin",
   "runtime": "node",
-  "dependencies": ["accessors", "fuse_ui"],
+  "dependencies": { "accessors": ">=5.0.0", "fuse_ui": ">=2.0.0" },
   "min_host_version": "5.0.0",
   "permissions": {
     "accessors.ui": { "reason": "Draws the reticle inside the game's HUD, in place of the game's default aim." },

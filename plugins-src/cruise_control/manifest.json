@@ -6,7 +6,7 @@
   "description": "Simple cruise control functionality",
   "entry": "plugin:CruiseControlPlugin",
   "runtime": "node",
-  "dependencies": ["accessors"],
+  "dependencies": { "accessors": ">=5.0.0" },
   "min_host_version": "5.0.0",
   "hotkeys": {
     "toggle": "c"

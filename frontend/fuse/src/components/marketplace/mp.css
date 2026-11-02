@@ -1,0 +1,376 @@
+/* Shared look of the registry screens: bevel panels, mono labels, status chips. */
+
+/* The header band of a HudFrame with :head="34": a title, then a mono code or controls on the right. */
+.mp-band {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    height: 34px;
+    padding: 0 var(--space-4);
+    box-sizing: border-box;
+    flex-shrink: 0;
+}
+
+.mp-band-title {
+    font-family: var(--font-primary);
+    font-size: var(--main-font-size-3);
+    font-weight: var(--font-weight-2);
+    text-transform: uppercase;
+    color: var(--text-main);
+    white-space: nowrap;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.mp-band-title .req {
+    margin-left: 2px;
+    color: var(--accent-200);
+}
+
+.mp-band-code {
+    margin-left: auto;
+    font-family: var(--font-microcopy);
+    font-size: var(--secondary-font-size-4);
+    letter-spacing: 0.08em;
+    color: var(--base-600);
+    white-space: nowrap;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+/* The body of a HudFrame under its band. */
+.mp-frame-body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-4) var(--space-4);
+    min-height: 0;
+}
+
+/* A section break inside a frame. */
+.mp-divider {
+    border-top: 1px dashed rgba(255, 255, 255, 0.08);
+}
+
+/* The label above a frame, like a part number on a drawing. Values copy on click. */
+.mp-tagline {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-2);
+    min-width: 0;
+    padding: 0 var(--space-1);
+    font-family: var(--font-microcopy);
+    font-size: var(--secondary-font-size-5);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.mp-tag-key,
+.mp-tag-sep {
+    color: var(--base-600);
+}
+
+.mp-tag {
+    padding: 0;
+    border: none;
+    background: none;
+    cursor: copy;
+    font: inherit;
+    letter-spacing: inherit;
+    color: var(--text-muted);
+    text-transform: none;
+}
+
+.mp-tag:hover {
+    color: var(--text-main);
+}
+
+.mp-tag-fill {
+    flex: 1;
+}
+
+.mp-panel {
+    background: var(--black-1-a);
+    border: 1px solid var(--base-600);
+    corner-shape: bevel;
+    border-radius: 10px 0 10px 0;
+    box-sizing: border-box;
+}
+
+.mp-label {
+    font-family: var(--font-microcopy);
+    font-size: 10px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.mp-label--accent {
+    color: var(--accent-200);
+}
+
+.mp-label--warn {
+    color: var(--accent-600);
+}
+
+.mp-label--error {
+    color: var(--error-highlight);
+}
+
+.mp-field-label {
+    font-family: var(--font-primary);
+    font-size: var(--main-font-size-4);
+    font-weight: var(--font-weight-2);
+    color: var(--text-main);
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.mp-field-label .req {
+    color: var(--accent-200);
+    margin-left: 2px;
+}
+
+.mp-mono {
+    font-family: var(--font-microcopy);
+}
+
+.mp-title {
+    font-family: var(--font-primary);
+    font-size: var(--main-font-size-2);
+    font-weight: var(--font-weight-2);
+    color: var(--text-main);
+    margin: 0;
+}
+
+.mp-text {
+    font-family: var(--font-primary);
+    font-size: var(--main-font-size-4);
+    color: var(--text-muted);
+    margin: 0;
+}
+
+.mp-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 1px 6px;
+    font-family: var(--font-microcopy);
+    font-size: 11px;
+    line-height: 16px;
+    text-transform: uppercase;
+    white-space: nowrap;
+    color: var(--text-muted);
+    background: rgba(255, 255, 255, 0.04);
+    border-radius: 2px;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.mp-chip--live {
+    color: var(--accent-200);
+    background: rgba(132, 255, 177, 0.08);
+}
+
+.mp-chip--review {
+    color: var(--accent-600);
+    background: rgba(255, 252, 125, 0.08);
+}
+
+.mp-chip--error {
+    color: var(--error-highlight);
+    background: rgba(255, 106, 98, 0.1);
+}
+
+.mp-chip--info {
+    color: #7dd3fc;
+    background: rgba(125, 211, 252, 0.1);
+}
+
+.mp-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    color: var(--accent-200);
+    font-family: var(--font-primary);
+    font-size: var(--main-font-size-4);
+}
+
+.mp-link:hover {
+    text-decoration: underline;
+}
+
+.mp-link:disabled {
+    opacity: 0.4;
+    cursor: default;
+    text-decoration: none;
+}
+
+.mp-textarea {
+    width: 100%;
+    min-height: 120px;
+    background: var(--black-1-a);
+    border: 1px solid var(--base-600);
+    color: var(--text-main);
+    font-family: var(--font-microcopy);
+    font-size: var(--main-font-size-4);
+    line-height: 1.6;
+    padding: var(--space-3);
+    resize: vertical;
+    outline: none;
+    box-sizing: border-box;
+    corner-shape: bevel;
+    border-radius: 0 0 8px 0;
+}
+
+.mp-textarea:focus {
+    border-color: var(--accent-200);
+}
+
+.mp-scroll::-webkit-scrollbar,
+.mp-textarea::-webkit-scrollbar {
+    width: 6px;
+}
+
+.mp-scroll::-webkit-scrollbar-track,
+.mp-textarea::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.mp-scroll::-webkit-scrollbar-thumb,
+.mp-textarea::-webkit-scrollbar-thumb {
+    background-color: hsla(0, 0%, 100%, 0.15);
+    border-radius: 4px;
+    border-left: 4px solid transparent;
+    background-clip: padding-box;
+}
+
+.mp-scroll::-webkit-scrollbar-thumb:hover,
+.mp-textarea::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(255, 255, 255, 0.25);
+}
+
+.mp-hint-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2);
+}
+
+.mp-empty {
+    padding: var(--space-6) var(--space-4);
+    text-align: center;
+    font-family: var(--font-primary);
+    font-size: var(--main-font-size-4);
+    color: var(--text-muted);
+}
+
+.mp-markdown {
+    font-family: var(--font-primary);
+    font-size: var(--main-font-size-4);
+    color: var(--text-main);
+    line-height: 1.6;
+}
+
+.mp-markdown :deep(h1),
+.mp-markdown :deep(h2),
+.mp-markdown :deep(h3) {
+    color: var(--text-main);
+    font-weight: var(--font-weight-2);
+    margin: var(--space-3) 0 var(--space-1);
+}
+
+.mp-markdown :deep(p) {
+    margin: var(--space-1) 0;
+    color: var(--text-muted);
+}
+
+.mp-markdown :deep(code) {
+    font-family: var(--font-microcopy);
+    background: rgba(255, 255, 255, 0.06);
+    padding: 1px 4px;
+}
+
+.mp-markdown :deep(pre) {
+    background: rgba(255, 255, 255, 0.04);
+    padding: var(--space-3);
+    overflow-x: auto;
+}
+
+.mp-markdown :deep(pre code) {
+    background: none;
+    padding: 0;
+}
+
+.mp-markdown :deep(a) {
+    color: var(--accent-200);
+}
+
+.mp-markdown :deep(ul),
+.mp-markdown :deep(ol) {
+    padding-left: var(--space-4);
+    color: var(--text-muted);
+}
+
+.mp-markdown :deep(blockquote) {
+    border-left: 2px solid rgba(255, 255, 255, 0.15);
+    padding-left: var(--space-3);
+    color: var(--text-muted);
+    margin: var(--space-2) 0;
+}
+
+.mp-breadcrumb {
+        user-select: none;
+    -webkit-user-select: none;
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    flex-shrink: 0;
+}
+
+.mp-back {
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: 1px solid var(--base-600);
+    color: var(--text-main);
+    cursor: pointer;
+}
+
+.mp-back:hover {
+    border-color: var(--accent-200);
+}
+
+.mp-crumb {
+    font-family: var(--font-microcopy);
+    font-size: var(--main-font-size-4);
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+
+.mp-crumb--link {
+    cursor: pointer;
+    background: none;
+    border: none;
+    padding: 0;
+}
+
+.mp-crumb--link:hover {
+    color: var(--text-main);
+}
+
+.mp-crumb--current {
+    color: var(--text-main);
+}

@@ -7,12 +7,15 @@ import { autoUpdater } from 'electron-updater'
 import { spawn, execFile, type ChildProcess } from 'node:child_process'
 import os from 'node:os'
 import crypto from 'node:crypto'
+import https from 'node:https'
 import DiscordRPC from 'discord-rpc'
 
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import fs from 'node:fs'
 import { unzipSync, strFromU8 } from 'fflate'
+import { inspectPackage } from '../../../workers/registry-processor/src/zip.ts'
+import { checkImage, sniffImage, MAX_IMAGE_BYTES } from '../../../workers/registry-processor/src/image.ts'
 import { getStageWindow, initOverlayStage, setFrameSources, startOverlayStage, stopOverlayStage } from './overlayStage'
 import { handleIpc, onIpc, onceIpc, trustSurface } from './ipcGuard'
 import { PermissionStore } from './permissionStore'
@@ -1233,17 +1236,6 @@ app.whenReady().then(() => {
     }
   }
 
-  // Only allow HTTPS requests to Cloudflare R2 hostnames
-  function assertR2Url(url: string): void {
-    let parsed: URL
-    try { parsed = new URL(url) } catch { throw new Error('Invalid URL') }
-    if (parsed.protocol !== 'https:') throw new Error('Only HTTPS URLs are allowed')
-    const { hostname } = parsed
-    if (!hostname.endsWith('.r2.cloudflarestorage.com') && !hostname.endsWith('.r2.dev')) {
-      throw new Error('URL must point to Cloudflare R2 storage')
-    }
-  }
-
   handleIpc('plugins:show-file', (_event, filePath: string) => {
     try {
       assertInPluginsDir(filePath)
@@ -1261,39 +1253,180 @@ app.whenReady().then(() => {
     }
   })
 
-  handleIpc('plugins:download-plugin', async (_event, url: string, filename: string) => {
+  // ── Registry: packages and images stream from disk, so no file passes over IPC ──
+
+  const CDN_HOST = new URL((import.meta.env.VITE_CDN_URL as string | undefined) || 'https://cdn.wotheatfuse.com').hostname
+  const IMAGE_EXT = /\.(png|jpe?g|gif|webp)$/i
+
+  function hashFile(filePath: string, start?: number, end?: number): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const h = crypto.createHash('sha256')
+      fs.createReadStream(filePath, { start, end })
+        .on('data', c => h.update(c)).on('error', reject).on('end', () => resolve(h.digest('hex')))
+    })
+  }
+
+  /** The same checks the processor Worker runs, so the form shows problems before the upload. */
+  async function inspectLocalPackage(filePath: string) {
+    if (!filePath.toLowerCase().endsWith('.fuse')) throw new Error('not_a_package')
+    const handle = await fs.promises.open(filePath, 'r')
     try {
-      assertR2Url(url)
-      const safeFilename = path.basename(filename).replace(/[^a-zA-Z0-9._\-]/g, '_')
-      if (!safeFilename.endsWith('.fuse')) throw new Error('Only .fuse files can be installed')
-      const dest = path.join(PATHS.pluginsUser, safeFilename)
-      if (!fs.existsSync(PATHS.pluginsUser)) fs.mkdirSync(PATHS.pluginsUser, { recursive: true })
-      const response = await net.fetch(url)
-      if (!response.ok) throw new Error(`Download failed: HTTP ${response.status}`)
-      const buffer = await response.arrayBuffer()
-      const fileBuf = Buffer.from(buffer)
-      fs.writeFileSync(dest, fileBuf)
-      const checksum = crypto.createHash('sha256').update(fileBuf).digest('hex')
-      return { success: true, filePath: dest, checksum }
+      const { size } = await handle.stat()
+      const check = await inspectPackage({
+        size,
+        read: async (offset, length) => {
+          const b = Buffer.alloc(length)
+          const { bytesRead } = await handle.read(b, 0, length, offset)
+          return new Uint8Array(b.buffer, b.byteOffset, bytesRead)
+        },
+      })
+      return {
+        filePath, fileName: path.basename(filePath), size, sha256: await hashFile(filePath),
+        manifest: check.manifest ?? null, problem: check.problem ?? null,
+      }
+    } finally {
+      await handle.close()
+    }
+  }
+
+  async function inspectLocalImage(filePath: string, kind: 'icon' | 'avatar') {
+    if (!IMAGE_EXT.test(filePath)) return { filePath, size: 0, problem: 'image_type' }
+    const { size } = await fs.promises.stat(filePath)
+    if (size > MAX_IMAGE_BYTES) return { filePath, size, problem: 'image_size' }
+    const bytes = new Uint8Array(await fs.promises.readFile(filePath))
+    const res = checkImage(kind, sniffImage(bytes)?.type ?? '', bytes)
+    if (!res.info) return { filePath, size, problem: res.problem ?? 'image_unreadable' }
+    return {
+      filePath, size, type: res.info.type, width: res.info.width, height: res.info.height, problem: null,
+      preview: `data:${res.info.type};base64,${Buffer.from(bytes).toString('base64')}`,
+    }
+  }
+
+  /** One PUT with an exact Content-Length, streamed from a byte range of the file. */
+  function putRange(url: string, filePath: string, start: number, length: number, headers: Record<string, string>,
+                    onBytes: (n: number) => void): Promise<string> {
+    const target = new URL(url)
+    if (target.protocol !== 'https:' || !target.hostname.endsWith('.r2.cloudflarestorage.com')) {
+      return Promise.reject(new Error('upload_host_refused'))
+    }
+    return new Promise((resolve, reject) => {
+      const req = https.request(target, { method: 'PUT', headers: { ...headers, 'Content-Length': String(length) } }, res => {
+        let body = ''
+        res.on('data', c => { body += c })
+        res.on('end', () => {
+          if ((res.statusCode ?? 0) >= 300) reject(new Error(`upload_failed: HTTP ${res.statusCode} ${body.slice(0, 300)}`))
+          else resolve(String(res.headers.etag ?? '').replace(/"/g, ''))
+        })
+      })
+      req.on('error', reject)
+      const stream = fs.createReadStream(filePath, { start, end: start + length - 1 })
+      stream.on('data', c => onBytes(c.length))
+      stream.on('error', e => { req.destroy(e); reject(e) })
+      stream.pipe(req)
+    })
+  }
+
+  handleIpc('registry:pick-file', async (_event, kind: 'package' | 'image') => {
+    const filters = kind === 'package'
+      ? [{ name: 'FUSE plugin', extensions: ['fuse'] }]
+      : [{ name: 'Image', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp'] }]
+    const result = await dialog.showOpenDialog(win!, { properties: ['openFile'], filters })
+    return result.canceled ? null : (result.filePaths[0] ?? null)
+  })
+
+  handleIpc('registry:inspect-package', async (_event, filePath: string) => {
+    try { return { success: true, ...(await inspectLocalPackage(String(filePath))) } }
+    catch (e: unknown) { return { success: false, error: (e as Error).message } }
+  })
+
+  handleIpc('registry:inspect-image', async (_event, filePath: string, kind: 'icon' | 'avatar') => {
+    try { return { success: true, ...(await inspectLocalImage(String(filePath), kind === 'avatar' ? 'avatar' : 'icon')) } }
+    catch (e: unknown) { return { success: false, error: (e as Error).message } }
+  })
+
+  // The plan comes from registry-upload-create: one signed PUT, or one signed URL per part.
+  handleIpc('registry:upload', async (event, req: {
+    token: string; filePath: string; kind: 'package' | 'image'
+    mode: 'single' | 'multipart'; url?: string; headers?: Record<string, string>
+    partSize?: number; parts?: { n: number; url: string; size: number }[]
+  }) => {
+    try {
+      const filePath = String(req.filePath)
+      if (req.kind === 'package' ? !filePath.toLowerCase().endsWith('.fuse') : !IMAGE_EXT.test(filePath)) throw new Error('upload_type_refused')
+      const { size } = await fs.promises.stat(filePath)
+      let sent = 0
+      const progress = (n: number) => {
+        sent += n
+        if (!event.sender.isDestroyed()) event.sender.send('registry:upload-progress', { token: req.token, sent, total: size })
+      }
+      if (req.mode === 'single') {
+        await putRange(String(req.url), filePath, 0, size, req.headers ?? {}, progress)
+        return { success: true }
+      }
+      const partSize = Number(req.partSize)
+      const done: { n: number; etag: string }[] = []
+      for (const part of req.parts ?? []) {
+        const start = (part.n - 1) * partSize
+        let etag = ''
+        for (let attempt = 1; ; attempt++) {
+          const before = sent
+          try { etag = await putRange(part.url, filePath, start, part.size, {}, progress); break }
+          catch (e) { sent = before; if (attempt >= 3) throw e }
+        }
+        done.push({ n: part.n, etag })
+      }
+      return { success: true, parts: done }
     } catch (e: unknown) {
       return { success: false, error: (e as Error).message }
     }
   })
 
-  handleIpc('plugins:upload-to-r2', async (_event, presignedUrl: string, fileBuffer: ArrayBuffer, contentType: string) => {
+  // Streams a CDN file to plugins/.downloads, checks size and SHA-256, and only then moves it into the plugins folder.
+  handleIpc('registry:install', async (event, req: {
+    token: string; url: string; sha256: string; size: number; fileName: string; replace?: string[]
+  }) => {
+    const tmpDir = path.join(PATHS.pluginsUser, '.downloads')
+    const tmp = path.join(tmpDir, `${String(req.sha256).slice(0, 16)}.part`)
+    let out: fs.WriteStream | null = null
     try {
-      assertR2Url(presignedUrl)
-      const response = await net.fetch(presignedUrl, {
-        method: 'PUT',
-        body: Buffer.from(fileBuffer),
-        headers: { 'Content-Type': contentType },
-      })
-      if (!response.ok) {
-        const body = await response.text().catch(() => '')
-        throw new Error(`Upload failed: HTTP ${response.status} ${body}`)
+      const target = new URL(String(req.url))
+      if (target.protocol !== 'https:' || target.hostname !== CDN_HOST) throw new Error('download_host_refused')
+      if (!/^[0-9a-f]{64}$/.test(String(req.sha256))) throw new Error('sha256_invalid')
+      const fileName = path.basename(String(req.fileName)).replace(/[^a-zA-Z0-9._-]/g, '_')
+      if (!fileName.endsWith('.fuse')) throw new Error('not_a_package')
+      fs.mkdirSync(tmpDir, { recursive: true })
+
+      const response = await net.fetch(target.href)
+      if (!response.ok || !response.body) throw new Error(`download_failed: HTTP ${response.status}`)
+      const hash = crypto.createHash('sha256')
+      const file = fs.createWriteStream(tmp)
+      out = file
+      const reader = response.body.getReader()
+      let received = 0
+      for (;;) {
+        const { done, value } = await reader.read()
+        if (done) break
+        received += value.length
+        if (received > req.size) throw new Error('size_mismatch')
+        hash.update(value)
+        if (!file.write(value)) await new Promise<void>(r => file.once('drain', () => r()))
+        if (!event.sender.isDestroyed()) event.sender.send('registry:install-progress', { token: req.token, received, total: req.size })
       }
-      return { success: true }
+      await new Promise<void>((resolve, reject) => file.end((err?: Error | null) => err ? reject(err) : resolve()))
+      out = null
+      if (received !== req.size) throw new Error('size_mismatch')
+      if (hash.digest('hex') !== req.sha256) throw new Error('checksum_mismatch')
+
+      const dest = path.join(PATHS.pluginsUser, fileName)
+      fs.renameSync(tmp, dest)
+      for (const old of req.replace ?? []) {
+        if (path.resolve(old) === path.resolve(dest)) continue
+        try { assertInPluginsDir(old); fs.unlinkSync(path.resolve(old)) } catch { /* already gone */ }
+      }
+      return { success: true, filePath: dest }
     } catch (e: unknown) {
+      if (out) await new Promise<void>(r => out!.destroy().once('close', () => r()))
+      try { fs.unlinkSync(tmp) } catch { /* no partial file */ }
       return { success: false, error: (e as Error).message }
     }
   })

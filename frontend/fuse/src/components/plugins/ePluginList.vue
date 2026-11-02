@@ -3,7 +3,7 @@ import { ref, computed, onMounted } from 'vue'
 import ePlugin from './ePlugin.vue'
 import eCheckbox from '../inputs/eCheckbox.vue'
 import { usePluginsStore } from '../../stores/plugins'
-import { useMarketplaceStore } from '../../stores/marketplace'
+import { useRegistryStore } from '../../stores/registry'
 import { useNavigationStore } from '../../stores/navigation'
 import type { MenuOption } from '../ui/eContextMenu.vue'
 import { useI18n } from '../../composables/useI18n'
@@ -23,31 +23,23 @@ const props = withDefaults(defineProps<{
 })
 
 const store = usePluginsStore()
-const marketplaceStore = useMarketplaceStore()
+const registry = useRegistryStore()
 const navStore = useNavigationStore()
 const samples = useSamplePlugins()
 
-function fileBasename(filePath: string) {
-    return filePath.replace(/\\/g, '/').split('/').pop() ?? filePath
+// The registry links a file by its SHA-256, so the link survives version updates.
+function marketplaceMatchFor(plugin: { checksum?: string }) {
+    const file = plugin.checksum ? registry.installed.find(f => f.sha256 === plugin.checksum) : undefined
+    return file?.projectId ? registry.linkedProjects[file.projectId] ?? null : null
 }
 
-function marketplaceMatchFor(plugin: { checksum?: string; filePath?: string }) {
-    // Prefer checksum: matches any version of the project, so the link survives updates.
-    if (plugin.checksum) {
-        const byChecksum = marketplaceStore.checksumToProject.get(plugin.checksum)
-        if (byChecksum) return byChecksum
-    }
-    // Fallback to latest-version file name (e.g. manually placed file with no known checksum).
-    if (plugin.filePath) return marketplaceStore.fileToProject.get(fileBasename(plugin.filePath)) ?? null
-    return null
+function updateFor(plugin: { checksum?: string }) {
+    return (plugin.checksum && registry.installed.find(f => f.sha256 === plugin.checksum)?.update?.version) || null
 }
 
 function handleMarketplaceClick(projectId: string) {
-    const project = marketplaceStore.projects.find(p => p.id === projectId)
-    if (project) marketplaceStore.selectProject(project)
     navStore.selectOption('discover')
-    // AppDiscover listens to this to open the project once it mounts
-    eventBus.emit('navigate:discover', { projectId })
+    void registry.openProject(projectId)
 }
 
 const selected = ref<Record<string, boolean>>({})
@@ -122,8 +114,7 @@ function menuOptionsFor(pluginId: string): MenuOption[] {
         const result = await window.pluginsAPI.deleteFile(plugin.filePath)
         if (result.success) {
           store.remove(pluginId)
-          const remaining = await window.pluginsAPI.scan()
-          marketplaceStore.reconcileInstallStates(remaining)
+          await registry.refreshInstalled()
         }
       },
     },
@@ -131,13 +122,7 @@ function menuOptionsFor(pluginId: string): MenuOption[] {
   return options
 }
 
-onMounted(async () => {
-  const [plugins] = await Promise.all([
-    window.pluginsAPI.scan(),
-    marketplaceStore.projects.length === 0 ? marketplaceStore.fetchProjects() : Promise.resolve(),
-  ])
-  marketplaceStore.reconcileInstallStates(plugins)
-})
+onMounted(() => void registry.refreshInstalled())
 </script>
 
 <template>
@@ -168,6 +153,7 @@ onMounted(async () => {
           :enabled="isEnabled(plugin.status)"
           :menu-options="menuOptionsFor(plugin.plugin_id)"
           :marketplace-project="marketplaceMatchFor(plugin)"
+          :update-version="updateFor(plugin)"
           @update:selected="selected[plugin.plugin_id] = $event"
           @update:enabled="handleToggle(plugin.plugin_id, $event)"
           @marketplace-click="handleMarketplaceClick"

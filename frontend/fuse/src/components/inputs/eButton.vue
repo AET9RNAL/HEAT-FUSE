@@ -4,6 +4,8 @@ export type ButtonSize = 'slim' | 'half' | 'full' | 'flex'
 export type ButtonVariant = 'primary' | 'secondary' | 'tertiary' | 'accent'
 export type SystemState = 'idle' | 'processing' | 'success' | 'error'
 export type ButtonMode = 'default' | 'confirm' | 'hold' | 'toggle'
+// danger semantics for actions that destroy data.
+export type ButtonTone = 'default' | 'danger'
 </script>
 
 <script setup lang="ts">
@@ -19,6 +21,7 @@ interface Props {
     size?: ButtonSize
     variant?: ButtonVariant
     mode?: ButtonMode
+    tone?: ButtonTone
     label?: string
     icon?: IconKind
     iconSize?: IconSize
@@ -46,6 +49,7 @@ const props = withDefaults(defineProps<Props>(), {
     size: 'slim',
     variant: 'primary',
     mode: 'default',
+    tone: 'default',
     label: '',
     iconSize: 'normal',
     systemState: 'idle',
@@ -202,13 +206,16 @@ const stateContent = computed(() => {
 
 const contentKey = computed(() => `${props.systemState}:${armed.value}:${toggleOn.value}`)
 
+const danger = computed(() => props.tone === 'danger')
+
 const borderColor = computed(() => {
-    if (armed.value) return 'var(--error-base)'
+    if (armed.value || danger.value) return 'var(--error-base)'
     return props.variant === 'primary' ? 'var(--base-600)' : 'rgba(0, 0, 0, 0)'
 })
 
 const fillColor = computed(() => {
     if (armed.value) return 'rgba(102, 35, 43, 0.85)'
+    if (danger.value) return 'rgba(102, 35, 43, 0.6)'
     // Toggle's wrap carries the body fill, so the inset surface is clear until active.
     if (props.mode === 'toggle') return toggleOn.value ? 'var(--accent-200)' : 'rgba(10, 10, 10, 0)'
     if (props.variant === 'accent') return 'rgb(132, 255, 177)'
@@ -217,6 +224,7 @@ const fillColor = computed(() => {
 })
 
 const hoverFill = computed(() => {
+    if (danger.value) return 'rgba(102, 35, 43, 0.9)'
     if (props.variant === 'accent') return 'rgb(168, 255, 200)'
     if (props.variant === 'tertiary') return 'rgba(255, 255, 255, 0.06)'
     return 'rgba(30, 30, 28, 0.75)'
@@ -229,7 +237,7 @@ const iconColor = computed(() => (toggleOn.value ? 'var(--black-1)' : ''))
 <template>
     <motion.div
         class="ebutton-wrap"
-        :class="[`variant-${variant}`, `mode-${mode}`, { armed, 'toggle-on': toggleOn }]"
+        :class="[`variant-${variant}`, `mode-${mode}`, `tone-${tone}`, { armed, 'toggle-on': toggleOn }]"
         :style="containerStyle"
         :initial="false"
         :animate="{ borderColor }"
@@ -264,7 +272,7 @@ const iconColor = computed(() => (toggleOn.value ? 'var(--black-1)' : ''))
                     :exit="{ opacity: 0, width: 0 }"
                     :transition="{ duration: 0.15 }"
                 >
-                    <eThrobber :progress="holdProgress" :active="holding" />
+                    <eThrobber :progress="holdProgress" :active="holding" :tone="danger ? 'danger' : 'accent'" />
                 </motion.span>
             </AnimatePresence>
             <AnimatePresence mode="wait">
@@ -360,6 +368,10 @@ const iconColor = computed(() => (toggleOn.value ? 'var(--black-1)' : ''))
     transform-origin: left center;
     background: rgba(132, 255, 177, 0.25);
     pointer-events: none;
+}
+
+.tone-danger .hold-fill {
+    background: rgba(255, 106, 98, 0.35);
 }
 
 /* Opens from 0 to the throbber (14px) plus the gap. The negative margin cancels the flex gap while it is closed. */

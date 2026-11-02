@@ -1,16 +1,16 @@
 <script setup lang="ts">
 import { ref, computed, watch, onUnmounted, nextTick } from 'vue'
 import Icons from '../ui/Icons.vue'
-import type { MarketplaceTag } from '../../stores/marketplace'
+import type { RegistryTag } from '../../utils/registry-api'
 
 const props = defineProps<{
-    tags: MarketplaceTag[]
+    tags: RegistryTag[]
     /** Selected tag ids */
-    modelValue: string[]
+    modelValue: number[]
     allLabel: string
 }>()
 
-const emit = defineEmits<{ 'update:modelValue': [value: string[]] }>()
+const emit = defineEmits<{ 'update:modelValue': [value: number[]] }>()
 
 const show = ref(false)
 const triggerRef = ref<HTMLElement | null>(null)
@@ -79,7 +79,7 @@ onUnmounted(() => {
 })
 
 // The menu stays open across toggles - filtering is a multi-select
-function toggleTag(id: string) {
+function toggleTag(id: number) {
     const next = props.modelValue.includes(id)
         ? props.modelValue.filter(t => t !== id)
         : [...props.modelValue, id]
