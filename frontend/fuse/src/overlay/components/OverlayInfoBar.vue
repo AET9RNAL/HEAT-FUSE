@@ -270,7 +270,6 @@ onBeforeUnmount(() => window.removeEventListener("pointerdown", onWindowPointerD
   white-space: nowrap;
   background: var(--black-1-a);
   backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
   border: 1px solid var(--base-600);
   corner-shape: bevel;
   border-radius: 6px 0 6px 0;

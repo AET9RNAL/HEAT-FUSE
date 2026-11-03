@@ -87,7 +87,6 @@ function close(): void {
   inset: 0;
   z-index: 0;
   backdrop-filter: blur(35px);
-  -webkit-backdrop-filter: blur(35px);
   pointer-events: none;
 }
 

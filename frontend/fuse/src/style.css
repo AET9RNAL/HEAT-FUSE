@@ -43,7 +43,6 @@ h5 { font-size: var(--main-font-size-5); font-weight: var(--font-weight-2); }
     drop-shadow(0 0 1px var(--Branding-Green, #84FFB1))
     drop-shadow(0 2px 5px rgba(197, 255, 218, 0.20));
   backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
 }
 
 /* Debug utilities */

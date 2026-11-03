@@ -77,7 +77,6 @@ const gradientBg = computed(() => {
             class="compositor-effect"
             :style="{
                 backdropFilter: frostBlur > 0 ? `blur(${frostBlur}px)` : undefined,
-                WebkitBackdropFilter: frostBlur > 0 ? `blur(${frostBlur}px)` : undefined,
                 filter: needsSvgFilter ? `url(#${filterId})` : 'none',
             }"
         ></div>

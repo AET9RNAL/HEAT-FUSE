@@ -767,7 +767,6 @@ function onUsername(value: string): void {
   inset: 0;
   background: rgba(0, 0, 0, 0.6);
   backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
 }
 
 /* max-width keeps a wide child inside the window instead of centring it out of view. */

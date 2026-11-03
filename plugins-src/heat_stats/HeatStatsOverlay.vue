@@ -197,7 +197,6 @@ watch([section, tab], ([s, t]: [string, string]) => {
   user-select: none;
   -webkit-user-select: none;
   backdrop-filter: blur(35px);
-  -webkit-backdrop-filter: blur(35px);
 }
 
 .hs-body {

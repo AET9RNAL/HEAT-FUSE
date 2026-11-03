@@ -225,7 +225,6 @@ onUnmounted(() => { clearLockTimer(); if (obsCopyTimer) clearTimeout(obsCopyTime
   flex-shrink: 0;
   background: var(--black-1-a);
   backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
   box-sizing: border-box;
   border: 1px solid var(--base-600);
   corner-shape: bevel;

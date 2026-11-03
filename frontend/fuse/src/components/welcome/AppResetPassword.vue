@@ -117,7 +117,6 @@ async function handleSubmit() {
     z-index: 200;
     background: rgba(0, 0, 0, 0.7);
     backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
 }
 
 .reset-motion {
@@ -140,7 +139,6 @@ async function handleSubmit() {
     inset: 0;
     z-index: 0;
     backdrop-filter: blur(35px);
-    -webkit-backdrop-filter: blur(35px);
     corner-shape: bevel;
     border-radius: 8px 0 8px 0;
     pointer-events: none;

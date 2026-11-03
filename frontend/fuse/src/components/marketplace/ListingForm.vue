@@ -118,6 +118,7 @@ const hasIcon = computed(() => !!props.icon || !!props.iconKey)
                             </div>
                             <div class="lf-row">
                                 <eInputField
+                                    class="lf-inputField"
                                     :model-value="modelValue.name"
                                     :label="t('registry.listing.name')"
                                     size="flex"
@@ -135,6 +136,7 @@ const hasIcon = computed(() => !!props.icon || !!props.iconKey)
                             </div>
                             <div class="lf-row">
                                 <eInputField
+                                class="lf-inputField"
                                     :model-value="modelValue.slug"
                                     :label="t('registry.listing.slug')"
                                     size="flex"
@@ -160,6 +162,7 @@ const hasIcon = computed(() => !!props.icon || !!props.iconKey)
                         </div>
                         <div class="lf-row">
                             <eInputField
+                                class="lf-inputField"
                                 :model-value="modelValue.summary"
                                 :label="t('registry.listing.summary')"
                                 size="flex"
@@ -301,6 +304,7 @@ const hasIcon = computed(() => !!props.icon || !!props.iconKey)
 }
 
 .lf-tags {
+    user-select: none;
     display: flex;
     flex-wrap: wrap;
     gap: var(--space-1);
@@ -326,5 +330,9 @@ const hasIcon = computed(() => !!props.icon || !!props.iconKey)
 .lf-tag:disabled {
     opacity: 0.35;
     cursor: default;
+}
+
+.lf-inputField {
+    user-select: none;
 }
 </style>

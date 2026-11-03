@@ -421,7 +421,6 @@ function getCombo(action: string): string {
     inset: 0;
     z-index: 0;
     backdrop-filter: blur(35px);
-    -webkit-backdrop-filter: blur(35px);
     corner-shape: bevel;
     border-radius: 8px 0 8px 0;
     pointer-events: none;

@@ -105,7 +105,6 @@ function cancel() {
     position: absolute;
     inset: 0;
     backdrop-filter: blur(35px);
-    -webkit-backdrop-filter: blur(35px);
     z-index: 0;
     pointer-events: none;
 }

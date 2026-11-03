@@ -147,7 +147,6 @@ const REVEAL = { duration: 0, delay: WIPE.duration * WIPE.times[1] }
     position: absolute;
     inset: 0;
     backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
     pointer-events: none;
 }
 

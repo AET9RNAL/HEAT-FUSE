@@ -83,7 +83,6 @@ const showOverlay = computed(() => isHovered.value || props.selected)
   corner-shape: bevel;
   border-radius: 20% 0 20% 0;
   backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
   background:
     linear-gradient(
       180deg,

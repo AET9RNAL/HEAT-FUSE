@@ -173,6 +173,7 @@ function onKeydown(event: KeyboardEvent) {
 }
 
 .md-tabs button {
+    user-select: none;
     background: none;
     border: none;
     border-bottom: 2px solid transparent;

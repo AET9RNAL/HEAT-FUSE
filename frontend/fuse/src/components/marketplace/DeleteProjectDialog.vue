@@ -211,7 +211,6 @@ onUnmounted(() => window.removeEventListener('keydown', onKey, true))
     position: absolute;
     inset: 0;
     backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
     pointer-events: none;
 }
 
