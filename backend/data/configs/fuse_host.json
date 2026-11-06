@@ -7,7 +7,8 @@
     "threat_ring",
     "rive_dev",
     "witchery",
-    "atgm_preview"
+    "atgm_preview",
+    "heat_stats"
   ],
   "hotkey_overrides": {
     "host": {

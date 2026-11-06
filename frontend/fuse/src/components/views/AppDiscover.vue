@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { AnimatePresence, motion } from 'motion-v'
 import { useRegistryStore } from '../../stores/registry'
 import { useAuthStore } from '../../stores/auth'
 import { useI18n } from '../../composables/useI18n'
+import { Dynamics } from '../../composables/useMotion'
 import type { SortKey } from '../../utils/registry-api'
 import RegistryCard from '../marketplace/RegistryCard.vue'
+import RegistryCardSkeleton from '../marketplace/RegistryCardSkeleton.vue'
 import ProjectPage from '../marketplace/ProjectPage.vue'
 import CreatorPage from '../marketplace/CreatorPage.vue'
 import MyPlugins from '../marketplace/MyPlugins.vue'
@@ -31,6 +33,11 @@ const tabs = computed<BrowserTab[]>(() => {
 // The plugin page and the creator page sit on top of the grid, so Back keeps the scroll and filters.
 const view = computed(() => registry.selected ? 'project' : registry.creator ? 'creator' : 'grid')
 
+// Hidden: the grid keeps its layout, so the list keeps its scroll position.
+const gridAnimate = computed(() => view.value === 'grid'
+    ? { opacity: 1, visibility: 'visible' as const }
+    : { opacity: 0, transitionEnd: { visibility: 'hidden' as const } })
+
 async function openCreator(username: string) {
     registry.closeProject()
     await registry.openCreator(username)
@@ -41,9 +48,25 @@ function back() {
     else registry.closeCreator()
 }
 
+const SKELETON_CARDS = 6
+const STAGGER_CARDS = 8
+const STAGGER_S = 0.035
+
+const entered = ref(false)
+let enterTimer: ReturnType<typeof setTimeout> | null = null
+
+const showSkeleton = computed(() => !entered.value || (registry.loading && !registry.projects.length))
+
+function cardTransition(i: number) {
+    return { ...Dynamics.circOut, delay: i < STAGGER_CARDS ? i * STAGGER_S : 0 }
+}
+
 onMounted(async () => {
+    enterTimer = setTimeout(() => { entered.value = true }, Dynamics.snappy.duration * 1000)
     await Promise.all([registry.fetchTags(), registry.search(), registry.refreshInstalled()])
 })
+
+onUnmounted(() => { if (enterTimer) clearTimeout(enterTimer) })
 
 watch(activeTab, (tab) => {
     if (tab === 'browse') void registry.refreshInstalled()
@@ -62,7 +85,93 @@ const sortLabels = computed(() => SORT_VALUES.map(v => t(`appdiscover.sort.${v}`
             @update:model-value="activeTab = $event as Tab"
         />
 
-        <template v-if="activeTab === 'browse'">
+        <div v-if="activeTab === 'browse'" class="browse-stack">
+            <motion.div
+                class="browse-layout"
+                :inert="view !== 'grid'"
+                :initial="{ opacity: 0 }"
+                :animate="gridAnimate"
+                :transition="{ duration: 0.15 }"
+            >
+                <div v-ftue="'discover-tools'" class="toolbar">
+                    <eInputField
+                        :label="t('appdiscover.searchPlaceholder')"
+                        v-model="registry.filters.search"
+                        size="flex"
+                        orientation="both"
+                    />
+                    <div class="actions">
+                        <eTagFilter :tags="registry.tags" :all-label="t('appdiscover.allTags')" v-model="registry.filters.tagIds" />
+                        <eListSelector
+                            :label="t('appdiscover.sorting')"
+                            :options="sortLabels"
+                            :values="SORT_VALUES"
+                            :model-value="registry.filters.sort"
+                            @update:model-value="registry.filters.sort = $event as SortKey"
+                        />
+                    </div>
+                </div>
+
+                <div class="plugin-list-wrap">
+                    <div class="plugin-list">
+                        <AnimatePresence mode="wait">
+                            <motion.div
+                                v-if="showSkeleton"
+                                key="skeleton"
+                                class="list-state list-state--skeleton"
+                                :exit="{ opacity: 0 }"
+                                :transition="{ duration: 0.1 }"
+                            >
+                                <RegistryCardSkeleton v-for="n in SKELETON_CARDS" :key="n" :index="n - 1" />
+                            </motion.div>
+
+                            <motion.div
+                                v-else-if="!registry.projects.length"
+                                key="empty"
+                                class="list-state"
+                                :initial="{ opacity: 0 }"
+                                :animate="{ opacity: 1 }"
+                                :exit="{ opacity: 0 }"
+                                :transition="Dynamics.quick"
+                            >
+                                <div class="empty-state">{{ t('appdiscover.noResults') }}</div>
+                            </motion.div>
+
+                            <motion.div
+                                v-else
+                                key="list"
+                                class="list-state"
+                                :exit="{ opacity: 0 }"
+                                :transition="{ duration: 0.1 }"
+                            >
+                                <motion.div
+                                    v-for="(project, i) in registry.projects"
+                                    :key="project.id"
+                                    :initial="{ opacity: 0, y: 8 }"
+                                    :animate="{ opacity: 1, y: 0 }"
+                                    :transition="cardTransition(i)"
+                                >
+                                    <RegistryCard
+                                        :project="project"
+                                        @select="registry.openProject(project.id)"
+                                        @creator="openCreator"
+                                    />
+                                </motion.div>
+                                <div v-if="registry.hasMore" class="more">
+                                    <eButton
+                                        size="half"
+                                        variant="secondary"
+                                        :label="t('registry.loadMore', { shown: registry.projects.length, total: registry.total })"
+                                        :system-state="registry.loading ? 'processing' : 'idle'"
+                                        @click="registry.search(true)"
+                                    />
+                                </div>
+                            </motion.div>
+                        </AnimatePresence>
+                    </div>
+                </div>
+            </motion.div>
+
             <AnimatePresence mode="wait">
                 <motion.div
                     v-if="view === 'project'"
@@ -87,62 +196,8 @@ const sortLabels = computed(() => SORT_VALUES.map(v => t(`appdiscover.sort.${v}`
                 >
                     <CreatorPage @back="back" />
                 </motion.div>
-
-                <motion.div
-                    v-else
-                    key="grid"
-                    :initial="{ opacity: 0 }"
-                    :animate="{ opacity: 1 }"
-                    :exit="{ opacity: 0 }"
-                    :transition="{ duration: 0.15 }"
-                    class="browse-layout"
-                >
-                    <div v-ftue="'discover-tools'" class="toolbar">
-                        <eInputField
-                            :label="t('appdiscover.searchPlaceholder')"
-                            v-model="registry.filters.search"
-                            size="flex"
-                            orientation="both"
-                        />
-                        <div class="actions">
-                            <eTagFilter :tags="registry.tags" :all-label="t('appdiscover.allTags')" v-model="registry.filters.tagIds" />
-                            <eListSelector
-                                :label="t('appdiscover.sorting')"
-                                :options="sortLabels"
-                                :values="SORT_VALUES"
-                                :model-value="registry.filters.sort"
-                                @update:model-value="registry.filters.sort = $event as SortKey"
-                            />
-                        </div>
-                    </div>
-
-                    <div class="plugin-list-wrap">
-                        <div class="plugin-list">
-                            <div v-if="registry.loading && !registry.projects.length" class="empty-state">{{ t('components.loading') }}</div>
-                            <div v-else-if="!registry.projects.length" class="empty-state">{{ t('appdiscover.noResults') }}</div>
-                            <template v-else>
-                                <RegistryCard
-                                    v-for="project in registry.projects"
-                                    :key="project.id"
-                                    :project="project"
-                                    @select="registry.openProject(project.id)"
-                                    @creator="openCreator"
-                                />
-                                <div v-if="registry.hasMore" class="more">
-                                    <eButton
-                                        size="half"
-                                        variant="secondary"
-                                        :label="t('registry.loadMore', { shown: registry.projects.length, total: registry.total })"
-                                        :system-state="registry.loading ? 'processing' : 'idle'"
-                                        @click="registry.search(true)"
-                                    />
-                                </div>
-                            </template>
-                        </div>
-                    </div>
-                </motion.div>
             </AnimatePresence>
-        </template>
+        </div>
 
         <template v-else-if="activeTab === 'mine'">
             <MyPlugins @view-in-discover="(id: string) => { activeTab = 'browse'; registry.openProject(id) }" />
@@ -161,9 +216,17 @@ const sortLabels = computed(() => SORT_VALUES.map(v => t(`appdiscover.sort.${v}`
     box-sizing: border-box;
     overflow: hidden;
 }
-.panel-fill {
+.browse-stack {
+    position: relative;
     flex: 1;
     min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.panel-fill {
+    position: absolute;
+    inset: 0;
     overflow: hidden;
 }
 
@@ -234,6 +297,20 @@ const sortLabels = computed(() => SORT_VALUES.map(v => t(`appdiscover.sort.${v}`
 
 .plugin-list::-webkit-scrollbar-thumb:hover {
     background-color: rgba(255, 255, 255, 0.25);
+}
+
+.list-state {
+    flex: 1 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+}
+
+/* The skeleton fills the list box and clips, so it never shows a scrollbar. */
+.list-state--skeleton {
+    flex: 1 1 0;
+    min-height: 0;
+    overflow: hidden;
 }
 
 .more {

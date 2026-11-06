@@ -13,8 +13,8 @@ import DiscordRPC from 'discord-rpc'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import fs from 'node:fs'
-import { unzipSync, strFromU8 } from 'fflate'
-import { inspectPackage } from '../../../workers/registry-processor/src/zip.ts'
+import { strFromU8 } from 'fflate'
+import { inspectPackage, readCentralDirectory, readEntry, type RangeSource } from '../../../workers/registry-processor/src/zip.ts'
 import { checkImage, sniffImage, MAX_IMAGE_BYTES } from '../../../workers/registry-processor/src/image.ts'
 import { getStageWindow, initOverlayStage, setFrameSources, startOverlayStage, stopOverlayStage } from './overlayStage'
 import { handleIpc, onIpc, onceIpc, trustSurface } from './ipcGuard'
@@ -173,36 +173,82 @@ function manifestHotkeys(hotkeys: PluginManifest['hotkeys'], saved: Record<strin
   return Object.entries(hotkeys ?? {}).map(([action, combo]) => ({ action, combo: saved[action] ?? String(combo), label: action }))
 }
 
-function scanPluginsDir(dir: string) {
-  if (!fs.existsSync(dir)) return []
+/** Streams the file through SHA-256 in chunks, so a large package does not block the main process. */
+function hashFile(filePath: string, start?: number, end?: number): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const h = crypto.createHash('sha256')
+    fs.createReadStream(filePath, { start, end })
+      .on('data', c => h.update(c)).on('error', reject).on('end', () => resolve(h.digest('hex')))
+  })
+}
+
+interface ScannedFile {
+  checksum: string
+  manifest: PluginManifest | null
+}
+
+// A package is read again only when its size or file times change.
+const scanCache = new Map<string, { stamp: string; result: Promise<ScannedFile> }>()
+
+/** Reads the zip index and the manifest only, not the whole package. */
+async function readPluginFile(filePath: string, size: number): Promise<ScannedFile> {
+  const handle = await fs.promises.open(filePath, 'r')
+  try {
+    const src: RangeSource = {
+      size,
+      read: async (offset, length) => {
+        const b = Buffer.alloc(length)
+        const { bytesRead } = await handle.read(b, 0, length, offset)
+        return new Uint8Array(b.buffer, b.byteOffset, bytesRead)
+      },
+    }
+    const entry = (await readCentralDirectory(src)).find(e => e.name.endsWith('/manifest.json'))
+    const manifest = entry ? JSON.parse(strFromU8(await readEntry(src, entry))) as PluginManifest : null
+    return { checksum: await hashFile(filePath), manifest }
+  } finally {
+    await handle.close()
+  }
+}
+
+function scanPluginFile(filePath: string, stat: fs.Stats): Promise<ScannedFile> {
+  const stamp = `${stat.size}:${stat.mtimeMs}:${stat.ctimeMs}`
+  const hit = scanCache.get(filePath)
+  if (hit?.stamp === stamp) return hit.result
+  const result = readPluginFile(filePath, stat.size)
+  scanCache.set(filePath, { stamp, result })
+  // A failed read, for example of a file still downloading, runs again on the next scan.
+  result.catch(() => { if (scanCache.get(filePath)?.result === result) scanCache.delete(filePath) })
+  return result
+}
+
+async function scanPluginsDir(dir: string) {
+  const files = (await fs.promises.readdir(dir).catch(() => [] as string[])).filter(f => f.endsWith('.fuse'))
+  const present = new Set(files.map(f => path.join(dir, f)))
+  for (const key of scanCache.keys()) if (!present.has(key)) scanCache.delete(key)
   let saved: HostConfig['hotkey_overrides'] = {}
   try { saved = readHostConfig().hotkey_overrides ?? {} } catch { /* an unreadable host config: the defaults show */ }
-  return fs.readdirSync(dir)
-    .filter(f => f.endsWith('.fuse'))
-    .flatMap(file => {
-      try {
-        const buf = fs.readFileSync(path.join(dir, file))
-        const checksum = crypto.createHash('sha256').update(buf).digest('hex')
-        const entries = unzipSync(new Uint8Array(buf), { filter: f => f.name.endsWith('/manifest.json') })
-        const manifestKey = Object.keys(entries).find(k => k.endsWith('/manifest.json'))
-        if (!manifestKey) return []
-        const m: PluginManifest = JSON.parse(strFromU8(entries[manifestKey]))
-        const pluginId = m.plugin_id ?? m.id ?? path.basename(file, '.fuse')
-        return [{
-          plugin_id:    pluginId,
-          name:         m.name        ?? path.basename(file, '.fuse'),
-          version:      m.version     ?? '0.0.0',
-          description:  m.description ?? '',
-          author:       m.author,
-          status:       'pending' as const,
-          configSchema: m.config_schema ?? [],
-          hotkeys:      manifestHotkeys(m.hotkeys, saved?.[pluginId]),
-          core:         m.core         ?? false,
-          filePath:     path.join(dir, file),
-          checksum,
-        }]
-      } catch { return [] }
-    })
+  const rows = await Promise.all(files.map(async file => {
+    const filePath = path.join(dir, file)
+    try {
+      const { checksum, manifest: m } = await scanPluginFile(filePath, await fs.promises.stat(filePath))
+      if (!m) return null
+      const pluginId = m.plugin_id ?? m.id ?? path.basename(file, '.fuse')
+      return {
+        plugin_id:    pluginId,
+        name:         m.name        ?? path.basename(file, '.fuse'),
+        version:      m.version     ?? '0.0.0',
+        description:  m.description ?? '',
+        author:       m.author,
+        status:       'pending' as const,
+        configSchema: m.config_schema ?? [],
+        hotkeys:      manifestHotkeys(m.hotkeys, saved?.[pluginId]),
+        core:         m.core         ?? false,
+        filePath,
+        checksum,
+      }
+    } catch { return null }
+  }))
+  return rows.filter((r): r is NonNullable<typeof r> => r !== null)
 }
 
 //
@@ -1257,14 +1303,6 @@ app.whenReady().then(() => {
 
   const CDN_HOST = new URL((import.meta.env.VITE_CDN_URL as string | undefined) || 'https://cdn.wotheatfuse.com').hostname
   const IMAGE_EXT = /\.(png|jpe?g|gif|webp)$/i
-
-  function hashFile(filePath: string, start?: number, end?: number): Promise<string> {
-    return new Promise((resolve, reject) => {
-      const h = crypto.createHash('sha256')
-      fs.createReadStream(filePath, { start, end })
-        .on('data', c => h.update(c)).on('error', reject).on('end', () => resolve(h.digest('hex')))
-    })
-  }
 
   /** The same checks the processor Worker runs, so the form shows problems before the upload. */
   async function inspectLocalPackage(filePath: string) {

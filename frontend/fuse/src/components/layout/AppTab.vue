@@ -38,10 +38,10 @@ watch(() => store.selectedOption, () => {
     <AnimatePresence mode="popLayout">
       <motion.div
         :key="store.selectedOption"
-        :initial="{ opacity: 0, scale: 1, x: 25, y: 25 }"
+        :initial="{ opacity: 0, scale: 1, x: 25, y: 0 }"
         :animate="{ opacity: 1, scale: 1, x: 0, y: 0 }"
-        :exit="{ opacity: 0, scale: 0.9, x: -25, y: -25 }"
-        :transition="Dynamics.smooth"
+        :exit="{ opacity: 0, scale: 0.9, x: -25, y: 0 }"
+        :transition="Dynamics.snappy"
         class="tab-wrapper"
       >
         <component :is="currentComponent" />

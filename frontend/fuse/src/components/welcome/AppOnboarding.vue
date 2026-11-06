@@ -56,6 +56,9 @@ const canAdvance = computed(() => {
 // Only a signed-in user has nowhere to go back to - they arrived here past auth.
 const canGoBack = computed(() => stage.value > 1 || !auth.isSignedIn())
 
+// No skip while the config write runs or after it succeeds.
+const canSkip = computed(() => stage.value !== 3 || applyFailed.value)
+
 const titleKey = computed(() => {
     if (stage.value === 1) return 'apponboarding.titleStage1'
     if (stage.value === 3 && !applying.value && !applyFailed.value) return 'apponboarding.titleStage3'
@@ -116,6 +119,12 @@ async function next() {
     await applyConfiguration()
 }
 
+// Launch on Home sends a user with no game path to Settings.
+function skipOnboarding() {
+    store.onboardingComplete = true
+    auth.setScreen('main')
+}
+
 function goBack() {
     if (stage.value > 1) {
         stage.value -= 1
@@ -130,6 +139,16 @@ onUnmounted(() => { if (finishTimer) clearTimeout(finishTimer) })
 
 <template>
     <div class="onboarding-column">
+        <!-- Hidden, not removed, so the progress bar keeps its place. -->
+        <motion.button
+            class="skip-link"
+            :class="{ hidden: !canSkip }"
+            :disabled="!canSkip"
+            :whileHover="{ color: 'var(--accent-200)' }"
+            :transition="{ duration: 0.15 }"
+            @click="skipOnboarding"
+        >{{ t('apponboarding.skipForNow') }}</motion.button>
+
         <div class="stages">
             <span
                 v-for="n in STAGES"
@@ -281,6 +300,25 @@ onUnmounted(() => { if (finishTimer) clearTimeout(finishTimer) })
     align-items: flex-start;
     gap: var(--space-5);
     width: 400px;
+}
+
+.skip-link {
+    user-select: none;
+    -webkit-user-select: none;
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    font-family: var(--font-microcopy);
+    font-size: var(--secondary-font-size-5);
+    color: var(--text-main);
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 2px;
+}
+
+.skip-link.hidden {
+    visibility: hidden;
 }
 
 .stages {

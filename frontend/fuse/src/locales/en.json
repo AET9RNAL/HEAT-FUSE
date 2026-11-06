@@ -914,7 +914,8 @@
     "configDescription": "Prepare HEAT For FUSE",
     "applying": "Applying configuration...",
     "applyFailed": "Couldn't apply the configuration",
-    "retry": "Retry"
+    "retry": "Retry",
+    "skipForNow": "Skip for now"
   },
   "ftue": {
     "skip": "SKIP",

@@ -1,7 +1,7 @@
 {
   "name": "fuse",
   "private": true,
-  "version": "2.0.0",
+  "version": "2.2.0",
   "description": "FUSE modding runtime for WoT HEAT",
   "author": "AET3RNAL",
   "license": "GPL-3.0-only",
@@ -13,7 +13,7 @@
     "preview": "vite preview",
     "build:runtime": "node scripts/build-runtime.cjs",
     "pack:plugins": "node scripts/pack-node-plugins.cjs",
-    "release": "dotenv -e .env -- cross-env vue-tsc && npm run build:runtime && npm run pack:plugins && vite build && dotenv -e .env -- electron-builder --publish always",
+    "release": "dotenv -e .env -- cross-env vue-tsc && npm run build:runtime && vite build && dotenv -e .env -- electron-builder --publish always",
     "release:linux": "dotenv -e .env -- cross-env vue-tsc && npm run build:runtime && npm run pack:plugins && vite build && dotenv -e .env -- electron-builder --linux --publish always"
   },
   "dependencies": {

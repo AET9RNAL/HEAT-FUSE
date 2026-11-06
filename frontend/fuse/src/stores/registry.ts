@@ -37,6 +37,11 @@ export type InstallUiState = 'idle' | 'downloading' | 'installed' | 'update' | '
 
 const PAGE = 20
 
+// A refetch with the same rows keeps the old array, so the cards do not render again.
+function sameRows(a: unknown, b: unknown): boolean {
+    return JSON.stringify(a) === JSON.stringify(b)
+}
+
 export const useRegistryStore = defineStore('registry', () => {
     const app = useAppStore()
     const { t } = useI18n()
@@ -62,7 +67,8 @@ export const useRegistryStore = defineStore('registry', () => {
     async function fetchTags(): Promise<void> {
         const { data, error } = await db().from('tags').select('*').order('label')
         if (error) { logger.error('registry:tags', { error }); return }
-        tags.value = data ?? []
+        const next = data ?? []
+        if (!sameRows(tags.value, next)) tags.value = next
     }
 
     async function fetchGameVersions(): Promise<void> {
@@ -92,7 +98,8 @@ export const useRegistryStore = defineStore('registry', () => {
             })
             if (seq !== browseSeq) return
             const items = rows.map(r => ({ ...r.project, game_compatible: r.game_compatible }))
-            projects.value = append ? [...projects.value, ...items] : items
+            const next = append ? [...projects.value, ...items] : items
+            if (!sameRows(projects.value, next)) projects.value = next
             total.value = rows[0]?.total ?? (append ? total.value : 0)
         } catch (err) {
             logger.error('registry:search', { error: err })
@@ -211,7 +218,7 @@ export const useRegistryStore = defineStore('registry', () => {
                 : [[], []]
             const bySha = new Map(known.map(k => [k.sha256, k]))
             const updBySha = new Map(updates.map(u => [u.sha256, u]))
-            installed.value = scanned.map(p => {
+            const next = scanned.map(p => {
                 const hit = bySha.get(p.checksum)
                 const upd = updBySha.get(p.checksum)
                 return {
@@ -220,6 +227,7 @@ export const useRegistryStore = defineStore('registry', () => {
                     update: upd?.update_file_id ? { fileId: upd.update_file_id, version: upd.update_version ?? '' } : null,
                 }
             })
+            if (!sameRows(installed.value, next)) installed.value = next
             await linkProjects(installed.value.map(f => f.projectId).filter((x): x is string => !!x))
         } catch (err) {
             logger.error('registry:refreshInstalled', { error: err })
