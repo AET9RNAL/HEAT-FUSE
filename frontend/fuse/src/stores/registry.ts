@@ -202,6 +202,30 @@ export const useRegistryStore = defineStore('registry', () => {
     const linkedProjects = ref<Record<string, RegistryProject>>({})
     const progress = ref<Record<string, { state: 'downloading' | 'error'; done: number; total: number; error?: string }>>({})
 
+    // Every file of the installs that overlap in time. A finished file keeps its bytes, so the combined share never drops.
+    // `runs` counts the installs that need the file.
+    const batch = ref<Record<string, { done: number; total: number; runs: number }>>({})
+    let batchRuns = 0
+    let batchTimer: ReturnType<typeof setTimeout> | null = null
+    // The bar holds at 100% this long before it closes.
+    const BATCH_HOLD_MS = 600
+
+    /** All running installs as one download, or null when none runs. Share is 0 to 1, by bytes. */
+    const downloads = computed(() => {
+        const rows = Object.values(batch.value)
+        if (!rows.length) return null
+        let done = 0
+        let total = 0
+        for (const r of rows) {
+            done += Math.min(r.done, r.total)
+            total += r.total
+        }
+        return { files: rows.length, share: total > 0 ? done / total : 0 }
+    })
+
+    // One download per file ID, shared by parallel installs
+    const fetches = new Map<string, ReturnType<typeof window.registryAPI.install>>()
+
     /** Scans the plugins folder and links each file to its registry file and newer version. */
     async function refreshInstalled(): Promise<void> {
         if (!window.pluginsAPI) return
@@ -304,26 +328,58 @@ export const useRegistryStore = defineStore('registry', () => {
         if (plan.blockers.length) return { success: false, error: plan.blockers[0].reason }
         const order = [...plan.downloads.filter(r => r.role === 'dependency'), ...plan.downloads.filter(r => r.role === 'requested')]
         const done: string[] = []
+        // The downloads this install starts. Other installs can wait on them.
+        const mine = new Map<string, ReturnType<typeof window.registryAPI.install>>()
+        // A new batch starts only when no other install runs.
+        if (batchRuns++ === 0) {
+            if (batchTimer) clearTimeout(batchTimer)
+            batchTimer = null
+            batch.value = {}
+        }
+        for (const r of order) {
+            const row = batch.value[r.file_id!]
+            if (row) row.runs++
+            else batch.value[r.file_id!] = { done: 0, total: r.size_bytes ?? 0, runs: 1 }
+        }
         const off = window.registryAPI.onInstallProgress(p => {
             const cur = progress.value[p.token]
             if (cur) { cur.done = p.received; cur.total = p.total }
+            const row = batch.value[p.token]
+            if (row) { row.done = p.received; row.total = p.total }
         })
         try {
             for (const r of order) {
                 const fileId = r.file_id!
-                progress.value[fileId] = { state: 'downloading', done: 0, total: r.size_bytes ?? 0 }
-                const replace = installed.value
-                    .filter(f => r.plugin_id && f.plugin_id.toLowerCase() === r.plugin_id.toLowerCase())
-                    .map(f => f.filePath)
-                const res = await window.registryAPI.install({
-                    token: fileId, url: cdnUrl(r.storage_key)!, sha256: r.sha256!, size: r.size_bytes ?? 0,
-                    fileName: r.file_name!, replace,
-                })
+                // An install that ended after this plan was made can already have the file on disk.
+                if (installed.value.some(f => f.sha256 === r.sha256)) {
+                    const row = batch.value[fileId]
+                    if (row) row.done = row.total
+                    done.push(fileId)
+                    continue
+                }
+                let job = fetches.get(fileId)
+                if (!job) {
+                    progress.value[fileId] = { state: 'downloading', done: 0, total: r.size_bytes ?? 0 }
+                    const replace = installed.value
+                        .filter(f => r.plugin_id && f.plugin_id.toLowerCase() === r.plugin_id.toLowerCase())
+                        .map(f => f.filePath)
+                    job = window.registryAPI.install({
+                        token: fileId, url: cdnUrl(r.storage_key)!, sha256: r.sha256!, size: r.size_bytes ?? 0,
+                        fileName: r.file_name!, replace,
+                    })
+                    fetches.set(fileId, job)
+                    mine.set(fileId, job)
+                }
+                const res = await job
                 if (!res.success) {
+                    // A failed download leaves the map at once, so the next click tries again.
+                    if (fetches.get(fileId) === job) fetches.delete(fileId)
                     progress.value[fileId] = { state: 'error', done: 0, total: 0, error: res.error }
                     throw new RegistryError(res.error ?? 'download_failed')
                 }
                 delete progress.value[fileId]
+                const row = batch.value[fileId]
+                if (row) row.done = row.total
                 done.push(fileId)
             }
             eventBus.emit('notification', {
@@ -339,8 +395,22 @@ export const useRegistryStore = defineStore('registry', () => {
             return { success: false, error: (err as RegistryError).code ?? (err as Error).message }
         } finally {
             off()
-            if (done.length) void rpc('record_downloads', { p_files: done, p_install_id: installId.value }).catch(() => {})
+            // A failed install takes its unfinished files out of the batch, unless another install still needs them.
+            for (const r of order) {
+                const row = batch.value[r.file_id!]
+                if (row && !done.includes(r.file_id!) && --row.runs === 0) delete batch.value[r.file_id!]
+            }
+            if (--batchRuns === 0) {
+                batchTimer = setTimeout(() => {
+                    batchTimer = null
+                    batch.value = {}
+                }, BATCH_HOLD_MS)
+            }
+            const fetched = done.filter(id => mine.has(id))
+            if (fetched.length) void rpc('record_downloads', { p_files: fetched, p_install_id: installId.value }).catch(() => {})
             await refreshInstalled()
+            // A failed download can have a retry from another install under the same ID. Only this install's jobs leave.
+            for (const [id, job] of mine) if (fetches.get(id) === job) fetches.delete(id)
         }
     }
 
@@ -387,7 +457,7 @@ export const useRegistryStore = defineStore('registry', () => {
         installId, channels, tags, gameVersions, stats, playerGameVersion,
         filters, projects, total, loading, hasMore,
         selected, files, usedBy, loadingProject, creator, loadingCreator,
-        installed, linkedProjects, progress,
+        installed, linkedProjects, progress, downloads,
         fetchTags, fetchGameVersions, fetchStats, search,
         openProject, openFile, closeProject, openCreator, closeCreator,
         refreshInstalled, installedFor, fileState, projectState,

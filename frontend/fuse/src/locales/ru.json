@@ -864,6 +864,8 @@
     },
     "updateProgress": {
       "updating": "Обновление",
+      "installing": "Установка плагина",
+      "installingMany": "Установка файлов: {count}",
       "notifFoundTitle": "Найдено обновление",
       "notifFoundMessage": "v{version} готова к загрузке",
       "notifDownloadingTitle": "Загрузка обновления",

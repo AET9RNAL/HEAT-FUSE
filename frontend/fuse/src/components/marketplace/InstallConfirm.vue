@@ -37,7 +37,7 @@ const blocked = computed(() => (plan.value?.blockers.length ?? 0) > 0)
                 :transition="{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }"
             >
                 <div class="ic-header">
-                    <span class="mp-label mp-label--accent">{{ t('registry.confirm.kicker') }}</span>
+                    <!-- <span class="mp-label mp-label--accent">{{ t('registry.confirm.kicker') }}</span> -->
                     <span class="ic-title">{{ t('registry.confirm.title', { name: plan.requested.project_name ?? '' }) }}</span>
                     <button v-tip="t('common.close')" class="ic-close" @click="registry.cancelInstall()">
                         <Icons kind="cross" size="normal" />

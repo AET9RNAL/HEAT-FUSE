@@ -864,6 +864,8 @@
     },
     "updateProgress": {
       "updating": "Mise à jour",
+      "installing": "Installation du plugin",
+      "installingMany": "Installation de {count} fichiers",
       "notifFoundTitle": "Mise à jour trouvée",
       "notifFoundMessage": "v{version} est prête à être téléchargée",
       "notifDownloadingTitle": "Téléchargement de la mise à jour",

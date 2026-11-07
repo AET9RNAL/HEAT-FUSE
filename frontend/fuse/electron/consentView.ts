@@ -7,6 +7,7 @@ import { BrowserWindow, WebContentsView, screen, session } from 'electron'
 import path from 'node:path'
 import { handleIpc, onIpc, trustSurface } from './ipcGuard'
 import { getStageWindow, setStageInputOverride } from './overlayStage'
+import { displayInStage, pointInStage, stageFrame } from './stageGeometry'
 
 declare const __RELEASE__: boolean
 
@@ -161,9 +162,7 @@ async function showNext(): Promise<void> {
 function placeView(): void {
   const stage = viewHost
   if (!view || !stage || stage.isDestroyed()) return
-  const content = stage.getContentBounds()
-  const primary = screen.getPrimaryDisplay().bounds
-  view.setBounds({ x: primary.x - content.x, y: primary.y - content.y, width: primary.width, height: primary.height })
+  view.setBounds(displayInStage(screen.getPrimaryDisplay(), stageFrame(stage)))
 }
 
 function ensureView(stage: BrowserWindow): Promise<WebContentsView | null> {
@@ -246,11 +245,10 @@ function updateInput(): void {
 function cursorOverCard(): boolean {
   const stage = viewHost
   if (!cardRect || !view || !stage || stage.isDestroyed()) return false
-  const content = stage.getContentBounds()
   const bounds = view.getBounds()
-  const cursor = screen.getCursorScreenPoint()
-  const x = cursor.x - content.x - bounds.x
-  const y = cursor.y - content.y - bounds.y
+  const cursor = pointInStage(screen.getCursorScreenPoint(), stageFrame(stage))
+  const x = cursor.x - bounds.x
+  const y = cursor.y - bounds.y
   return x >= cardRect.x && x < cardRect.x + cardRect.width && y >= cardRect.y && y < cardRect.y + cardRect.height
 }
 

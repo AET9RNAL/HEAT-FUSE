@@ -7,6 +7,8 @@
  * which cannot hook a Chromium/Electron window.
  */
 import { screen } from 'electron'
+import { getStageWindow } from './overlayStage'
+import { desktopBounds, displayInStage, stageFrame, toStage } from './stageGeometry'
 import http from 'node:http'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -51,35 +53,22 @@ const NO_STORE = {
   'access-control-allow-origin': '*',
 }
 
-/** Bounding box of the union of all displays - the overlay stage's coord space. */
-function virtualBounds(): { x: number; y: number; width: number; height: number } {
-  const displays = screen.getAllDisplays()
-  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
-  for (const d of displays) {
-    minX = Math.min(minX, d.bounds.x)
-    minY = Math.min(minY, d.bounds.y)
-    maxX = Math.max(maxX, d.bounds.x + d.bounds.width)
-    maxY = Math.max(maxY, d.bounds.y + d.bounds.height)
-  }
-  if (!Number.isFinite(minX)) {
-    const p = screen.getPrimaryDisplay().bounds
-    return { x: p.x, y: p.y, width: p.width, height: p.height }
-  }
-  return { x: minX, y: minY, width: maxX - minX, height: maxY - minY }
-}
-
-/** Displays offered to the launcher's broadcast picker. */
+/** Displays offered to the launcher's broadcast picker. Sizes are in stage pixels, the size of each display's viewport. */
 export function listObsDisplays(): Array<{ id: string; label: string; width: number; height: number; primary: boolean }> {
   const primaryId = screen.getPrimaryDisplay().id
-  return screen.getAllDisplays().map((d, i) => ({
-    id: String(d.id),
-    // Index-based, not `d.label`: Windows reports things like "\\.\DISPLAY1" or
-    // a long OEM model name, neither of which fits a button.
-    label: `${i + 1}`,
-    width: d.bounds.width,
-    height: d.bounds.height,
-    primary: d.id === primaryId,
-  }))
+  const frame = stageFrame(getStageWindow())
+  return screen.getAllDisplays().map((d, i) => {
+    const r = displayInStage(d, frame)
+    return {
+      id: String(d.id),
+      // Index-based, not `d.label`: Windows reports things like "\\.\DISPLAY1" or
+      // a long OEM model name, neither of which fits a button.
+      label: `${i + 1}`,
+      width: r.width,
+      height: r.height,
+      primary: d.id === primaryId,
+    }
+  })
 }
 
 /**
@@ -92,17 +81,16 @@ export function listObsDisplays(): Array<{ id: string; label: string; width: num
  * display id, falling back to the primary display.
  */
 function resolveViewport(sel: string | null): { x: number; y: number; w: number; h: number } {
-  const v = virtualBounds()
-  if (sel === 'all') return { x: 0, y: 0, w: v.width, h: v.height }
+  const frame = stageFrame(getStageWindow())
+  if (sel === 'all') {
+    const v = toStage(desktopBounds(), frame)
+    return { x: v.x, y: v.y, w: v.width, h: v.height }
+  }
   const displays = screen.getAllDisplays()
   const target = (sel ? displays.find((d) => String(d.id) === sel) : undefined)
     ?? screen.getPrimaryDisplay()
-  return {
-    x: target.bounds.x - v.x,
-    y: target.bounds.y - v.y,
-    w: target.bounds.width,
-    h: target.bounds.height,
-  }
+  const r = displayInStage(target, frame)
+  return { x: r.x, y: r.y, w: r.width, h: r.height }
 }
 
 function makeHandler(rendererDist: string): http.RequestListener {

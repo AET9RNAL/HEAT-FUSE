@@ -7,6 +7,7 @@ import eUpdateProgress from './eUpdateProgress.vue'
 import { useI18n } from '../../composables/useI18n'
 import { useNavigationStore } from '../../stores/navigation'
 import { useAuthStore } from '../../stores/auth'
+import { useRegistryStore } from '../../stores/registry'
 import { useFuseControl } from '../../composables/useFuseControl'
 import { useUpdater } from '../../composables/useUpdater'
 import FuseLogoFull from '../../assets/icons/fuse-logo-full.svg'
@@ -20,6 +21,15 @@ const maximizeWindow = () => window.appAPI?.maximizeWindow()
 
 const { fuseState, fuseError } = useFuseControl()
 const updater = useUpdater()
+const registry = useRegistryStore()
+
+// The App update wins: it restarts the App when it ends.
+const download = computed(() => {
+  const s = updater.state.value
+  if (s === 'downloading' || s === 'downloaded') return { value: updater.downloadProgress.value / 100, files: 0 }
+  const d = registry.downloads
+  return d ? { value: d.share, files: d.files } : null
+})
 
 onMounted(() => updater.init())
 onUnmounted(() => updater.cleanup())
@@ -53,18 +63,7 @@ const pageTitle = computed(() => t(`appnav.${nav.selectedOption}`))
     </div>
 
     <div class="progress-center">
-      <AnimatePresence>
-        <motion.div
-          v-if="updater.state.value === 'downloading' || updater.state.value === 'downloaded'"
-          :key="'progress'"
-          :initial="{ opacity: 0, y: -6 }"
-          :animate="{ opacity: 1, y: 0 }"
-          :exit="{ opacity: 0, y: -6 }"
-          :transition="{ duration: 0.2 }"
-        >
-          <eUpdateProgress :progress="updater.downloadProgress.value" />
-        </motion.div>
-      </AnimatePresence>
+      <eUpdateProgress :active="!!download" :value="download?.value ?? 0" :files="download?.files ?? 0" />
     </div>
 
     <div class="right-group">

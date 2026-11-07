@@ -1,5 +1,6 @@
 import { BrowserWindow, screen, session, shell, type WebFrameMain } from 'electron'
 import { handleIpc, onIpc, trustSurface } from './ipcGuard'
+import { desktopBounds, dipRectFor, displayInStage, stageFrame, windowDeviceBounds, type Rect } from './stageGeometry'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 
@@ -69,36 +70,53 @@ function isSubFrame(frame: WebFrameMain | null | undefined): boolean {
   }
 }
 
-/** Bounding box of the union of all displays (the virtual desktop). */
-function virtualBounds(): { x: number; y: number; width: number; height: number } {
-  const displays = screen.getAllDisplays()
-  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
-  for (const d of displays) {
-    minX = Math.min(minX, d.bounds.x)
-    minY = Math.min(minY, d.bounds.y)
-    maxX = Math.max(maxX, d.bounds.x + d.bounds.width)
-    maxY = Math.max(maxY, d.bounds.y + d.bounds.height)
-  }
-  if (!Number.isFinite(minX)) {
-    const p = screen.getPrimaryDisplay().bounds
-    return { x: p.x, y: p.y, width: p.width, height: p.height }
-  }
-  return { x: minX, y: minY, width: maxX - minX, height: maxY - minY }
+/** Device pixels the window may be off before a refit. */
+const FIT_TOLERANCE = 2
+/** Refits allowed until the displays change, so the window never fights Windows in a loop. */
+const MAX_FITS = 6
+const FIT_DELAY_MS = 100
+const DISPLAY_DELAY_MS = 250
+
+let fitsLeft = MAX_FITS
+let fitTimer: ReturnType<typeof setTimeout> | null = null
+let lastPrimaryRect = ''
+
+function fitsDesktop(win: BrowserWindow, target: Rect): boolean {
+  const b = windowDeviceBounds(win)
+  return Math.abs(b.x - target.x) <= FIT_TOLERANCE &&
+    Math.abs(b.y - target.y) <= FIT_TOLERANCE &&
+    Math.abs(b.x + b.width - target.x - target.width) <= FIT_TOLERANCE &&
+    Math.abs(b.y + b.height - target.y - target.height) <= FIT_TOLERANCE
 }
 
-/**
- * Resize the stage to span the whole virtual desktop.
- *
- * On Windows a `resizable: false` window caps its maximum size at the size it
- * was created with, so a later setBounds can't grow it to reach a second
- * monitor. We lift the constraint around the resize.
- */
-function applyVirtualBounds(win: BrowserWindow): void {
+/** Moves the window over the whole desktop, unless it is there already. */
+function fitToDesktop(win: BrowserWindow): void {
   if (win.isDestroyed()) return
-  const wasResizable = win.isResizable()
-  if (!wasResizable) win.setResizable(true)
-  win.setBounds(virtualBounds())
-  if (!wasResizable) win.setResizable(false)
+  const target = desktopBounds()
+  if (!fitsDesktop(win, target)) {
+    if (fitsLeft > 0) {
+      fitsLeft--
+      // A non-resizable window keeps its old size as its max size on Windows, so the limit lifts for the move.
+      const wasResizable = win.isResizable()
+      if (!wasResizable) win.setResizable(true)
+      win.setBounds(dipRectFor(target))
+      if (!wasResizable) win.setResizable(false)
+    } else if (fitsLeft === 0) {
+      fitsLeft--
+      console.warn('[stage] window does not fit the desktop', JSON.stringify({ target, got: windowDeviceBounds(win) }))
+    }
+  }
+  sendPrimaryDisplay()
+}
+
+/** A DPI change can resize the window after a move, so every fit gets a check once things settle. */
+function scheduleFit(delay = FIT_DELAY_MS): void {
+  if (fitTimer) clearTimeout(fitTimer)
+  fitTimer = setTimeout(() => {
+    fitTimer = null
+    const win = getStageWindow()
+    if (win) fitToDesktop(win)
+  }, delay)
 }
 
 function applyIgnore(ignore: boolean, win: BrowserWindow | null = getStageWindow()): void {
@@ -107,16 +125,20 @@ function applyIgnore(ignore: boolean, win: BrowserWindow | null = getStageWindow
   win.setIgnoreMouseEvents(ignore, { forward: true })
 }
 
-/** The primary display's box inside the stage window, which spans every display. */
+/** The primary display's box in the stage page's CSS pixels. */
 function primaryDisplayRect(win: BrowserWindow): { x: number; y: number; w: number; h: number } {
-  const content = win.getContentBounds()
-  const primary = screen.getPrimaryDisplay().bounds
-  return { x: primary.x - content.x, y: primary.y - content.y, w: primary.width, h: primary.height }
+  const r = displayInStage(screen.getPrimaryDisplay(), stageFrame(win))
+  return { x: r.x, y: r.y, w: r.width, h: r.height }
 }
 
 function sendPrimaryDisplay(): void {
   const win = getStageWindow()
-  if (win && !win.webContents.isDestroyed()) win.webContents.send('overlay:primary-display-changed', primaryDisplayRect(win))
+  if (!win || win.webContents.isDestroyed()) return
+  const rect = primaryDisplayRect(win)
+  const key = JSON.stringify(rect)
+  if (key === lastPrimaryRect) return
+  lastPrimaryRect = key
+  win.webContents.send('overlay:primary-display-changed', rect)
 }
 
 function isStagePage(url: string): boolean {
@@ -126,7 +148,9 @@ function isStagePage(url: string): boolean {
 
 function createStageWindow(): void {
   if (!stageParams || !env) return
-  const b = virtualBounds()
+  const b = dipRectFor(desktopBounds())
+  fitsLeft = MAX_FITS
+  lastPrimaryRect = ''
   const win = new BrowserWindow({
     x: b.x, y: b.y, width: b.width, height: b.height,
     transparent: true,
@@ -175,9 +199,9 @@ function createStageWindow(): void {
       void shell.openExternal(e.url)
     }
   })
-  // The stage grows to the whole desktop after it opens, which moves the primary display inside it.
-  win.on('move', sendPrimaryDisplay)
-  win.on('resize', sendPrimaryDisplay)
+  // Windows can move or resize the window on its own, for example on a DPI change.
+  win.on('move', () => scheduleFit())
+  win.on('resize', () => scheduleFit())
   win.webContents.on('did-start-navigation', (details) => {
     if (details.isMainFrame && !details.isSameDocument) connectionTaken = false
   })
@@ -194,19 +218,20 @@ function createStageWindow(): void {
   }
   win.once('ready-to-show', () => {
     win.showInactive()
-    applyVirtualBounds(win)
-    setTimeout(() => applyVirtualBounds(win), 500)
-    setTimeout(() => applyVirtualBounds(win), 1500)
+    // Windows limits a new window to the work area, so the real size comes after show.
+    fitToDesktop(win)
+    setTimeout(() => fitToDesktop(win), 500)
+    setTimeout(() => fitToDesktop(win), 1500)
     if (env?.devServerUrl) win.webContents.openDevTools({ mode: 'detach' })
   })
   win.on('closed', () => { if (stageWindow === win) stageWindow = null })
   stageWindow = win
 }
 
-function resizeToVirtualDesktop(): void {
-  if (stageWindow && !stageWindow.isDestroyed()) applyVirtualBounds(stageWindow)
-  // A new primary display can move without the stage window changing size.
-  sendPrimaryDisplay()
+/** Displays can send several events for one change, so the fit waits for the last one. */
+function onDisplaysChanged(): void {
+  fitsLeft = MAX_FITS
+  scheduleFit(DISPLAY_DELAY_MS)
 }
 
 export function initOverlayStage(stageEnv: StageEnv): void {
@@ -271,9 +296,9 @@ export function initOverlayStage(stageEnv: StageEnv): void {
     }
   })
 
-  screen.on('display-added', resizeToVirtualDesktop)
-  screen.on('display-removed', resizeToVirtualDesktop)
-  screen.on('display-metrics-changed', resizeToVirtualDesktop)
+  screen.on('display-added', onDisplaysChanged)
+  screen.on('display-removed', onDisplaysChanged)
+  screen.on('display-metrics-changed', onDisplaysChanged)
 }
 
 export function startOverlayStage(port: number, token: string): void {

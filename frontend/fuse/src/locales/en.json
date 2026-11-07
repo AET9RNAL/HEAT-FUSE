@@ -864,6 +864,8 @@
     },
     "updateProgress": {
       "updating": "Updating",
+      "installing": "Installing plugin",
+      "installingMany": "Installing {count} files",
       "notifFoundTitle": "Update Found",
       "notifFoundMessage": "v{version} is ready to download",
       "notifDownloadingTitle": "Downloading Update",
