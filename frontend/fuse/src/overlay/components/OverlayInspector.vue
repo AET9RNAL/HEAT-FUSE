@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import StagePanel from "./StagePanel.vue";
 import ControlRenderer from "../inspector/ControlRenderer.vue";
 import Icons from "../../components/ui/Icons.vue";
@@ -9,6 +9,17 @@ import { useInspectorModel, type BuiltinSource } from "../inspector/useInspector
 import { evalWhen, type InputPhase, type InspectorSection } from "../inspector/types";
 import { overlays } from "../overlayClient";
 import { commitTransform } from "../history";
+import {
+  areaAt,
+  areaOf,
+  centerIn,
+  displays,
+  keepInside,
+  mainOverlayArea,
+  mainScreen,
+  overlayAreas,
+  panelMaxHeight,
+} from "../screens";
 import { clearSelection, inspectorPos, lockAspect, selectedId } from "../stageState";
 import type { OverlayRect } from "../types";
 
@@ -27,7 +38,7 @@ const rect = computed<OverlayRect>(() => {
   if (!d) return { x: 0, y: 0, w: 0, h: 0 };
   if (d.rect) return d.rect;
   const { w, h } = d.size;
-  return { x: Math.round((window.innerWidth - w) / 2), y: Math.round((window.innerHeight - h) / 2), w, h };
+  return { ...centerIn(mainOverlayArea(), w, h), w, h };
 });
 
 function apply(patch: Partial<OverlayRect>): void {
@@ -53,15 +64,17 @@ function setSize(w: number, h: number): void {
 
 type Align = "left" | "center-h" | "right" | "top" | "center-v" | "bottom";
 
+/** Aligns to the display that holds the overlay. */
 function align(mode: Align): void {
   const r = rect.value;
+  const a = areaOf(r, overlayAreas());
   switch (mode) {
-    case "left": return apply({ x: 0 });
-    case "center-h": return apply({ x: Math.round((window.innerWidth - r.w) / 2) });
-    case "right": return apply({ x: Math.round(window.innerWidth - r.w) });
-    case "top": return apply({ y: 0 });
-    case "center-v": return apply({ y: Math.round((window.innerHeight - r.h) / 2) });
-    case "bottom": return apply({ y: Math.round(window.innerHeight - r.h) });
+    case "left": return apply({ x: a.x });
+    case "center-h": return apply({ x: Math.round(a.x + (a.w - r.w) / 2) });
+    case "right": return apply({ x: Math.round(a.x + a.w - r.w) });
+    case "top": return apply({ y: a.y });
+    case "center-v": return apply({ y: Math.round(a.y + (a.h - r.h) / 2) });
+    case "bottom": return apply({ y: Math.round(a.y + a.h - r.h) });
   }
 }
 
@@ -217,11 +230,22 @@ const model = useInspectorModel(overlayId, computed(() => builtin.value));
 // `__rive` is a predicate feed, not a row of its own.
 const HIDDEN_IDS = new Set(["__rive"]);
 
-const collapsed = reactive(new Set<string>());
+/** Open or closed by hand. Plugin sections keep this per overlay, FUSE's own sections share it. */
+const toggled = reactive(new Map<string, boolean>());
+
+function sectionKey(s: InspectorSection): string {
+  return s.builtin ? s.id : `${overlayId.value}:${s.id}`;
+}
+
+/** A section starts open unless it sets `defaultCollapsed`. */
+function isCollapsed(s: InspectorSection): boolean {
+  if (s.collapsible === false) return false;
+  return toggled.get(sectionKey(s)) ?? s.defaultCollapsed ?? false;
+}
+
 function toggleSection(s: InspectorSection): void {
   if (s.collapsible === false) return;
-  if (collapsed.has(s.id)) collapsed.delete(s.id);
-  else collapsed.add(s.id);
+  toggled.set(sectionKey(s), !isCollapsed(s));
 }
 
 const visibleSections = computed(() =>
@@ -229,18 +253,21 @@ const visibleSections = computed(() =>
 );
 
 // --- floating placement + header drag ------------------------------------
-function clampToViewport(x: number, y: number): { x: number; y: number } {
-  const h = root.value?.offsetHeight ?? 0;
-  return {
-    x: Math.min(Math.max(0, x), Math.max(0, window.innerWidth - PANEL_W)),
-    y: Math.min(Math.max(0, y), Math.max(0, window.innerHeight - h)),
-  };
+/** Keeps the panel inside one display: the one under the pointer while dragging, else the one that holds most of it. */
+function clampToScreen(x: number, y: number, pointer?: { x: number; y: number }): { x: number; y: number } {
+  const box = { x, y, w: PANEL_W, h: root.value?.offsetHeight ?? 0 };
+  return keepInside(box, pointer ? areaAt(pointer.x, pointer.y) : areaOf(box));
+}
+
+/** Top-right of the display that holds the selected overlay. */
+function defaultPos(): { x: number; y: number } {
+  const a = displays.value.length ? areaOf(rect.value) : mainScreen();
+  return { x: Math.max(a.x, a.x + a.w - PANEL_W - MARGIN), y: a.y + MARGIN };
 }
 
 const panelStyle = computed(() => {
-  const p = inspectorPos.value;
-  if (p) return { left: `${p.x}px`, top: `${p.y}px` };
-  return { left: `${Math.max(0, window.innerWidth - PANEL_W - MARGIN)}px`, top: `${MARGIN}px` };
+  const p = inspectorPos.value ?? defaultPos();
+  return { left: `${p.x}px`, top: `${p.y}px`, maxHeight: `${panelMaxHeight(p.x, p.y, PANEL_W, MARGIN)}px` };
 });
 
 let isDragging = false;
@@ -260,9 +287,10 @@ function onHeaderDown(e: PointerEvent): void {
 
 function onHeaderMove(e: PointerEvent): void {
   if (!isDragging) return;
-  inspectorPos.value = clampToViewport(
+  inspectorPos.value = clampToScreen(
     startPos.x + (e.clientX - startPtr.x),
     startPos.y + (e.clientY - startPtr.y),
+    { x: e.clientX, y: e.clientY },
   );
 }
 
@@ -270,12 +298,13 @@ function onHeaderUp(): void {
   isDragging = false;
 }
 
-// A saved position can land off-screen if the stage resolution changed since.
+// A saved position can land off-screen if the displays changed since.
 function onResize(): void {
   const p = inspectorPos.value;
-  if (p) inspectorPos.value = clampToViewport(p.x, p.y);
+  if (p) inspectorPos.value = clampToScreen(p.x, p.y);
 }
 
+watch(displays, onResize);
 onMounted(() => window.addEventListener("resize", onResize));
 onBeforeUnmount(() => window.removeEventListener("resize", onResize));
 </script>
@@ -310,14 +339,14 @@ onBeforeUnmount(() => window.removeEventListener("resize", onResize));
               v-if="s.collapsible !== false"
               class="sec-caret"
               :initial="false"
-              :animate="{ rotate: collapsed.has(s.id) ? -90 : 0 }"
+              :animate="{ rotate: isCollapsed(s) ? -90 : 0 }"
               :transition="Dynamics.snappy"
             >
               <Icons kind="chevron-down" size="small" color="var(--text-muted)" />
             </motion.span>
             <span class="ins-section-label">{{ s.label }}</span>
           </button>
-          <template v-if="!collapsed.has(s.id)">
+          <template v-if="!isCollapsed(s)">
             <p v-if="s.description" class="ins-section-desc">{{ s.description }}</p>
             <template v-for="(c, i) in s.controls" :key="c.id ?? `${s.id}-${i}`">
               <ControlRenderer
@@ -342,7 +371,6 @@ onBeforeUnmount(() => window.removeEventListener("resize", onResize));
   -webkit-user-select: none;
   position: fixed;
   width: 264px;
-  max-height: calc(100vh - 120px);
   display: flex;
   color: var(--text-main);
   font-family: var(--font-primary);

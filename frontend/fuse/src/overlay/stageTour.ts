@@ -14,12 +14,12 @@ import {
   localOverlayIds,
   localPlugins,
   overlays,
-  primaryDisplay,
   sendStageTourDone,
   stagePlugins,
   stageSettings,
 } from "./overlayClient";
 import { clearSelection, pluginListOpen, selectOverlay, selectedId } from "./stageState";
+import { centerIn, mainOverlayArea } from "./screens";
 import type { HostState, OverlayDescriptor, StagePlugin } from "./types";
 
 // "__" keeps the ids clear of real plugin ids.
@@ -93,7 +93,6 @@ const STEPS: StageStep[] = [
 ];
 
 function demoOverlay(): OverlayDescriptor {
-  const d = primaryDisplay.value ?? { x: 0, y: 0, w: window.innerWidth, h: window.innerHeight };
   return {
     overlayId: DEMO_OVERLAY_ID,
     pluginId: DEMO_PLUGIN_ID,
@@ -103,12 +102,7 @@ function demoOverlay(): OverlayDescriptor {
     artboard: null,
     stateMachine: null,
     viewModel: null,
-    rect: {
-      x: Math.round(d.x + (d.w - DEMO_SIZE.w) / 2),
-      y: Math.round(d.y + (d.h - DEMO_SIZE.h) / 2),
-      w: DEMO_SIZE.w,
-      h: DEMO_SIZE.h,
-    },
+    rect: { ...centerIn(mainOverlayArea(), DEMO_SIZE.w, DEMO_SIZE.h), w: DEMO_SIZE.w, h: DEMO_SIZE.h },
     visible: true,
     interactive: true,
     inputs: {},

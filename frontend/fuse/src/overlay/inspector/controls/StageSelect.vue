@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from "motion-v";
 import Icons from "../../../components/ui/Icons.vue";
 import { Dynamics } from "../../../composables/useMotion";
 import type { Option } from "../types";
+import { areaAt } from "../../screens";
 
 const props = withDefaults(
   defineProps<{
@@ -44,7 +45,8 @@ function place(): void {
   const box = rootEl()?.getBoundingClientRect();
   if (!box) return;
   const MAX_H = 240;
-  const below = box.bottom + MAX_H < window.innerHeight;
+  const screen = areaAt(box.left + box.width / 2, box.top + box.height / 2);
+  const below = box.bottom + MAX_H < screen.y + screen.h;
   menuStyle.value = {
     left: `${box.left}px`,
     width: `${box.width}px`,

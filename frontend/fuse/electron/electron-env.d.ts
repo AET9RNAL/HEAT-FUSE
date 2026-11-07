@@ -36,8 +36,8 @@ interface Window {
     setIgnore: (ignore: boolean) => void
     setFocusable: (focusable: boolean) => void
     connection: () => Promise<{ port: number; token: string } | null>
-    primaryDisplay: () => Promise<{ x: number; y: number; w: number; h: number } | null>
-    onPrimaryDisplay: (cb: (rect: { x: number; y: number; w: number; h: number }) => void) => void
+    displays: () => Promise<Array<{ x: number; y: number; w: number; h: number; primary: boolean }> | null>
+    onDisplays: (cb: (list: Array<{ x: number; y: number; w: number; h: number; primary: boolean }>) => void) => void
   }
   /** Consent view only. */
   consentAPI?: {

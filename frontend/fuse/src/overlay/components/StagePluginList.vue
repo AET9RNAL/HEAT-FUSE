@@ -2,7 +2,7 @@
 /**
  * Read-only roster of everything loaded on this stage
  */
-import { computed, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import StagePanel from "./StagePanel.vue";
 import Icons from "../../components/ui/Icons.vue";
 import { motion } from "motion-v";
@@ -10,6 +10,7 @@ import { Dynamics } from "../../composables/useMotion";
 import { vTip } from "../inspector/tooltip";
 import { overlays, stageRoster } from "../overlayClient";
 import { pluginListOpen, pluginListPos, selectOverlay, selectedId } from "../stageState";
+import { areaAt, areaOf, displays, keepInside, mainScreen, panelMaxHeight } from "../screens";
 
 const PANEL_W = 300;
 
@@ -49,25 +50,38 @@ function overlayKnown(overlayId: string): boolean {
   return overlays.has(overlayId);
 }
 
-const panelStyle = computed(() => {
-  const p = pluginListPos.value;
-  if (p) return { left: `${p.x}px`, top: `${p.y}px` };
-  return { left: `${MARGIN}px`, top: `${MARGIN}px` };
-});
-
 const MARGIN = 24;
+
+/** Top-left of the primary display. */
+function defaultPos(): { x: number; y: number } {
+  const a = mainScreen();
+  return { x: a.x + MARGIN, y: a.y + MARGIN };
+}
+
+const panelStyle = computed(() => {
+  const p = pluginListPos.value ?? defaultPos();
+  return { left: `${p.x}px`, top: `${p.y}px`, maxHeight: `${panelMaxHeight(p.x, p.y, PANEL_W, MARGIN)}px` };
+});
 
 let isDragging = false;
 let startPtr = { x: 0, y: 0 };
 let startPos = { x: 0, y: 0 };
 
-function clampToViewport(x: number, y: number): { x: number; y: number } {
-  const h = root.value?.offsetHeight ?? 0;
-  return {
-    x: Math.min(Math.max(0, x), Math.max(0, window.innerWidth - PANEL_W)),
-    y: Math.min(Math.max(0, y), Math.max(0, window.innerHeight - h)),
-  };
+/** Keeps the panel inside one display: the one under the pointer while dragging, else the one that holds most of it. */
+function clampToScreen(x: number, y: number, pointer?: { x: number; y: number }): { x: number; y: number } {
+  const box = { x, y, w: PANEL_W, h: root.value?.offsetHeight ?? 0 };
+  return keepInside(box, pointer ? areaAt(pointer.x, pointer.y) : areaOf(box));
 }
+
+// A saved position can land off-screen if the displays changed since.
+function onResize(): void {
+  const p = pluginListPos.value;
+  if (p) pluginListPos.value = clampToScreen(p.x, p.y);
+}
+
+watch(displays, onResize);
+onMounted(() => window.addEventListener("resize", onResize));
+onBeforeUnmount(() => window.removeEventListener("resize", onResize));
 
 function onHeaderDown(e: PointerEvent): void {
   if ((e.target as HTMLElement).closest("button")) return;
@@ -82,9 +96,10 @@ function onHeaderDown(e: PointerEvent): void {
 
 function onHeaderMove(e: PointerEvent): void {
   if (!isDragging) return;
-  pluginListPos.value = clampToViewport(
+  pluginListPos.value = clampToScreen(
     startPos.x + (e.clientX - startPtr.x),
     startPos.y + (e.clientY - startPtr.y),
+    { x: e.clientX, y: e.clientY },
   );
 }
 
@@ -161,7 +176,6 @@ function onHeaderUp(): void {
   -webkit-user-select: none;
   position: fixed;
   width: 300px;
-  max-height: calc(100vh - 140px);
   display: flex;
   z-index: 15;
   color: var(--text-main);

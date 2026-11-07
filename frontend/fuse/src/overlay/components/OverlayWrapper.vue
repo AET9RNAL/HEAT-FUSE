@@ -6,6 +6,7 @@ import { hostState, dragging } from "../overlayClient";
 import { commitTransform } from "../history";
 import { activeGuides, grid, lockAspect, selectOverlay, selectedId } from "../stageState";
 import { peerBoxes, snapEdge, snapMove, type Box } from "../composables/useSnapping";
+import { centerIn, mainOverlayArea } from "../screens";
 import type { OverlayDescriptor, OverlayRect } from "../types";
 
 const props = defineProps<{ descriptor: OverlayDescriptor }>();
@@ -59,10 +60,17 @@ watch(
   { deep: true },
 );
 
+/** Where an overlay with no saved rect sits: the centre of the primary display. */
+function defaultTopLeft(): { x: number; y: number } {
+  const { w, h } = effSize.value;
+  return centerIn(mainOverlayArea(), w, h);
+}
+
 const style = computed(() => {
   const { w, h } = effSize.value;
-  const p = pos.value ?? (props.descriptor.rect ? { x: props.descriptor.rect.x, y: props.descriptor.rect.y } : null);
-  const spin = rot.value ? ` rotate(${rot.value}deg)` : "";
+  const r = props.descriptor.rect;
+  const p = pos.value ?? (r ? { x: r.x, y: r.y } : defaultTopLeft());
+  const spin = rot.value ? `rotate(${rot.value}deg)` : "";
   const base = {
     position: "absolute" as const,
     width: `${w}px`,
@@ -74,21 +82,14 @@ const style = computed(() => {
     pointerEvents: clickable.value ? ("auto" as const) : ("none" as const),
     cursor: calibrating.value ? ("move" as const) : ("default" as const),
   };
-  if (p) return { ...base, left: `${p.x}px`, top: `${p.y}px`, transform: spin.trim() };
-  // Centered default when no rect is set yet.
-  return { ...base, left: "50%", top: "50%", transform: `translate(-50%, -50%)${spin}` };
+  return { ...base, left: `${p.x}px`, top: `${p.y}px`, transform: spin };
 });
 
-/** Current on-screen top-left, for building a rect when none is set yet. */
+/** Current top-left in stage px, for building a rect when none is set yet. */
 function currentTopLeft(): { x: number; y: number } {
   if (pos.value) return pos.value;
   const r = props.descriptor.rect;
-  if (r) return { x: r.x, y: r.y };
-  if (el.value) {
-    const b = el.value.getBoundingClientRect();
-    return { x: Math.round(b.left), y: Math.round(b.top) };
-  }
-  return { x: 0, y: 0 };
+  return r ? { x: r.x, y: r.y } : defaultTopLeft();
 }
 
 /** Commit the current geometry, carrying rot/opacity through unchanged. */

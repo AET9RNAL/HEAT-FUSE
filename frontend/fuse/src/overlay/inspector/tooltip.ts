@@ -1,4 +1,5 @@
 import { inject, reactive, type Directive, type InjectionKey } from "vue";
+import { areaAt } from "../screens";
 
 const SHOW_DELAY = 420;
 const GAP = 8;
@@ -28,8 +29,9 @@ export function hideTip(): void {
 
 function showFor(el: HTMLElement, text: string): void {
   const box = el.getBoundingClientRect();
+  const screen = areaAt(box.left + box.width / 2, box.top + box.height / 2);
   // Rough height guess - the box is one or two lines and only needs to pick a side.
-  const below = box.bottom + GAP + 48 < window.innerHeight;
+  const below = box.bottom + GAP + 48 < screen.y + screen.h;
   tip.text = text;
   tip.below = below;
   tip.x = Math.round(box.left + box.width / 2);

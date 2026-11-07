@@ -1,4 +1,5 @@
 import { overlays } from "../overlayClient";
+import { overlayAreas } from "../screens";
 import type { Guide, SnapMode } from "../stageState";
 import type { OverlayRect } from "../types";
 
@@ -47,8 +48,9 @@ export function peerBoxes(movingId: string): Box[] {
   return boxes;
 }
 
-function viewportBox(): Box {
-  return { left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight };
+/** Each display's edges, so overlays snap to real monitor edges and not to the gaps between them. */
+function screenBoxes(): Box[] {
+  return overlayAreas().map((a) => ({ left: a.x, top: a.y, right: a.x + a.w, bottom: a.y + a.h }));
 }
 
 function candidates(peers: Box[], axis: "x" | "y"): Candidate[] {
@@ -61,7 +63,7 @@ function candidates(peers: Box[], axis: "x" | "y"): Candidate[] {
     }
   };
   for (const p of peers) push(p);
-  push(viewportBox());
+  for (const s of screenBoxes()) push(s);
   return out;
 }
 

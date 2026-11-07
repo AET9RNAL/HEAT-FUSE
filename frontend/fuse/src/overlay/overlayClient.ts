@@ -19,6 +19,8 @@ let obsMode = false;
 import type { OverlayInput } from "./rive";
 import type { InputPhase, InspectorSchema } from "./inspector/types";
 import { clearNotifications, pushNotification, removeNotification, type StageNotification } from "./notifications";
+import { displays, viewport, type DisplayArea } from "./screens";
+export { primaryDisplay, viewport } from "./screens";
 import type { HostState, OverlayDescriptor, OverlayRect, PluginMetrics, StageMetrics, StagePlugin } from "./types";
 
 type DataEvents = Record<string, Record<string, OverlayInput>>;
@@ -49,8 +51,6 @@ export const pluginMetrics = ref<Record<string, PluginMetrics>>({});
 export const stageSettings = reactive({ perfWidget: false, tour: false });
 /** The stage renderer's and GPU process's resources, once a second while the widget is on. */
 export const stageMetrics = ref<StageMetrics | null>(null);
-/** The primary display's box in stage coordinates; null outside the Electron stage. */
-export const primaryDisplay = ref<{ x: number; y: number; w: number; h: number } | null>(null);
 /** Host shortcuts as currently bound (user-rebindable), for on-stage hints. */
 export const hostHotkeys = reactive({ lock: "ctrl+l", interactive: "ctrl+i" });
 
@@ -61,13 +61,6 @@ export function formatCombo(combo: string): string {
     .map((part) => (part ? part[0].toUpperCase() + part.slice(1) : part))
     .join("+");
 }
-/**
- * Region of the virtual desktop this client renders, when broadcasting a single
- * display to OBS. Overlay rects are in virtual-desktop coordinates, so the stage
- * shifts by -x/-y to bring the chosen monitor's region into view. Null in the
- * Electron stage window, which already spans the whole virtual desktop.
- */
-export const viewport = ref<{ x: number; y: number; w: number; h: number } | null>(null);
 /** True while an overlay is being dragged (suppresses hover click-through toggling). */
 export const dragging = ref(false);
 
@@ -80,29 +73,27 @@ export const dragging = ref(false);
  */
 export const sourceRev = ref(0);
 
-type DisplayRect = { x: number; y: number; w: number; h: number };
-
 type StageApi = {
   stageAPI?: {
     setIgnore(ignore: boolean): void;
     setFocusable(focusable: boolean): void;
     connection(): Promise<FuseOverlayParams | null>;
-    primaryDisplay(): Promise<DisplayRect | null>;
-    onPrimaryDisplay(cb: (rect: DisplayRect) => void): void;
+    displays(): Promise<DisplayArea[] | null>;
+    onDisplays(cb: (list: DisplayArea[]) => void): void;
   };
 };
 
-let primaryDisplayWatched = false;
+let displaysWatched = false;
 
-function watchPrimaryDisplay(): void {
+function watchDisplays(): void {
   const api = (window as unknown as StageApi).stageAPI;
-  if (!api || primaryDisplayWatched) return;
-  primaryDisplayWatched = true;
-  api.onPrimaryDisplay((rect) => (primaryDisplay.value = rect));
+  if (!api || displaysWatched) return;
+  displaysWatched = true;
+  api.onDisplays((list) => (displays.value = list));
   void api
-    .primaryDisplay()
-    .then((rect) => {
-      if (rect) primaryDisplay.value = rect;
+    .displays()
+    .then((list) => {
+      if (list?.length) displays.value = list;
     })
     .catch(() => {});
 }
@@ -195,7 +186,7 @@ export function connectOverlay(): void {
     return;
   }
 
-  watchPrimaryDisplay();
+  watchDisplays();
   void resolveParams().then((params) => {
     if (!params) {
       console.error("[overlay] no connection params (stageAPI.connection() or ?port&token)");

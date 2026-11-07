@@ -79,7 +79,7 @@ const DISPLAY_DELAY_MS = 250
 
 let fitsLeft = MAX_FITS
 let fitTimer: ReturnType<typeof setTimeout> | null = null
-let lastPrimaryRect = ''
+let lastDisplays = ''
 
 function fitsDesktop(win: BrowserWindow, target: Rect): boolean {
   const b = windowDeviceBounds(win)
@@ -106,7 +106,7 @@ function fitToDesktop(win: BrowserWindow): void {
       console.warn('[stage] window does not fit the desktop', JSON.stringify({ target, got: windowDeviceBounds(win) }))
     }
   }
-  sendPrimaryDisplay()
+  sendDisplays()
 }
 
 /** A DPI change can resize the window after a move, so every fit gets a check once things settle. */
@@ -125,20 +125,24 @@ function applyIgnore(ignore: boolean, win: BrowserWindow | null = getStageWindow
   win.setIgnoreMouseEvents(ignore, { forward: true })
 }
 
-/** The primary display's box in the stage page's CSS pixels. */
-function primaryDisplayRect(win: BrowserWindow): { x: number; y: number; w: number; h: number } {
-  const r = displayInStage(screen.getPrimaryDisplay(), stageFrame(win))
-  return { x: r.x, y: r.y, w: r.width, h: r.height }
+/** Every display's box in the stage page's CSS pixels. The window also covers the gaps between them. */
+function stageDisplays(win: BrowserWindow): Array<{ x: number; y: number; w: number; h: number; primary: boolean }> {
+  const frame = stageFrame(win)
+  const primaryId = screen.getPrimaryDisplay().id
+  return screen.getAllDisplays().map((d) => {
+    const r = displayInStage(d, frame)
+    return { x: r.x, y: r.y, w: r.width, h: r.height, primary: d.id === primaryId }
+  })
 }
 
-function sendPrimaryDisplay(): void {
+function sendDisplays(): void {
   const win = getStageWindow()
   if (!win || win.webContents.isDestroyed()) return
-  const rect = primaryDisplayRect(win)
-  const key = JSON.stringify(rect)
-  if (key === lastPrimaryRect) return
-  lastPrimaryRect = key
-  win.webContents.send('overlay:primary-display-changed', rect)
+  const list = stageDisplays(win)
+  const key = JSON.stringify(list)
+  if (key === lastDisplays) return
+  lastDisplays = key
+  win.webContents.send('overlay:displays-changed', list)
 }
 
 function isStagePage(url: string): boolean {
@@ -150,7 +154,7 @@ function createStageWindow(): void {
   if (!stageParams || !env) return
   const b = dipRectFor(desktopBounds())
   fitsLeft = MAX_FITS
-  lastPrimaryRect = ''
+  lastDisplays = ''
   const win = new BrowserWindow({
     x: b.x, y: b.y, width: b.width, height: b.height,
     transparent: true,
@@ -256,9 +260,9 @@ export function initOverlayStage(stageEnv: StageEnv): void {
     cb({ cancel: details.resourceType === 'subFrame' && !frameAllowed(details.url) })
   })
 
-  handleIpc('overlay:primary-display', (e) => {
+  handleIpc('overlay:displays', (e) => {
     const win = getStageWindow()
-    return win && e.sender === win.webContents ? primaryDisplayRect(win) : null
+    return win && e.sender === win.webContents ? stageDisplays(win) : null
   })
 
   // Once per page load. The stage app takes it first, so plugin code that asks later gets null.

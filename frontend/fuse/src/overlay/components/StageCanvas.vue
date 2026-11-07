@@ -12,6 +12,7 @@ import StagePerfBar from "./StagePerfBar.vue";
 import eFtue, { type FtueLabels } from "../../components/ftue/eFtue.vue";
 import { useI18n } from "../../composables/useI18n";
 import { hostState, overlays, primaryDisplay, stageSettings, viewport } from "../overlayClient";
+import { mainScreen } from "../screens";
 import { dim } from "../stageState";
 import { DEMO_OVERLAY_ID } from "../stageTour";
 
@@ -48,6 +49,12 @@ const viewStyle = computed(() => {
 // Sits under the overlays and stays click-through, so the stage's hover
 // hit-test (which looks for .overlay-wrapper / .stage-ui) is unaffected.
 const dimStyle = computed(() => ({ background: `rgba(0, 0, 0, ${dim.value})` }));
+
+// The toolbar and the notices sit on the primary display, never in a gap between displays.
+const mainStyle = computed(() => {
+  const a = mainScreen();
+  return { left: `${a.x}px`, top: `${a.y}px`, width: `${a.w}px`, height: `${a.h}px` };
+});
 </script>
 
 <template>
@@ -65,9 +72,11 @@ const dimStyle = computed(() => ({ background: `rgba(0, 0, 0, ${dim.value})` }))
     <SnapGuides v-if="calibrating" />
     <OverlayInspector v-if="calibrating" />
     <StagePluginList v-if="calibrating" />
-    <StageToolbar v-if="calibrating" />
+    <div class="stage-main" :style="mainStyle">
+      <StageToolbar v-if="calibrating" />
+      <StageNotices />
+    </div>
     <StagePerfBar v-if="stageSettings.perfWidget" />
-    <StageNotices />
     <StageTooltip />
     <eFtue :labels="ftueLabels" :bounds="ftueBounds" layer-class="stage-ui" />
   </div>
@@ -91,6 +100,11 @@ const dimStyle = computed(() => ({ background: `rgba(0, 0, 0, ${dim.value})` }))
 .stage-dim {
   position: absolute;
   inset: 0;
+  pointer-events: none;
+}
+
+.stage-main {
+  position: absolute;
   pointer-events: none;
 }
 </style>

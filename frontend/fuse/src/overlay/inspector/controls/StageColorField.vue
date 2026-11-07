@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from "motion-v";
 import eColorPicker from "../../../components/inputs/eColorPicker.vue";
 import { Dynamics } from "../../../composables/useMotion";
 import StageSlider from "./StageSlider.vue";
+import { areaAt } from "../../screens";
 
 const props = withDefaults(
   defineProps<{
@@ -88,9 +89,10 @@ function toggle(e: MouseEvent): void {
   openedAt = Date.now();
   const PW = 264;
   const PH = 300;
+  const screen = areaAt(box.left + box.width / 2, box.top + box.height / 2);
   let top = box.bottom + 6;
-  if (top + PH > window.innerHeight) top = Math.max(8, box.top - PH - 6);
-  pos.value = { left: Math.max(8, box.right - PW), top };
+  if (top + PH > screen.y + screen.h) top = Math.max(screen.y + 8, box.top - PH - 6);
+  pos.value = { left: Math.max(screen.x + 8, box.right - PW), top };
   open.value = true;
 }
 </script>

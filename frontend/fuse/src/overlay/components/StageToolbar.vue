@@ -211,11 +211,12 @@ const doneTip = computed(() => {
 .stage-toolbar {
   user-select: none;
   -webkit-user-select: none;
-  position: fixed;
+  position: absolute;
   left: 50%;
   bottom: 24px;
   transform: translateX(-50%);
   z-index: 20;
+  pointer-events: auto;
   color: var(--text-main);
   font-family: var(--font-primary);
 }

@@ -3,6 +3,7 @@
  */
 import { computed, ref } from "vue";
 import { overlays, sendTransform } from "./overlayClient";
+import { centerIn, mainOverlayArea } from "./screens";
 import type { OverlayRect } from "./types";
 
 interface Entry {
@@ -24,7 +25,7 @@ function currentRect(overlayId: string): OverlayRect | null {
   if (!d) return null;
   if (d.rect) return { ...d.rect };
   const { w, h } = d.size;
-  return { x: Math.round((window.innerWidth - w) / 2), y: Math.round((window.innerHeight - h) / 2), w, h };
+  return { ...centerIn(mainOverlayArea(), w, h), w, h };
 }
 
 function same(a: OverlayRect, b: OverlayRect): boolean {

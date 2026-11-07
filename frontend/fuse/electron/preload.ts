@@ -10,11 +10,11 @@ if (SURFACE === 'stage') {
     setFocusable: (focusable: boolean): void => ipcRenderer.send('overlay:set-focusable', !!focusable),
     /** The runtime socket's port and stage token, answered once per page load. */
     connection: (): Promise<{ port: number; token: string } | null> => ipcRenderer.invoke('overlay:connection'),
-    /** Where the primary display sits inside the stage window. */
-    primaryDisplay: (): Promise<{ x: number; y: number; w: number; h: number } | null> =>
-      ipcRenderer.invoke('overlay:primary-display'),
-    onPrimaryDisplay: (cb: (rect: { x: number; y: number; w: number; h: number }) => void): void => {
-      ipcRenderer.on('overlay:primary-display-changed', (_e, rect) => cb(rect))
+    /** Where each display sits inside the stage window. */
+    displays: (): Promise<Array<{ x: number; y: number; w: number; h: number; primary: boolean }> | null> =>
+      ipcRenderer.invoke('overlay:displays'),
+    onDisplays: (cb: (list: Array<{ x: number; y: number; w: number; h: number; primary: boolean }>) => void): void => {
+      ipcRenderer.on('overlay:displays-changed', (_e, list) => cb(list))
     },
   })
 }

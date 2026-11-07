@@ -863,6 +863,7 @@ overlay.inspector.patch("glow_size", { max: 40 });   // change one control in pl
 
 Every control takes `id`, `label`, `tooltip`, `hint`, `key`, `when`, `disabledWhen` and `width: "full" | "half"`. A section takes `id`, `label`, `description`, `collapsible`, `defaultCollapsed`, `order` (FUSE's sections use 0, 1 and 2), `when` and `controls`.
 
+- A section starts open. Set `defaultCollapsed: true` to start it collapsed. Set `collapsible: false` to keep it open.
 - A control with a `key` reads and writes that config key, the same key that the App panel edits. Without a `key` the value is transient and reaches the plugin only through `onInput`.
 - The runtime coerces each value against its control: it clamps numbers and checks options. It rejects a value that does not fit. The runtime saves a `commit` change, but not a `live` change.
 - A `keybind` control with `action` shows and rebinds that live hotkey, the same binding as the App's Keybinds tab. It does not use `key`.
