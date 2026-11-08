@@ -7,8 +7,10 @@ import { clearHistory, redo, undo } from "./history";
 import { hideTip } from "./inspector/tooltip";
 import { visibleNotifications } from "./notifications";
 import { initStageTour } from "./stageTour";
+import { initHiddenOverlayNotice } from "./hiddenOverlays";
 
 initStageTour();
+initHiddenOverlayNotice();
 
 let lastIgnore = true;
 

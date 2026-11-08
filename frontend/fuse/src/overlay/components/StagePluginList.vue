@@ -11,6 +11,7 @@ import { vTip } from "../inspector/tooltip";
 import { overlays, stageRoster } from "../overlayClient";
 import { pluginListOpen, pluginListPos, selectOverlay, selectedId } from "../stageState";
 import { areaAt, areaOf, displays, keepInside, mainScreen, panelMaxHeight } from "../screens";
+import { hiddenOverlays } from "../hiddenOverlays";
 
 const PANEL_W = 300;
 
@@ -48,6 +49,14 @@ function overlayLabel(overlayId: string): string {
 
 function overlayKnown(overlayId: string): boolean {
   return overlays.has(overlayId);
+}
+
+const offStage = computed(() => new Map(hiddenOverlays.value.map((h) => [h.overlayId, h.display])));
+
+function offStageTip(overlayId: string): string {
+  const d = offStage.value.get(overlayId);
+  const where = d ? `display ${d.index}` : "a display";
+  return `On ${where}, outside the stage. Add the display with the toolbar's display picker, or select the overlay and use Align.`;
 }
 
 const MARGIN = 24;
@@ -160,6 +169,7 @@ function onHeaderUp(): void {
             >
               <Icons kind="overlay" size="small" color="var(--ico)" />
               <span class="child-name">{{ overlayLabel(oid) }}</span>
+              <span v-if="offStage.has(oid)" v-tip="offStageTip(oid)" class="child-off">Off stage</span>
             </button>
             <p v-if="!p.overlay_ids.length" class="pl-empty">No overlays</p>
           </div>
@@ -371,6 +381,17 @@ function onHeaderUp(): void {
   font-family: var(--font-microcopy);
   font-size: var(--main-font-size-5);
   color: var(--base-600);
+}
+
+.child-off {
+  flex: none;
+  padding: 0 var(--space-1);
+  font-family: var(--font-microcopy);
+  font-size: var(--main-font-size-5);
+  color: var(--accent-200);
+  border: 1px dashed var(--accent-200);
+  corner-shape: bevel;
+  border-radius: 4px 0 4px 0;
 }
 
 .pl-empty {

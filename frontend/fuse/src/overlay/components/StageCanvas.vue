@@ -28,7 +28,7 @@ const ftueLabels = computed<FtueLabels>(() => ({
   sample: t("ftue.sample"),
 }));
 
-// The stage covers every display. The tour stays on the primary one.
+// The tour stays on the stage's main display.
 const ftueBounds = computed(() => {
   const d = primaryDisplay.value;
   return d ? { x: d.x, y: d.y, width: d.w, height: d.h } : null;
@@ -90,8 +90,8 @@ const mainStyle = computed(() => {
   background: transparent;
 }
 
-/* Same box as .stage when untranslated, so overlay coordinates are unchanged
-   in the Electron stage window. */
+/* Same box as .stage. In the Electron stage each overlay subtracts the stage
+   offset itself, so this layer never gets a transform there. */
 .stage-view {
   position: absolute;
   inset: 0;

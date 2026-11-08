@@ -3,6 +3,7 @@ import { computed, ref } from "vue";
 import { AnimatePresence, motion } from "motion-v";
 import StagePanel from "./StagePanel.vue";
 import StageNumberField from "./StageNumberField.vue";
+import StageDisplayPicker from "./StageDisplayPicker.vue";
 import Icons from "../../components/ui/Icons.vue";
 import { Dynamics } from "../../composables/useMotion";
 import StageSlider from "../inspector/controls/StageSlider.vue";
@@ -161,6 +162,8 @@ const doneTip = computed(() => {
         <span class="readout">{{ canvas }} · {{ count }} el · {{ selCount }} sel</span>
 
         <span class="sep"></span>
+
+        <StageDisplayPicker />
 
         <motion.button
           v-ftue="'stage-help'"

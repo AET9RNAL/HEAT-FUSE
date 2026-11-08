@@ -29,10 +29,10 @@ export function deviceBounds(d: Display): Rect {
   return WIN ? screen.dipToScreenRect(null, d.bounds) : { ...d.bounds }
 }
 
-/** The union of all displays in device units: the box the stage window covers. */
-export function desktopBounds(): Rect {
+/** The union of some displays in device units. */
+export function unionBounds(list: Display[]): Rect {
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
-  for (const d of screen.getAllDisplays()) {
+  for (const d of list) {
     const b = deviceBounds(d)
     minX = Math.min(minX, b.x)
     minY = Math.min(minY, b.y)
@@ -41,6 +41,11 @@ export function desktopBounds(): Rect {
   }
   if (!Number.isFinite(minX)) return deviceBounds(screen.getPrimaryDisplay())
   return { x: minX, y: minY, width: maxX - minX, height: maxY - minY }
+}
+
+/** The union of all displays. Overlay coordinates start at its top-left corner, whatever the stage window covers. */
+export function desktopBounds(): Rect {
+  return unionBounds(screen.getAllDisplays())
 }
 
 /** The DIP rect that `setBounds` turns into `target`. Electron picks the scale from the rect itself, so each display's scale is tried. */
@@ -103,14 +108,20 @@ function predictedScale(area: Rect): number {
   return best.scaleFactor
 }
 
-/** The stage page's frame: from the open window, or where the window goes when it opens. */
-export function stageFrame(win: BrowserWindow | null): StageFrame {
-  if (win && !win.isDestroyed()) {
-    const b = windowDeviceBounds(win)
-    return { origin: { x: b.x, y: b.y }, scale: windowScale(win) }
-  }
+/** The stage page's frame: page px start at the window's top-left corner. */
+export function stageFrame(win: BrowserWindow): StageFrame {
+  const b = windowDeviceBounds(win)
+  return { origin: { x: b.x, y: b.y }, scale: windowScale(win) }
+}
+
+/**
+ * The overlay frame: saved overlay rects are CSS px at the stage scale, from the
+ * desktop's top-left corner. `target` is where the window goes when none is open.
+ */
+export function overlayFrame(win: BrowserWindow | null, target: Rect): StageFrame {
   const d = desktopBounds()
-  return { origin: { x: d.x, y: d.y }, scale: predictedScale(d) }
+  const scale = win && !win.isDestroyed() ? windowScale(win) : predictedScale(target)
+  return { origin: { x: d.x, y: d.y }, scale }
 }
 
 /** A device-unit rect in the stage page's CSS pixels. Edges round, not sizes, so neighbour displays meet without a gap. */

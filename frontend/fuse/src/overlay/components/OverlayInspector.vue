@@ -16,8 +16,8 @@ import {
   displays,
   keepInside,
   mainOverlayArea,
-  mainScreen,
   overlayAreas,
+  overlayToPage,
   panelMaxHeight,
 } from "../screens";
 import { clearSelection, inspectorPos, lockAspect, selectedId } from "../stageState";
@@ -261,7 +261,7 @@ function clampToScreen(x: number, y: number, pointer?: { x: number; y: number })
 
 /** Top-right of the display that holds the selected overlay. */
 function defaultPos(): { x: number; y: number } {
-  const a = displays.value.length ? areaOf(rect.value) : mainScreen();
+  const a = areaOf(overlayToPage(rect.value));
   return { x: Math.max(a.x, a.x + a.w - PANEL_W - MARGIN), y: a.y + MARGIN };
 }
 

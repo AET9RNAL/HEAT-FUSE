@@ -16,7 +16,7 @@ import fs from 'node:fs'
 import { strFromU8 } from 'fflate'
 import { inspectPackage, readCentralDirectory, readEntry, type RangeSource } from '../../../workers/registry-processor/src/zip.ts'
 import { checkImage, sniffImage, MAX_IMAGE_BYTES } from '../../../workers/registry-processor/src/image.ts'
-import { getStageWindow, initOverlayStage, setFrameSources, startOverlayStage, stopOverlayStage } from './overlayStage'
+import { getStageWindow, initOverlayStage, setFrameSources, setSavedDisplays, startOverlayStage, stopOverlayStage } from './overlayStage'
 import { handleIpc, onIpc, onceIpc, trustSurface } from './ipcGuard'
 import { PermissionStore } from './permissionStore'
 import { SecretStore } from './secretStore'
@@ -998,6 +998,7 @@ app.whenReady().then(() => {
     devServerUrl: VITE_DEV_SERVER_URL,
     rendererDist: RENDERER_DIST,
     preload: PATHS.preload,
+    onDisplaysSelected: (list) => win?.webContents.send('stage:displays:changed', list),
   })
 
   // Decisions live here, encrypted; the runtime asks and is told.
@@ -1519,6 +1520,8 @@ app.whenReady().then(() => {
   handleIpc('safe-storage:decrypt', (_event, buf: { type: 'Buffer'; data: number[] }) =>
     safeStorage.decryptString(Buffer.from(buf.data)))
 
+
+  handleIpc('stage:displays:set', (_event, list: unknown) => setSavedDisplays(list))
 
   handleIpc('app:set-autostart', (_event, value: boolean) => {
     app.setLoginItemSettings({ openAtLogin: value })

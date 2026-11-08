@@ -1,6 +1,17 @@
-import { BrowserWindow, screen, session, shell, type WebFrameMain } from 'electron'
+import { BrowserWindow, screen, session, shell, type Display, type WebFrameMain } from 'electron'
 import { handleIpc, onIpc, trustSurface } from './ipcGuard'
-import { desktopBounds, dipRectFor, displayInStage, stageFrame, windowDeviceBounds, type Rect } from './stageGeometry'
+import {
+  deviceBounds,
+  dipRectFor,
+  displayInStage,
+  overlayFrame,
+  stageFrame,
+  toStage,
+  unionBounds,
+  windowDeviceBounds,
+  type Rect,
+  type StageFrame,
+} from './stageGeometry'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 
@@ -23,6 +34,8 @@ interface StageEnv {
   devServerUrl?: string
   rendererDist: string
   preload: string
+  /** The user picked displays on the stage. The App saves the pick. */
+  onDisplaysSelected?: (list: SavedDisplay[]) => void
 }
 
 let stageWindow: BrowserWindow | null = null
@@ -79,9 +92,106 @@ const DISPLAY_DELAY_MS = 250
 
 let fitsLeft = MAX_FITS
 let fitTimer: ReturnType<typeof setTimeout> | null = null
-let lastDisplays = ''
+let lastLayout = ''
 
-function fitsDesktop(win: BrowserWindow, target: Rect): boolean {
+/** A display the user picked for the stage, as the App saves it on this PC. */
+export interface SavedDisplay {
+  id: string
+  label: string
+  /** Device units. */
+  bounds: Rect
+}
+
+/** The user's pick. Empty means the primary only. */
+let savedDisplays: SavedDisplay[] = []
+
+const sameRect = (a: Rect, b: Rect): boolean =>
+  a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height
+
+/** Windows can change a display id after a driver update or a port change, so later passes match by name, size and position. */
+const MATCH_PASSES: Array<(s: SavedDisplay, d: Display) => boolean> = [
+  (s, d) => String(d.id) === s.id,
+  (s, d) => d.label === s.label && sameRect(deviceBounds(d), s.bounds),
+  (s, d) => d.label === s.label && deviceBounds(d).width === s.bounds.width && deviceBounds(d).height === s.bounds.height,
+  (s, d) => sameRect(deviceBounds(d), s.bounds),
+]
+
+function matchSaved(saved: SavedDisplay[], all: Display[]): Display[] {
+  const left = [...saved]
+  const free = [...all]
+  const out: Display[] = []
+  for (const fits of MATCH_PASSES) {
+    for (let i = left.length - 1; i >= 0; i--) {
+      const j = free.findIndex((d) => fits(left[i], d))
+      if (j < 0) continue
+      out.push(free[j])
+      free.splice(j, 1)
+      left.splice(i, 1)
+    }
+  }
+  return out
+}
+
+/**
+ * Displays the stage window covers: the user's pick, else the primary. A window
+ * across GPUs or refresh rates runs at the pace of the slowest display.
+ */
+function coveredDisplays(): Display[] {
+  const picked = matchSaved(savedDisplays, screen.getAllDisplays())
+  return picked.length ? picked : [screen.getPrimaryDisplay()]
+}
+
+function toSaved(d: Display): SavedDisplay {
+  return { id: String(d.id), label: d.label, bounds: deviceBounds(d) }
+}
+
+function parseSaved(raw: unknown): SavedDisplay[] {
+  if (!Array.isArray(raw)) return []
+  return raw.flatMap((r) => {
+    const b = r?.bounds
+    const ok = typeof r?.id === 'string' && b && [b.x, b.y, b.width, b.height].every(Number.isFinite)
+    return ok ? [{ id: r.id, label: String(r.label ?? ''), bounds: { x: b.x, y: b.y, width: b.width, height: b.height } }] : []
+  })
+}
+
+function applySaved(next: SavedDisplay[]): boolean {
+  if (JSON.stringify(next) === JSON.stringify(savedDisplays)) return false
+  savedDisplays = next
+  fitsLeft = MAX_FITS
+  scheduleFit(0)
+  return true
+}
+
+/** The App sends its saved pick at start and after each change. */
+export function setSavedDisplays(raw: unknown): void {
+  applySaved(parseSaved(raw))
+}
+
+/** The box the stage window covers, in device units. */
+function stageTarget(): Rect {
+  return unionBounds(coveredDisplays())
+}
+
+/** The display the stage UI and the consent card sit on: the primary if covered, else the first covered one. */
+export function mainStageDisplay(): Display {
+  const covered = coveredDisplays()
+  const primaryId = screen.getPrimaryDisplay().id
+  return covered.find((d) => d.id === primaryId) ?? covered[0] ?? screen.getPrimaryDisplay()
+}
+
+/** The overlay frame for code outside the stage page, such as the OBS server. */
+export function overlaySpace(): StageFrame {
+  return overlayFrame(getStageWindow(), stageTarget())
+}
+
+function within(inner: Rect, outer: Rect, tolerance: number): boolean {
+  return inner.x >= outer.x - tolerance &&
+    inner.y >= outer.y - tolerance &&
+    inner.x + inner.width <= outer.x + outer.width + tolerance &&
+    inner.y + inner.height <= outer.y + outer.height + tolerance
+}
+
+function fitsTarget(win: BrowserWindow, target: Rect): boolean {
   const b = windowDeviceBounds(win)
   return Math.abs(b.x - target.x) <= FIT_TOLERANCE &&
     Math.abs(b.y - target.y) <= FIT_TOLERANCE &&
@@ -89,11 +199,11 @@ function fitsDesktop(win: BrowserWindow, target: Rect): boolean {
     Math.abs(b.y + b.height - target.y - target.height) <= FIT_TOLERANCE
 }
 
-/** Moves the window over the whole desktop, unless it is there already. */
-function fitToDesktop(win: BrowserWindow): void {
+/** Moves the window over the covered displays, unless it is there already. */
+function fitToStage(win: BrowserWindow): void {
   if (win.isDestroyed()) return
-  const target = desktopBounds()
-  if (!fitsDesktop(win, target)) {
+  const target = stageTarget()
+  if (!fitsTarget(win, target)) {
     if (fitsLeft > 0) {
       fitsLeft--
       // A non-resizable window keeps its old size as its max size on Windows, so the limit lifts for the move.
@@ -103,10 +213,10 @@ function fitToDesktop(win: BrowserWindow): void {
       if (!wasResizable) win.setResizable(false)
     } else if (fitsLeft === 0) {
       fitsLeft--
-      console.warn('[stage] window does not fit the desktop', JSON.stringify({ target, got: windowDeviceBounds(win) }))
+      console.warn('[stage] window does not fit its displays', JSON.stringify({ target, got: windowDeviceBounds(win) }))
     }
   }
-  sendDisplays()
+  sendLayout()
 }
 
 /** A DPI change can resize the window after a move, so every fit gets a check once things settle. */
@@ -115,7 +225,7 @@ function scheduleFit(delay = FIT_DELAY_MS): void {
   fitTimer = setTimeout(() => {
     fitTimer = null
     const win = getStageWindow()
-    if (win) fitToDesktop(win)
+    if (win) fitToStage(win)
   }, delay)
 }
 
@@ -125,24 +235,42 @@ function applyIgnore(ignore: boolean, win: BrowserWindow | null = getStageWindow
   win.setIgnoreMouseEvents(ignore, { forward: true })
 }
 
-/** Every display's box in the stage page's CSS pixels. The window also covers the gaps between them. */
-function stageDisplays(win: BrowserWindow): Array<{ x: number; y: number; w: number; h: number; primary: boolean }> {
-  const frame = stageFrame(win)
+function stageLayout(win: BrowserWindow): StageLayout {
+  const page = stageFrame(win)
+  const winRect = windowDeviceBounds(win)
+  const corner = toStage(winRect, overlayFrame(win, stageTarget()))
   const primaryId = screen.getPrimaryDisplay().id
-  return screen.getAllDisplays().map((d) => {
-    const r = displayInStage(d, frame)
-    return { x: r.x, y: r.y, w: r.width, h: r.height, primary: d.id === primaryId }
-  })
+  const picked = new Set(coveredDisplays().map((d) => d.id))
+  return {
+    displays: screen.getAllDisplays().map((d, i) => {
+      const r = displayInStage(d, page)
+      const inStage = within(deviceBounds(d), winRect, FIT_TOLERANCE)
+      return {
+        id: String(d.id),
+        // Same numbers as the OBS display picker.
+        index: i + 1,
+        name: d.label,
+        x: r.x,
+        y: r.y,
+        w: r.width,
+        h: r.height,
+        primary: d.id === primaryId,
+        selected: picked.has(d.id),
+        inStage,
+      }
+    }),
+    offset: { x: corner.x, y: corner.y },
+  }
 }
 
-function sendDisplays(): void {
+function sendLayout(): void {
   const win = getStageWindow()
   if (!win || win.webContents.isDestroyed()) return
-  const list = stageDisplays(win)
-  const key = JSON.stringify(list)
-  if (key === lastDisplays) return
-  lastDisplays = key
-  win.webContents.send('overlay:displays-changed', list)
+  const layout = stageLayout(win)
+  const key = JSON.stringify(layout)
+  if (key === lastLayout) return
+  lastLayout = key
+  win.webContents.send('overlay:layout-changed', layout)
 }
 
 function isStagePage(url: string): boolean {
@@ -152,9 +280,9 @@ function isStagePage(url: string): boolean {
 
 function createStageWindow(): void {
   if (!stageParams || !env) return
-  const b = dipRectFor(desktopBounds())
+  const b = dipRectFor(stageTarget())
   fitsLeft = MAX_FITS
-  lastDisplays = ''
+  lastLayout = ''
   const win = new BrowserWindow({
     x: b.x, y: b.y, width: b.width, height: b.height,
     transparent: true,
@@ -223,9 +351,9 @@ function createStageWindow(): void {
   win.once('ready-to-show', () => {
     win.showInactive()
     // Windows limits a new window to the work area, so the real size comes after show.
-    fitToDesktop(win)
-    setTimeout(() => fitToDesktop(win), 500)
-    setTimeout(() => fitToDesktop(win), 1500)
+    fitToStage(win)
+    setTimeout(() => fitToStage(win), 500)
+    setTimeout(() => fitToStage(win), 1500)
     if (env?.devServerUrl) win.webContents.openDevTools({ mode: 'detach' })
   })
   win.on('closed', () => { if (stageWindow === win) stageWindow = null })
@@ -260,9 +388,22 @@ export function initOverlayStage(stageEnv: StageEnv): void {
     cb({ cancel: details.resourceType === 'subFrame' && !frameAllowed(details.url) })
   })
 
-  handleIpc('overlay:displays', (e) => {
+  handleIpc('overlay:layout', (e) => {
     const win = getStageWindow()
-    return win && e.sender === win.webContents ? stageDisplays(win) : null
+    return win && e.sender === win.webContents ? stageLayout(win) : null
+  })
+
+  // The toolbar's display picker. At least one display stays picked.
+  handleIpc('overlay:select-displays', (e, ids: unknown) => {
+    const win = getStageWindow()
+    if (!win || e.sender !== win.webContents || !Array.isArray(ids)) return false
+    const wanted = new Set(ids.map(String))
+    const picked = screen.getAllDisplays().filter((d) => wanted.has(String(d.id)))
+    if (!picked.length) return false
+    const primaryOnly = picked.length === 1 && picked[0].id === screen.getPrimaryDisplay().id
+    const next = primaryOnly ? [] : picked.map(toSaved)
+    if (applySaved(next)) env?.onDisplaysSelected?.(next)
+    return true
   })
 
   // Once per page load. The stage app takes it first, so plugin code that asks later gets null.

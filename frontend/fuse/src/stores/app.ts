@@ -57,16 +57,28 @@ export const useAppStore = defineStore('app', () => {
     const stagePerfWidget = ref<boolean>(true)
     // FTUE tour ids the user finished or skipped. Local to this device.
     const ftueSeen = ref<string[]>([])
+    // Displays the stage covers, picked on the stage toolbar. Empty = the primary only.
+    const stageDisplays = ref<SavedStageDisplay[]>([])
 
     // Setting registry
-    // Each entry maps a ref to a DB column key and a load default.
-    // Adding a setting = one line here.
+    // Each entry maps a ref to a load default and, unless `sync: false`, a user_profiles column.
+    // Adding a setting = one line here, plus its key in persist.pick at the bottom.
 
-    interface SettingEntry {
+    interface SyncedSetting {
         ref: Ref<any>
         db: string
         default: any
+        sync?: true
     }
+
+    /** Stays on this device: the persist plugin saves it, Supabase never sees it, and a logout keeps it. */
+    interface LocalSetting {
+        ref: Ref<any>
+        default: any
+        sync: false
+    }
+
+    type SettingEntry = SyncedSetting | LocalSetting
 
     const registry: Record<string, SettingEntry> = {
         appLanguage:           { ref: appLanguage,           db: 'app_language',              default: 'en' },
@@ -90,7 +102,11 @@ export const useAppStore = defineStore('app', () => {
         audioVolume:            { ref: audioVolume,            db: 'audio_volume',                default: 80 },
         audioMuted:             { ref: audioMuted,             db: 'audio_muted',                 default: false },
         stagePerfWidget:        { ref: stagePerfWidget,        db: 'stage_perf_widget',           default: true },
+        // Display ids and layouts belong to one PC.
+        stageDisplays:          { ref: stageDisplays,          default: [],                       sync: false },
     }
+
+    const syncedSettings = Object.values(registry).filter((e): e is SyncedSetting => e.sync !== false)
 
     // Batched save system (wire DB when auth is ready)
 
@@ -127,7 +143,7 @@ export const useAppStore = defineStore('app', () => {
         debouncedSaveAll()
     }
 
-    for (const entry of Object.values(registry)) {
+    for (const entry of syncedSettings) {
         watch(entry.ref, (value) => queueSave(entry.db, value))
     }
 
@@ -168,6 +184,13 @@ export const useAppStore = defineStore('app', () => {
         setDiagnosticsConsent(value)
     }, { immediate: true })
 
+    // Main sizes the stage from this list. The persist plugin's restore fires this at start.
+    // A pick on the stage comes back through onChanged.
+    watch(stageDisplays, (list) => {
+        void window.stageDisplaysAPI?.set(JSON.parse(JSON.stringify(list)))
+    }, { deep: true })
+    window.stageDisplaysAPI?.onChanged((list) => { stageDisplays.value = list })
+
     // The coldwar.project watcher follows the selected platform's folder.
     watch([gameDirPaths, gamePlatform], () => {
         void window.gameAPI?.watchConfig(gameDirPaths.value[gamePlatform.value] ?? '')
@@ -193,7 +216,7 @@ export const useAppStore = defineStore('app', () => {
     function loadDefaults() {
         isLoading = true
         try {
-            for (const entry of Object.values(registry)) {
+            for (const entry of syncedSettings) {
                 entry.ref.value = entry.default
             }
         } finally {
@@ -212,7 +235,7 @@ export const useAppStore = defineStore('app', () => {
             const profile = data?.[0]
             if (!profile) return
 
-            for (const entry of Object.values(registry)) {
+            for (const entry of syncedSettings) {
                 const dbValue = profile[entry.db]
                 entry.ref.value = dbValue ?? entry.default
             }
@@ -231,7 +254,7 @@ export const useAppStore = defineStore('app', () => {
 
         // Seed a new profile from this device, or the column defaults wipe onboarding's picks.
         const seed: Record<string, any> = { user_id: user.id }
-        for (const entry of Object.values(registry)) seed[entry.db] = entry.ref.value
+        for (const entry of syncedSettings) seed[entry.db] = entry.ref.value
 
         const { error: upsertError } = await supabase
             .from('user_profiles')
@@ -457,6 +480,7 @@ export const useAppStore = defineStore('app', () => {
         audioMuted,
         stagePerfWidget,
         ftueSeen,
+        stageDisplays,
         releaseNotes,
         releaseNotesLoading,
         releaseNotesOpen,
@@ -507,6 +531,7 @@ export const useAppStore = defineStore('app', () => {
             'audioMuted',
             'stagePerfWidget',
             'ftueSeen',
+            'stageDisplays',
         ],
     },
 })

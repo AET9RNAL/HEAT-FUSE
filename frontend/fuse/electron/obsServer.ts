@@ -7,8 +7,8 @@
  * which cannot hook a Chromium/Electron window.
  */
 import { screen } from 'electron'
-import { getStageWindow } from './overlayStage'
-import { desktopBounds, displayInStage, stageFrame, toStage } from './stageGeometry'
+import { overlaySpace } from './overlayStage'
+import { desktopBounds, displayInStage, toStage } from './stageGeometry'
 import http from 'node:http'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -56,7 +56,7 @@ const NO_STORE = {
 /** Displays offered to the launcher's broadcast picker. Sizes are in stage pixels, the size of each display's viewport. */
 export function listObsDisplays(): Array<{ id: string; label: string; width: number; height: number; primary: boolean }> {
   const primaryId = screen.getPrimaryDisplay().id
-  const frame = stageFrame(getStageWindow())
+  const frame = overlaySpace()
   return screen.getAllDisplays().map((d, i) => {
     const r = displayInStage(d, frame)
     return {
@@ -81,7 +81,7 @@ export function listObsDisplays(): Array<{ id: string; label: string; width: num
  * display id, falling back to the primary display.
  */
 function resolveViewport(sel: string | null): { x: number; y: number; w: number; h: number } {
-  const frame = stageFrame(getStageWindow())
+  const frame = overlaySpace()
   if (sel === 'all') {
     const v = toStage(desktopBounds(), frame)
     return { x: v.x, y: v.y, w: v.width, h: v.height }

@@ -9,22 +9,35 @@ export interface Area {
 }
 
 export interface DisplayArea extends Area {
+  id: string;
+  /** 1-based, the same numbers as the OBS display picker. */
+  index: number;
+  name: string;
   primary: boolean;
+  /** The user picked it for the stage. */
+  selected: boolean;
+  /** The stage window covers the whole display. */
+  inStage: boolean;
 }
 
-/** Every display's box in the stage window. Empty outside the Electron stage. */
+/** Every display's box in page px. Empty outside the Electron stage. */
 export const displays = ref<DisplayArea[]>([]);
 
-/** The primary display's box. Null outside the Electron stage. */
+/** The stage window's top-left corner in overlay coordinates. Overlay rects start at the desktop's corner, and the window covers only part of it. */
+export const stageOffset = ref({ x: 0, y: 0 });
+
+const coveredDisplays = computed(() => displays.value.filter((d) => d.inStage));
+
+/** The display the stage UI sits on: the primary if the stage covers it, else the first covered one. Null outside the Electron stage. */
 export const primaryDisplay = computed<DisplayArea | null>(
-  () => displays.value.find((d) => d.primary) ?? displays.value[0] ?? null,
+  () => coveredDisplays.value.find((d) => d.primary) ?? coveredDisplays.value[0] ?? null,
 );
 
 /**
  * Region of the virtual desktop this client renders, when broadcasting a single
  * display to OBS. Overlay rects are in virtual-desktop coordinates, so the stage
  * shifts by -x/-y to bring the chosen monitor's region into view. Null in the
- * Electron stage window, which already spans the whole virtual desktop.
+ * Electron stage window, which uses `stageOffset` instead.
  */
 export const viewport = ref<Area | null>(null);
 
@@ -32,25 +45,43 @@ function pageArea(): Area {
   return { x: 0, y: 0, w: window.innerWidth, h: window.innerHeight };
 }
 
-/** Visible areas in page px: each display, or the whole page. */
-export function screenAreas(): Area[] {
-  return displays.value.length ? displays.value : [pageArea()];
+/** Overlay coordinates of the page's top-left corner: the OBS viewport, or the stage window offset. */
+export function overlayShift(): { x: number; y: number } {
+  const v = viewport.value;
+  return v ? { x: v.x, y: v.y } : stageOffset.value;
 }
 
-/** Visible areas in overlay coordinates: each display, the OBS viewport, or the whole page. */
+function toOverlay(a: Area): Area {
+  const s = stageOffset.value;
+  return { x: a.x + s.x, y: a.y + s.y, w: a.w, h: a.h };
+}
+
+/** A box in overlay coordinates, moved into page px. */
+export function overlayToPage(b: Area): Area {
+  const s = overlayShift();
+  return { x: b.x - s.x, y: b.y - s.y, w: b.w, h: b.h };
+}
+
+/** Visible areas in page px: each covered display, or the whole page. */
+export function screenAreas(): Area[] {
+  return coveredDisplays.value.length ? coveredDisplays.value : [pageArea()];
+}
+
+/** Visible areas in overlay coordinates: each covered display, the OBS viewport, or the whole page. */
 export function overlayAreas(): Area[] {
-  if (displays.value.length) return displays.value;
+  if (coveredDisplays.value.length) return coveredDisplays.value.map(toOverlay);
   return [viewport.value ?? pageArea()];
 }
 
-/** The primary display in page px, or the whole page. */
+/** The stage's main display in page px, or the whole page. */
 export function mainScreen(): Area {
   return primaryDisplay.value ?? pageArea();
 }
 
-/** The primary display in overlay coordinates, the OBS viewport, or the whole page. */
+/** The stage's main display in overlay coordinates, the OBS viewport, or the whole page. */
 export function mainOverlayArea(): Area {
-  return primaryDisplay.value ?? viewport.value ?? pageArea();
+  const p = primaryDisplay.value;
+  return p ? toOverlay(p) : viewport.value ?? pageArea();
 }
 
 function distanceSq(a: Area, x: number, y: number): number {
@@ -100,6 +131,13 @@ export function keepInside(box: Area, a: Area, margin = 0): { x: number; y: numb
     x: clamp(box.x, a.x + margin, a.x + a.w - box.w - margin),
     y: clamp(box.y, a.y + margin, a.y + a.h - box.h - margin),
   };
+}
+
+/** Moves an overlay box that lies fully outside the stage back onto the nearest display. */
+export function keepOnStage(box: Area): { x: number; y: number } {
+  const areas = overlayAreas();
+  if (areas.some((a) => overlap(a, box) > 0)) return { x: box.x, y: box.y };
+  return keepInside(box, areaOf(box, areas));
 }
 
 /** Room the stage toolbar takes at the bottom of the primary display. */

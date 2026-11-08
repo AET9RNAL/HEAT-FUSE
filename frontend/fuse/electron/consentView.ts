@@ -6,7 +6,7 @@
 import { BrowserWindow, WebContentsView, screen, session } from 'electron'
 import path from 'node:path'
 import { handleIpc, onIpc, trustSurface } from './ipcGuard'
-import { getStageWindow, setStageInputOverride } from './overlayStage'
+import { getStageWindow, mainStageDisplay, setStageInputOverride } from './overlayStage'
 import { displayInStage, pointInStage, stageFrame } from './stageGeometry'
 
 declare const __RELEASE__: boolean
@@ -154,15 +154,11 @@ async function showNext(): Promise<void> {
   }
 }
 
-/**
- * Covers the primary display, wherever the stage window spans; the page centres
- * the card in itself. Re-run whenever the stage window or the displays change,
- * since the stage grows to the whole desktop after it opens.
- */
+/** Covers the stage's main display. The page centres the card. Runs again when the stage window or the displays change. */
 function placeView(): void {
   const stage = viewHost
   if (!view || !stage || stage.isDestroyed()) return
-  view.setBounds(displayInStage(screen.getPrimaryDisplay(), stageFrame(stage)))
+  view.setBounds(displayInStage(mainStageDisplay(), stageFrame(stage)))
 }
 
 function ensureView(stage: BrowserWindow): Promise<WebContentsView | null> {

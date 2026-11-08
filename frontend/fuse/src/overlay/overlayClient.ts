@@ -19,7 +19,7 @@ let obsMode = false;
 import type { OverlayInput } from "./rive";
 import type { InputPhase, InspectorSchema } from "./inspector/types";
 import { clearNotifications, pushNotification, removeNotification, type StageNotification } from "./notifications";
-import { displays, viewport, type DisplayArea } from "./screens";
+import { displays, stageOffset, viewport, type DisplayArea } from "./screens";
 export { primaryDisplay, viewport } from "./screens";
 import type { HostState, OverlayDescriptor, OverlayRect, PluginMetrics, StageMetrics, StagePlugin } from "./types";
 
@@ -78,24 +78,33 @@ type StageApi = {
     setIgnore(ignore: boolean): void;
     setFocusable(focusable: boolean): void;
     connection(): Promise<FuseOverlayParams | null>;
-    displays(): Promise<DisplayArea[] | null>;
-    onDisplays(cb: (list: DisplayArea[]) => void): void;
+    layout(): Promise<StageLayout | null>;
+    onLayout(cb: (layout: StageLayout) => void): void;
+    selectDisplays(ids: string[]): Promise<boolean>;
   };
 };
 
-let displaysWatched = false;
+/** Picks the displays the stage covers. Main saves the pick in the App and resizes the window. */
+export function selectStageDisplays(ids: string[]): void {
+  void (window as unknown as StageApi).stageAPI?.selectDisplays([...ids]).catch(() => false);
+}
 
-function watchDisplays(): void {
+type StageLayout = { displays: DisplayArea[]; offset: { x: number; y: number } };
+
+let layoutWatched = false;
+
+function applyLayout(layout: StageLayout | null): void {
+  if (!layout?.displays?.length) return;
+  displays.value = layout.displays;
+  stageOffset.value = layout.offset;
+}
+
+function watchLayout(): void {
   const api = (window as unknown as StageApi).stageAPI;
-  if (!api || displaysWatched) return;
-  displaysWatched = true;
-  api.onDisplays((list) => (displays.value = list));
-  void api
-    .displays()
-    .then((list) => {
-      if (list?.length) displays.value = list;
-    })
-    .catch(() => {});
+  if (!api || layoutWatched) return;
+  layoutWatched = true;
+  api.onLayout(applyLayout);
+  void api.layout().then(applyLayout).catch(() => {});
 }
 
 /** Ask Electron main to make the stage window click-through (true) or interactive (false). */
@@ -186,7 +195,7 @@ export function connectOverlay(): void {
     return;
   }
 
-  watchDisplays();
+  watchLayout();
   void resolveParams().then((params) => {
     if (!params) {
       console.error("[overlay] no connection params (stageAPI.connection() or ?port&token)");

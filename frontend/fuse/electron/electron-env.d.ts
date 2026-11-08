@@ -29,6 +29,33 @@ interface GameConfigRead {
   error?: string
 }
 
+/** Every display in stage page px, and the stage window's top-left corner in overlay coordinates. */
+interface StageLayout {
+  displays: Array<{
+    id: string
+    /** 1-based, the same numbers as the OBS display picker. */
+    index: number
+    name: string
+    x: number
+    y: number
+    w: number
+    h: number
+    primary: boolean
+    /** The user picked it for the stage. */
+    selected: boolean
+    /** The stage window covers all of it. */
+    inStage: boolean
+  }>
+  offset: { x: number; y: number }
+}
+
+/** A display picked for the stage, saved on this PC. Bounds are in device units. */
+interface SavedStageDisplay {
+  id: string
+  label: string
+  bounds: { x: number; y: number; width: number; height: number }
+}
+
 // Used in Renderer process, expose in `preload.ts`
 interface Window {
   /** Stage window only. */
@@ -36,8 +63,14 @@ interface Window {
     setIgnore: (ignore: boolean) => void
     setFocusable: (focusable: boolean) => void
     connection: () => Promise<{ port: number; token: string } | null>
-    displays: () => Promise<Array<{ x: number; y: number; w: number; h: number; primary: boolean }> | null>
-    onDisplays: (cb: (list: Array<{ x: number; y: number; w: number; h: number; primary: boolean }>) => void) => void
+    layout: () => Promise<StageLayout | null>
+    onLayout: (cb: (layout: StageLayout) => void) => void
+    selectDisplays: (ids: string[]) => Promise<boolean>
+  }
+  /** App window only: the displays the stage covers, saved on this PC. */
+  stageDisplaysAPI?: {
+    set: (list: SavedStageDisplay[]) => Promise<void>
+    onChanged: (cb: (list: SavedStageDisplay[]) => void) => void
   }
   /** Consent view only. */
   consentAPI?: {

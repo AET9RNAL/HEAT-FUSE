@@ -93,7 +93,7 @@ const gpuTip = computed(() =>
     : `GPU process, busiest engine (${gpuProcess.value.engine ?? "3D"}), as Task Manager counts it. The App window shares it.`,
 );
 
-const fpsTip = "Frames the stage draws each second, capped at your display's refresh rate. A drop means the stage stutters, not the game.";
+const fpsTip = "Frames the stage draws each second, capped at your display's refresh rate. The stage shares the GPU with the game, so it draws fewer frames while the game runs without an FPS limit. A drop means the stage stutters, not the game.";
 
 const style = computed(() => {
   const d = primaryDisplay.value;

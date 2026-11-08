@@ -10,12 +10,13 @@ if (SURFACE === 'stage') {
     setFocusable: (focusable: boolean): void => ipcRenderer.send('overlay:set-focusable', !!focusable),
     /** The runtime socket's port and stage token, answered once per page load. */
     connection: (): Promise<{ port: number; token: string } | null> => ipcRenderer.invoke('overlay:connection'),
-    /** Where each display sits inside the stage window. */
-    displays: (): Promise<Array<{ x: number; y: number; w: number; h: number; primary: boolean }> | null> =>
-      ipcRenderer.invoke('overlay:displays'),
-    onDisplays: (cb: (list: Array<{ x: number; y: number; w: number; h: number; primary: boolean }>) => void): void => {
-      ipcRenderer.on('overlay:displays-changed', (_e, list) => cb(list))
+    /** Where each display sits inside the stage window, and where the window sits in overlay coordinates. */
+    layout: (): Promise<StageLayout | null> => ipcRenderer.invoke('overlay:layout'),
+    onLayout: (cb: (layout: StageLayout) => void): void => {
+      ipcRenderer.on('overlay:layout-changed', (_e, layout) => cb(layout))
     },
+    /** Picks the displays the stage covers. False when no listed display exists. */
+    selectDisplays: (ids: string[]): Promise<boolean> => ipcRenderer.invoke('overlay:select-displays', ids),
   })
 }
 
@@ -84,6 +85,13 @@ exposeApp('appAPI', {
     ipcRenderer.invoke('window:maximize'),
   toggleStageDevtools: (): void => ipcRenderer.send('overlay:toggle-devtools'),
   toggleRuntimeDevtools: (): void => ipcRenderer.send('runtime:toggle-devtools'),
+})
+
+exposeApp('stageDisplaysAPI', {
+  set: (list: SavedStageDisplay[]): Promise<void> => ipcRenderer.invoke('stage:displays:set', list),
+  onChanged: (cb: (list: SavedStageDisplay[]) => void): void => {
+    ipcRenderer.on('stage:displays:changed', (_e, list) => cb(list))
+  },
 })
 
 exposeApp('pluginsAPI', {

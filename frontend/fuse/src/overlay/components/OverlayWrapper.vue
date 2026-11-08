@@ -6,7 +6,7 @@ import { hostState, dragging } from "../overlayClient";
 import { commitTransform } from "../history";
 import { activeGuides, grid, lockAspect, selectOverlay, selectedId } from "../stageState";
 import { peerBoxes, snapEdge, snapMove, type Box } from "../composables/useSnapping";
-import { centerIn, mainOverlayArea } from "../screens";
+import { centerIn, keepOnStage, mainOverlayArea, stageOffset } from "../screens";
 import type { OverlayDescriptor, OverlayRect } from "../types";
 
 const props = defineProps<{ descriptor: OverlayDescriptor }>();
@@ -82,7 +82,9 @@ const style = computed(() => {
     pointerEvents: clickable.value ? ("auto" as const) : ("none" as const),
     cursor: calibrating.value ? ("move" as const) : ("default" as const),
   };
-  return { ...base, left: `${p.x}px`, top: `${p.y}px`, transform: spin };
+  // No transform on the layer: fixed-position popups inside plugin overlays keep page coordinates.
+  const off = stageOffset.value;
+  return { ...base, left: `${p.x - off.x}px`, top: `${p.y - off.y}px`, transform: spin };
 });
 
 /** Current top-left in stage px, for building a rect when none is set yet. */
@@ -141,6 +143,8 @@ function onPointerUp(): void {
   activeGuides.value = [];
   if (!pos.value) return;
   const { w, h } = effSize.value;
+  // A drag can leave the stage window, where nobody sees the overlay.
+  pos.value = keepOnStage({ ...pos.value, w, h });
   commit(pos.value.x, pos.value.y, w, h);
 }
 
