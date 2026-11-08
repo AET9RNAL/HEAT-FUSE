@@ -425,12 +425,19 @@ function _writeGameConfig(dirPath: string, opts: { enabled?: boolean; port?: num
 let projectWatcher: fs.FSWatcher | null = null
 let projectWatchDir = ''
 
+// TEMP FIX
+const contentPatchFix = import('./contentPatchFix').catch((e: unknown) => {
+  console.warn('[content-patch] module failed to load', e)
+  return null
+})
+
 /**
  * Watch the game folder, because the game replaces the file rather than editing
  * it. The renderer decides what a change means; nothing is written back.
  */
 function _watchGameConfig(dirPath: string): void {
   const dir = dirPath ? path.resolve(dirPath) : ''
+  void contentPatchFix.then((m) => m?.setGameDir(dir))
   if (dir === projectWatchDir) return
   projectWatcher?.close()
   projectWatcher = null
