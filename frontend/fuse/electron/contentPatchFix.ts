@@ -1,6 +1,8 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import zlib from 'node:zlib'
+import { findStoredEntry, readAt, shrinkIndents } from './gameZip'
 
 const PROJECT_FILE = 'coldwar.project'
 const ENTRY_NAME = 'patched_project.json'
@@ -57,94 +59,6 @@ export function setKeys(text: string, keys: DebuggerKeys): string {
   return grow ? shrinkIndents(out, growFrom, grow) : out
 }
 
-function shrinkIndents(text: string, from: number, count: number): string {
-  const cuts: Array<[number, number]> = []
-  let left = count
-  const collect = (start: number, end: number): void => {
-    const re = /\n( {2,})/g
-    re.lastIndex = start
-    for (let m = re.exec(text); m && left > 0 && m.index < end; m = re.exec(text)) {
-      const take = Math.min(left, m[1].length - 1)
-      cuts.push([m.index + 1, take])
-      left -= take
-    }
-  }
-  collect(from, text.length)
-  if (left > 0) collect(0, from)
-  if (left > 0) throw new Error('no indent room for the edit')
-  cuts.sort((a, b) => b[0] - a[0])
-  let out = text
-  for (const [at, take] of cuts) out = out.slice(0, at) + out.slice(at + take)
-  return out
-}
-
-// zip 
-
-const CRC_TABLE = (() => {
-  const t = new Uint32Array(256)
-  for (let n = 0; n < 256; n++) {
-    let c = n
-    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1
-    t[n] = c >>> 0
-  }
-  return t
-})()
-
-function crc32(buf: Buffer): number {
-  let c = 0xffffffff
-  for (let i = 0; i < buf.length; i++) c = CRC_TABLE[(c ^ buf[i]) & 0xff] ^ (c >>> 8)
-  return (c ^ 0xffffffff) >>> 0
-}
-
-function readAt(fd: number, pos: number, len: number): Buffer {
-  const buf = Buffer.alloc(len)
-  const got = fs.readSync(fd, buf, 0, len, pos)
-  if (got !== len) throw new Error('short read')
-  return buf
-}
-
-interface StoredEntry {
-  dataPos: number
-  size: number
-  localCrcPos: number
-  centralCrcPos: number
-}
-
-/** Finds a stored (not compressed) entry. Zip64, compression, encryption and data descriptors give null. */
-function findStoredEntry(fd: number, fileSize: number, name: string): StoredEntry | null {
-  const tailLen = Math.min(fileSize, 22 + 0xffff)
-  const tail = readAt(fd, fileSize - tailLen, tailLen)
-  let eocd = -1
-  for (let i = tailLen - 22; i >= 0; i--) {
-    if (tail.readUInt32LE(i) === 0x06054b50) { eocd = i; break }
-  }
-  if (eocd < 0) return null
-  const cdSize = tail.readUInt32LE(eocd + 12)
-  const cdPos = tail.readUInt32LE(eocd + 16)
-  if (cdPos === 0xffffffff || cdSize === 0xffffffff || cdPos + cdSize > fileSize) return null
-  const cd = readAt(fd, cdPos, cdSize)
-  for (let p = 0; p + 46 <= cd.length; ) {
-    if (cd.readUInt32LE(p) !== 0x02014b50) return null
-    const flags = cd.readUInt16LE(p + 8)
-    const method = cd.readUInt16LE(p + 10)
-    const packed = cd.readUInt32LE(p + 20)
-    const size = cd.readUInt32LE(p + 24)
-    const nameLen = cd.readUInt16LE(p + 28)
-    const extraLen = cd.readUInt16LE(p + 30)
-    const commentLen = cd.readUInt16LE(p + 32)
-    const localPos = cd.readUInt32LE(p + 42)
-    if (cd.toString('utf-8', p + 46, p + 46 + nameLen) === name) {
-      if (method !== 0 || packed !== size || flags & 0x09) return null
-      const local = readAt(fd, localPos, 30)
-      if (local.readUInt32LE(0) !== 0x04034b50 || local.readUInt16LE(6) & 0x09) return null
-      const dataPos = localPos + 30 + local.readUInt16LE(26) + local.readUInt16LE(28)
-      return { dataPos, size, localCrcPos: localPos + 14, centralCrcPos: cdPos + p + 16 }
-    }
-    p += 46 + nameLen + extraLen + commentLen
-  }
-  return null
-}
-
 /** Sets the debugger keys in one patch zip. Throws when the zip is locked or broken. */
 export function patchZip(zipPath: string, keys: DebuggerKeys): PatchResult {
   const fd = fs.openSync(zipPath, 'r+')
@@ -160,7 +74,7 @@ export function patchZip(zipPath: string, keys: DebuggerKeys): PatchResult {
     if (isJson(before) && !isJson(after)) throw new Error('edit broke the JSON')
     const bytes = Buffer.from(after, 'latin1')
     const crc = Buffer.alloc(4)
-    crc.writeUInt32LE(crc32(bytes))
+    crc.writeUInt32LE(zlib.crc32(bytes) >>> 0)
     fs.writeSync(fd, bytes, 0, bytes.length, entry.dataPos)
     fs.writeSync(fd, crc, 0, 4, entry.localCrcPos)
     fs.writeSync(fd, crc, 0, 4, entry.centralCrcPos)

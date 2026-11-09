@@ -1,0 +1,40 @@
+{
+  "format": "fuse-override/1",
+  "name": "Aircraft Carrier Ship Bow",
+  "created": "2026-11-09T00:26:35Z",
+  "pack": "aa_override.zip",
+  "entries": [
+    ".assets/output/00_camp_hybrid_halloweena17ce1a145d805be19a6957d0ac3b521.client.scene",
+    ".assets/output/workshop_anchors_camerase7752d2a2778f3c0adef230946a914c6.client.scene"
+  ],
+  "originals": {
+    ".assets/output/00_camp_hybrid_halloweena17ce1a145d805be19a6957d0ac3b521.client.scene": {
+      "size": 3007,
+      "sha256": "c2c29286d06cd71dbd2a937b5fee6684c12de35c24f62ef9cba2e66abca4e2e9"
+    },
+    ".assets/output/workshop_anchors_camerase7752d2a2778f3c0adef230946a914c6.client.scene": {
+      "size": 4224,
+      "sha256": "ba899a7d8e94c707dd4a43a6ab3c2719785b40be8cfa397dbaa1e470f4630268"
+    }
+  },
+  "project": [
+    {
+      "op": "set",
+      "key": "cw::session::ClientSessionSettings/lobby/path",
+      "value": "/worlds/camps/00_camp_hybrid/events/halloween/00_camp_hybrid_halloween.world"
+    },
+    {
+      "op": "dependencies",
+      "asset": "/worlds/camps/00_camp_hybrid/events/halloween/00_camp_hybrid_halloween.world",
+      "dependencies": [
+        "/worlds/camps/00_camp_hybrid/00_camp_hybrid_s002.world",
+        "/worlds/06_aircraft_carrier.world"
+      ]
+    }
+  ],
+  "studio": {
+    "baseWorld": "/worlds/camps/00_camp_hybrid/00_camp_hybrid_s002.world",
+    "console": false,
+    "notes": []
+  }
+}

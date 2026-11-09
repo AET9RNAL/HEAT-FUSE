@@ -18,6 +18,7 @@ import type { PluginPermissions } from "./permissions.js";
 import type { PluginStorage } from "./storage.js";
 import type { PluginSecrets } from "./secrets.js";
 import type { PluginLinks } from "./links.js";
+import type { PluginOverrides } from "./overrides.js";
 
 export type HostState = "calibrate" | "locked" | "interactive";
 
@@ -51,6 +52,8 @@ export interface FuseContext {
   secrets: PluginSecrets;
   /** Opening pages in the browser, and `fuse://plugin/<id>/...` callbacks. */
   links: PluginLinks;
+  /** The presets of this plugin's override part, applied into the game files. Needs `game_overrides`. */
+  overrides: PluginOverrides;
   host: HostView;
   logger: Logger;
 

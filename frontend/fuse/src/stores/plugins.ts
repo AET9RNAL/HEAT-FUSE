@@ -15,6 +15,34 @@ export interface PluginHotkey {
     hold?: boolean
 }
 
+/**
+ * off: no preset, or the plugin is off. pending: FUSE writes it when the game is closed. applied: the game files
+ * hold it. outdated: the game files changed, and the preset needs an update from its author. failed: see `reason`.
+ */
+export type OverrideState = 'off' | 'pending' | 'applied' | 'outdated' | 'failed'
+
+export interface OverridePreset {
+    id: string
+    name: string
+    /** A path inside the package, or null. */
+    preview: string | null
+    problem: string | null
+}
+
+export interface OverrideStatus {
+    preset: string | null
+    state: OverrideState
+    reason?: string
+    /** pending only: FUSE takes changes out of the game files, not puts them in. */
+    removing?: boolean
+}
+
+/** The override part of a plugin. `active` is null while the runtime is down: only the runtime knows it. */
+export interface PluginOverrides {
+    presets: OverridePreset[]
+    active: OverrideStatus | null
+}
+
 export interface PluginRecord {
     plugin_id: string
     name: string
@@ -27,16 +55,20 @@ export interface PluginRecord {
     hotkeys: PluginHotkey[]
     filePath?: string
     checksum?: string
+    /** False for a plugin with only an override part. */
+    hasRuntime?: boolean
+    overrides?: PluginOverrides | null
 }
 
 /** Incoming schemas may be sections or legacy categories; they're normalised on the way in. */
-export type PluginUpsert = Partial<Omit<PluginRecord, 'configSchema'>> & { plugin_id: string; configSchema?: unknown }
+export type PluginUpsert = Partial<Omit<PluginRecord, 'configSchema'>> & { plugin_id: string; configSchema?: unknown; has_runtime?: boolean }
 
 export const usePluginsStore = defineStore('plugins', () => {
     const plugins = ref<PluginRecord[]>([])
 
     function upsert(data: PluginUpsert) {
-        const { configSchema: rawSchema, ...rest } = data
+        const { configSchema: rawSchema, has_runtime, ...rest } = data
+        if (has_runtime !== undefined) rest.hasRuntime = has_runtime
         const schema = rawSchema !== undefined ? normalizeConfigSchema(rawSchema) : undefined
         const idx = plugins.value.findIndex(p => p.plugin_id === data.plugin_id)
         if (idx >= 0) {
@@ -58,8 +90,47 @@ export const usePluginsStore = defineStore('plugins', () => {
                 hotkeys: data.hotkeys ?? [],
                 filePath: data.filePath,
                 checksum: data.checksum,
+                hasRuntime: rest.hasRuntime,
+                overrides: data.overrides ?? null,
             })
         }
+    }
+
+    function setOverrides(id: string, overrides: PluginOverrides) {
+        const plugin = plugins.value.find(p => p.plugin_id === id)
+        if (plugin) plugin.overrides = overrides
+    }
+
+    /** The `result` of a JSON-RPC reply, or its error as `{ ok: false, error }`. */
+    function rpcResult<T extends { ok?: boolean; error?: string }>(reply: Record<string, unknown>): T {
+        const err = reply.error as { message?: string } | undefined
+        if (err) return { ok: false, error: err.message ?? 'the runtime gave an error' } as T
+        return (reply.result ?? {}) as T
+    }
+
+    /** Picks a preset, or null for none. Needs the runtime: it asks for consent and checks the game files. */
+    async function selectOverride(id: string, preset: string | null): Promise<{ ok: boolean; status?: OverrideStatus; error?: string }> {
+        const { connected, send } = useFuseConnection()
+        if (!connected.value) return { ok: false, error: 'FUSE is off' }
+        // The call waits while the consent card is up.
+        const result = rpcResult<{ ok?: boolean; status?: OverrideStatus; error?: string }>(
+            await send('override.select', { plugin_id: id, preset }, 120_000))
+        if (result.ok && result.status) {
+            const plugin = plugins.value.find(p => p.plugin_id === id)
+            if (plugin?.overrides) plugin.overrides = { ...plugin.overrides, active: result.status }
+        }
+        return { ok: !!result.ok, status: result.status, error: result.error }
+    }
+
+    /** Takes back every FUSE change to the game files. Without the runtime, Electron main does it. */
+    async function removeAllOverrides(): Promise<{ ok: boolean; error?: string }> {
+        const { connected, send } = useFuseConnection()
+        if (connected.value) {
+            const result = rpcResult<{ ok?: boolean; error?: string }>(await send('override.removeAll', {}))
+            return { ok: !!result.ok, error: result.error }
+        }
+        const result = await window.overridesAPI.removeAll()
+        return { ok: result.success, error: result.error }
     }
 
     function remove(id: string) {
@@ -76,6 +147,7 @@ export const usePluginsStore = defineStore('plugins', () => {
             if (p.status === 'active' || p.status === 'loading') {
                 p.status = 'pending'
             }
+            if (p.overrides) p.overrides = { ...p.overrides, active: null }
         }
     }
 
@@ -153,6 +225,8 @@ export const usePluginsStore = defineStore('plugins', () => {
                 hotkeys: r.hotkeys?.length
                     ? r.hotkeys as PluginHotkey[]
                     : existing?.hotkeys ?? [],
+                // The runtime's snapshot has the state and the problems: keep it over the manifest list.
+                overrides: existing?.overrides?.active ? existing.overrides : r.overrides,
             })
         }
     }
@@ -177,8 +251,9 @@ export const usePluginsStore = defineStore('plugins', () => {
     return {
         plugins,
         upsert, remove, setStatus, resetRuntimeStatuses,
-        updateConfigValue, updateHotkey,
+        updateConfigValue, updateHotkey, setOverrides,
         setEnabled, setPluginConfig, configAction, rebindHotkey,
+        selectOverride, removeAllOverrides,
         scan, watchHostConfig, unwatchHostConfig,
     }
 })

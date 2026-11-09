@@ -39,7 +39,7 @@ type Events = {
     // Plugin config / keybinds
     'config:value_changed': { plugin_id: string; key: string; value: unknown }
     'hotkey:rebound': { plugin_id: string; action: string; combo: string }
-    'plugin-config:open': { plugin_id: string }
+    'plugin-config:open': { plugin_id: string; tab?: 'config' | 'keybinds' | 'overrides' }
     'plugin-config:saved': { plugin_id: string }
     'plugin-config:reset': { plugin_id: string }
 

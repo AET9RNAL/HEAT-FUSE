@@ -1,15 +1,23 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from '../../composables/useI18n'
-import { compareVersions } from '../../utils/registry-api'
-import Icons from '../ui/Icons.vue'
+import { compareVersions, type PluginType } from '../../utils/registry-api'
+import Icons, { type IconKind } from '../ui/Icons.vue'
+
+const TYPE_ICONS: Record<PluginType, IconKind> = {
+    runtime: 'pluginRuntime',
+    override: 'pluginOverride',
+    hybrid: 'pluginHybrid',
+}
 
 const props = withDefaults(defineProps<{
     /** Game versions */
     game?: string[]
     /** Lowest FUSE version the file runs on */
     fuse?: string | null
-}>(), { game: () => [], fuse: null })
+    /** Runtime, override or hybrid. Null hides the type item. */
+    pluginType?: PluginType | null
+}>(), { game: () => [], fuse: null, pluginType: null })
 
 const { t } = useI18n()
 
@@ -41,6 +49,13 @@ const fuseTip = computed(() => props.fuse
             <span class="ct-mark"><Icons kind="app-icon" size="small" /></span>
             <span class="ct-ver">{{ fuse ? `≥ ${fuse}` : '—' }}</span>
         </span>
+        <template v-if="pluginType">
+            <span class="ct-notch" aria-hidden="true" />
+            <span v-tip="t(`registry.compat.typeTip.${pluginType}`)" class="ct-item">
+                <span class="ct-mark"><Icons :kind="TYPE_ICONS[pluginType]" size="small" /></span>
+                <span class="ct-ver">{{ t(`registry.compat.type.${pluginType}`) }}</span>
+            </span>
+        </template>
     </span>
 </template>
 
@@ -61,9 +76,12 @@ const fuseTip = computed(() => props.fuse
     border-bottom: 1px solid var(--base-600);
 }
 
+.ct-item + .ct-notch + .ct-item {
+    padding-left: var(--space-2);
+}
+
 .ct-item:last-child {
     padding-right: 0;
-    padding-left: var(--space-2);
 }
 
 .ct-mark {

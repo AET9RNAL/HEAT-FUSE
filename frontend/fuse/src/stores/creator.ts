@@ -4,6 +4,7 @@ import { logger } from '../utils/logger'
 import {
     rpc, invoke, RegistryError,
     type RegistryProject, type RegistryFile, type MyProfile, type Channel, type Relation, type ProjectKind, type FoundProject,
+    type PluginType,
 } from '../utils/registry-api'
 
 export interface InspectedPackage {
@@ -182,11 +183,12 @@ export const useCreatorStore = defineStore('creator', () => {
 
     /** Uploads a package. The Worker then checks it, so the file starts in `uploaded`, not `ready`. */
     async function uploadPackage(projectId: string, pkg: InspectedPackage, meta: {
-        channel: Channel; changelog: string; gameVersions: string[]
+        channel: Channel; changelog: string; gameVersions: string[]; pluginType: PluginType
     }, onProgress?: (share: number) => void): Promise<string> {
         const plan = await invoke<UploadPlan>('registry-upload-create', {
             kind: 'file', project_id: projectId, size: pkg.size, sha256: pkg.sha256,
             channel: meta.channel, changelog: meta.changelog, game_versions: meta.gameVersions,
+            plugin_type: meta.pluginType,
         })
         await sendFile(plan, pkg.filePath, 'package', onProgress)
         return plan.file_id!
@@ -203,10 +205,13 @@ export const useCreatorStore = defineStore('creator', () => {
         return getFile(fileId).catch(() => null)
     }
 
-    async function updateFile(id: string, patch: { channel?: Channel; changelog?: string; gameVersions?: string[] }): Promise<void> {
+    async function updateFile(id: string, patch: {
+        channel?: Channel; changelog?: string; gameVersions?: string[]; pluginType?: PluginType
+    }): Promise<void> {
         await rpc('update_file', {
             p_file: id, p_channel: patch.channel ?? null, p_changelog: patch.changelog ?? null,
             p_game_versions: patch.gameVersions ?? null,
+            ...(patch.pluginType ? { p_plugin_type: patch.pluginType } : {}),
         })
     }
 

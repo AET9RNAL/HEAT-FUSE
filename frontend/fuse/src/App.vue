@@ -25,6 +25,7 @@ import { usePostHog } from './composables/usePostHog'
 import { useAppTour } from './composables/useAppTour'
 import { eventBus } from './events/eventBus'
 import { useI18n, setI18nLocale } from './composables/useI18n'
+import { overrideView, RESTART_KINDS } from './utils/overrideState'
 import { ref, computed, watch, onUnmounted } from 'vue'
 import { AnimatePresence, motion } from 'motion-v'
 import packageJson from '../package.json'
@@ -65,6 +66,7 @@ const { register: registerLogs } = useFuseLogs()
 type NotificationType = 'success' | 'warning' | 'error'
 const notification = ref<{ title?: string; message: string; type?: NotificationType } | null>(null)
 const activePluginConfigId = ref<string | null>(null)
+const activePluginConfigTab = ref<'config' | 'keybinds' | 'overrides' | null>(null)
 const activePlugin = computed(() =>
     activePluginConfigId.value
         ? pluginsStore.plugins.find(p => p.plugin_id === activePluginConfigId.value) ?? null
@@ -107,7 +109,28 @@ function showNotification(payload: { title?: string; message: string; type?: Not
     notification.value = payload
 }
 
-function openPluginConfig({ plugin_id }: { plugin_id: string }) {
+// A game change that waits for the game to close: say once that a restart shows it.
+const overrideKinds = computed(() => new Map(pluginsStore.plugins
+    .filter(p => p.overrides)
+    .map(p => [p.plugin_id, overrideView(p.overrides!, appStore.gameRunning).kind] as const)))
+
+watch(overrideKinds, (next, prev) => {
+    const waiting = pluginsStore.plugins.filter((p) => {
+        const kind = next.get(p.plugin_id)
+        const before = prev?.get(p.plugin_id)
+        return kind && before && before !== 'unknown' && kind !== before && RESTART_KINDS.includes(kind)
+    })
+    if (!waiting.length) return
+    const removing = waiting.every(p => next.get(p.plugin_id) === 'removeWait')
+    showNotification({
+        title: t(removing ? 'components.plugin.overrides.notifyRemoveTitle' : 'components.plugin.overrides.notifyApplyTitle'),
+        message: t('components.plugin.overrides.notifyMessage', { plugins: waiting.map(p => p.name).join(', ') }),
+        type: 'warning',
+    })
+})
+
+function openPluginConfig({ plugin_id, tab }: { plugin_id: string; tab?: 'config' | 'keybinds' | 'overrides' }) {
+    activePluginConfigTab.value = tab ?? null
     activePluginConfigId.value = plugin_id
 }
 
@@ -255,6 +278,7 @@ onUnmounted(() => {
     <ePluginConfig
       v-if="activePlugin"
       :plugin="activePlugin"
+      :initial-tab="activePluginConfigTab"
       @close="activePluginConfigId = null"
     />
   </AnimatePresence>

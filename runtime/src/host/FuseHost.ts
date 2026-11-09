@@ -26,6 +26,7 @@ import { resolvePluginNode, type PluginNode } from "./pluginNode.js";
 import { DevWatcher } from "./devWatch.js";
 import { GameProbe } from "./gameProbe.js";
 import { discover } from "./discovery.js";
+import { OverrideHub } from "./OverrideHub.js";
 import { resolveLoadOrder } from "./resolver.js";
 import { PluginState } from "./types.js";
 import type { DiscoveredPlugin } from "./types.js";
@@ -106,6 +107,8 @@ interface HostConfigState {
   enabled_plugins: string[] | null;
   disabled_plugins: string[];
   hotkey_overrides: Record<string, Record<string, string>>;
+  /** Plugin -> its picked override preset, or null for none. Key order is pick order. */
+  override_picks?: Record<string, string | null>;
   [key: string]: unknown;
 }
 
@@ -165,6 +168,7 @@ export class FuseHost implements RuntimeBridge {
   readonly permissions: PermissionManager;
   private services: ServiceHub;
   private storage = new StorageHub();
+  private overrides: OverrideHub;
   private bridge: ElectronBridge;
   private warnedScopes = new Set<string>();
   /** Consecutive seconds each plugin has been over the CPU threshold. */
@@ -284,6 +288,23 @@ export class FuseHost implements RuntimeBridge {
       hotkey_overrides: {},
     });
 
+    this.overrides = new OverrideHub({
+      send: (msg) => this.sendToElectron?.(msg),
+      gameDir: () => this.gameConfig.installs.find((i) => i.dir)?.dir ?? null,
+      contentPatchDirs: () => [path.join(process.env.LOCALAPPDATA ?? path.join(os.homedir(), "AppData", "Local"), "coldwar", ".content_patch")],
+      isEnabled: (id) => {
+        const state = this.pluginStates.get(id);
+        return state !== PluginState.DISABLED && state !== PluginState.SKIPPED;
+      },
+      allowed: (id) => this.permissions.has(id, "game_overrides"),
+      picks: () => ({ ...(this.hostCfgState.override_picks ?? {}) }),
+      savePicks: (picks) => {
+        this.hostCfgState.override_picks = picks;
+        this.hostConfig.save(this.hostCfgState as unknown as Record<string, unknown>);
+      },
+      onChange: (id) => this.onOverridesChanged(id),
+    });
+
     this.registerGlobalHotkeys();
     this.applyHotkeyOverrides("host");
 
@@ -319,6 +340,7 @@ export class FuseHost implements RuntimeBridge {
       this.pluginStates.set(spec.pluginId, PluginState.PENDING);
       this.permissions.register(spec);
     }
+    void this.overrides.sync(rawSpecs);
     if (!this.pluginNode.netFlag && rawSpecs.some((s) => s.manifest.permissions?.network)) {
       this.notifyNetworkUnenforced();
     }
@@ -396,6 +418,8 @@ export class FuseHost implements RuntimeBridge {
         filesDir: path.join(PLUGIN_FILES_DIR, spec.pluginId),
         storage: (op, collection, args) => this.brokerStorage(spec.pluginId, op, collection, args),
         secrets: (op, key, value) => this.brokerSecrets(spec.pluginId, op, key, value),
+        overrides: (op, args) => this.brokerOverrides(spec.pluginId, op, args),
+        overridesSnapshot: () => this.overrides.snapshot(spec.pluginId),
         openLink: (url) => this.openLink(spec.pluginId, url),
         broadcast: (message) => this.server.broadcastControl(message),
         onUnexpectedExit: (p, detail) => this.onPluginExited(p, detail),
@@ -459,6 +483,14 @@ export class FuseHost implements RuntimeBridge {
       if (this.stagePerfWidget) this.stageMeter.setProcesses(Number(msg.rendererPid) || 0, Number(msg.gpuPid) || 0);
       return;
     }
+    if (msg.type === "overrides:status") {
+      this.overrides.onMainStatus(msg);
+      return;
+    }
+    if (msg.type === "overrides:recheck") {
+      void this.overrides.recompute();
+      return;
+    }
     if (msg.type === "links:callback") {
       const pluginId = String(msg.pluginId ?? "");
       const proc = this.procs.get(pluginId);
@@ -504,6 +536,29 @@ export class FuseHost implements RuntimeBridge {
   }
 
   /** Invalid links throw; a valid one without a recent user action returns false. */
+  /** `ctx.overrides.select` from the plugin's process. */
+  private async brokerOverrides(pluginId: string, op: string, args: unknown[]): Promise<unknown> {
+    if (op !== "select") throw new Error(`unknown overrides operation '${op}'`);
+    if (!this.permissions.check(pluginId, "game_overrides")) throw new Error("overrides need the 'game_overrides' permission");
+    return this.overrides.select(pluginId, args[0] === null || args[0] === undefined ? null : String(args[0]));
+  }
+
+  /** An override-only plugin has no process: it is active once it is on and its scopes are answered. */
+  private activateOverrideOnly(spec: DiscoveredPlugin): void {
+    this.pluginStates.set(spec.pluginId, PluginState.ACTIVE);
+    logger.info(`Loaded override-only plugin ${spec.name} [${spec.pluginId}] v${spec.version}`);
+    this.notifyPluginRegistered(spec, PluginState.ACTIVE);
+    void this.overrides.recompute();
+  }
+
+  /** The override part of a plugin changed: its process, the App and the stage hear it. */
+  private onOverridesChanged(pluginId: string): void {
+    const snapshot = this.overrides.snapshot(pluginId);
+    this.procs.get(pluginId)?.pushOverrides(snapshot);
+    this.server.broadcastControl({ type: "plugin:overrides", plugin_id: pluginId, overrides: snapshot });
+    this.broadcastPluginList();
+  }
+
   private async openLink(pluginId: string, url: string): Promise<boolean> {
     const target = parseLink(url);
     if (!this.permissions.consumeUserAction(pluginId)) {
@@ -625,6 +680,11 @@ export class FuseHost implements RuntimeBridge {
     const spec = this.setupPending.shift()!;
     this._state = this.autoLockQueue ? "locked" : "calibrate";
     await this.permissions.ensureConsent(spec.pluginId);
+    if (!spec.hasRuntime) {
+      this.activateOverrideOnly(spec);
+      setImmediate(() => void this.dequeueNextPlugin());
+      return;
+    }
     await this.instantiate(spec);
 
     const proc = this.procs.get(spec.pluginId);
@@ -698,6 +758,8 @@ export class FuseHost implements RuntimeBridge {
     this.pluginStates.set(pluginId, PluginState.DISABLED);
     this.notifyPluginStatusChanged(pluginId, PluginState.DISABLED);
     this.publishFrames();
+    // A plugin that is off keeps nothing in the game files.
+    void this.overrides.recompute();
 
     const proc = this.procs.get(pluginId);
     if (!proc) return;
@@ -724,8 +786,15 @@ export class FuseHost implements RuntimeBridge {
     }
     this.crashes.delete(pluginId);
     await this.permissions.ensureConsent(pluginId);
+    if (!spec.hasRuntime) {
+      this.activateOverrideOnly(spec);
+      this.publishFrames();
+      this.notifyPluginStatusChanged(pluginId, PluginState.ACTIVE);
+      return;
+    }
     await this.instantiate(spec);
     this.publishFrames();
+    void this.overrides.recompute();
     const proc = this.procs.get(pluginId);
     if (!proc) return;
     this.enterCurrentState(proc);
@@ -791,6 +860,7 @@ export class FuseHost implements RuntimeBridge {
 
   private onPermissionsChanged(pluginId: string): void {
     this.broadcastPluginList();
+    if (this.overrides.has(pluginId)) void this.overrides.recompute();
     const proc = this.procs.get(pluginId);
     if (!proc) return;
     // Process-kind scopes are spawn flags: a different answer needs a new process.
@@ -1018,6 +1088,8 @@ export class FuseHost implements RuntimeBridge {
         tags: [...spec.tags],
         is_core: spec.isCore,
         status: (this.pluginStates.get(pluginId) ?? PluginState.PENDING).valueOf(),
+        has_runtime: spec.hasRuntime,
+        overrides: this.overrides.has(pluginId) ? this.overrides.snapshot(pluginId) : null,
       });
     }
     return result;
@@ -1146,7 +1218,10 @@ export class FuseHost implements RuntimeBridge {
     // A plugin process started later reads this as its first-tick fallback.
     process.env.FUSE_CDP_PORT = String(next.port);
     this.publishGameConfig();
-    if (foldersMoved) this.restartForGameFolders();
+    if (foldersMoved) {
+      this.restartForGameFolders();
+      void this.overrides.recompute();
+    }
   }
 
   /** Probe again after a page loss, so a stale reachable flag does not linger. */
@@ -1302,6 +1377,28 @@ export class FuseHost implements RuntimeBridge {
     return { ok: proc.config.dispatchAction(controlId, params.payload) };
   }
 
+  /** A preset picked in the App, also for a plugin that has no process. Asks for the scope if it is still open. */
+  async rpcOverrideSelect(params: Record<string, unknown>): Promise<Record<string, unknown>> {
+    const pluginId = String(params.plugin_id ?? "");
+    const preset = params.preset === null || params.preset === undefined ? null : String(params.preset);
+    this.permissions.noteUserAction(pluginId);
+    await this.permissions.ensureConsent(pluginId);
+    if (preset !== null && !this.permissions.check(pluginId, "game_overrides")) {
+      return { ok: false, error: "the 'Game file changes' permission is off" };
+    }
+    try {
+      return { ok: true, status: await this.overrides.select(pluginId, preset) };
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : String(e) };
+    }
+  }
+
+  /** "Remove all game changes": every pick goes to none, so main removes every FUSE change. */
+  async rpcOverridesRemoveAll(): Promise<Record<string, unknown>> {
+    await this.overrides.removeAll();
+    return { ok: true };
+  }
+
   async rpcSetEnabled(params: Record<string, unknown>): Promise<Record<string, unknown>> {
     const pluginId = params.plugin_id as string;
     const enabled = Boolean(params.enabled);
@@ -1449,6 +1546,8 @@ export class FuseHost implements RuntimeBridge {
       configSchema,
       configValues,
       hotkeys: this.hotkeysFor(spec.pluginId),
+      has_runtime: spec.hasRuntime,
+      overrides: this.overrides.has(spec.pluginId) ? this.overrides.snapshot(spec.pluginId) : null,
     });
     this.installConfigWatchers(spec.pluginId);
     this.broadcastPluginList();

@@ -198,10 +198,10 @@ async function scanFuseArchive(fusePath: string, keep: Set<string>, onError?: Di
     return fail(`Extraction failed: ${e instanceof Error ? e.message : String(e)}`);
   }
 
-  let located: { entryPath: string; entryClass: string };
+  let located: { entryPath: string; entryClass: string } | null = null;
   try {
-    if (!manifest.entry) throw new Error("manifest missing 'entry'");
-    located = locateEntry(packageRoot, manifest.entry);
+    if (manifest.entry) located = locateEntry(packageRoot, manifest.entry);
+    else if (!manifest.override) throw new Error("manifest missing 'entry' (or 'override')");
   } catch (e) {
     logger.error(`Skipping .fuse plugin '${pluginId}': ${String(e)}`);
     return fail(e instanceof Error ? e.message : String(e));
@@ -223,8 +223,9 @@ async function scanFuseArchive(fusePath: string, keep: Set<string>, onError?: Di
     archivePath: fusePath,
     packageRoot,
     checksum,
-    entryPath: located.entryPath,
-    entryClass: located.entryClass,
+    entryPath: located?.entryPath ?? "",
+    entryClass: located?.entryClass ?? "",
+    hasRuntime: located !== null,
     requiresCalibration: false,
     calibrationStages: 1,
     manifest,

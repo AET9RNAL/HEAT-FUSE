@@ -23,6 +23,22 @@
     "about": "About"
   },
   "apphome": {
+    "gameChanges": {
+      "title": "Game Changes",
+      "desc": "Some plugins put presets into the game files. FUSE records each change, so it can put back the original files.",
+      "change": "Change",
+      "pack": "FUSE pack in the game folder: {presets}",
+      "edits": "Edits in {file}: {count}",
+      "waiting": "The changes wait for the game to close.",
+      "nothingHeld": "FUSE holds no changes in the game files.",
+      "removeAll": "Remove All Game Changes",
+      "removeAllDesc": "Put back the original game files. While the game runs, FUSE waits until it closes.",
+      "remove": "Remove",
+      "removedTitle": "Game Changes Removed",
+      "removedMessage": "FUSE puts back the original game files.",
+      "removedWaitMessage": "FUSE puts back the original game files when the game closes.",
+      "removeFailedTitle": "Remove Failed"
+    },
     "searchPlaceholder": "Search plugins...",
     "discover": "Discover",
     "filtering": "Filtering",
@@ -349,6 +365,16 @@
       "beta": "Feature complete. It can still have bugs.",
       "alpha": "Early build for testers. Expect breaking changes."
     },
+    "pluginType": {
+      "runtime": "Runtime",
+      "override": "Override",
+      "hybrid": "Hybrid (Runtime and Override functionality)"
+    },
+    "pluginTypeHint": {
+      "runtime": "Runtime FUSE plugin",
+      "override": "Override FUSE plugin",
+      "hybrid": "Hybrid FUSE plugin"
+    },
     "relation": {
       "required": "Required",
       "optional": "Optional",
@@ -368,7 +394,17 @@
       "gameTip": "Marked for game versions: {list}",
       "gameNone": "Not marked for a game version",
       "fuseTip": "Needs FUSE {version} or later",
-      "fuseNone": "No minimum FUSE version"
+      "fuseNone": "No minimum FUSE version",
+      "type": {
+        "runtime": "Runtime",
+        "override": "Override",
+        "hybrid": "Hybrid"
+      },
+      "typeTip": {
+        "runtime": "Runs in FUSE",
+        "override": "Overrides Game assets",
+        "hybrid": "Runs in FUSE and overrides Game assets"
+      }
     },
     "creator": {
       "kicker": "Creator",
@@ -436,7 +472,11 @@
       "requires": "Requires",
       "gameVersions": "Game versions",
       "changelog": "Changelog",
-      "channel": "Channel"
+      "channel": "Channel",
+      "pluginType": "Plugin type",
+      "typeFromManifest": "Manifest",
+      "typeDiffers": "The manifest declares another type. Check your pick.",
+      "typeLocked": "The type is locked after the file goes to review."
     },
     "dep": {
       "title": "Dependencies",
@@ -669,8 +709,15 @@
       "manifest_ambiguous": "The package has more than one manifest.json.",
       "manifest_too_large": "The manifest.json is too large.",
       "manifest_invalid": "The manifest.json is not valid JSON.",
-      "entry_missing": "The manifest has no entry.",
+      "entry_missing": "The manifest has no entry and no override part.",
+      "plugin_type_invalid": "The plugin type is not valid.",
+      "plugin_type_locked": "The plugin type cannot change after the file goes to review.",
+      "plugin_type_mismatch": "The package changes game files. Pick \"Override\" or \"Hybrid\" as the type.",
+      "game_versions_required": "A plugin that changes game files needs at least one game version.",
       "min_host_version_invalid": "The manifest min_host_version is invalid.",
+      "min_host_version_missing": "An override or hybrid manifest needs min_host_version.",
+      "game_versions_missing": "An override or hybrid manifest needs game_versions.",
+      "game_versions_invalid": "The manifest game_versions must be a list of X.Y.Z versions.",
       "compression_unsupported": "The package uses an unsupported compression.",
       "processing_timeout": "The check takes too long. Open the version later to see the result.",
       "image_type": "Use PNG, JPG, GIF or WebP.",
@@ -856,11 +903,64 @@
       },
       "menu": {
         "settings": "Settings",
+        "gameChanges": "Game Changes",
         "showInExplorer": "Show in Explorer",
         "delete": "Delete"
       },
       "reloadWarningTitle": "Reload Required",
-      "reloadWarningMessage": "Plugin changes may not apply until you reload with Ctrl+R or restart FUSE."
+      "reloadWarningMessage": "Plugin changes may not apply until you reload with Ctrl+R or restart FUSE.",
+      "overrides": {
+        "tab": "Game Changes",
+        "intro": "FUSE puts the preset you pick into the game files. The game locks its files while it runs, so FUSE writes the change when the game is closed.",
+        "presets": "Presets",
+        "none": "None",
+        "noneDesc": "The game uses its own files",
+        "startFuse": "Turn FUSE on to pick a preset.",
+        "waitingConsent": "Answer the permission card on the stage to continue.",
+        "pickFailed": "FUSE did not pick the preset: {reason}",
+        "notifyApplyTitle": "Restart the game to apply",
+        "notifyRemoveTitle": "Restart the game to remove",
+        "notifyMessage": "FUSE changes the game files for {plugins} when the game closes. You see the change at the next game start.",
+        "short": {
+          "unknown": "FUSE off",
+          "none": "No preset",
+          "pluginOff": "Plugin off",
+          "waitGame": "Restart game",
+          "applying": "Applying",
+          "applied": "Applied",
+          "inGame": "In the game",
+          "removeWait": "Restart game",
+          "removing": "Removing",
+          "outdated": "Needs update",
+          "failed": "Not applied"
+        },
+        "title": {
+          "unknown": "FUSE is off",
+          "none": "No game changes",
+          "pluginOff": "The plugin is off",
+          "waitGame": "Restart the game to apply",
+          "applying": "Applying",
+          "applied": "Applied",
+          "inGame": "In the game",
+          "removeWait": "Restart the game to remove",
+          "removing": "Removing",
+          "outdated": "Needs an update",
+          "failed": "Not applied"
+        },
+        "text": {
+          "unknown": "Turn FUSE on to see and change the state of the game files.",
+          "none": "The game uses its own files.",
+          "pluginOff": "Turn the plugin on to put {preset} into the game.",
+          "waitGame": "FUSE writes {preset} into the game files when the game closes. You see it at the next game start.",
+          "applying": "FUSE writes {preset} into the game files now.",
+          "applied": "{preset} is in the game files. You see it when you start the game.",
+          "inGame": "{preset} is in the game.",
+          "removeWait": "FUSE takes its changes out of the game files when the game closes. You see the original files at the next game start.",
+          "removing": "FUSE takes its changes out of the game files now.",
+          "outdated": "The game files changed, so {preset} needs an update from its author.",
+          "failed": "FUSE cannot put {preset} into the game."
+        }
+      }
     },
     "updateProgress": {
       "updating": "Updating",

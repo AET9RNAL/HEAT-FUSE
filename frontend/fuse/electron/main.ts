@@ -22,6 +22,7 @@ import { PermissionStore } from './permissionStore'
 import { SecretStore } from './secretStore'
 import { initConsent, requestConsent, resetConsent, stageOpened, type ConsentRequest } from './consentView'
 import { startObsServer, stopObsServer, setObsParams, obsUrl, obsParamsUrl, listObsDisplays } from './obsServer'
+import { OverrideApplier, type WantedState } from './overrideApplier'
 
 declare const __RELEASE__: boolean
 
@@ -73,12 +74,30 @@ interface PluginManifest {
   /** Action name -> default combo. */
   hotkeys?: Record<string, string>
   core?: boolean
+  override?: { presets?: Array<{ id?: unknown; name?: unknown; dir?: unknown; preview?: unknown }> }
+}
+
+/** The presets as the runtime lists them, without a state: only the runtime knows the state. */
+function manifestOverrides(m: PluginManifest) {
+  if (!m.override || !Array.isArray(m.override.presets)) return null
+  const presets = m.override.presets.map((p) => {
+    const id = String(p?.id ?? '')
+    let preview: string | null = null
+    if (typeof p?.dir === 'string' && typeof p?.preview === 'string') {
+      const rel = path.posix.normalize(path.posix.join(p.dir.replace(/\\/g, '/'), p.preview.replace(/\\/g, '/')))
+      if (!rel.startsWith('../') && !path.posix.isAbsolute(rel)) preview = rel
+    }
+    return { id, name: String(p?.name ?? id).slice(0, 64), preview, problem: null }
+  }).filter((p) => p.id)
+  return { presets, active: null }
 }
 
 interface HostConfig {
   disabled_plugins: string[]
   enabled_plugins: string[] | null
   hotkey_overrides?: Record<string, Record<string, string>>
+  /** Plugin -> picked override preset. The runtime owns it. Main writes it only while the runtime is down. */
+  override_picks?: Record<string, string | null>
 }
 
 // Release notes (GitHub release body)
@@ -243,6 +262,7 @@ async function scanPluginsDir(dir: string) {
         configSchema: m.config_schema ?? [],
         hotkeys:      manifestHotkeys(m.hotkeys, saved?.[pluginId]),
         core:         m.core         ?? false,
+        overrides:    manifestOverrides(m),
         filePath,
         checksum,
       }
@@ -529,6 +549,20 @@ async function _checkGameProcess(): Promise<{ running: boolean; pid?: number }> 
     )
   })
 }
+
+const LOCAL_APP_DATA = process.env.LOCALAPPDATA ?? path.join(os.homedir(), 'AppData', 'Local')
+
+// The only writer of game files: override packs and their project edits.
+const overrideApplier = new OverrideApplier({
+  isGameRunning: async () => (await _checkGameProcess()).running,
+  contentPatchRoot: () => path.join(LOCAL_APP_DATA, 'coldwar', '.content_patch'),
+  stateDir: () => path.join(LOCAL_APP_DATA, 'FUSE', 'game-overrides'),
+  log: (msg) => console.log(msg),
+  warn: (msg) => console.warn(msg),
+  onHeldChange: (held) => {
+    if (win && !win.isDestroyed()) win.webContents.send('overrides:held-changed', held)
+  },
+})
 
 async function _checkForegroundProcess(): Promise<string> {
   const cmd = `${PS_FW_DEF};$h=[FW]::GetForegroundWindow();$p=[uint32]0;[FW]::GetWindowThreadProcessId($h,[ref]$p)|Out-Null;(Get-Process -Id $p -EA 0).Name`
@@ -912,6 +946,7 @@ app.on('before-quit', (event) => {
   disconnectDiscord()
   stopOverlayStage()
   stopObsServer()
+  overrideApplier.dispose()
 
   if (gameWatcher) { clearInterval(gameWatcher); gameWatcher = null }
   if (focusWatcher) { clearInterval(focusWatcher); focusWatcher = null }
@@ -1147,6 +1182,8 @@ app.whenReady().then(() => {
           else stopStageProcessReports()
         } else if (msg?.type === 'stage:frames') {
           setFrameSources(msg.sources)
+        } else if (msg?.type === 'overrides:apply' && msg.state && typeof msg.state === 'object') {
+          overrideApplier.setWanted(msg.state as WantedState, (reply) => { if (proc.connected) proc.send(reply) })
         }
       })
 
@@ -1302,6 +1339,63 @@ app.whenReady().then(() => {
       assertInPluginsDir(filePath)
       fs.unlinkSync(path.resolve(filePath))
       return { success: true }
+    } catch (e: unknown) {
+      return { success: false, error: (e as Error).message }
+    }
+  })
+
+  /** A preset preview from inside a package, as a data URL. The path is relative to the package root. */
+  handleIpc('plugins:read-preview', async (_event, filePath: string, relPath: string) => {
+    try {
+      assertInPluginsDir(filePath)
+      if (typeof relPath !== 'string' || !/\.(png|jpe?g|gif|webp)$/i.test(relPath)) return null
+      const rel = path.posix.normalize(relPath.replace(/\\/g, '/'))
+      if (rel.startsWith('../') || path.posix.isAbsolute(rel)) return null
+      const handle = await fs.promises.open(path.resolve(filePath), 'r')
+      try {
+        const size = (await handle.stat()).size
+        const src: RangeSource = {
+          size,
+          read: async (offset, length) => {
+            const b = Buffer.alloc(length)
+            const { bytesRead } = await handle.read(b, 0, length, offset)
+            return new Uint8Array(b.buffer, b.byteOffset, bytesRead)
+          },
+        }
+        const entries = await readCentralDirectory(src)
+        const manifest = entries.find(e => e.name.endsWith('/manifest.json'))
+        if (!manifest) return null
+        const root = manifest.name.slice(0, -'manifest.json'.length)
+        const entry = entries.find(e => e.name === root + rel)
+        if (!entry || entry.uncompressedSize > MAX_IMAGE_BYTES) return null
+        const bytes = await readEntry(src, entry)
+        const info = sniffImage(bytes)
+        return info ? `data:${info.type};base64,${Buffer.from(bytes).toString('base64')}` : null
+      } finally {
+        await handle.close()
+      }
+    } catch {
+      return null
+    }
+  })
+
+  // ── Game changes: what FUSE holds in the game files ──
+
+  handleIpc('overrides:held', () => overrideApplier.held())
+
+  /**
+   * "Remove all game changes" while the runtime is down. The picks go to none in fuse_host.json, so the next
+   * runtime start keeps them off, and the applier takes back every change.
+   */
+  handleIpc('overrides:remove-all', async () => {
+    try {
+      const ids = (await scanPluginsDir(PATHS.pluginsUser)).filter((r) => r.overrides).map((r) => r.plugin_id)
+      const cfg = readHostConfig()
+      const picks: Record<string, string | null> = {}
+      for (const id of new Set([...ids, ...Object.keys(cfg.override_picks ?? {})])) picks[id] = null
+      writeHostConfig({ ...cfg, override_picks: picks })
+      overrideApplier.removeAll()
+      return { success: true, waiting: (await _checkGameProcess()).running }
     } catch (e: unknown) {
       return { success: false, error: (e as Error).message }
     }

@@ -13,6 +13,31 @@ export type SortKey = 'downloads' | 'views' | 'updated' | 'name'
 export const CHANNELS: Channel[] = ['release', 'beta', 'alpha']
 export const GAME_VERSION_RE = /^[0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,4}$/
 
+/** A plugin process (runtime), game file changes (override), or both parts (hybrid). */
+export type PluginType = 'runtime' | 'override' | 'hybrid'
+export const PLUGIN_TYPES: PluginType[] = ['runtime', 'override', 'hybrid']
+
+/** The type the manifest declares: `entry` gives a process, `override` gives game file changes. */
+export function pluginTypeOf(manifest: Record<string, unknown> | null | undefined): PluginType {
+    const o = manifest?.override
+    const hasOverride = !!o && typeof o === 'object' && !Array.isArray(o)
+    const hasEntry = typeof manifest?.entry === 'string' && manifest.entry.trim() !== ''
+    if (hasOverride) return hasEntry ? 'hybrid' : 'override'
+    return 'runtime'
+}
+
+/** The game versions a manifest declares, sorted, without bad values. */
+export function manifestGameVersions(manifest: Record<string, unknown> | null | undefined): string[] {
+    const list = manifest?.game_versions
+    if (!Array.isArray(list)) return []
+    const valid = list.filter((v): v is string => typeof v === 'string' && GAME_VERSION_RE.test(v))
+    return [...new Set(valid)].sort(compareVersions)
+}
+
+/** The type of a file, or null without a file. A file from before the type column is runtime. */
+export const fileType = (f: Pick<RegistryFile, 'plugin_type'> | null | undefined): PluginType | null =>
+    f ? f.plugin_type ?? 'runtime' : null
+
 export interface RegistryTag { id: number; slug: string; label: string; color: string | null }
 
 export interface RegistryFile {
@@ -22,6 +47,8 @@ export interface RegistryFile {
     channel: Channel
     changelog: string
     game_versions: string[]
+    /** Missing before the 20261109 migration: read it as runtime. */
+    plugin_type?: PluginType
     file_name: string | null
     size_bytes: number | null
     sha256: string | null

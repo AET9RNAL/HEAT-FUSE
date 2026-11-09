@@ -21,6 +21,7 @@ import type { PluginServices, ServiceHandle, ServiceSpec } from "../sdk/services
 import type { PluginStorage, StorageCollection } from "../sdk/storage.js";
 import type { PluginSecrets } from "../sdk/secrets.js";
 import type { PluginLinks } from "../sdk/links.js";
+import type { OverridePresetInfo, OverrideStatus, OverridesSnapshot, PluginOverrides } from "../sdk/overrides.js";
 import type { FuseContext, FusePlugin, HostState, HostView, TeardownReason } from "../sdk/plugin.js";
 
 export type PluginClass = (new () => FusePlugin) & { requiresCalibration?: unknown; calibrationStages?: unknown };
@@ -690,6 +691,50 @@ class RemoteLinks implements PluginLinks {
   }
 }
 
+// --- overrides ----------------------------------------------------------------
+
+const NO_OVERRIDES: OverridesSnapshot = { presets: [], active: { preset: null, state: "off" } };
+
+class RemoteOverrides implements PluginOverrides {
+  private listeners = new Set<() => void>();
+
+  constructor(
+    private readonly channel: Channel,
+    private readonly log: Logger,
+    private snap: OverridesSnapshot,
+  ) {}
+
+  presets(): OverridePresetInfo[] {
+    return this.snap.presets.map((p) => ({ ...p }));
+  }
+
+  active(): OverrideStatus {
+    return { ...this.snap.active };
+  }
+
+  select(preset: string | null): Promise<OverrideStatus> {
+    return this.channel.request<OverrideStatus>({ t: "overrides", op: "select", args: [preset === null ? null : String(preset)] });
+  }
+
+  onChange(cb: () => void): () => void {
+    this.listeners.add(cb);
+    return () => {
+      this.listeners.delete(cb);
+    };
+  }
+
+  apply(snap: OverridesSnapshot): void {
+    this.snap = snap ?? NO_OVERRIDES;
+    for (const cb of [...this.listeners]) {
+      try {
+        cb();
+      } catch (e) {
+        this.log.exception("overrides listener raised", e);
+      }
+    }
+  }
+}
+
 // --- permissions --------------------------------------------------------------
 
 class RemotePermissions implements PluginPermissions {
@@ -734,6 +779,7 @@ export class PluginRuntime {
   private readonly services: RemoteServices;
   private readonly permissions: RemotePermissions;
   private readonly links: RemoteLinks;
+  private readonly overrides: RemoteOverrides;
 
   constructor(
     private readonly channel: Channel,
@@ -749,6 +795,7 @@ export class PluginRuntime {
     this.services = new RemoteServices(channel, this.log, init.services);
     this.permissions = new RemotePermissions(channel, init.permissions);
     this.links = new RemoteLinks(channel, this.log);
+    this.overrides = new RemoteOverrides(channel, this.log, init.overrides ?? NO_OVERRIDES);
 
     const permissions = this.permissions;
     const services = this.services;
@@ -799,6 +846,7 @@ export class PluginRuntime {
       storage: new RemoteStorage(channel),
       secrets,
       links: this.links,
+      overrides: this.overrides,
       host,
       logger: this.log,
       state: init.state,
@@ -871,6 +919,9 @@ export class PluginRuntime {
         return;
       case "links.callback":
         this.links.dispatch(String(msg.url ?? ""));
+        return;
+      case "overrides.state":
+        this.overrides.apply(msg.snapshot as OverridesSnapshot);
         return;
 
       case "service.state":

@@ -101,6 +101,9 @@ export type IconKind =
   | 'exe'
   | 'upload'
   | 'heatLogo'
+  | 'pluginRuntime'
+  | 'pluginOverride'
+  | 'pluginHybrid'
 </script>
 
 <script setup lang="ts">

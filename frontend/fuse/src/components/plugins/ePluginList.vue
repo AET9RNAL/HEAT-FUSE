@@ -94,6 +94,14 @@ function menuOptionsFor(pluginId: string): MenuOption[] {
       action: () => eventBus.emit('plugin-config:open', { plugin_id: pluginId }),
     })
   }
+  if (plugin.overrides) {
+    options.push({
+      label: t('components.plugin.menu.gameChanges'),
+      icon: 'file',
+      iconSize: 'normal',
+      action: () => eventBus.emit('plugin-config:open', { plugin_id: pluginId, tab: 'overrides' }),
+    })
+  }
   options.push(
     {
       label: t('components.plugin.menu.showInExplorer'),

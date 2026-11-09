@@ -79,14 +79,15 @@ function _handleMessage(data: string): void {
 
 // ── JSON-RPC send ──────────────────────────────────────────────────────────
 
-async function send(method: string, params?: Record<string, unknown>): Promise<Record<string, unknown>> {
+/** `timeoutMs` is for a call that waits for the user, for example on a consent card. */
+async function send(method: string, params?: Record<string, unknown>, timeoutMs = RPC_TIMEOUT_MS): Promise<Record<string, unknown>> {
     if (!_ws || _ws.readyState !== WebSocket.OPEN) throw new Error('not connected')
     const id = _nextRpcId++
     return new Promise((resolve, reject) => {
         const timer = setTimeout(() => {
             _pending.delete(id)
             reject(new Error(`RPC timeout: ${method}`))
-        }, RPC_TIMEOUT_MS)
+        }, timeoutMs)
         _pending.set(id, { resolve, reject, timer })
         _ws!.send(JSON.stringify({ jsonrpc: '2.0', method, params, id }))
     })

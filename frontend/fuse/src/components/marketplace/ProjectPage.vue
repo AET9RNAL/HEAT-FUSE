@@ -4,7 +4,7 @@ import { useRegistryStore } from '../../stores/registry'
 import { useI18n } from '../../composables/useI18n'
 import { renderMarkdown } from '../../composables/useMarkdown'
 import { eventBus } from '../../events/eventBus'
-import { formatBytes, formatDate, compareVersions, type RegistryFile, type RegistryDependency } from '../../utils/registry-api'
+import { formatBytes, formatDate, compareVersions, fileType, type RegistryFile, type RegistryDependency } from '../../utils/registry-api'
 import ProjectIcon from './ProjectIcon.vue'
 import ChannelChip from './ChannelChip.vue'
 import CompatTag from './CompatTag.vue'
@@ -101,7 +101,7 @@ function openDep(d: RegistryDependency) { void registry.openProject(d.project_id
                             <div class="pp-tags">
                                 <eBadge v-for="tag in project.tags" :key="tag.id" :label="tag.label" :color="tag.color ?? undefined" />
                             </div>
-                            <CompatTag v-if="latest" class="pp-compat" :game="latest.game_versions" :fuse="latest.min_fuse_version" />
+                            <CompatTag v-if="latest" class="pp-compat" :game="latest.game_versions" :fuse="latest.min_fuse_version" :plugin-type="fileType(latest)" />
                         </div>
                         <div v-if="latest" class="pp-install">
                             <eButton

@@ -99,6 +99,19 @@ exposeApp('pluginsAPI', {
   showFile: (filePath: string) => ipcRenderer.invoke('plugins:show-file', filePath),
   deleteFile: (filePath: string): Promise<{ success: boolean; error?: string }> =>
     ipcRenderer.invoke('plugins:delete', filePath),
+  readPreview: (filePath: string, relPath: string): Promise<string | null> =>
+    ipcRenderer.invoke('plugins:read-preview', filePath, relPath),
+})
+
+exposeApp('overridesAPI', {
+  held: () => ipcRenderer.invoke('overrides:held'),
+  removeAll: (): Promise<{ success: boolean; waiting?: boolean; error?: string }> =>
+    ipcRenderer.invoke('overrides:remove-all'),
+  onHeldChanged: (cb: (held: unknown) => void): (() => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, held: unknown) => cb(held)
+    ipcRenderer.on('overrides:held-changed', listener)
+    return () => ipcRenderer.removeListener('overrides:held-changed', listener)
+  },
 })
 
 exposeApp('registryAPI', {

@@ -23,6 +23,22 @@
     "about": "Про програму"
   },
   "apphome": {
+    "gameChanges": {
+      "title": "Зміни гри",
+      "desc": "Деякі плагіни поміщають пресети у файли гри. FUSE записує кожну зміну й може повернути початкові файли.",
+      "change": "Змінити",
+      "pack": "Пакет FUSE у папці гри: {presets}",
+      "edits": "Зміни у {file}: {count}",
+      "waiting": "Зміни чекають на закриття гри.",
+      "nothingHeld": "FUSE не тримає змін у файлах гри.",
+      "removeAll": "Прибрати всі зміни гри",
+      "removeAllDesc": "Повернути початкові файли гри. Якщо гра запущена, FUSE чекає на її закриття.",
+      "remove": "Прибрати",
+      "removedTitle": "Зміни гри прибрано",
+      "removedMessage": "FUSE повертає початкові файли гри.",
+      "removedWaitMessage": "FUSE поверне початкові файли гри, коли гра закриється.",
+      "removeFailedTitle": "Не вдалося прибрати"
+    },
     "searchPlaceholder": "Пошук плагінів...",
     "discover": "Огляд",
     "filtering": "Фільтр",
@@ -349,6 +365,16 @@
       "beta": "Усі функції готові. Можливі помилки.",
       "alpha": "Рання збірка для тестувальників. Можливі несумісні зміни."
     },
+    "pluginType": {
+      "runtime": "Runtime",
+      "override": "Override",
+      "hybrid": "Гібрид (функції Runtime і Override)"
+    },
+    "pluginTypeHint": {
+      "runtime": "Runtime-плагін FUSE",
+      "override": "Override-плагін FUSE",
+      "hybrid": "Гібридний плагін FUSE"
+    },
     "relation": {
       "required": "Обов'язково",
       "optional": "Необов'язково",
@@ -368,7 +394,17 @@
       "gameTip": "Позначено для версій гри: {list}",
       "gameNone": "Не позначено для версії гри",
       "fuseTip": "Потрібен FUSE {version} або новіший",
-      "fuseNone": "Немає мінімальної версії FUSE"
+      "fuseNone": "Немає мінімальної версії FUSE",
+      "type": {
+        "runtime": "Runtime",
+        "override": "Override",
+        "hybrid": "Гібрид"
+      },
+      "typeTip": {
+        "runtime": "Працює у FUSE",
+        "override": "Замінює файли гри",
+        "hybrid": "Працює у FUSE і замінює файли гри"
+      }
     },
     "creator": {
       "kicker": "Автор",
@@ -436,7 +472,11 @@
       "requires": "Потребує",
       "gameVersions": "Версії гри",
       "changelog": "Список змін",
-      "channel": "Канал"
+      "channel": "Канал",
+      "pluginType": "Тип плагіна",
+      "typeFromManifest": "Маніфест",
+      "typeDiffers": "У маніфесті вказано інший тип. Перевірте вибір.",
+      "typeLocked": "Тип не можна змінити після надсилання файлу на перевірку."
     },
     "dep": {
       "title": "Залежності",
@@ -669,8 +709,15 @@
       "manifest_ambiguous": "У пакеті більше одного manifest.json.",
       "manifest_too_large": "manifest.json завеликий.",
       "manifest_invalid": "manifest.json — некоректний JSON.",
-      "entry_missing": "У маніфесті немає entry.",
+      "entry_missing": "У маніфесті немає ні entry, ні частини override.",
+      "plugin_type_invalid": "Неприпустимий тип плагіна.",
+      "plugin_type_locked": "Тип плагіна не можна змінити після надсилання файлу на перевірку.",
+      "plugin_type_mismatch": "Пакет змінює файли гри. Виберіть тип «Override» або «Гібрид».",
+      "game_versions_required": "Плагіну, який змінює файли гри, потрібна принаймні одна версія гри.",
       "min_host_version_invalid": "min_host_version у маніфесті хибний.",
+      "min_host_version_missing": "У маніфесті override або гібридного плагіна потрібен min_host_version.",
+      "game_versions_missing": "У маніфесті override або гібридного плагіна потрібен game_versions.",
+      "game_versions_invalid": "game_versions у маніфесті має бути списком версій X.Y.Z.",
       "compression_unsupported": "Пакет використовує непідтримуване стиснення.",
       "processing_timeout": "Перевірка триває задовго. Відкрийте версію пізніше, щоб побачити результат.",
       "image_type": "Використовуйте PNG, JPG, GIF або WebP.",
@@ -856,11 +903,64 @@
       },
       "menu": {
         "settings": "Налаштування",
+        "gameChanges": "Зміни гри",
         "showInExplorer": "Показати в провіднику",
         "delete": "Видалити"
       },
       "reloadWarningTitle": "Потрібне перезавантаження",
-      "reloadWarningMessage": "Зміни плагіна можуть не застосуватися, доки ви не перезавантажите плагіни через Ctrl+R або не перезапустите FUSE."
+      "reloadWarningMessage": "Зміни плагіна можуть не застосуватися, доки ви не перезавантажите плагіни через Ctrl+R або не перезапустите FUSE.",
+      "overrides": {
+        "tab": "Зміни гри",
+        "intro": "FUSE поміщає вибраний пресет у файли гри. Поки гра запущена, вона блокує свої файли, тому FUSE записує зміну, коли гра закрита.",
+        "presets": "Пресети",
+        "none": "Немає",
+        "noneDesc": "Гра використовує свої файли",
+        "startFuse": "Увімкніть FUSE, щоб вибрати пресет.",
+        "waitingConsent": "Дайте відповідь на картку дозволу на сцені, щоб продовжити.",
+        "pickFailed": "FUSE не вибрав пресет: {reason}",
+        "notifyApplyTitle": "Перезапустіть гру, щоб застосувати",
+        "notifyRemoveTitle": "Перезапустіть гру, щоб прибрати",
+        "notifyMessage": "FUSE змінить файли гри для {plugins}, коли гра закриється. Ви побачите зміну під час наступного запуску.",
+        "short": {
+          "unknown": "FUSE вимкнено",
+          "none": "Без пресета",
+          "pluginOff": "Плагін вимкнено",
+          "waitGame": "Перезапустіть гру",
+          "applying": "Застосування",
+          "applied": "Застосовано",
+          "inGame": "У грі",
+          "removeWait": "Перезапустіть гру",
+          "removing": "Прибирання",
+          "outdated": "Потрібне оновлення",
+          "failed": "Не застосовано"
+        },
+        "title": {
+          "unknown": "FUSE вимкнено",
+          "none": "Змін гри немає",
+          "pluginOff": "Плагін вимкнено",
+          "waitGame": "Перезапустіть гру, щоб застосувати",
+          "applying": "Застосування",
+          "applied": "Застосовано",
+          "inGame": "У грі",
+          "removeWait": "Перезапустіть гру, щоб прибрати",
+          "removing": "Прибирання",
+          "outdated": "Потрібне оновлення",
+          "failed": "Не застосовано"
+        },
+        "text": {
+          "unknown": "Увімкніть FUSE, щоб бачити й змінювати стан файлів гри.",
+          "none": "Гра використовує свої файли.",
+          "pluginOff": "Увімкніть плагін, щоб помістити {preset} у гру.",
+          "waitGame": "FUSE запише {preset} у файли гри, коли гра закриється. Ви побачите його під час наступного запуску.",
+          "applying": "FUSE записує {preset} у файли гри.",
+          "applied": "{preset} у файлах гри. Ви побачите його під час запуску гри.",
+          "inGame": "{preset} у грі.",
+          "removeWait": "FUSE прибере свої зміни з файлів гри, коли гра закриється. Ви побачите початкові файли під час наступного запуску.",
+          "removing": "FUSE прибирає свої зміни з файлів гри.",
+          "outdated": "Файли гри змінилися, тому {preset} потребує оновлення від автора.",
+          "failed": "FUSE не може помістити {preset} у гру."
+        }
+      }
     },
     "updateProgress": {
       "updating": "Оновлення",

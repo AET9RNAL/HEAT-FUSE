@@ -345,13 +345,15 @@ Each plugin ships a `manifest.json` at the package root:
 | `plugin_id` | yes | Identifier for config files, dependencies and enable/disable. Must match the archive's top-level folder. When they differ, the folder name wins. |
 | `name` | yes | Display name shown in UI and logs. |
 | `version` | yes | Semver string. |
-| `entry` | yes | `"module:ClassName"`. The module is the bundled entry file. |
-| `runtime` | yes | `"node"`. |
+| `entry` | yes, without `override` | `"module:ClassName"`. The module is the bundled entry file. An override plugin has no entry. |
+| `override` | no | Prebuilt game file changes: `{ "format": 1, "presets": [{ "id", "name", "dir" }], "default": null }`. A plugin with `override` and `entry` is a hybrid plugin. |
+| `runtime` | yes, with `entry` | `"node"`. |
 | `author` | no | Shown in the App's Plugins tab. |
 | `description` | no | Short summary. |
 | `homepage`, `tags` | no | Sent to the App with the plugin list. |
 | `core` | no | `true` marks a core plugin. Core plugins load before user plugins and get dangerous scopes without a prompt. |
-| `min_host_version` | no | Lowest runtime version (current: `5.0.0`). The runtime skips an incompatible plugin. |
+| `min_host_version` | yes, with `override` | Lowest runtime version (current: `5.0.0`). The runtime skips an incompatible plugin. |
+| `game_versions` | yes, with `override` | The game versions the plugin fits, as X.Y.Z values: `["1.2.2"]`. The upload form takes them from the manifest. |
 | `dependencies` | no | Required plugin ids: a list, or `{ "id": ">=1.0" }` with `>=`, `<=`, `==`, `>`, `<` or `*`. Providers load before consumers. |
 | `optional_dependencies` | no | Soft load-order hints. A missing plugin does not block loading. |
 | `permissions` | no | `{ "scope": { "reason": "..." } }`. The user sees the reason. See [Permissions](#permissions). |

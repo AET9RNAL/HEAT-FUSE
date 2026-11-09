@@ -5,6 +5,7 @@
  */
 import type { HostState } from "../sdk/plugin.js";
 import type { PermissionState } from "../sdk/permissions.js";
+import type { OverridesSnapshot } from "../sdk/overrides.js";
 
 export type WireMessage = { t: string } & Record<string, unknown>;
 
@@ -34,5 +35,7 @@ export interface InitMessage {
   filesDir: string | null;
   permissions: Record<string, PermissionState>;
   services: Record<string, ServiceSnapshot>;
+  /** The override part: presets and status. Empty presets without one. */
+  overrides: OverridesSnapshot;
   logLevel: string;
 }

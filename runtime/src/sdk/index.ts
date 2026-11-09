@@ -53,4 +53,5 @@ export type { PluginPermissions, PermissionState } from "./permissions.js";
 export type { PluginStorage, StorageCollection, StorageQuery, StorageWhere, StorageOp } from "./storage.js";
 export type { PluginSecrets } from "./secrets.js";
 export type { PluginLinks } from "./links.js";
+export type { PluginOverrides, OverridePresetInfo, OverrideState, OverrideStatus, OverridesSnapshot } from "./overrides.js";
 export type { LanguageService } from "./language.js";

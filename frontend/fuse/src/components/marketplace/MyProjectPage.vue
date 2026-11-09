@@ -3,7 +3,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useCreatorStore, type InspectedImage } from '../../stores/creator'
 import { useI18n } from '../../composables/useI18n'
 import { eventBus } from '../../events/eventBus'
-import { errorText, formatBytes, formatDate, compareVersions, type RegistryProject, type RegistryFile } from '../../utils/registry-api'
+import { errorText, formatBytes, formatDate, compareVersions, fileType, type RegistryProject, type RegistryFile } from '../../utils/registry-api'
 import ListingForm, { type ListingDraft } from './ListingForm.vue'
 import ProjectIcon from './ProjectIcon.vue'
 import StatusChip from './StatusChip.vue'
@@ -212,7 +212,7 @@ async function copy(text: string) {
                             <StatusChip :status="project.status" :listed="project.listed" />
                         </div>
                         <p class="mp-text">{{ project.summary }}</p>
-                        <CompatTag v-if="compatFile" class="pj-compat" :game="compatFile.game_versions" :fuse="compatFile.min_fuse_version" />
+                        <CompatTag v-if="compatFile" class="pj-compat" :game="compatFile.game_versions" :fuse="compatFile.min_fuse_version" :plugin-type="fileType(compatFile)" />
                     </div>
                     <eMaterialButton
                         v-if="project.status === 'approved'"

@@ -55,7 +55,7 @@ const props = withDefaults(defineProps<Props>(), {
     systemState: 'idle',
     disabled: false,
     confirmLabel: '',
-    confirmIcon: 'checkmark',
+    confirmIcon: undefined,
     holdMs: 600,
     holdThrobber: false,
     holdLabels: undefined,

@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, onUnmounted, watch, provide } from 'vue'
 import { motion } from 'motion-v'
 import Icons from '../ui/Icons.vue'
+import eThrobber from '../ui/eThrobber.vue'
 import eToggle from '../inputs/eToggle.vue'
 // The stage inspector renders the same ControlInput, so both config surfaces
 // get identical inputs. Toggles stay the app's Rive eToggle.
@@ -11,24 +12,40 @@ import { evalWhen, type InspectorControl } from '../../overlay/inspector/types'
 import { vTip } from '../../directives/vTip'
 import type { PluginRecord, ConfigControl, ConfigSection } from '../../stores/plugins'
 import { usePluginsStore } from '../../stores/plugins'
+import { useAppStore } from '../../stores/app'
 import { useFuseConnection } from '../../composables/useFuseConnection'
+import { useI18n } from '../../composables/useI18n'
 import { eventBus } from '../../events/eventBus'
 import { useKeybindCapture } from '../../composables/useKeybindCapture'
+import { overrideView, TONE_COLOR } from '../../utils/overrideState'
 
 const store = usePluginsStore()
+const appStore = useAppStore()
 const { connected } = useFuseConnection()
+const { t } = useI18n()
 
 // Shared controls show the app's tooltip, not the stage's.
 provide(TIP_DIRECTIVE, vTip)
 
-const props = defineProps<{ plugin: PluginRecord }>()
+type Tab = 'config' | 'keybinds' | 'overrides'
+
+const props = defineProps<{ plugin: PluginRecord; initialTab?: Tab | null }>()
 const emit = defineEmits<{ close: [] }>()
 
-type Tab = 'config' | 'keybinds'
+const hasConfig    = computed(() => props.plugin.configSchema.length > 0)
+const hasKeybinds  = computed(() => props.plugin.hotkeys.length > 0)
+const hasOverrides = computed(() => !!props.plugin.overrides)
 
-const hasConfig   = computed(() => props.plugin.configSchema.length > 0)
-const hasKeybinds = computed(() => props.plugin.hotkeys.length > 0)
-const activeTab   = ref<Tab>(hasConfig.value ? 'config' : 'keybinds')
+function firstTab(): Tab {
+    const wanted = props.initialTab
+    if (wanted === 'overrides' && hasOverrides.value) return 'overrides'
+    if (wanted === 'keybinds' && hasKeybinds.value) return 'keybinds'
+    if (hasConfig.value) return 'config'
+    if (hasOverrides.value) return 'overrides'
+    return 'keybinds'
+}
+
+const activeTab = ref<Tab>(firstTab())
 
 // Pending changes buffer
 const pendingConfig  = ref<Record<string, unknown>>({})
@@ -239,6 +256,64 @@ function getCombo(action: string): string {
     if (action in pendingHotkeys.value) return pendingHotkeys.value[action]
     return props.plugin.hotkeys.find(h => h.action === action)?.combo ?? ''
 }
+
+// ── Game changes ───────────────────────────────────────────────────────
+// A pick goes to the runtime at once: it asks for consent, checks the game files, and main writes them.
+
+const overrides = computed(() => props.plugin.overrides
+    ? overrideView(props.plugin.overrides, appStore.gameRunning)
+    : null)
+const presets = computed(() => props.plugin.overrides?.presets ?? [])
+
+/** The preset id in flight, null for "None". Undefined while no pick runs. */
+const picking = ref<string | null | undefined>(undefined)
+/** The pick takes long: the consent card is up on the stage. */
+const slowPick = ref(false)
+const pickError = ref('')
+const canPick = computed(() => connected.value && picking.value === undefined)
+
+function isPicked(id: string | null): boolean {
+    const v = overrides.value
+    return !!v && v.kind !== 'unknown' && v.presetId === id
+}
+
+async function pick(id: string | null) {
+    if (!canPick.value || isPicked(id)) return
+    picking.value = id
+    pickError.value = ''
+    const slow = setTimeout(() => { slowPick.value = true }, 700)
+    try {
+        const result = await store.selectOverride(props.plugin.plugin_id, id)
+        if (!result.ok) pickError.value = result.error ?? ''
+    } catch (e) {
+        pickError.value = e instanceof Error ? e.message : String(e)
+    } finally {
+        clearTimeout(slow)
+        slowPick.value = false
+        picking.value = undefined
+    }
+}
+
+const previews = ref<Record<string, string>>({})
+
+// Previews load when the tab opens, one package read for each image.
+watch(() => [activeTab.value, props.plugin.filePath, presets.value.map(p => p.preview).join('|')] as const, async ([tab, file]) => {
+    if (tab !== 'overrides' || !file) return
+    for (const p of presets.value) {
+        if (!p.preview || previews.value[p.id]) continue
+        const url = await window.pluginsAPI.readPreview(file, p.preview)
+        if (url) previews.value = { ...previews.value, [p.id]: url }
+    }
+}, { immediate: true })
+
+const overrideText = computed(() => {
+    const v = overrides.value
+    return v ? t(`components.plugin.overrides.text.${v.kind}`, { preset: v.presetName }) : ''
+})
+const showReason = computed(() => {
+    const v = overrides.value
+    return !!v?.reason && (v.kind === 'failed' || v.kind === 'outdated')
+})
 </script>
 
 <template>
@@ -285,6 +360,12 @@ function getCombo(action: string): string {
                             :class="{ active: activeTab === 'keybinds' }"
                             @click="activeTab = 'keybinds'"
                         >Keybinds</button>
+                        <button
+                            v-if="hasOverrides"
+                            class="tab-btn"
+                            :class="{ active: activeTab === 'overrides' }"
+                            @click="activeTab = 'overrides'"
+                        >{{ t('components.plugin.overrides.tab') }}</button>
                     </div>
 
                     <!-- Config tab -->
@@ -369,6 +450,67 @@ function getCombo(action: string): string {
                         <div v-if="plugin.hotkeys.length === 0" class="empty-state">
                             No keybindings registered
                         </div>
+                    </div>
+
+                    <!-- Game changes tab -->
+                    <div v-else-if="activeTab === 'overrides' && overrides" class="panel-body">
+                        <p class="section-desc">{{ t('components.plugin.overrides.intro') }}</p>
+
+                        <motion.div
+                            :key="overrides.kind"
+                            class="override-state"
+                            :initial="{ opacity: 0, y: -2 }"
+                            :animate="{ opacity: 1, y: 0 }"
+                            :transition="{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }"
+                        >
+                            <span class="state-mark" :style="{ background: TONE_COLOR[overrides.tone] }" />
+                            <div class="state-body">
+                                <span class="entry-label">{{ t(`components.plugin.overrides.title.${overrides.kind}`) }}</span>
+                                <span class="entry-desc">{{ overrideText }}</span>
+                                <span v-if="showReason" class="entry-desc state-reason">{{ overrides.reason }}</span>
+                            </div>
+                        </motion.div>
+
+                        <div class="config-category-label">{{ t('components.plugin.overrides.presets') }}</div>
+
+                        <button
+                            class="preset-row"
+                            :class="{ picked: isPicked(null) }"
+                            :disabled="!canPick"
+                            @click="pick(null)"
+                        >
+                            <span class="preset-thumb"><Icons kind="reset" size="normal" /></span>
+                            <span class="preset-body">
+                                <span class="entry-label">{{ t('components.plugin.overrides.none') }}</span>
+                                <span class="entry-desc">{{ t('components.plugin.overrides.noneDesc') }}</span>
+                            </span>
+                            <eThrobber v-if="picking === null" active />
+                            <Icons v-else-if="isPicked(null)" kind="checkmark" size="small" class="preset-check" />
+                        </button>
+
+                        <button
+                            v-for="p in presets"
+                            :key="p.id"
+                            class="preset-row"
+                            :class="{ picked: isPicked(p.id) }"
+                            :disabled="!canPick || !!p.problem"
+                            @click="pick(p.id)"
+                        >
+                            <span class="preset-thumb">
+                                <img v-if="previews[p.id]" :src="previews[p.id]" class="preset-img" alt="" />
+                                <Icons v-else kind="missingImage" size="normal" />
+                            </span>
+                            <span class="preset-body">
+                                <span class="entry-label">{{ p.name }}</span>
+                                <span v-if="p.problem" class="entry-desc state-reason">{{ p.problem }}</span>
+                            </span>
+                            <eThrobber v-if="picking === p.id" active />
+                            <Icons v-else-if="isPicked(p.id)" kind="checkmark" size="small" class="preset-check" />
+                        </button>
+
+                        <p v-if="!connected" class="section-desc">{{ t('components.plugin.overrides.startFuse') }}</p>
+                        <p v-else-if="slowPick" class="section-desc">{{ t('components.plugin.overrides.waitingConsent') }}</p>
+                        <p v-if="pickError" class="section-desc state-reason">{{ t('components.plugin.overrides.pickFailed', { reason: pickError }) }}</p>
                     </div>
                 </div>
 
@@ -709,5 +851,99 @@ function getCombo(action: string): string {
     padding: var(--space-4);
     user-select: none;
     -webkit-user-select: none;
+}
+
+/* Game changes */
+
+.override-state {
+    flex-shrink: 0;
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-3);
+    padding: var(--space-3);
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.06);
+    corner-shape: bevel;
+    border-radius: 4px 0 4px 0;
+}
+
+.state-mark {
+    flex-shrink: 0;
+    width: 6px;
+    height: 6px;
+    margin-top: 5px;
+    transform: rotate(45deg);
+}
+
+.state-body {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.state-reason {
+    color: var(--error-highlight);
+}
+
+.preset-row {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    width: 100%;
+    padding: var(--space-2);
+    background: none;
+    border: 1px solid transparent;
+    corner-shape: bevel;
+    border-radius: 4px 0 4px 0;
+    text-align: left;
+    cursor: pointer;
+}
+.preset-row:hover:not(:disabled) {
+    background: rgba(255,255,255,0.04);
+}
+.preset-row.picked {
+    border-color: rgba(132, 255, 177, 0.35);
+    background: rgba(132, 255, 177, 0.05);
+}
+.preset-row:disabled {
+    cursor: default;
+}
+.preset-row:disabled:not(.picked) .preset-body {
+    opacity: 0.5;
+}
+
+.preset-thumb {
+    flex-shrink: 0;
+    width: 64px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    background: #1c1c1c;
+    color: var(--text-muted);
+}
+
+.preset-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.preset-body {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.preset-check {
+    flex-shrink: 0;
+    color: var(--light-green);
 }
 </style>

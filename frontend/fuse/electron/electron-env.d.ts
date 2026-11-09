@@ -49,6 +49,16 @@ interface StageLayout {
   offset: { x: number; y: number }
 }
 
+/** What FUSE holds in the game files, from the ledger of Electron main. */
+interface HeldGameChanges {
+  /** `presets` lists plugin/preset for each preset in the FUSE pack. */
+  pack: { file: string; presets: string[] } | null
+  files: Array<{ file: string; entry: string | null; edits: number; plugins: string[] }>
+  /** True while the changes wait for the game to close. */
+  waiting: boolean
+  error?: string
+}
+
 /** A display picked for the stage, saved on this PC. Bounds are in device units. */
 interface SavedStageDisplay {
   id: string
@@ -113,11 +123,23 @@ interface Window {
       configSchema: unknown[]
       configValues: Record<string, unknown>
       hotkeys: unknown[]
+      /** The manifest presets. `active` is null: only the runtime knows the state. */
+      overrides: {
+        presets: Array<{ id: string; name: string; preview: string | null; problem: string | null }>
+        active: null
+      } | null
       filePath: string
       checksum: string
     }>>
     showFile: (filePath: string) => Promise<void>
     deleteFile: (filePath: string) => Promise<{ success: boolean; error?: string }>
+    /** A preview image inside a package, as a data URL, or null. */
+    readPreview: (filePath: string, relPath: string) => Promise<string | null>
+  }
+  overridesAPI: {
+    held: () => Promise<HeldGameChanges>
+    removeAll: () => Promise<{ success: boolean; waiting?: boolean; error?: string }>
+    onHeldChanged: (cb: (held: HeldGameChanges) => void) => () => void
   }
   registryAPI: {
     pathForFile: (file: File) => string

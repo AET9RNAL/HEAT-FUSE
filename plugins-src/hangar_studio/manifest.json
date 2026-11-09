@@ -1,0 +1,32 @@
+{
+  "plugin_id": "hangar_studio",
+  "name": "Hangar Studio",
+  "version": "1.0.0",
+  "author": "AETERNAL",
+  "description": "Custom hangar scenes. Pick a layout, and FUSE puts it into the game files. You see it at the next game start.",
+  "min_host_version": "5.0.0",
+  "game_versions": ["1.2.2"],
+  "permissions": {
+    "game_overrides": { "reason": "Puts the hangar layout you pick into the game files." }
+  },
+  "override": {
+    "format": 1,
+    "presets": [
+      { "id": "carrier_dock", "name": "Aircraft Carrier Dock", "dir": "overrides/carrier_dock" },
+      { "id": "carrier_airfield", "name": "Aircraft Carrier Airfield", "dir": "overrides/carrier_airfield" },
+      { "id": "carrier_gas_tanks", "name": "Aircraft Carrier Gas Tanks", "dir": "overrides/carrier_gas_tanks" },
+      { "id": "carrier_ship_bow", "name": "Aircraft Carrier Ship Bow", "dir": "overrides/carrier_ship_bow" },
+      { "id": "carrier_ship_containers", "name": "Aircraft Carrier Ship Containers", "dir": "overrides/carrier_ship_containers" },
+      { "id": "carrier_engine_room", "name": "Aircraft Carrier Ship Engine Room", "dir": "overrides/carrier_engine_room" },
+      { "id": "carrier_engine_room_2", "name": "Aircraft Carrier Ship Engine Room 2", "dir": "overrides/carrier_engine_room_2" },
+      { "id": "blossom_monument", "name": "Blossom Monument", "dir": "overrides/blossom_monument" },
+      { "id": "blossom_bridge", "name": "Blossom Bridge", "dir": "overrides/blossom_bridge" },
+      { "id": "blossom_broadcast", "name": "Blossom Broadcast", "dir": "overrides/blossom_broadcast" },
+      { "id": "blossom_cannon", "name": "Blossom Cannon", "dir": "overrides/blossom_cannon" },
+      { "id": "blossom_majesty_hotel_entrance", "name": "Blossom Majesty Hotel Entrance", "dir": "overrides/blossom_majesty_hotel_entrance" },
+      { "id": "blossom_majesty_hotel_rooftop", "name": "Blossom Majesty Hotel Rooftop", "dir": "overrides/blossom_majesty_hotel_rooftop" },
+      { "id": "blossom_parking_lot", "name": "Blossom Parking Lot", "dir": "overrides/blossom_parking_lot" }
+    ],
+    "default": null
+  }
+}

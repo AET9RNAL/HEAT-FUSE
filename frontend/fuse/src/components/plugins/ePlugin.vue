@@ -5,10 +5,13 @@ import eToggle from '../inputs/eToggle.vue'
 import eContextMenu, { type MenuOption } from '../ui/eContextMenu.vue'
 import Icons from '../ui/Icons.vue'
 import type { PluginRecord, PluginStatus } from '../../stores/plugins'
+import { useAppStore } from '../../stores/app'
 import { cdnUrl, type RegistryProject } from '../../utils/registry-api'
+import { overrideView, TONE_COLOR } from '../../utils/overrideState'
 import { useI18n } from '../../composables/useI18n'
 
 const { t } = useI18n()
+const appStore = useAppStore()
 
 const props = withDefaults(defineProps<{
   plugin: PluginRecord
@@ -59,6 +62,16 @@ const filename = computed(() =>
 )
 
 const statusLabel = computed(() => t(`components.plugin.status.${props.plugin.status}`))
+
+// Game changes: one short line under the status. The tooltip carries the full text.
+const override = computed(() => props.plugin.overrides ? overrideView(props.plugin.overrides, appStore.gameRunning) : null)
+const overrideLabel = computed(() => override.value ? t(`components.plugin.overrides.short.${override.value.kind}`) : '')
+const overrideTip = computed(() => {
+  const v = override.value
+  if (!v) return undefined
+  const text = t(`components.plugin.overrides.text.${v.kind}`, { preset: v.presetName })
+  return v.reason && (v.kind === 'failed' || v.kind === 'outdated') ? `${text} ${v.reason}` : text
+})
 </script>
 
 <template>
@@ -104,11 +117,19 @@ const statusLabel = computed(() => t(`components.plugin.status.${props.plugin.st
     </div>
 
     <div class="col-status">
+      <div class="status-row">
+        <span
+          class="indicator"
+          :style="{ background: indicatorColor, boxShadow: indicatorGlow }"
+        />
+        <span class="status-label">{{ statusLabel }}</span>
+      </div>
       <span
-        class="indicator"
-        :style="{ background: indicatorColor, boxShadow: indicatorGlow }"
-      />
-      <span class="status-label">{{ statusLabel }}</span>
+        v-if="override && override.kind !== 'unknown'"
+        v-tip="overrideTip"
+        class="override-line"
+        :style="{ color: override.tone === 'muted' ? undefined : TONE_COLOR[override.tone] }"
+      >{{ overrideLabel }}</span>
     </div>
 
     <div class="col-actions">
@@ -284,8 +305,28 @@ const statusLabel = computed(() => t(`components.plugin.status.${props.plugin.st
 
 .col-status {
   display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--space-0);
+  min-width: 0;
+}
+
+.status-row {
+  display: flex;
   align-items: center;
   gap: var(--space-1);
+}
+
+.override-line {
+  font-family: var(--font-microcopy);
+  font-size: var(--secondary-font-size-4);
+  font-weight: var(--font-weight-3);
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .indicator {

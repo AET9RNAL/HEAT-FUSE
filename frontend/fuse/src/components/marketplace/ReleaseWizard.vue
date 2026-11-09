@@ -42,7 +42,7 @@ const icon = ref<InspectedImage | null>(null)
 const listingValid = ref(false)
 const build = ref<BuildDraft>({
     pkg: null, file: null, channel: 'release', changelog: '',
-    gameVersions: registry.playerGameVersion ? [registry.playerGameVersion] : [], deps: [],
+    gameVersions: registry.playerGameVersion ? [registry.playerGameVersion] : [], pluginType: 'runtime', deps: [],
 })
 
 onMounted(async () => {
@@ -89,6 +89,7 @@ async function saveBuild(): Promise<boolean> {
     try {
         await creator.updateFile(fileId.value, {
             channel: build.value.channel, changelog: build.value.changelog, gameVersions: build.value.gameVersions,
+            pluginType: build.value.pluginType,
         })
         const saved = await creator.setDependencies(fileId.value, build.value.deps)
         build.value = { ...build.value, file: saved }
@@ -212,6 +213,7 @@ const canNext = computed(() => step.value === 'listing' ? listingValid.value : s
                         :preview-channel="build.channel"
                         :preview-game="build.gameVersions"
                         :preview-fuse="build.file?.min_fuse_version ?? null"
+                        :preview-type="build.pluginType"
                     />
                     <HudFrame class="wz-version" :head="BAND" :ticks="false">
                         <div class="mp-band">
@@ -230,6 +232,8 @@ const canNext = computed(() => step.value === 'listing' ? listingValid.value : s
                                 <span class="mp-mono wz-v">{{ build.gameVersions.join(', ') || '—' }}</span>
                                 <span class="mp-mono wz-v">{{ build.file?.min_fuse_version ? `≥ ${build.file.min_fuse_version}` : '—' }}</span>
                             </div>
+                            <span class="mp-label">{{ t('registry.build.pluginType') }}</span>
+                            <span class="mp-mono wz-v" :class="{ 'wz-v--warn': build.pluginType !== 'runtime' }">{{ t(`registry.pluginType.${build.pluginType}`) }}</span>
                             <span class="mp-label">{{ t('registry.build.requires') }}</span>
                             <span class="mp-mono wz-v">{{ build.deps.filter(d => d.relation === 'required').map(d => d.name).join(' · ') || '—' }}</span>
                         </div>
@@ -356,6 +360,10 @@ const canNext = computed(() => step.value === 'listing' ? listingValid.value : s
 .wz-v {
     font-size: var(--main-font-size-4);
     color: var(--text-main);
+}
+
+.wz-v--warn {
+    color: var(--warning-color);
 }
 
 .wz-checks-body {

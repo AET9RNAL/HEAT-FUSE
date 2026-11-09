@@ -3,7 +3,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useCreatorStore } from '../../stores/creator'
 import { useI18n } from '../../composables/useI18n'
 import { eventBus } from '../../events/eventBus'
-import { errorText } from '../../utils/registry-api'
+import { errorText, pluginTypeOf } from '../../utils/registry-api'
 import BuildForm, { type BuildDraft } from './BuildForm.vue'
 import eButton from '../inputs/eButton.vue'
 import Icons from '../ui/Icons.vue'
@@ -19,7 +19,7 @@ const saved = ref('')
 const saving = ref(false)
 
 function snapshot(d: BuildDraft) {
-    return JSON.stringify([d.channel, d.changelog, d.gameVersions, d.deps.map(x => [x.project_id, x.file_id, x.relation])])
+    return JSON.stringify([d.channel, d.changelog, d.gameVersions, d.pluginType, d.deps.map(x => [x.project_id, x.file_id, x.relation])])
 }
 
 onMounted(async () => {
@@ -27,6 +27,7 @@ onMounted(async () => {
     if (!f) return
     draft.value = {
         pkg: null, file: f, channel: f.channel, changelog: f.changelog, gameVersions: [...f.game_versions],
+        pluginType: f.plugin_type ?? pluginTypeOf(f.manifest),
         deps: (f.dependencies ?? []).map(d => ({
             project_id: d.project_id, file_id: d.file_id, relation: d.relation, name: d.name, slug: d.slug,
             plugin_id: d.plugin_id, icon_key: d.icon_key, file_version: d.file_version,
@@ -47,7 +48,10 @@ async function save() {
     if (!d?.file) return
     saving.value = true
     try {
-        await creator.updateFile(d.file.id, { channel: d.channel, changelog: d.changelog, gameVersions: d.gameVersions })
+        await creator.updateFile(d.file.id, {
+            channel: d.channel, changelog: d.changelog, gameVersions: d.gameVersions,
+            ...(d.pluginType !== d.file.plugin_type ? { pluginType: d.pluginType } : {}),
+        })
         await creator.setDependencies(d.file.id, d.deps)
         saved.value = snapshot(d)
         eventBus.emit('notification', { message: t('registry.version.saved'), type: 'success' })

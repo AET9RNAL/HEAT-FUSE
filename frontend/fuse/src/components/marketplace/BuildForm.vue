@@ -2,7 +2,10 @@
 import { ref, computed } from 'vue'
 import { useCreatorStore, type InspectedPackage, type DependencyDraft } from '../../stores/creator'
 import { useI18n } from '../../composables/useI18n'
-import { errorText, formatBytes, duplicateOf, CHANNELS, CHANNEL_COLORS, type Channel, type RegistryFile } from '../../utils/registry-api'
+import {
+    errorText, formatBytes, duplicateOf, pluginTypeOf, manifestGameVersions, CHANNELS, CHANNEL_COLORS, PLUGIN_TYPES,
+    type Channel, type PluginType, type RegistryFile,
+} from '../../utils/registry-api'
 import HudFrame from './HudFrame.vue'
 import GameVersionPicker from './GameVersionPicker.vue'
 import MarkdownField from './MarkdownField.vue'
@@ -18,6 +21,8 @@ export interface BuildDraft {
     channel: Channel
     changelog: string
     gameVersions: string[]
+    /** Prefilled from the manifest. The uploader can change it until the file goes to review. */
+    pluginType: PluginType
     deps: DependencyDraft[]
 }
 
@@ -69,6 +74,24 @@ const manifestReqText = computed(() => {
     if (d && typeof d === 'object' && !Array.isArray(d)) return Object.entries(d).map(([k, v]) => `${k} ${v}`).join(' · ')
     return manifestRequires.value.join(' · ')
 })
+// Game file changes carry the warning colour, the same as their mark on the card.
+const TYPE_COLORS: Record<PluginType, string> = {
+    runtime: 'var(--text-muted)',
+    override: 'var(--warning-color)',
+    hybrid: 'var(--warning-color)',
+}
+const manifestType = computed<PluginType | null>(() => manifest.value ? pluginTypeOf(manifest.value) : null)
+const manifestGames = computed(() => manifestGameVersions(manifest.value))
+const gamesFromManifest = computed(() =>
+    manifestGames.value.length > 0 && manifestGames.value.join() === [...props.modelValue.gameVersions].sort().join())
+const typeLocked = computed(() => {
+    const s = props.modelValue.file?.status
+    return !!s && s !== 'draft' && s !== 'rejected'
+})
+function pickType(p: PluginType) {
+    if (!typeLocked.value && props.modelValue.pluginType !== p) patch({ pluginType: p })
+}
+
 const fileName = computed(() => props.modelValue.file?.file_name ?? props.modelValue.pkg?.fileName ?? '')
 const size = computed(() => props.modelValue.file?.size_bytes ?? props.modelValue.pkg?.size ?? 0)
 const sha = computed(() => props.modelValue.file?.sha256 ?? props.modelValue.pkg?.sha256 ?? '')
@@ -84,15 +107,19 @@ async function choose(path: string | null) {
         if (pkg.problem) { problem.value = pkg.problem; phase.value = 'invalid'; patch({ pkg, file: null }); return }
         const old = props.modelValue.file
         if (old && (old.status === 'draft' || old.status === 'rejected')) await creator.deleteDraft('file', old.id).catch(() => {})
-        patch({ pkg, file: null })
+        const pluginType = pluginTypeOf(pkg.manifest)
+        // The manifest game versions replace the picks. Without them the picks stay.
+        const declared = manifestGameVersions(pkg.manifest)
+        const gameVersions = declared.length ? declared : props.modelValue.gameVersions
+        patch({ pkg, file: null, pluginType, gameVersions })
         phase.value = 'uploading'
         share.value = 0
         const fileId = await creator.uploadPackage(props.projectId, pkg, {
-            channel: props.modelValue.channel, changelog: props.modelValue.changelog, gameVersions: props.modelValue.gameVersions,
+            channel: props.modelValue.channel, changelog: props.modelValue.changelog, gameVersions, pluginType,
         }, s => { share.value = s })
         phase.value = 'checking'
         const file = await creator.waitForFile(fileId)
-        patch({ pkg, file })
+        patch({ pkg, file, pluginType, gameVersions })
         if (file?.state === 'ready') phase.value = 'verified'
         else { phase.value = 'invalid'; problem.value = file?.invalid_reason ?? 'processing_timeout' }
     } catch (err) {
@@ -101,7 +128,7 @@ async function choose(path: string | null) {
         if (dup && dup.project_id === props.projectId && dup.state === 'ready' && (dup.status === 'draft' || dup.status === 'rejected')) {
             const file = await creator.getFile(dup.file_id).catch(() => null)
             if (file) {
-                patch({ pkg, file })
+                patch({ pkg, file, pluginType: file.plugin_type ?? pluginTypeOf(file.manifest) })
                 phase.value = 'verified'
                 return
             }
@@ -170,10 +197,12 @@ const chipText = computed(() => ({
                                 <span class="mp-label">{{ t('registry.pluginId') }}</span>
                                 <span class="mp-label">{{ t('registry.col.version') }}</span>
                                 <span class="mp-label">{{ t('registry.col.fuse') }}</span>
+                                <span class="mp-label">{{ t('registry.col.game') }}</span>
                                 <span class="mp-label">{{ t('registry.build.requires') }}</span>
                                 <span class="mp-mono bf-v">{{ manifest.plugin_id }}</span>
                                 <span class="mp-mono bf-v">{{ manifest.version }}</span>
                                 <span class="mp-mono bf-v">{{ manifest.min_host_version ? `≥ ${manifest.min_host_version}` : '—' }}</span>
+                                <span class="mp-mono bf-v">{{ manifestGames.join(', ') || '—' }}</span>
                                 <span class="mp-mono bf-v">{{ manifestReqText || '—' }}</span>
                             </div>
                         </div>
@@ -184,6 +213,7 @@ const chipText = computed(() => ({
             <HudFrame :head="BAND" :ticks="false" :delay="0.06">
                 <div class="mp-band">
                     <span class="mp-band-title">{{ t('registry.build.gameVersions') }}<span class="req">*</span></span>
+                    <span v-if="gamesFromManifest" class="mp-label mp-label--accent">{{ t('registry.build.typeFromManifest') }}</span>
                     <span class="mp-band-code">{{ String(modelValue.gameVersions.length).padStart(2, '0') }}</span>
                 </div>
                 <div class="mp-frame-body">
@@ -202,6 +232,40 @@ const chipText = computed(() => ({
         </div>
 
         <div class="bf-side">
+            <HudFrame :head="BAND" :ticks="false" :delay="0.03">
+                <div class="mp-band">
+                    <span class="mp-band-title">{{ t('registry.build.pluginType') }}<span class="req">*</span></span>
+                    <span class="mp-band-code">TY-{{ modelValue.pluginType.toUpperCase() }}</span>
+                </div>
+                <div class="bf-channels">
+                    <div
+                        v-for="p in PLUGIN_TYPES"
+                        :key="p"
+                        class="bf-channel"
+                        :class="{ on: modelValue.pluginType === p, fixed: typeLocked }"
+                        :style="{ '--ch': TYPE_COLORS[p] }"
+                        @click="pickType(p)"
+                    >
+                        <div class="bf-check" :class="{ picked: modelValue.pluginType === p }">
+                            <eCheckbox
+                                :model-value="modelValue.pluginType === p"
+                                :width="24"
+                                :height="24"
+                                :is-disabled="typeLocked"
+                                @update:model-value="$event && pickType(p)"
+                            />
+                        </div>
+                        <span class="bf-ch-text">
+                            <span class="bf-ch-name">{{ t(`registry.pluginType.${p}`) }}</span>
+                            <span class="mp-text">{{ t(`registry.pluginTypeHint.${p}`) }}</span>
+                        </span>
+                        <span v-if="manifestType === p" class="mp-label mp-label--accent">{{ t('registry.build.typeFromManifest') }}</span>
+                    </div>
+                </div>
+                <p v-if="manifestType && modelValue.pluginType !== manifestType" class="bf-type-note">{{ t('registry.build.typeDiffers') }}</p>
+                <p v-else-if="typeLocked" class="bf-type-note muted">{{ t('registry.build.typeLocked') }}</p>
+            </HudFrame>
+
             <!-- One row per channel. The picked row carries a bar in its channel colour. -->
             <HudFrame :head="BAND" :ticks="false" :delay="0.06">
                 <div class="mp-band">
@@ -350,7 +414,7 @@ const chipText = computed(() => ({
 
 .bf-grid {
     display: grid;
-    grid-template-columns: auto auto auto 1fr;
+    grid-template-columns: auto auto auto auto 1fr;
     gap: 2px var(--space-5);
 }
 
@@ -394,6 +458,31 @@ const chipText = computed(() => ({
     left: 0;
     width: 2px;
     background: var(--ch);
+}
+
+.bf-channel.fixed {
+    cursor: default;
+}
+
+.bf-channel.fixed:hover {
+    background: none;
+}
+
+.bf-channel.fixed.on {
+    background: color-mix(in srgb, var(--ch) 7%, transparent);
+}
+
+.bf-type-note {
+    margin: 0;
+    padding: 0 var(--space-4) var(--space-2);
+    font-family: var(--font-microcopy);
+    font-size: 11px;
+    text-transform: uppercase;
+    color: var(--warning-color);
+}
+
+.bf-type-note.muted {
+    color: var(--text-muted);
 }
 
 .bf-check {

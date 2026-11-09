@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import eLaunchPanel from '../home/eLaunchPanel.vue'
 import eSwitch from '../inputs/eSwitch.vue'
 import type { eSwitchOption } from '../inputs/eSwitch.vue'
 import ePluginList from '../plugins/ePluginList.vue'
 import eFiles from '../home/eFiles.vue'
 import eConsole from '../home/eConsole.vue'
+import eGameChanges from '../home/eGameChanges.vue'
+import { useGameChanges } from '../../composables/useGameChanges'
 import eMaterialButton from '../inputs/eMaterialButton.vue'
 import eListSelector from '../inputs/eListSelector.vue'
 import Icons from '../ui/Icons.vue'
@@ -33,11 +35,17 @@ const appStore = useAppStore()
 const navStore = useNavigationStore()
 
 const activeTab = ref<string>('content')
-const tabOptions: eSwitchOption[] = [
+const { relevant: gameChangesRelevant } = useGameChanges()
+// Game Changes shows only when a plugin has presets or FUSE still holds changes.
+const tabOptions = computed<eSwitchOption[]>(() => [
   { icon: 'content',  value: 'content' },
+  ...(gameChangesRelevant.value ? [{ icon: 'file' as const, value: 'gameChanges' }] : []),
   { icon: 'folder',   value: 'files' },
   { icon: 'console',  value: 'console' },
-]
+])
+watch(gameChangesRelevant, (shown) => {
+  if (!shown && activeTab.value === 'gameChanges') activeTab.value = 'content'
+})
 
 const searchQuery = ref('')
 const filterMode = ref('all')
@@ -185,6 +193,7 @@ onUnmounted(() => {
         :search="searchQuery"
         :filter-mode="filterMode"
       />
+      <eGameChanges v-else-if="activeTab === 'gameChanges'" />
       <eFiles v-else-if="activeTab === 'files'" />
       <eConsole v-else-if="activeTab === 'console'" />
     <!-- </Compositor> -->

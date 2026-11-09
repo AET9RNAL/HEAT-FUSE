@@ -35,6 +35,10 @@ export interface RuntimeBridge {
   /** Master volume and the sounds to warm, for a newly-connected stage. */
   audioHydration(): { master: { volume: number; muted: boolean }; preload: string[] };
   rpcSetEnabled(params: Record<string, unknown>): Promise<Record<string, unknown>>;
+  /** A preset of a plugin's override part, picked in the App. */
+  rpcOverrideSelect(params: Record<string, unknown>): Promise<Record<string, unknown>>;
+  /** Remove every FUSE change from the game files. */
+  rpcOverridesRemoveAll(): Promise<Record<string, unknown>>;
   rpcHotkeyRebind(params: Record<string, unknown>): Record<string, unknown>;
   rpcOverlaySetVisible(params: Record<string, unknown>): Promise<Record<string, unknown>>;
   /** The App's setting for the stage's performance widget. */
@@ -365,6 +369,12 @@ export class WsServer {
           break;
         case "plugin.setEnabled":
           result = await this.bridge.rpcSetEnabled(params);
+          break;
+        case "override.select":
+          result = await this.bridge.rpcOverrideSelect(params);
+          break;
+        case "override.removeAll":
+          result = await this.bridge.rpcOverridesRemoveAll();
           break;
         case "hotkey.rebind":
           result = this.bridge.rpcHotkeyRebind(params);

@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import { motion } from 'motion-v'
 import { useRegistryStore } from '../../stores/registry'
 import { useI18n } from '../../composables/useI18n'
-import { CHANNEL_COLORS, type RegistryProject, type RegistryTag, type Channel } from '../../utils/registry-api'
+import { CHANNEL_COLORS, fileType, type RegistryProject, type RegistryTag, type Channel, type PluginType } from '../../utils/registry-api'
 import ProjectIcon from './ProjectIcon.vue'
 import CompatTag from './CompatTag.vue'
 import eButton from '../inputs/eButton.vue'
@@ -23,7 +23,11 @@ const props = withDefaults(defineProps<{
     previewChannel?: Channel | null
     previewGame?: string[]
     previewFuse?: string | null
-}>(), { preview: false, previewIcon: null, previewVersion: null, previewChannel: null, previewGame: () => [], previewFuse: null })
+    previewType?: PluginType | null
+}>(), {
+    preview: false, previewIcon: null, previewVersion: null, previewChannel: null, previewGame: () => [], previewFuse: null,
+    previewType: null,
+})
 
 const emit = defineEmits<{ select: []; creator: [username: string] }>()
 
@@ -37,7 +41,8 @@ const busy = computed(() => registry.planning === props.project.latest_file?.id 
 
 const compatGame = computed(() => props.preview ? props.previewGame : props.project.latest_file?.game_versions ?? [])
 const compatFuse = computed(() => props.preview ? props.previewFuse : props.project.latest_file?.min_fuse_version ?? null)
-const hasCompat = computed(() => compatGame.value.length > 0 || !!compatFuse.value)
+const compatType = computed(() => props.preview ? props.previewType : fileType(props.project.latest_file))
+const hasCompat = computed(() => compatGame.value.length > 0 || !!compatFuse.value || !!compatType.value)
 
 const label = computed(() => ({
     downloading: t('registry.install.downloading'),
@@ -106,7 +111,7 @@ function onCreator(e: MouseEvent) {
                 <span class="stat-sep">·</span>
                 <Icons kind="download" class="stat-icon" />
                 <span class="stat">{{ preview ? '—' : project.downloads.toLocaleString() }}</span>
-                <CompatTag v-if="hasCompat" class="card-compat" :game="compatGame" :fuse="compatFuse" />
+                <CompatTag v-if="hasCompat" class="card-compat" :game="compatGame" :fuse="compatFuse" :plugin-type="compatType" />
             </div>
         </div>
     </motion.div>

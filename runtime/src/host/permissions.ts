@@ -52,6 +52,14 @@ export const SCOPES: Record<string, ScopeDef> = {
     kind: "process",
     icon: "file",
   },
+  game_overrides: {
+    label: "Game file changes",
+    description:
+      "Change the game files on this PC. FUSE writes the changes when the game is closed. It takes them back when you turn the plugin off.",
+    level: "dangerous",
+    kind: "brokered",
+    icon: "file",
+  },
   processes: {
     label: "Start programs",
     description: "Start programs and background threads on this PC. A program or thread it starts can run outside FUSE's limits.",
@@ -128,6 +136,8 @@ export class PermissionManager {
   private serviceOwners = new Map<string, string>();
   private decisions = new Map<string, Record<string, boolean>>();
   private waiting = new Map<string, () => void>();
+  /** Plugin -> its open consent request. */
+  private consenting = new Map<string, Promise<void>>();
   private reported = new Set<string>();
   private reasked = new Set<string>();
   private reviewing = new Set<string>();
@@ -261,12 +271,20 @@ export class PermissionManager {
     return state === "granted";
   }
 
-  /** Ask about every declared scope still unanswered; resolves once the user has answered. */
-  async ensureConsent(pluginId: string): Promise<void> {
+  /**
+   * Ask about every declared scope still unanswered; resolves once the user has answered. Two callers at the
+   * same time (the load queue and a pick in the App) share one consent card.
+   */
+  ensureConsent(pluginId: string): Promise<void> {
+    const running = this.consenting.get(pluginId);
+    if (running) return running;
     const meta = this.plugins.get(pluginId);
-    if (!meta) return;
+    if (!meta) return Promise.resolve();
     const open = [...meta.reasons.keys()].filter((scope) => this.state(pluginId, scope) === "prompt");
-    if (open.length) await this.ask(pluginId, open);
+    if (!open.length) return Promise.resolve();
+    const asked = this.ask(pluginId, open).finally(() => this.consenting.delete(pluginId));
+    this.consenting.set(pluginId, asked);
+    return asked;
   }
 
   noteUserAction(pluginId: string): void {

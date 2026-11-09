@@ -18,6 +18,7 @@ import type { OverlayDeclaration, OverlayHandle, OverlayManager, Rect, Size } fr
 import type { StageNotificationInit, StageNotifier } from "../sdk/notifications.js";
 import type { PlayOptions } from "../sdk/audio.js";
 import type { PermissionState } from "../sdk/permissions.js";
+import type { OverridesSnapshot } from "../sdk/overrides.js";
 import type { HostState, TeardownReason } from "../sdk/plugin.js";
 import type { PluginConfig } from "./config.js";
 import type { EventBus, EventHandler } from "./EventBus.js";
@@ -108,6 +109,9 @@ export interface PluginProcessDeps {
   /** Brokered services, already bound to this plugin and checked against its permissions. */
   storage(op: string, collection: string, args: unknown[]): Promise<unknown>;
   secrets(op: string, key: unknown, value: unknown): Promise<unknown>;
+  overrides(op: string, args: unknown[]): Promise<unknown>;
+  /** The override part's presets and status, for the init message. */
+  overridesSnapshot(): OverridesSnapshot;
   openLink(url: string): Promise<boolean>;
   broadcast(message: Record<string, unknown>): void;
   onUnexpectedExit(proc: PluginProcess, detail: string): void;
@@ -240,6 +244,7 @@ export class PluginProcess implements ServiceConsumer {
       filesDir: permissions.has(this.pluginId, "files") ? this.deps.filesDir : null,
       permissions: this.permissionStates(),
       services: this.deps.services.snapshotsFor(this.pluginId),
+      overrides: this.deps.overridesSnapshot(),
       logLevel: process.env.FUSE_LOG_LEVEL ?? "info",
     };
     channel.send(init as unknown as WireMessage);
@@ -292,6 +297,11 @@ export class PluginProcess implements ServiceConsumer {
   /** A `fuse://plugin/<id>/...` link, routed here by Electron main. */
   linkCallback(url: string): void {
     this.send({ t: "links.callback", url });
+  }
+
+  /** The override part changed: presets or status. */
+  pushOverrides(snapshot: OverridesSnapshot): void {
+    this.send({ t: "overrides.state", snapshot });
   }
 
   async teardown(reason: TeardownReason): Promise<void> {
@@ -617,6 +627,9 @@ export class PluginProcess implements ServiceConsumer {
         return;
       case "secrets":
         this.answer(msg.rid, d.secrets(String(msg.op ?? ""), msg.key, msg.value));
+        return;
+      case "overrides":
+        this.answer(msg.rid, d.overrides(String(msg.op ?? ""), Array.isArray(msg.args) ? msg.args : []));
         return;
       case "links.open":
         this.answer(msg.rid, d.openLink(String(msg.url ?? "")));

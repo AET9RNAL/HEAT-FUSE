@@ -23,6 +23,22 @@
     "about": "О программе"
   },
   "apphome": {
+    "gameChanges": {
+      "title": "Изменения игры",
+      "desc": "Некоторые плагины помещают пресеты в файлы игры. FUSE записывает каждое изменение и может вернуть исходные файлы.",
+      "change": "Изменить",
+      "pack": "Пакет FUSE в папке игры: {presets}",
+      "edits": "Изменения в {file}: {count}",
+      "waiting": "Изменения ждут закрытия игры.",
+      "nothingHeld": "FUSE не держит изменений в файлах игры.",
+      "removeAll": "Убрать все изменения игры",
+      "removeAllDesc": "Вернуть исходные файлы игры. Если игра запущена, FUSE ждёт её закрытия.",
+      "remove": "Убрать",
+      "removedTitle": "Изменения игры убраны",
+      "removedMessage": "FUSE возвращает исходные файлы игры.",
+      "removedWaitMessage": "FUSE вернёт исходные файлы игры, когда игра закроется.",
+      "removeFailedTitle": "Не удалось убрать"
+    },
     "searchPlaceholder": "Поиск плагинов...",
     "discover": "Обзор",
     "filtering": "Фильтр",
@@ -349,6 +365,16 @@
       "beta": "Все функции готовы. Возможны ошибки.",
       "alpha": "Ранняя сборка для тестеров. Возможны несовместимые изменения."
     },
+    "pluginType": {
+      "runtime": "Runtime",
+      "override": "Override",
+      "hybrid": "Гибрид (функции Runtime и Override)"
+    },
+    "pluginTypeHint": {
+      "runtime": "Runtime-плагин FUSE",
+      "override": "Override-плагин FUSE",
+      "hybrid": "Гибридный плагин FUSE"
+    },
     "relation": {
       "required": "Обязательно",
       "optional": "Необязательно",
@@ -368,7 +394,17 @@
       "gameTip": "Отмечен для версий игры: {list}",
       "gameNone": "Не отмечен для версии игры",
       "fuseTip": "Нужен FUSE {version} или новее",
-      "fuseNone": "Нет минимальной версии FUSE"
+      "fuseNone": "Нет минимальной версии FUSE",
+      "type": {
+        "runtime": "Runtime",
+        "override": "Override",
+        "hybrid": "Гибрид"
+      },
+      "typeTip": {
+        "runtime": "Работает в FUSE",
+        "override": "Заменяет файлы игры",
+        "hybrid": "Работает в FUSE и заменяет файлы игры"
+      }
     },
     "creator": {
       "kicker": "Автор",
@@ -436,7 +472,11 @@
       "requires": "Требует",
       "gameVersions": "Версии игры",
       "changelog": "Список изменений",
-      "channel": "Канал"
+      "channel": "Канал",
+      "pluginType": "Тип плагина",
+      "typeFromManifest": "Манифест",
+      "typeDiffers": "В манифесте указан другой тип. Проверьте выбор.",
+      "typeLocked": "Тип нельзя изменить после отправки файла на проверку."
     },
     "dep": {
       "title": "Зависимости",
@@ -669,8 +709,15 @@
       "manifest_ambiguous": "В пакете больше одного manifest.json.",
       "manifest_too_large": "manifest.json слишком большой.",
       "manifest_invalid": "manifest.json — некорректный JSON.",
-      "entry_missing": "В манифесте нет entry.",
+      "entry_missing": "В манифесте нет ни entry, ни части override.",
+      "plugin_type_invalid": "Недопустимый тип плагина.",
+      "plugin_type_locked": "Тип плагина нельзя изменить после отправки файла на проверку.",
+      "plugin_type_mismatch": "Пакет меняет файлы игры. Выберите тип «Override» или «Гибрид».",
+      "game_versions_required": "Плагину, который меняет файлы игры, нужна хотя бы одна версия игры.",
       "min_host_version_invalid": "min_host_version в манифесте неверен.",
+      "min_host_version_missing": "В манифесте override или гибридного плагина нужен min_host_version.",
+      "game_versions_missing": "В манифесте override или гибридного плагина нужен game_versions.",
+      "game_versions_invalid": "game_versions в манифесте должен быть списком версий X.Y.Z.",
       "compression_unsupported": "Пакет использует неподдерживаемое сжатие.",
       "processing_timeout": "Проверка идёт слишком долго. Откройте версию позже, чтобы увидеть результат.",
       "image_type": "Используйте PNG, JPG, GIF или WebP.",
@@ -856,11 +903,64 @@
       },
       "menu": {
         "settings": "Настройки",
+        "gameChanges": "Изменения игры",
         "showInExplorer": "Показать в проводнике",
         "delete": "Удалить"
       },
       "reloadWarningTitle": "Нужна перезагрузка",
-      "reloadWarningMessage": "Изменения плагина могут не примениться, пока вы не перезагрузите плагины через Ctrl+R или не перезапустите FUSE."
+      "reloadWarningMessage": "Изменения плагина могут не примениться, пока вы не перезагрузите плагины через Ctrl+R или не перезапустите FUSE.",
+      "overrides": {
+        "tab": "Изменения игры",
+        "intro": "FUSE помещает выбранный пресет в файлы игры. Пока игра запущена, она блокирует свои файлы, поэтому FUSE записывает изменение, когда игра закрыта.",
+        "presets": "Пресеты",
+        "none": "Нет",
+        "noneDesc": "Игра использует свои файлы",
+        "startFuse": "Включите FUSE, чтобы выбрать пресет.",
+        "waitingConsent": "Ответьте на карточку разрешения на сцене, чтобы продолжить.",
+        "pickFailed": "FUSE не выбрал пресет: {reason}",
+        "notifyApplyTitle": "Перезапустите игру, чтобы применить",
+        "notifyRemoveTitle": "Перезапустите игру, чтобы убрать",
+        "notifyMessage": "FUSE изменит файлы игры для {plugins}, когда игра закроется. Вы увидите изменение при следующем запуске.",
+        "short": {
+          "unknown": "FUSE выключен",
+          "none": "Без пресета",
+          "pluginOff": "Плагин выключен",
+          "waitGame": "Перезапустите игру",
+          "applying": "Применение",
+          "applied": "Применено",
+          "inGame": "В игре",
+          "removeWait": "Перезапустите игру",
+          "removing": "Удаление",
+          "outdated": "Нужно обновление",
+          "failed": "Не применено"
+        },
+        "title": {
+          "unknown": "FUSE выключен",
+          "none": "Изменений игры нет",
+          "pluginOff": "Плагин выключен",
+          "waitGame": "Перезапустите игру, чтобы применить",
+          "applying": "Применение",
+          "applied": "Применено",
+          "inGame": "В игре",
+          "removeWait": "Перезапустите игру, чтобы убрать",
+          "removing": "Удаление",
+          "outdated": "Нужно обновление",
+          "failed": "Не применено"
+        },
+        "text": {
+          "unknown": "Включите FUSE, чтобы видеть и менять состояние файлов игры.",
+          "none": "Игра использует свои файлы.",
+          "pluginOff": "Включите плагин, чтобы поместить {preset} в игру.",
+          "waitGame": "FUSE запишет {preset} в файлы игры, когда игра закроется. Вы увидите его при следующем запуске.",
+          "applying": "FUSE записывает {preset} в файлы игры.",
+          "applied": "{preset} в файлах игры. Вы увидите его при запуске игры.",
+          "inGame": "{preset} в игре.",
+          "removeWait": "FUSE уберёт свои изменения из файлов игры, когда игра закроется. Вы увидите исходные файлы при следующем запуске.",
+          "removing": "FUSE убирает свои изменения из файлов игры.",
+          "outdated": "Файлы игры изменились, поэтому {preset} нужно обновление от автора.",
+          "failed": "FUSE не может поместить {preset} в игру."
+        }
+      }
     },
     "updateProgress": {
       "updating": "Обновление",

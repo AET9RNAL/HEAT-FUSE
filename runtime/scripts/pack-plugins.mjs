@@ -18,45 +18,49 @@ async function packOne(id) {
   const srcDir = path.join(SRC_ROOT, id);
   const manifest = JSON.parse(fs.readFileSync(path.join(srcDir, "manifest.json"), "utf-8"));
   const pluginId = manifest.plugin_id ?? id;
-  const [moduleName] = String(manifest.entry).split(":");
-  if (!moduleName) throw new Error(`${id}: manifest 'entry' must be 'module:Class'`);
+  // A plugin with only an override part has no code to bundle.
+  const overrideOnly = !manifest.entry && !!manifest.override;
+  const files = {};
+  if (!overrideOnly) {
+    const [moduleName] = String(manifest.entry).split(":");
+    if (!moduleName) throw new Error(`${id}: manifest 'entry' must be 'module:Class'`);
 
-  // Resolve the entry source file.
-  let entrySrc = "";
-  for (const ext of [".ts", ".tsx", ".js", ".mjs"]) {
-    const c = path.join(srcDir, moduleName + ext);
-    if (fs.existsSync(c)) {
-      entrySrc = c;
-      break;
+    // Resolve the entry source file.
+    let entrySrc = "";
+    for (const ext of [".ts", ".tsx", ".js", ".mjs"]) {
+      const c = path.join(srcDir, moduleName + ext);
+      if (fs.existsSync(c)) {
+        entrySrc = c;
+        break;
+      }
     }
-  }
-  if (!entrySrc) throw new Error(`${id}: entry module '${moduleName}' not found in ${srcDir}`);
+    if (!entrySrc) throw new Error(`${id}: entry module '${moduleName}' not found in ${srcDir}`);
 
-  // Bundle to an in-memory string.
-  const result = await build({
-    entryPoints: [entrySrc],
-    bundle: true,
-    format: "esm",
-    platform: "node",
-    target: "node20",
-    write: false,
-    // Plugins run from an extracted cache dir, so an external .map never resolves;
-    // inline is the only form a debugger can follow back to plugins-src.
-    sourcemap: process.env.RELEASE === "true" ? false : "inline",
-    sourcesContent: true,
-    alias: { "@fuse/plugin-sdk": SDK_ENTRY },
-    // Native/optional deps a plugin might use stay external (resolved at runtime).
-    external: ["uiohook-napi", "chrome-remote-interface"],
-    logLevel: "warning",
-  });
-  const bundled = result.outputFiles[0].text;
+    // Bundle to an in-memory string.
+    const result = await build({
+      entryPoints: [entrySrc],
+      bundle: true,
+      format: "esm",
+      platform: "node",
+      target: "node20",
+      write: false,
+      // Plugins run from an extracted cache dir, so an external .map never resolves;
+      // inline is the only form a debugger can follow back to plugins-src.
+      sourcemap: process.env.RELEASE === "true" ? false : "inline",
+      sourcesContent: true,
+      alias: { "@fuse/plugin-sdk": SDK_ENTRY },
+      // Native/optional deps a plugin might use stay external (resolved at runtime).
+      external: ["uiohook-napi", "chrome-remote-interface"],
+      logLevel: "warning",
+    });
+    files[`${pluginId}/${moduleName}.js`] = new TextEncoder().encode(result.outputFiles[0].text);
+  }
 
   // Stage the archive contents under `<pluginId>/`.
-  const files = {};
-  files[`${pluginId}/${moduleName}.js`] = new TextEncoder().encode(bundled);
   files[`${pluginId}/manifest.json`] = new TextEncoder().encode(JSON.stringify(manifest, null, 2));
   // `ui` carries raw UI-library sources (.vue/.js/.css/.riv) served to overlays; `components` holds an overlay's own child components.
-  const PACKED = ["js", "assets", "ui", "components"];
+  // `overrides` holds the preset folders of an override part: packs, apply.json, previews.
+  const PACKED = ["js", "assets", "ui", "components", "overrides"];
   for (const sub of PACKED) {
     const dir = path.join(srcDir, sub);
     if (fs.existsSync(dir)) addDir(dir, `${pluginId}/${sub}`, files);
