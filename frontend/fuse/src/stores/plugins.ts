@@ -5,7 +5,8 @@ import { normalizeConfigSchema, type ConfigSection } from '../utils/configSchema
 
 export type { ConfigSection, ConfigControl } from '../utils/configSchema'
 
-export type PluginStatus = 'active' | 'disabled' | 'error' | 'skipped' | 'pending' | 'loading'
+/** idle: an app-only plugin with no window open, so no process. It starts with its app. */
+export type PluginStatus = 'active' | 'disabled' | 'error' | 'skipped' | 'pending' | 'loading' | 'idle'
 
 export interface PluginHotkey {
     action: string
@@ -144,7 +145,7 @@ export const usePluginsStore = defineStore('plugins', () => {
 
     function resetRuntimeStatuses() {
         for (const p of plugins.value) {
-            if (p.status === 'active' || p.status === 'loading') {
+            if (p.status === 'active' || p.status === 'loading' || p.status === 'idle') {
                 p.status = 'pending'
             }
             if (p.overrides) p.overrides = { ...p.overrides, active: null }

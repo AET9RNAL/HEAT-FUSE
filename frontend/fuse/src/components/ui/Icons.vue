@@ -104,6 +104,10 @@ export type IconKind =
   | 'pluginRuntime'
   | 'pluginOverride'
   | 'pluginHybrid'
+  | 'restore'
+  | 'pin'
+  | 'favorite'
+  | 'search'
 </script>
 
 <script setup lang="ts">

@@ -5,6 +5,9 @@ import eKeybind from '../inputs/eKeybind.vue'
 import eNumberField from '../inputs/eNumberField.vue'
 import eSelect, { type SelectOption } from '../inputs/eSelect.vue'
 import StageSlider from '../../overlay/inspector/controls/StageSlider.vue'
+import { useAppsStore, type TaskbarEdge } from '../../stores/apps'
+import { useFuseControl } from '../../composables/useFuseControl'
+import { useFuseConnection } from '../../composables/useFuseConnection'
 import type { SystemState } from '../inputs/eButton.vue'
 import type { eSwitchOption } from '../inputs/eSwitch.vue'
 import { useAppStore, type AppLanguage } from '../../stores/app'
@@ -49,6 +52,28 @@ onMounted(async () => {
         if (overrides) hotkeyOverrides.value = { ...overrides }
     } catch { /* no host config yet */ }
 })
+
+// Apps: the runtime holds the taskbar settings, so they change only while FUSE runs.
+// The console sets each app's alias, hotkey, favorite and pin.
+const appsStore = useAppsStore()
+const { fuseState } = useFuseControl()
+const fuseRunning = computed(() => fuseState.value === 'running')
+
+const CONSOLE_ACTION = 'Open Console'
+const consoleCombo = computed(() => hotkeyOverrides.value[CONSOLE_ACTION] ?? 'ctrl+space')
+
+/** Saved for the next start, and applied now when FUSE runs. */
+function setConsoleCombo(combo: string): void {
+    setCombo(CONSOLE_ACTION, combo)
+    if (fuseRunning.value) void useFuseConnection().rebindHotkey('host', CONSOLE_ACTION, combo).catch(() => {})
+}
+
+const edgeOptions = computed<SelectOption[]>(() => [
+    { label: t('appsettings.apps.edgeBottom'), value: 'bottom' },
+    { label: t('appsettings.apps.edgeTop'), value: 'top' },
+    { label: t('appsettings.apps.edgeLeft'), value: 'left' },
+    { label: t('appsettings.apps.edgeRight'), value: 'right' },
+])
 
 // Toggles Chrome DevTools on the FUSE stage and runtime sidecar's Node inspector
 const overlayDevtoolsOpen = ref(false)
@@ -356,6 +381,45 @@ const portDescription = computed(() =>
                 </div>
             </section>
 
+            <!-- Apps -->
+            <section class="panel">
+                <h2 class="panel-title">{{ t('appsettings.sections.apps') }}</h2>
+                <div class="options">
+                    <eSetting
+                        icon="monitor"
+                        :label="t('appsettings.apps.edge')"
+                        :description="t('appsettings.apps.edgeDesc')"
+                        :disabled="!fuseRunning"
+                    >
+                        <template #control>
+                            <eSelect
+                                class="edge-select"
+                                :model-value="appsStore.launcher.edge"
+                                :options="edgeOptions"
+                                @update:model-value="appsStore.saveLauncher({ edge: $event as TaskbarEdge })"
+                            />
+                        </template>
+                    </eSetting>
+                    <eSetting
+                        icon="hide"
+                        modelValue="secondary"
+                        :label="t('appsettings.apps.autoHide')"
+                        :description="t('appsettings.apps.autoHideDesc')"
+                        :value="appsStore.launcher.autoHide"
+                        :disabled="!fuseRunning"
+                        @update:value="appsStore.saveLauncher({ autoHide: $event as boolean })"
+                    />
+                    <eKeybind
+                        :label="CONSOLE_ACTION"
+                        :description="t('appsettings.hotkeys.consoleDesc')"
+                        :model-value="consoleCombo"
+                        reset-value="ctrl+space"
+                        @update:model-value="setConsoleCombo"
+                    />
+                    <p v-if="!fuseRunning" class="apps-note">{{ t('appsettings.apps.offline') }}</p>
+                </div>
+            </section>
+
             <!-- Audio: master level for plugin sounds on the stage window; plugins set their own under it -->
             <section class="panel">
                 <h2 class="panel-title">{{ t('appsettings.sections.audio') }}</h2>
@@ -444,6 +508,17 @@ const portDescription = computed(() =>
 
 .language-select {
     width: 160px;
+}
+
+.edge-select {
+    width: 160px;
+}
+
+.apps-note {
+    margin: 0;
+    font-family: var(--font-microcopy);
+    font-size: var(--secondary-font-size-4);
+    color: var(--text-muted);
 }
 
 .cdp-port {

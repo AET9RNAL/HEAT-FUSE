@@ -2,6 +2,7 @@
  * Shared runtime types. `Manifest` mirrors the `manifest.json` schema;
  */
 import type { FusePlugin } from "../sdk/plugin.js";
+import type { AppLifecycle, AppSpec } from "./appManifest.js";
 
 /** Dependencies: legacy list (any version) or dict of name => version spec. */
 export type DependencySpec = string[] | Record<string, string>;
@@ -39,6 +40,10 @@ export interface Manifest {
   permissions?: Record<string, { reason?: string }>;
   /** https sites its overlays may show in an iframe: `https://site.net` or `https://*.site.net`. */
   frames?: string[];
+  /** "app": the process runs only while one of its app windows is open. Needs `apps`. */
+  lifecycle?: AppLifecycle;
+  /** Windowed apps on the stage. See `host/appManifest.ts` for the fields. */
+  apps?: Array<Record<string, unknown>>;
   /** Services this plugin provides, and the scopes consumers need for them (`<service>.<scope>`). */
   provides?: Record<
     string,
@@ -68,6 +73,9 @@ export interface DiscoveredPlugin {
   /** Reported by the plugin process once its class is loaded. */
   requiresCalibration: boolean;
   calibrationStages: number;
+  lifecycle: AppLifecycle;
+  /** The manifest `apps`, checked and with defaults. */
+  apps: AppSpec[];
   manifest: Manifest;
 }
 
@@ -75,6 +83,8 @@ export enum PluginState {
   PENDING = "pending",
   LOADING = "loading",
   ACTIVE = "active",
+  /** An app-only plugin with no window open: no process. */
+  IDLE = "idle",
   DISABLED = "disabled",
   SKIPPED = "skipped",
   ERROR = "error",

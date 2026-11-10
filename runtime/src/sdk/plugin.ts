@@ -19,11 +19,12 @@ import type { PluginStorage } from "./storage.js";
 import type { PluginSecrets } from "./secrets.js";
 import type { PluginLinks } from "./links.js";
 import type { PluginOverrides } from "./overrides.js";
+import type { AppManager } from "./apps.js";
 
 export type HostState = "calibrate" | "locked" | "interactive";
 
-/** Why a plugin is being torn down. A crash gets no teardown. */
-export type TeardownReason = "disable" | "restart" | "shutdown";
+/** Why a plugin is being torn down. A crash gets no teardown. `app_closed`: the last window of an app-only plugin closed. */
+export type TeardownReason = "disable" | "restart" | "shutdown" | "app_closed";
 
 /** Minimal host surface exposed to plugins. */
 export interface HostView {
@@ -40,6 +41,8 @@ export interface FuseContext {
   services: PluginServices;
   events: PluginEvents;
   overlays: OverlayManager;
+  /** Windows of the apps in the manifest `apps` list. */
+  apps: AppManager;
   /** Toasts on the overlay stage, attributed to this plugin. */
   notifications: StageNotifier;
   /** Sounds from this plugin's assets, played on the stage window. */

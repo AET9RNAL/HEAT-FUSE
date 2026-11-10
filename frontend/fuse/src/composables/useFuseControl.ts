@@ -1,6 +1,7 @@
 import { ref, readonly, watch } from 'vue'
 import { useAppStore } from '../stores/app'
 import { usePluginsStore } from '../stores/plugins'
+import { useAppsStore } from '../stores/apps'
 import { useFuseConnection } from './useFuseConnection'
 import { eventBus } from '../events/eventBus'
 import { logger } from '../utils/logger'
@@ -17,7 +18,7 @@ const fuseError = ref<string | null>(null)
 const fusePid = ref<number | null>(null)
 const runtimeState = ref<FuseRuntimeState>(null)
 // Host shortcuts as the runtime has them bound, overrides included.
-const hostHotkeys = ref({ lock: 'ctrl+l', interactive: 'ctrl+i' })
+const hostHotkeys = ref({ lock: 'ctrl+l', interactive: 'ctrl+i', console: 'ctrl+space' })
 // OBS Browser Source URL for the overlay bundle, set once the runtime is up.
 const obsUrl = ref<string | null>(null)
 
@@ -157,7 +158,17 @@ async function startFuse(): Promise<boolean> {
                 hostHotkeys.value = {
                     lock: typeof msg['lock'] === 'string' ? msg['lock'] : hostHotkeys.value.lock,
                     interactive: typeof msg['interactive'] === 'string' ? msg['interactive'] : hostHotkeys.value.interactive,
+                    console: typeof msg['console'] === 'string' ? msg['console'] : hostHotkeys.value.console,
                 }
+            } else if (type === 'app:list') {
+                useAppsStore().setList(msg['apps'])
+            } else if (type === 'launcher:settings') {
+                useAppsStore().setLauncher(msg)
+            } else if (type === 'app:open_settings') {
+                // "Open Command Settings" in the stage console: the config window of the app's plugin.
+                const pluginId = typeof msg['pluginId'] === 'string' ? msg['pluginId'] : String(msg['appKey'] ?? '').split(':')[0]
+                if (pluginId) eventBus.emit('plugin-config:open', { plugin_id: pluginId })
+                void window.appAPI?.showWindow?.()
             }
         })
 
@@ -175,6 +186,8 @@ async function startFuse(): Promise<boolean> {
         if (connectResult.version) useAppStore().backendVersion = connectResult.version
 
         _setState('running')
+        // The App connects after the runtime hydrated its plugins, so it asks for the apps once.
+        void useAppsStore().refresh().catch(() => {})
         _sendAudioMaster()
         _sendStageSettings()
         _sendStageTour()
@@ -192,6 +205,7 @@ async function startFuse(): Promise<boolean> {
                 obsUrl.value = null
 
                 usePluginsStore().resetRuntimeStatuses()
+                useAppsStore().reset()
                 runtimeState.value = null
                 if (fuseState.value === 'running') {
                     _setState('idle')
@@ -224,6 +238,7 @@ async function stopFuse(): Promise<void> {
         fusePid.value = null
         obsUrl.value = null
         usePluginsStore().resetRuntimeStatuses()
+        useAppsStore().reset()
         runtimeState.value = null
         _setState('idle')
         eventBus.emit('agent:stopped', { code: null, signal: null })

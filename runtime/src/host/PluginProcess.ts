@@ -25,6 +25,7 @@ import type { EventBus, EventHandler } from "./EventBus.js";
 import { SCOPES, type PermissionManager } from "./permissions.js";
 import type { ServiceConsumer, ServiceHub } from "./ServiceHub.js";
 import type { PluginNode } from "./pluginNode.js";
+import type { ScopedApps } from "./AppHub.js";
 import { openMeter, type ProcessMeter } from "./processMeter.js";
 import type { DiscoveredPlugin } from "./types.js";
 
@@ -94,6 +95,7 @@ export interface PluginProcessDeps {
   node: PluginNode;
   config: PluginConfig;
   overlays: OverlayManager;
+  apps: ScopedApps;
   hotkeys: HotkeyRegistry;
   /** The combo the user saved for a hotkey of this plugin: by its label, else by its manifest action name. */
   hotkeyOverride(label: string, action: string | null): string | undefined;
@@ -245,6 +247,8 @@ export class PluginProcess implements ServiceConsumer {
       permissions: this.permissionStates(),
       services: this.deps.services.snapshotsFor(this.pluginId),
       overrides: this.deps.overridesSnapshot(),
+      lifecycle: this.spec.lifecycle,
+      apps: this.spec.apps.map((a) => a.appId),
       logLevel: process.env.FUSE_LOG_LEVEL ?? "info",
     };
     channel.send(init as unknown as WireMessage);
@@ -520,9 +524,26 @@ export class PluginProcess implements ServiceConsumer {
       case "overlay.declare": {
         const decl = asRecord(msg.decl) as unknown as OverlayDeclaration;
         if (typeof decl.id !== "string" || !decl.id) return;
+        if (this.spec.lifecycle === "app") {
+          this.log.warning(`overlay '${decl.id}' refused: an app-only plugin (lifecycle "app") has no overlays`);
+          return;
+        }
         this.handles.set(decl.id, d.overlays.declare(decl));
         return;
       }
+
+      case "apps.setJson":
+        d.apps.setJson(String(msg.windowId ?? ""), String(msg.path ?? ""), msg.value);
+        return;
+      case "apps.setTitle":
+        d.apps.setTitle(String(msg.windowId ?? ""), String(msg.title ?? ""));
+        return;
+      case "apps.command":
+        d.apps.command(String(msg.windowId ?? ""), String(msg.command ?? ""));
+        return;
+      case "apps.openView":
+        this.answer(msg.rid, d.apps.openView(String(msg.appId ?? ""), String(msg.view ?? "")));
+        return;
       case "overlay.op":
         this.overlayOp(String(msg.id ?? ""), String(msg.op ?? ""), Array.isArray(msg.args) ? msg.args : []);
         return;

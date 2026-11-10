@@ -47,8 +47,8 @@ Violations of these terms automatically terminate your rights under GPLv3 with r
 ![Logo](https://img.shields.io/badge/-VUE-f3f2f4?style=for-the-badge&logo=vue.js&logoColor=f3f2f4&labelColor=1D1D1D&color=1D1D1D)
 
 
-![Static Badge](https://img.shields.io/badge/RUNTIME_VERSION-5.0.0-1D1D1D?style=for-the-badge&labelColor=1D1D1D&color=434343)
-![Static Badge](https://img.shields.io/badge/LAUNCHER_VERSION-2.0.0-1D1D1D?style=for-the-badge&labelColor=1D1D1D&color=434343)
+![Static Badge](https://img.shields.io/badge/RUNTIME_VERSION-5.1.0-1D1D1D?style=for-the-badge&labelColor=1D1D1D&color=434343)
+![Static Badge](https://img.shields.io/badge/LAUNCHER_VERSION-3.0.0-1D1D1D?style=for-the-badge&labelColor=1D1D1D&color=434343)
 
 Get In Touch
 [![Discord](https://img.shields.io/badge/-DISCORD-f3f2f4?style=for-the-badge&logo=discord&logoColor=f3f2f4&labelColor=1D1D1D&color=1D1D1D)](https://discord.com/users/678198830767931431)
@@ -131,6 +131,32 @@ Positions, rotation, and opacity persist per plugin and are restored on the next
 
 ---
 
+## Apps
+
+Some plugins are apps: tools that open in a window on the stage. An app window takes clicks at any time. It does not need interactive mode.
+
+- **Console**: press `Ctrl+Space`. Type the name or the alias of an app, then press `Enter`. `Esc` closes the console and gives the keyboard back to the game.
+- **Taskbar**: a bar on one edge of the main display. It has Start (opens the console), the pinned and open apps, and Show desktop. A hidden taskbar stays at 50% opacity. Move the cursor to its edge or onto it to show it.
+- **Windows**: drag the title bar to move a window, and drag an edge to resize it. Double-click the title bar to maximize or restore the window. Drag a window to the top edge to maximize it, or to a side edge to fill that half of the display.
+- **Actions**: right-click an app in the console, or select it and press `Ctrl+K`. The actions are favorite, pin to the taskbar, close all windows and quit. **Configure Command** sets an alias or a launch hotkey.
+- **Settings > Apps** in the launcher sets the taskbar edge, the auto-hide and the console hotkey.
+
+| Console key | Action |
+|---|---|
+| `Up`, `Down` | Select an app |
+| `Enter` | Open the app |
+| `Ctrl+K` | Show the actions of the app |
+| `Ctrl+Shift+F` | Add the app to Favorites, or remove it |
+| `Ctrl+Shift+Up`, `Ctrl+Shift+Down` | Move a favorite up or down |
+| `Ctrl+Shift+,` | Configure Command |
+| `Esc` | Close the actions, clear the search, or close the console |
+
+A window has the keyboard after you click it. The game gets no keys while a window has the keyboard. Click the game to give the game the keyboard again.
+
+An app-only plugin starts when you open its app, and stops about 10 s after its last window closes. Its plugin card shows "Starts with its app". OBS browser sources show the app windows, but not the taskbar and the console.
+
+---
+
 ## Hotkeys
 
 Active globally while FUSE is running.
@@ -139,6 +165,7 @@ Active globally while FUSE is running.
 |-------|--------|
 | `Ctrl+L` | Toggle calibrate/lock. Advances calibration stages for multi-stage overlays. |
 | `Ctrl+I` | Toggle interactive mode. Overlays stay pinned but accept clicks and input. |
+| `Ctrl+Space` | Open or close the [app console](#apps). Change it in **Settings > Apps**. |
 | `Ctrl+R` | Hot-reload all plugins from disk without restarting FUSE. |
 | `Ctrl+P` | Quit FUSE. |
 
@@ -352,7 +379,7 @@ Each plugin ships a `manifest.json` at the package root:
 | `description` | no | Short summary. |
 | `homepage`, `tags` | no | Sent to the App with the plugin list. |
 | `core` | no | `true` marks a core plugin. Core plugins load before user plugins and get dangerous scopes without a prompt. |
-| `min_host_version` | yes, with `override` | Lowest runtime version (current: `5.0.0`). The runtime skips an incompatible plugin. |
+| `min_host_version` | yes, with `override` | Lowest runtime version (current: `5.1.0`, which added apps). The runtime skips an incompatible plugin. |
 | `game_versions` | yes, with `override` | The game versions the plugin fits, as X.Y.Z values: `["1.2.2"]`. The upload form takes them from the manifest. |
 | `dependencies` | no | Required plugin ids: a list, or `{ "id": ">=1.0" }` with `>=`, `<=`, `==`, `>`, `<` or `*`. Providers load before consumers. |
 | `optional_dependencies` | no | Soft load-order hints. A missing plugin does not block loading. |
@@ -360,6 +387,8 @@ Each plugin ships a `manifest.json` at the package root:
 | `provides` | no | Services that this plugin shares, and the scopes that guard them. See [Service scopes](#service-scopes). |
 | `frames` | no | https sites that its Vue overlays may show in an `<iframe>`. See [Frames](#frames). |
 | `hotkeys` | no | `{ "logical_name": "combo" }` defaults, read with `ctx.hotkeyFor()`. The App lists them while the plugin does not run. |
+| `apps` | no, yes with `lifecycle: "app"` | Windowed apps of the plugin. Needs `entry`. See [App Windows](#app-windows). |
+| `lifecycle` | no | `"always"` (default): the process runs while the plugin is on. `"app"`: the process runs only while one of its app windows is open. |
 | `default_config` | no | Default values for `ctx.config`. |
 
 ---
@@ -486,6 +515,7 @@ interface FuseContext {
   services: PluginServices;          // plugin and FUSE services
   events: PluginEvents;              // pub/sub between plugins
   overlays: OverlayManager;          // declare and control overlays
+  apps: AppManager;                  // windows of the manifest `apps`
   notifications: StageNotifier;      // toasts on the stage
   audio: PluginAudio;                // sounds from own assets (needs `audio`)
   permissions: PluginPermissions;    // declared scopes and their state
@@ -914,10 +944,109 @@ A Vue overlay can show a website in an `<iframe>` when the manifest lists the si
 
 ---
 
+## App Windows
+
+An app is a Vue view that opens in a FUSE window on the stage. The window has a title bar with minimize, maximize and close. The user opens apps from the taskbar and the console (see [Apps](#apps)). Use an app for a tool that the user works in. Use an overlay for content that the user looks at.
+
+```json
+{
+  "lifecycle": "app",
+  "apps": [
+    {
+      "id": "notes",
+      "name": "Match Notes",
+      "icon": "assets/notes.svg",
+      "keywords": ["notes", "match"],
+      "view": "Notes.vue",
+      "window": { "size": { "w": 560, "h": 640 }, "minSize": { "w": 360, "h": 320 }, "resizable": true, "instances": "single" },
+      "views": { "history": { "view": "History.vue", "size": { "w": 720, "h": 520 } } },
+      "hotkey": "ctrl+alt+n"
+    }
+  ]
+}
+```
+
+| Field | Required | Description |
+|---|---|---|
+| `id` | yes | 1 to 32 lowercase letters, digits, `_` or `-`. The app key is `<plugin_id>:<id>`. |
+| `name` | no | The name in the console, the taskbar and the title bar. Default: the id. |
+| `view` | yes | The `.vue` file of the main window, inside the package. |
+| `title` | no | The window title. Default: the name. |
+| `icon` | no | An svg, png, webp or jpg file inside the package. Without it, the console and the taskbar show the first letter of the name. |
+| `keywords` | no | Up to 16 more search words for the console. |
+| `window` | no | `size` (default 480 x 360), `minSize` (default 240 x 160), `maxSize`, `resizable` (default `true`). `instances`: `"single"` (default) focuses the open window on a second launch, `"multi"` opens a new window. Sizes are DIPs from 120 to 7680. |
+| `views` | no | More views, for example tool windows, that the plugin opens with `ctx.apps.open(appId, key)`. Each view takes `view`, `title`, `size`, `minSize`, `maxSize` and `resizable`. |
+| `hotkey` | no | The default launch hotkey. A hotkey that the user sets in the console replaces it. |
+
+Lifecycle:
+
+- `"always"` (default): the process runs while the plugin is on. The apps open windows on the running process.
+- `"app"`: the plugin is `idle` and has no process until the user opens one of its apps. The process stops 10 s after the last window closes, with `teardown("app_closed")`. A reopen in that time uses the same process. Such a plugin must declare `apps`, and `ctx.overlays.declare` throws in it.
+
+### AppManager
+
+```ts
+interface AppManager {
+  handle(appId: string, handlers: { open(win: AppWindow): void | Promise<void>; close?(win: AppWindow): void }): void;
+  open(appId: string, view?: string): Promise<AppWindow>;   // the main view, or a key of `views`
+  windows(appId?: string): AppWindow[];
+}
+
+interface AppWindow {
+  readonly id: string;
+  readonly appId: string;
+  readonly view: string;                                    // "main" or a key of `views`
+  readonly state: { focused: boolean; maximized: boolean; minimized: boolean; size: { w: number; h: number } };
+  setJson(path: string, value: unknown): void;              // the view's `data`, as OverlayHandle.setJson
+  setTitle(title: string): void;
+  focus(): void;
+  minimize(): void;
+  maximize(): void;
+  restore(): void;
+  close(): void;
+  onAction(cb: (action: string, payload?: unknown) => void): void;   // one handler for each window
+  onState(cb: (state: AppWindow["state"]) => void): () => void;
+}
+```
+
+```ts
+override setup(ctx: FuseContext): void {
+  ctx.apps.handle("notes", {
+    open: (win) => {
+      win.onAction((action, payload) => this.onAction(action, payload));
+      win.setJson("notes", this.notes);
+    },
+    close: (win) => this.forget(win),
+  });
+}
+```
+
+- FUSE calls `open` for each new window. It calls `open` again for the open windows after a plugin restart (`Ctrl+R`).
+- A window that opens before `handle()` runs waits for it.
+
+### App Views
+
+The stage mounts a view with the [Vue overlay](#vue-overlays) props and one more prop, `window`:
+
+```ts
+{
+  data, state, emitAction, assetBase,   // as for a Vue overlay
+  interactive: true,                    // always true in a window
+  window: { id: string, focused: boolean, maximized: boolean, size: { w: number, h: number } },
+}
+```
+
+- The view fills the window body. Do not draw a frame, a title or a close button: the window has them.
+- The view gets keys only while its window has the keyboard. While the stage has the keyboard, only plugin hotkeys with `Ctrl` or `Alt` fire.
+- A minimized window takes no input. OBS views show the windows, read-only.
+- The same import rules as for Vue overlays apply.
+
+---
+
 ## Host Lifecycle
 
 1. **Boot** (`runtime/src/index.ts`) - starts `WsServer` and prints the handshake line to stdout. Gets the saved permission decisions from Electron (waits up to 3 s) and discovers plugins. Starts the keyboard hook, the tick loop and the game port probe. Exits when Electron's stdin pipe or IPC channel closes (orphan guard).
-2. **Plugin init** - starts when the first client authenticates. Plugins start one at a time in dependency order. Calibration-requiring plugins hold the queue until locked.
+2. **Plugin init** - starts when the first client authenticates. Plugins start one at a time in dependency order. Calibration-requiring plugins hold the queue until locked. A plugin with `lifecycle: "app"` stays `idle` with no process until the user opens one of its apps.
 3. **Tick loop** - `tick(dt)` goes to every plugin process every ~50 ms. Resource metrics go to the stage each second.
 4. **Enable / disable** - the App starts or stops one plugin process. An enabled plugin joins the current host state.
 5. **Hot reload** (`Ctrl+R`) - stops all plugins in reverse order with `teardown("restart")`. Reads the permission decisions again and discovers the archives again. Starts every plugin in the `locked` state.
@@ -933,11 +1062,11 @@ Single WS endpoint at `ws://127.0.0.1:<port>/ws`. The first message must be `{ t
 
 | Direction | Messages |
 |---|---|
-| Runtime to control | `plugin:registered`, `plugin:status_changed`, `config:value_changed`, `hotkey:rebound`, `host:state_changed`, `host:hotkeys`, `stage:tour_done`, and `<plugin_id>.*` messages from `host.broadcast` |
-| Runtime to stage and view | `overlay:declared`, `overlay:data`, `overlay:transform`, `overlay:size`, `overlay:visibility`, `overlay:removed`, `overlay:reload`, `overlay:inspector`, `inspector:values`, `plugin:list`, `plugin:metrics`, `stage:notify`, `stage:dismiss`, `audio:master`, `audio:preload`, `audio:play`, `audio:stop`, `audio:stop_all`, `host:state_changed`, `host:hotkeys` |
-| Runtime to stage only | `stage:settings`, `stage:metrics` |
-| Stage to runtime | `overlay:transform` (editor commits a rect), `overlay:action`, `inspector:set`, `inspector:action`, `stage:dismiss`, `host:request`, `stage:tour_done`, `permissions:review` |
-| Control to runtime (JSON-RPC 2.0) | `config.update`, `config.action`, `plugin.setEnabled`, `hotkey.rebind`, `overlay.setVisible`, `audio.setMaster`, `stage.setPerfWidget`, `stage.setTour`, `app.setLanguage`, `app.setGameConfig` |
+| Runtime to control | `plugin:registered`, `plugin:status_changed`, `config:value_changed`, `hotkey:rebound`, `host:state_changed`, `host:hotkeys`, `stage:tour_done`, `app:list`, `launcher:settings`, `app:open_settings`, and `<plugin_id>.*` messages from `host.broadcast` |
+| Runtime to stage and view | `overlay:declared`, `overlay:data`, `overlay:transform`, `overlay:size`, `overlay:visibility`, `overlay:removed`, `overlay:reload`, `overlay:inspector`, `inspector:values`, `window:opened`, `window:data`, `window:state`, `window:order`, `window:closed`, `plugin:list`, `plugin:metrics`, `stage:notify`, `stage:dismiss`, `audio:master`, `audio:preload`, `audio:play`, `audio:stop`, `audio:stop_all`, `host:state_changed`, `host:hotkeys` |
+| Runtime to stage only | `stage:settings`, `stage:metrics`, `app:list`, `app:configure_result`, `launcher:settings`, `console:open`, `console:close`, `window:take_focus` |
+| Stage to runtime | `overlay:transform` (editor commits a rect), `overlay:action`, `inspector:set`, `inspector:action`, `stage:dismiss`, `host:request`, `stage:tour_done`, `permissions:review`, `app:launch`, `app:favorite`, `app:pin`, `app:configure`, `app:quit`, `app:open_settings`, `console:toggle`, `console:closed`, `hotkeys:capture`, `window:command`, `window:rect`, `window:action` |
+| Control to runtime (JSON-RPC 2.0) | `config.update`, `config.action`, `plugin.setEnabled`, `hotkey.rebind`, `overlay.setVisible`, `audio.setMaster`, `stage.setPerfWidget`, `stage.setTour`, `app.setLanguage`, `app.setGameConfig`, `app.list`, `app.launch`, `app.configure`, `app.favorite`, `app.pin`, `launcher.settings` |
 
 The `view` role only receives.
 
@@ -1096,7 +1225,7 @@ Logs from the runtime and from every plugin process go to the App's console.
 ```
 HEAT_SACLOS/
 ├── runtime/                 # Node sidecar
-│   ├── src/host/            # FuseHost, plugin processes, permissions, services, storage, overlays
+│   ├── src/host/            # FuseHost, plugin processes, permissions, services, storage, overlays, apps
 │   ├── src/plugin-host/     # the plugin process entry and its FuseContext
 │   ├── src/sdk/             # @fuse/plugin-sdk: base class, types and helpers for plugins
 │   ├── src/server/          # WebSocket + HTTP server
@@ -1106,7 +1235,7 @@ HEAT_SACLOS/
 ├── frontend/fuse/           # Electron + Vue App
 │   ├── electron/            # main process: runtime spawn, stage window, consent, secrets, OBS server
 │   ├── src/                 # the App UI
-│   └── src/overlay/         # the overlay stage: Rive and Vue overlays, editor, inspector
+│   └── src/overlay/         # the overlay stage: Rive and Vue overlays, editor, inspector, app windows
 ├── backend/data/            # the data folder in dev
 └── docs/                    # notes on the game's UI and engine
 ```
@@ -1116,7 +1245,7 @@ The data folder (`FUSE_DATA_DIR`) is the user data folder in production and `bac
 | Path | Holds |
 |---|---|
 | `configs/fuse_<plugin_id>.json` | Plugin config |
-| `configs/fuse_host.json` | `enabled_plugins`, `disabled_plugins`, `hotkey_overrides` |
+| `configs/fuse_host.json` | `enabled_plugins`, `disabled_plugins`, `hotkey_overrides`, `apps` (taskbar, favorites, pins, aliases, launch hotkeys, window places) |
 | `plugins-cache/` | Extracted archives |
 | `plugin-files/<plugin_id>/` | `ctx.filesDir` |
 | `storage/<plugin_id>.db` | `ctx.storage` |

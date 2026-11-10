@@ -90,7 +90,19 @@
       "advanced": "Advanced",
       "privacy": "Privacy & Telemetry",
       "language": "Language",
-      "keybinds": "{brandName} Keybinds"
+      "keybinds": "{brandName} Keybinds",
+      "apps": "Apps"
+    },
+    "apps": {
+      "edge": "Taskbar Edge",
+      "edgeDesc": "The taskbar sits on this edge of the main stage display",
+      "edgeBottom": "Bottom",
+      "edgeTop": "Top",
+      "edgeLeft": "Left",
+      "edgeRight": "Right",
+      "autoHide": "Hide The Taskbar",
+      "autoHideDesc": "A hidden taskbar stays at 50% opacity. It goes to full opacity when the cursor stays at its edge or on it. When it is not hidden, maximized windows leave room for it",
+      "offline": "Start {brandName} to change the taskbar"
     },
     "language": {
       "label": "App Language",
@@ -111,7 +123,8 @@
       "reloadDesc": "Reload All Active Plugins",
       "quitDesc": "Shut {brandName} Down",
       "calibrateDesc": "Switch Between Calibrate And Lock",
-      "interactiveDesc": "Toggle Overlay Interactivity"
+      "interactiveDesc": "Toggle Overlay Interactivity",
+      "consoleDesc": "Open The Apps Console"
     },
     "gameInstallation": {
       "title": "Game Installation",
@@ -899,7 +912,8 @@
         "pending": "Enqueued",
         "loading": "Loading",
         "skipped": "Skipped",
-        "disabled": "Disabled"
+        "disabled": "Disabled",
+        "idle": "Starts with its app"
       },
       "menu": {
         "settings": "Settings",
@@ -1141,6 +1155,10 @@
       "title": "Try it",
       "body": "Click the button on the DEMO frame. The overlay gets the click."
     },
+    "apps": {
+      "title": "Apps",
+      "body": "Some plugins are apps: tools that open in windows and take your clicks with no interactive mode. The taskbar shows your pinned and open apps, and its first button opens the console. A hidden taskbar stays dim at its edge. Press {console} to open the console from anywhere."
+    },
     "leave": {
       "title": "Back to the game",
       "body": "Press {interactive} to leave interactive mode. The overlays then lock, and become transparent to clicks. Press {lock} to come back to calibrate mode and finish the tour."
@@ -1154,6 +1172,74 @@
       "count": "count is {n}",
       "networkReason": "Gets sample data for the demo.",
       "storageReason": "Keeps the click count."
+    }
+  },
+  "stageapps": {
+    "window": {
+      "minimize": "Minimize",
+      "maximize": "Maximize",
+      "restore": "Restore",
+      "close": "Close",
+      "loading": "LOADING",
+      "starting": "STARTING",
+      "stoppedTitle": "THE APP STOPPED",
+      "stoppedNote": "{plugin} exited. The window keeps its place.",
+      "restart": "Restart",
+      "loadError": "The view did not load: {error}"
+    },
+    "taskbar": {
+      "startTip": "Open the console ({combo})",
+      "showDesktop": "Show desktop",
+      "open": "Open",
+      "show": "Show",
+      "newWindow": "Open New Window",
+      "pin": "Pin to Taskbar",
+      "unpin": "Unpin from Taskbar",
+      "closeAll": "Close All Windows",
+      "quit": "Quit App"
+    },
+    "console": {
+      "placeholder": "Search apps",
+      "favorites": "FAVORITES",
+      "suggestions": "SUGGESTIONS",
+      "all": "ALL APPS",
+      "results": "RESULTS · {n}",
+      "type": "App",
+      "noMatchTitle": "NO APPS MATCH “{query}”",
+      "noMatchNote": "Search looks at names, aliases, plugin ids and keywords.",
+      "noAppsTitle": "NO APPS YET",
+      "noAppsNote": "A plugin with an app adds it here. Find one in the Marketplace.",
+      "hint": "↑↓ SELECT   ESC CLOSE",
+      "openApp": "Open App",
+      "actions": "Actions"
+    },
+    "actions": {
+      "open": "Open App",
+      "newWindow": "Open New Window",
+      "addFavorite": "Add to Favorites",
+      "removeFavorite": "Remove from Favorites",
+      "moveUp": "Move Up",
+      "moveDown": "Move Down",
+      "pin": "Pin to Taskbar",
+      "unpin": "Unpin from Taskbar",
+      "closeAll": "Close All Windows",
+      "quit": "Quit App",
+      "configure": "Configure Command…",
+      "filter": "Search actions"
+    },
+    "configure": {
+      "title": "CONFIGURE COMMAND",
+      "settings": "Open Command Settings",
+      "setHotkey": "Set Hotkey…",
+      "setAlias": "Set Alias…",
+      "record": "PRESS A KEY COMBINATION",
+      "recordHint": "BACKSPACE REMOVES · ESC CANCELS",
+      "aliasPlaceholder": "alias",
+      "aliasHint": "1–24 LETTERS, DIGITS OR -  ·  ENTER SAVES",
+      "hotkeyTaken": "IN USE BY {owner}",
+      "hotkeyInvalid": "NOT A KEY COMBINATION",
+      "aliasTaken": "{owner} USES THIS ALIAS",
+      "aliasInvalid": "USE 1–24 LETTERS, DIGITS OR -"
     }
   }
 }

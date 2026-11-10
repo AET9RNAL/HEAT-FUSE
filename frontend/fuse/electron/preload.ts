@@ -8,6 +8,10 @@ if (SURFACE === 'stage') {
   contextBridge.exposeInMainWorld('stageAPI', {
     setIgnore: (ignore: boolean): void => ipcRenderer.send('overlay:set-ignore', !!ignore),
     setFocusable: (focusable: boolean): void => ipcRenderer.send('overlay:set-focusable', !!focusable),
+    /** Takes the keyboard from the game with no click (console, launch hotkey). */
+    takeFocus: (): void => ipcRenderer.send('stage:take-focus'),
+    /** Gives the keyboard back to the window that had it. `keepFocusable`: interactive and calibrate states. */
+    releaseFocus: (keepFocusable = false): void => ipcRenderer.send('stage:release-focus', !!keepFocusable),
     /** The runtime socket's port and stage token, answered once per page load. */
     connection: (): Promise<{ port: number; token: string } | null> => ipcRenderer.invoke('overlay:connection'),
     /** Where each display sits inside the stage window, and where the window sits in overlay coordinates. */
@@ -83,6 +87,8 @@ exposeApp('appAPI', {
     ipcRenderer.invoke('window:minimize'),
   maximizeWindow: (): Promise<void> =>
     ipcRenderer.invoke('window:maximize'),
+  showWindow: (): Promise<void> =>
+    ipcRenderer.invoke('window:show'),
   toggleStageDevtools: (): void => ipcRenderer.send('overlay:toggle-devtools'),
   toggleRuntimeDevtools: (): void => ipcRenderer.send('runtime:toggle-devtools'),
 })

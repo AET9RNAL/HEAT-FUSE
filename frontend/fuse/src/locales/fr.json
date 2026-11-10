@@ -90,7 +90,19 @@
       "advanced": "Avancé",
       "privacy": "Confidentialité et télémétrie",
       "language": "Langue",
-      "keybinds": "Raccourcis {brandName}"
+      "keybinds": "Raccourcis {brandName}",
+      "apps": "Applications"
+    },
+    "apps": {
+      "edge": "Bord de la barre des tâches",
+      "edgeDesc": "La barre des tâches se place sur ce bord de l'écran principal du stage",
+      "edgeBottom": "Bas",
+      "edgeTop": "Haut",
+      "edgeLeft": "Gauche",
+      "edgeRight": "Droite",
+      "autoHide": "Masquer la barre des tâches",
+      "autoHideDesc": "Masquée, elle reste à 50 % d'opacité. Elle passe à pleine opacité quand le curseur reste sur son bord ou sur elle. Si elle n'est pas masquée, les fenêtres agrandies lui laissent la place",
+      "offline": "Démarrez {brandName} pour modifier la barre des tâches"
     },
     "language": {
       "label": "Langue de l'application",
@@ -111,7 +123,8 @@
       "reloadDesc": "Recharger tous les plugins actifs",
       "quitDesc": "Arrêter {brandName}",
       "calibrateDesc": "Basculer entre calibrage et verrouillage",
-      "interactiveDesc": "Activer ou désactiver l'interactivité des overlays"
+      "interactiveDesc": "Activer ou désactiver l'interactivité des overlays",
+      "consoleDesc": "Ouvrir la console des applications"
     },
     "gameInstallation": {
       "title": "Installation du jeu",
@@ -899,7 +912,8 @@
         "pending": "En file",
         "loading": "Chargement",
         "skipped": "Ignoré",
-        "disabled": "Désactivé"
+        "disabled": "Désactivé",
+        "idle": "Démarre avec son application"
       },
       "menu": {
         "settings": "Réglages",
@@ -1141,6 +1155,10 @@
       "title": "Essayez",
       "body": "Cliquez sur le bouton du cadre DEMO. L'overlay reçoit le clic."
     },
+    "apps": {
+      "title": "Applications",
+      "body": "Certains plugins sont des applications : des outils qui s'ouvrent dans des fenêtres et reçoivent vos clics sans le mode interactif. La barre des tâches montre vos applications épinglées et ouvertes, et son premier bouton ouvre la console. Masquée, elle reste atténuée sur son bord. Appuyez sur {console} pour ouvrir la console de partout."
+    },
     "leave": {
       "title": "Retour au jeu",
       "body": "Appuyez sur {interactive} pour quitter le mode interactif. Les overlays se verrouillent alors et laissent passer les clics. Appuyez sur {lock} pour revenir au mode calibrage et terminer la visite."
@@ -1154,6 +1172,74 @@
       "count": "compteur : {n}",
       "networkReason": "Récupère des données d'exemple pour la démo.",
       "storageReason": "Garde le nombre de clics."
+    }
+  },
+  "stageapps": {
+    "window": {
+      "minimize": "Réduire",
+      "maximize": "Agrandir",
+      "restore": "Restaurer",
+      "close": "Fermer",
+      "loading": "CHARGEMENT",
+      "starting": "DÉMARRAGE",
+      "stoppedTitle": "L'APPLICATION S'EST ARRÊTÉE",
+      "stoppedNote": "{plugin} s'est fermé. La fenêtre garde sa place.",
+      "restart": "Redémarrer",
+      "loadError": "La vue n'a pas chargé : {error}"
+    },
+    "taskbar": {
+      "startTip": "Ouvrir la console ({combo})",
+      "showDesktop": "Afficher le bureau",
+      "open": "Ouvrir",
+      "show": "Afficher",
+      "newWindow": "Ouvrir une nouvelle fenêtre",
+      "pin": "Épingler à la barre des tâches",
+      "unpin": "Détacher de la barre des tâches",
+      "closeAll": "Fermer toutes les fenêtres",
+      "quit": "Quitter l'application"
+    },
+    "console": {
+      "placeholder": "Rechercher des applications",
+      "favorites": "FAVORIS",
+      "suggestions": "SUGGESTIONS",
+      "all": "TOUTES LES APPLICATIONS",
+      "results": "RÉSULTATS · {n}",
+      "type": "App",
+      "noMatchTitle": "AUCUNE APPLICATION POUR « {query} »",
+      "noMatchNote": "La recherche porte sur les noms, les alias, les id de plugin et les mots-clés.",
+      "noAppsTitle": "AUCUNE APPLICATION",
+      "noAppsNote": "Un plugin avec une application l'ajoute ici. Trouvez-en un dans le Marketplace.",
+      "hint": "↑↓ CHOISIR   ÉCHAP FERMER",
+      "openApp": "Ouvrir l'application",
+      "actions": "Actions"
+    },
+    "actions": {
+      "open": "Ouvrir l'application",
+      "newWindow": "Ouvrir une nouvelle fenêtre",
+      "addFavorite": "Ajouter aux favoris",
+      "removeFavorite": "Retirer des favoris",
+      "moveUp": "Monter",
+      "moveDown": "Descendre",
+      "pin": "Épingler à la barre des tâches",
+      "unpin": "Détacher de la barre des tâches",
+      "closeAll": "Fermer toutes les fenêtres",
+      "quit": "Quitter l'application",
+      "configure": "Configurer la commande…",
+      "filter": "Rechercher des actions"
+    },
+    "configure": {
+      "title": "CONFIGURER LA COMMANDE",
+      "settings": "Ouvrir les réglages de la commande",
+      "setHotkey": "Définir le raccourci…",
+      "setAlias": "Définir l'alias…",
+      "record": "APPUYEZ SUR UNE COMBINAISON DE TOUCHES",
+      "recordHint": "RETOUR ARRIÈRE SUPPRIME · ÉCHAP ANNULE",
+      "aliasPlaceholder": "alias",
+      "aliasHint": "1 À 24 LETTRES, CHIFFRES OU -  ·  ENTRÉE ENREGISTRE",
+      "hotkeyTaken": "UTILISÉ PAR {owner}",
+      "hotkeyInvalid": "CE N'EST PAS UNE COMBINAISON DE TOUCHES",
+      "aliasTaken": "{owner} UTILISE CET ALIAS",
+      "aliasInvalid": "UTILISEZ 1 À 24 LETTRES, CHIFFRES OU -"
     }
   }
 }

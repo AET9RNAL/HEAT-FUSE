@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { motion } from "motion-v";
 import eKey from "../../../components/ui/eKey.vue";
 import { Dynamics } from "../../../composables/useMotion";
@@ -14,12 +14,26 @@ const BARE_MODIFIER: Record<string, string> = { Control: "ctrl", Alt: "alt", Shi
 const MODIFIERS = new Set(["ctrl", "alt", "shift", "meta"]);
 const REJECT_MS = 1600;
 
-const props = withDefaults(defineProps<{ modelValue: string; disabled?: boolean; hold?: boolean }>(), {
-  disabled: false,
-  hold: false,
-});
+const props = withDefaults(
+  defineProps<{
+    modelValue: string;
+    disabled?: boolean;
+    hold?: boolean;
+    /** Starts to capture at once, with no click. */
+    autostart?: boolean;
+    /** Backspace commits an empty combo: no binding. */
+    clearable?: boolean;
+  }>(),
+  {
+    disabled: false,
+    hold: false,
+    autostart: false,
+    clearable: false,
+  },
+);
 
-const emit = defineEmits<{ commit: [combo: string] }>();
+/** `capture`: true while the field listens for a combo, so the host can pause its hotkeys. */
+const emit = defineEmits<{ commit: [combo: string]; capture: [on: boolean] }>();
 
 const el = ref<HTMLElement | null>(null);
 const capturing = ref(false);
@@ -90,6 +104,10 @@ function onKeyDown(e: KeyboardEvent): void {
     held.value = [];
     return;
   }
+  if (e.key === "Backspace" && props.clearable && !modsOf(e).length) {
+    finish("");
+    return;
+  }
   const key = e.key === " " ? "space" : e.key.toLowerCase();
   if (!/^[a-z0-9]$/.test(key) && !STANDALONE.has(key)) {
     reject(key);
@@ -123,12 +141,14 @@ function start(): void {
   lastMod = "";
   modsAtLast = [];
   capturing.value = true;
+  emit("capture", true);
   document.addEventListener("keydown", onKeyDown, true);
   document.addEventListener("keyup", onKeyUp, true);
   document.addEventListener("pointerdown", onOutsidePointerDown, true);
 }
 
 function stop(): void {
+  if (capturing.value) emit("capture", false);
   capturing.value = false;
   document.removeEventListener("keydown", onKeyDown, true);
   document.removeEventListener("keyup", onKeyUp, true);
@@ -144,6 +164,10 @@ function onClick(): void {
   }
   start();
 }
+
+onMounted(() => {
+  if (props.autostart && !props.disabled) start();
+});
 
 onBeforeUnmount(() => {
   stop();

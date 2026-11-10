@@ -15,6 +15,7 @@ import { unzipSync, strFromU8 } from "fflate";
 import { logger } from "../log.js";
 import { PLUGINS_CACHE_DIR, REPO_ROOT } from "../utils/paths.js";
 import type { DiscoveredPlugin, Manifest } from "./types.js";
+import { parseApps, type ParsedApps } from "./appManifest.js";
 
 export const USER_PLUGINS_DIR: string = process.env.FUSE_USER_PLUGINS_DIR
   ? path.resolve(process.env.FUSE_USER_PLUGINS_DIR)
@@ -199,13 +200,16 @@ async function scanFuseArchive(fusePath: string, keep: Set<string>, onError?: Di
   }
 
   let located: { entryPath: string; entryClass: string } | null = null;
+  let parsed: ParsedApps;
   try {
     if (manifest.entry) located = locateEntry(packageRoot, manifest.entry);
     else if (!manifest.override) throw new Error("manifest missing 'entry' (or 'override')");
+    parsed = parseApps(manifest, pluginId, located !== null, (rel) => fs.existsSync(path.join(packageRoot, rel)));
   } catch (e) {
     logger.error(`Skipping .fuse plugin '${pluginId}': ${String(e)}`);
     return fail(e instanceof Error ? e.message : String(e));
   }
+  for (const warning of parsed.warnings) logger.warning(`${pluginId}: ${warning}`);
 
   const version = (manifest.version as string) ?? "0.0";
   const name = (manifest.name as string) ?? pluginId;
@@ -228,6 +232,8 @@ async function scanFuseArchive(fusePath: string, keep: Set<string>, onError?: Di
     hasRuntime: located !== null,
     requiresCalibration: false,
     calibrationStages: 1,
+    lifecycle: parsed.lifecycle,
+    apps: parsed.apps,
     manifest,
   };
 }

@@ -8,33 +8,40 @@ import { hideTip } from "./inspector/tooltip";
 import { visibleNotifications } from "./notifications";
 import { initStageTour } from "./stageTour";
 import { initHiddenOverlayNotice } from "./hiddenOverlays";
+import { appsUiShown } from "./apps/appsState";
 
 initStageTour();
 initHiddenOverlayNotice();
 
+const APPS_UI = ".fuse-window, .fuse-taskbar, .fuse-console, .fuse-actions";
+
 let lastIgnore = true;
+
+function appsUiLive(): boolean {
+  return hostState.value !== "calibrate" && appsUiShown.value;
+}
 
 function onMouseMove(e: MouseEvent): void {
   if (dragging.value) return;
   // Calibrate (drag) and interactive (click) open the whole editor surface;
   // notifications stay hoverable and closable in every state, locked included.
   const editing = hostState.value === "calibrate" || hostState.value === "interactive";
-  if (!editing && visibleNotifications.value.length === 0) return;
+  const apps = appsUiLive();
+  if (!editing && !apps && visibleNotifications.value.length === 0) return;
   const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
-  const ignore = !el?.closest(editing ? ".overlay-wrapper, .stage-ui, .stage-notice" : ".stage-notice");
+  const targets = [editing ? ".overlay-wrapper, .stage-ui" : "", ".stage-notice", apps ? APPS_UI : ""].filter(Boolean).join(", ");
+  const ignore = !el?.closest(targets);
   if (ignore !== lastIgnore) {
     lastIgnore = ignore;
     setWindowIgnore(ignore);
   }
 }
 
-// The last card can vanish under a still cursor; without this the window would
-// keep swallowing game clicks until the mouse next moved.
 watch(
-  () => visibleNotifications.value.length,
-  (count) => {
+  () => [visibleNotifications.value.length, appsUiLive()] as const,
+  ([count, apps]) => {
     const editing = hostState.value === "calibrate" || hostState.value === "interactive";
-    if (count === 0 && !editing && !lastIgnore) {
+    if (count === 0 && !apps && !editing && !lastIgnore) {
       lastIgnore = true;
       setWindowIgnore(true);
     }

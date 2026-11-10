@@ -37,5 +37,9 @@ export interface InitMessage {
   services: Record<string, ServiceSnapshot>;
   /** The override part: presets and status. Empty presets without one. */
   overrides: OverridesSnapshot;
+  /** "app": the plugin cannot declare overlays. */
+  lifecycle: "always" | "app";
+  /** The ids of the manifest `apps`. */
+  apps: string[];
   logLevel: string;
 }

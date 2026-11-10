@@ -9,9 +9,11 @@ import StageGrid from "./StageGrid.vue";
 import StageTooltip from "../inspector/StageTooltip.vue";
 import StageNotices from "./StageNotices.vue";
 import StagePerfBar from "./StagePerfBar.vue";
+import WindowLayer from "../apps/WindowLayer.vue";
+import LauncherLayer from "../apps/LauncherLayer.vue";
 import eFtue, { type FtueLabels } from "../../components/ftue/eFtue.vue";
 import { useI18n } from "../../composables/useI18n";
-import { hostState, overlays, primaryDisplay, stageSettings, viewport } from "../overlayClient";
+import { hostState, isObsMode, overlays, primaryDisplay, stageSettings, viewport } from "../overlayClient";
 import { mainScreen } from "../screens";
 import { dim } from "../stageState";
 import { DEMO_OVERLAY_ID } from "../stageTour";
@@ -36,6 +38,8 @@ const ftueBounds = computed(() => {
 
 const list = computed(() => [...overlays.values()]);
 const calibrating = computed(() => hostState.value === "calibrate");
+// The taskbar and the console are stage tools: OBS shows the windows only.
+const obs = isObsMode();
 
 // Shift the overlay layer so the broadcast display's region fills the frame.
 // Only the overlays move: the stage itself stays the clip box, and the editor
@@ -69,6 +73,9 @@ const mainStyle = computed(() => {
         :descriptor="d"
       />
     </div>
+    <!-- Calibration hides the windows but keeps them mounted, so the views keep their state. -->
+    <WindowLayer v-show="!calibrating" />
+    <LauncherLayer v-if="!obs" />
     <SnapGuides v-if="calibrating" />
     <OverlayInspector v-if="calibrating" />
     <StagePluginList v-if="calibrating" />
@@ -91,10 +98,12 @@ const mainStyle = computed(() => {
 }
 
 /* Same box as .stage. In the Electron stage each overlay subtracts the stage
-   offset itself, so this layer never gets a transform there. */
+   offset itself, so this layer never gets a transform there. Its own stacking
+   context keeps a plugin's z-index inside it, so app windows stay above overlays. */
 .stage-view {
   position: absolute;
   inset: 0;
+  isolation: isolate;
 }
 
 .stage-dim {

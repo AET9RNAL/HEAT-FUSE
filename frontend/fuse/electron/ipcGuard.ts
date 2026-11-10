@@ -10,6 +10,8 @@ const CHANNEL_SURFACE: Record<string, Surface> = {
   'overlay:connection': 'stage',
   'overlay:layout': 'stage',
   'overlay:select-displays': 'stage',
+  'stage:take-focus': 'stage',
+  'stage:release-focus': 'stage',
   'consent:decide': 'consent',
   'consent:closed': 'consent',
   'consent:card-rect': 'consent',

@@ -1034,6 +1034,9 @@ app.whenReady().then(() => {
     rendererDist: RENDERER_DIST,
     preload: PATHS.preload,
     onDisplaysSelected: (list) => win?.webContents.send('stage:displays:changed', list),
+    onStageFocus: (focused) => {
+      if (fuseProcess?.connected) fuseProcess.send({ type: 'stage:focus', focused })
+    },
   })
 
   // Decisions live here, encrypted; the runtime asks and is told.
@@ -1082,6 +1085,14 @@ app.whenReady().then(() => {
     const target = BrowserWindow.getFocusedWindow() || win
     if (!target) return
     target.isMaximized() ? target.unmaximize() : target.maximize()
+  })
+
+  // "Open Command Settings" in the stage console: the App comes forward, also from the tray.
+  handleIpc('window:show', () => {
+    if (!win || win.isDestroyed()) return
+    if (win.isMinimized()) win.restore()
+    win.show()
+    win.focus()
   })
 
 

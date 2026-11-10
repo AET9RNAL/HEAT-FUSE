@@ -72,6 +72,8 @@ interface Window {
   stageAPI?: {
     setIgnore: (ignore: boolean) => void
     setFocusable: (focusable: boolean) => void
+    takeFocus: () => void
+    releaseFocus: (keepFocusable?: boolean) => void
     connection: () => Promise<{ port: number; token: string } | null>
     layout: () => Promise<StageLayout | null>
     onLayout: (cb: (layout: StageLayout) => void) => void
@@ -108,6 +110,7 @@ interface Window {
     closeWindow: () => Promise<void>
     minimizeWindow: () => Promise<void>
     maximizeWindow: () => Promise<void>
+    showWindow: () => Promise<void>
     toggleStageDevtools: () => void
     toggleRuntimeDevtools: () => void
     onDeepLink: (cb: (route: string, params: Record<string, string>) => void) => void

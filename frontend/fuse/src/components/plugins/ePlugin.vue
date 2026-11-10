@@ -46,13 +46,15 @@ const statusColors: Record<PluginStatus, string> = {
   loading:  '#feff7b',
   skipped:  '#525252',
   disabled: '#525252',
+  idle:     '#84ffb1',
 }
 
 const indicatorColor = computed(() => statusColors[props.plugin.status])
 
 const indicatorGlow = computed(() => {
   const s = props.plugin.status
-  if (s === 'skipped' || s === 'disabled') return 'none'
+  // idle: ready, with no process yet.
+  if (s === 'skipped' || s === 'disabled' || s === 'idle') return 'none'
   const c = statusColors[s]
   return `0 0 4px 2px ${c}, 0 0 8px 3px ${c}66`
 })

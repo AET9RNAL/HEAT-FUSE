@@ -22,6 +22,7 @@ import type { PluginStorage, StorageCollection } from "../sdk/storage.js";
 import type { PluginSecrets } from "../sdk/secrets.js";
 import type { PluginLinks } from "../sdk/links.js";
 import type { OverridePresetInfo, OverrideStatus, OverridesSnapshot, PluginOverrides } from "../sdk/overrides.js";
+import type { AppHandlers, AppManager, AppWindow, AppWindowCommand, AppWindowState } from "../sdk/apps.js";
 import type { FuseContext, FusePlugin, HostState, HostView, TeardownReason } from "../sdk/plugin.js";
 
 export type PluginClass = (new () => FusePlugin) & { requiresCalibration?: unknown; calibrationStages?: unknown };
@@ -457,9 +458,11 @@ class RemoteOverlays implements OverlayManager {
     private readonly channel: Channel,
     private readonly pluginId: string,
     private readonly log: Logger,
+    private readonly appOnly: boolean,
   ) {}
 
   declare(decl: OverlayDeclaration): OverlayHandle {
+    if (this.appOnly) throw new Error(`overlay '${decl.id}': an app-only plugin (lifecycle "app") cannot declare overlays`);
     const localId = decl.id;
     const handle: RemoteHandle = new RemoteHandle(this.channel, `${this.pluginId}:${localId}`, localId, this.log, () => {
       if (this.handles.get(localId) === handle) this.handles.delete(localId);
@@ -483,6 +486,158 @@ class RemoteOverlays implements OverlayManager {
 
   byLocalId(id: string): RemoteHandle | undefined {
     return this.handles.get(id);
+  }
+}
+
+// --- apps ---------------------------------------------------------------------
+
+const NO_SIZE = { w: 0, h: 0 };
+
+function parseWindowState(raw: unknown): AppWindowState {
+  const r = asRecord(raw);
+  const size = asRecord(r.size);
+  return {
+    focused: r.focused === true,
+    maximized: r.maximized === true,
+    minimized: r.minimized === true,
+    size: { w: Number(size.w) || 0, h: Number(size.h) || 0 },
+  };
+}
+
+class RemoteAppWindow implements AppWindow {
+  state: AppWindowState = { focused: false, maximized: false, minimized: false, size: { ...NO_SIZE } };
+  actionHandler: ((action: string, payload?: unknown) => void) | null = null;
+  private listeners = new Set<(state: AppWindowState) => void>();
+
+  constructor(
+    private readonly channel: Channel,
+    private readonly log: Logger,
+    readonly id: string,
+    readonly appId: string,
+    readonly view: string,
+  ) {}
+
+  setJson(path: string, value: unknown): void {
+    this.channel.send({ t: "apps.setJson", windowId: this.id, path, value: jsonClone(value) });
+  }
+  setTitle(title: string): void {
+    this.channel.send({ t: "apps.setTitle", windowId: this.id, title: String(title) });
+  }
+  focus(): void {
+    this.command("focus");
+  }
+  minimize(): void {
+    this.command("minimize");
+  }
+  maximize(): void {
+    this.command("maximize");
+  }
+  restore(): void {
+    this.command("restore");
+  }
+  close(): void {
+    this.command("close");
+  }
+  onAction(cb: (action: string, payload?: unknown) => void): void {
+    this.actionHandler = cb;
+  }
+  onState(cb: (state: AppWindowState) => void): () => void {
+    this.listeners.add(cb);
+    return () => {
+      this.listeners.delete(cb);
+    };
+  }
+
+  applyState(state: AppWindowState): void {
+    this.state = state;
+    for (const cb of [...this.listeners]) {
+      try {
+        cb(state);
+      } catch (e) {
+        this.log.exception(`window ${this.id}: state listener raised`, e);
+      }
+    }
+  }
+
+  private command(command: AppWindowCommand): void {
+    this.channel.send({ t: "apps.command", windowId: this.id, command });
+  }
+}
+
+class RemoteApps implements AppManager {
+  private handlers = new Map<string, AppHandlers>();
+  private wins = new Map<string, RemoteAppWindow>();
+
+  constructor(
+    private readonly channel: Channel,
+    private readonly log: Logger,
+    private readonly appIds: string[],
+  ) {}
+
+  handle(appId: string, handlers: AppHandlers): void {
+    if (!this.appIds.includes(appId)) throw new Error(`app '${appId}' is not in the manifest 'apps' list`);
+    this.handlers.set(appId, handlers);
+    // Windows that opened before the handler: a plugin restart reopens them during setup.
+    for (const win of this.wins.values()) if (win.appId === appId) this.callOpen(win, handlers);
+  }
+
+  async open(appId: string, view = "main"): Promise<AppWindow> {
+    const windowId = await this.channel.request<string>({ t: "apps.openView", appId, view });
+    const win = this.wins.get(windowId);
+    if (!win) throw new Error(`window '${windowId}' closed before it opened`);
+    return win;
+  }
+
+  windows(appId?: string): AppWindow[] {
+    return [...this.wins.values()].filter((w) => appId === undefined || w.appId === appId);
+  }
+
+  onOpen(msg: WireMessage): void {
+    const windowId = String(msg.windowId ?? "");
+    if (!windowId || this.wins.has(windowId)) return;
+    const win = new RemoteAppWindow(this.channel, this.log, windowId, String(msg.appId ?? ""), String(msg.view ?? "main"));
+    win.state = parseWindowState(msg.state);
+    this.wins.set(windowId, win);
+    const handlers = this.handlers.get(win.appId);
+    if (handlers) this.callOpen(win, handlers);
+  }
+
+  onClose(windowId: string): void {
+    const win = this.wins.get(windowId);
+    if (!win) return;
+    this.wins.delete(windowId);
+    const close = this.handlers.get(win.appId)?.close;
+    if (!close) return;
+    try {
+      close(win);
+    } catch (e) {
+      this.log.exception(`app '${win.appId}': close handler raised`, e);
+    }
+  }
+
+  onAction(windowId: string, action: string, payload: unknown): void {
+    const win = this.wins.get(windowId);
+    if (!win?.actionHandler) return;
+    try {
+      win.actionHandler(action, payload);
+    } catch (e) {
+      this.log.exception(`window ${windowId}: action handler raised`, e);
+    }
+  }
+
+  onState(windowId: string, raw: unknown): void {
+    this.wins.get(windowId)?.applyState(parseWindowState(raw));
+  }
+
+  private callOpen(win: RemoteAppWindow, handlers: AppHandlers): void {
+    try {
+      const out = handlers.open(win);
+      if (out && typeof (out as Promise<void>).catch === "function") {
+        (out as Promise<void>).catch((e) => this.log.exception(`app '${win.appId}': open handler raised`, e));
+      }
+    } catch (e) {
+      this.log.exception(`app '${win.appId}': open handler raised`, e);
+    }
   }
 }
 
@@ -776,6 +931,7 @@ export class PluginRuntime {
   private readonly hotkeys: RemoteHotkeys;
   private readonly events: RemoteEvents;
   private readonly overlays: RemoteOverlays;
+  private readonly apps: RemoteApps;
   private readonly services: RemoteServices;
   private readonly permissions: RemotePermissions;
   private readonly links: RemoteLinks;
@@ -791,7 +947,8 @@ export class PluginRuntime {
     this.config = new RemoteConfig(channel, this.log, init.config);
     this.hotkeys = new RemoteHotkeys(channel, pluginId, this.log);
     this.events = new RemoteEvents(channel, this.log);
-    this.overlays = new RemoteOverlays(channel, pluginId, this.log);
+    this.overlays = new RemoteOverlays(channel, pluginId, this.log, init.lifecycle === "app");
+    this.apps = new RemoteApps(channel, this.log, Array.isArray(init.apps) ? init.apps : []);
     this.services = new RemoteServices(channel, this.log, init.services);
     this.permissions = new RemotePermissions(channel, init.permissions);
     this.links = new RemoteLinks(channel, this.log);
@@ -840,6 +997,7 @@ export class PluginRuntime {
       services: this.services,
       events: this.events,
       overlays: this.overlays,
+      apps: this.apps,
       notifications,
       audio,
       permissions: this.permissions,
@@ -907,6 +1065,19 @@ export class PluginRuntime {
         );
         return;
       }
+
+      case "apps.open":
+        this.apps.onOpen(msg);
+        return;
+      case "apps.close":
+        this.apps.onClose(String(msg.windowId ?? ""));
+        return;
+      case "apps.action":
+        this.apps.onAction(String(msg.windowId ?? ""), String(msg.action ?? ""), msg.payload);
+        return;
+      case "apps.state":
+        this.apps.onState(String(msg.windowId ?? ""), msg.state);
+        return;
 
       case "hotkey":
         this.hotkeys.fire(String(msg.id ?? ""), msg.phase);

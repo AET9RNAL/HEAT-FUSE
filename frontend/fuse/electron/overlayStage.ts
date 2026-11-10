@@ -14,6 +14,7 @@ import {
 } from './stageGeometry'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { leaveForeground, noteForeground, releaseForeground, takeForeground } from './foreground'
 
 declare const __RELEASE__: boolean
 
@@ -36,6 +37,8 @@ interface StageEnv {
   preload: string
   /** The user picked displays on the stage. The App saves the pick. */
   onDisplaysSelected?: (list: SavedDisplay[]) => void
+  /** The stage window got or lost the keyboard. The runtime pauses single-key hotkeys while it has it. */
+  onStageFocus?: (focused: boolean) => void
 }
 
 let stageWindow: BrowserWindow | null = null
@@ -356,7 +359,12 @@ function createStageWindow(): void {
     setTimeout(() => fitToStage(win), 1500)
     if (env?.devServerUrl) win.webContents.openDevTools({ mode: 'detach' })
   })
-  win.on('closed', () => { if (stageWindow === win) stageWindow = null })
+  win.on('focus', () => env?.onStageFocus?.(true))
+  win.on('blur', () => env?.onStageFocus?.(false))
+  win.on('closed', () => {
+    if (stageWindow === win) stageWindow = null
+    env?.onStageFocus?.(false)
+  })
   stageWindow = win
 }
 
@@ -425,12 +433,27 @@ export function initOverlayStage(stageEnv: StageEnv): void {
   // never steals focus from the game.
   onIpc('overlay:set-focusable', (_e, focusable: boolean) => {
     if (stageWindow && !stageWindow.isDestroyed()) {
-      stageWindow.setFocusable(!!focusable)
-      if (!focusable) return
+      // setFocusable(false) alone gives the keyboard to the next window in the z-order, not to the game.
+      if (!focusable) {
+        leaveForeground(stageWindow)
+        return
+      }
+      noteForeground(stageWindow)
+      stageWindow.setFocusable(true)
+      // setFocusable also changes the taskbar button. The stage never has one.
+      stageWindow.setSkipTaskbar(true)
       // A focusable overlay still needs an explicit focus to route key events to
       // the clicked input; showInactive() left it unfocused.
       stageWindow.focus()
     }
+  })
+
+  // App windows and the console: the keyboard with no click, and back to the game on Esc.
+  onIpc('stage:take-focus', () => {
+    if (stageWindow && !stageWindow.isDestroyed()) takeForeground(stageWindow)
+  })
+  onIpc('stage:release-focus', (_e, keepFocusable: boolean) => {
+    if (stageWindow && !stageWindow.isDestroyed()) releaseForeground(stageWindow, !!keepFocusable)
   })
 
   onIpc('overlay:toggle-devtools', () => {

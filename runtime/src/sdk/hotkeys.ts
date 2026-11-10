@@ -67,6 +67,11 @@ export class HotkeyRegistry {
     this.listeners.add(listener);
   }
 
+  /** While the stage has the keyboard, only a combo with Ctrl or Alt fires, so typing does not trigger hotkeys. */
+  static firesWhileTyping(mods: string[]): boolean {
+    return mods.includes("ctrl") || mods.includes("alt");
+  }
+
   static parse(combo: string): ParsedCombo {
     const parts = combo
       .split("+")

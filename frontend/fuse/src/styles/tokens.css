@@ -126,6 +126,11 @@
   --black-1-a: hsla(142, 0%, 4%, 0.6);
   --black-2-a: hsla(142, 0%, 10%, 0.6);
   --black-3-a: hsla(142, 0%, 20%, 0.6);
+  /* Dense stage surface: app windows, the console, the taskbar. The game stays out of the text. */
+  --black-1-s: hsla(142, 0%, 4%, 0.86);
+
+  /* Accent w/ Alpha */
+  --accent-200-a: hsla(142, 100%, 78%, 0.2);
 
   /* Base colors */
   --base-50: rgba(242, 242, 242, 1);

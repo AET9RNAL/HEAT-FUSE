@@ -4,7 +4,8 @@
  */
 import { computed, ref, watch } from "vue";
 import { useI18n } from "../composables/useI18n";
-import { cancelFtue, ftue, startFtue, type FtueStep, type FtueTour } from "../directives/vFtue";
+import { cancelFtue, ftue, startFtue, type FtueSide, type FtueStep, type FtueTour } from "../directives/vFtue";
+import { launcher, taskbarHeld } from "./apps/appsState";
 import {
   connected,
   formatCombo,
@@ -38,11 +39,18 @@ interface StageStep extends Omit<FtueStep, "title" | "body" | "sample"> {
   demo?: boolean;
   /** The step needs Ctrl+I, which does nothing while a plugin is in setup calibration. */
   modeSwitch?: boolean;
+  /** The card side, read when the tour starts. */
+  sideFor?: () => FtueSide;
 }
 
 const selectDemo = (): void => selectOverlay(DEMO_OVERLAY_ID);
 const openList = (): void => { pluginListOpen.value = true; };
 const closeList = (): void => { pluginListOpen.value = false; };
+const holdTaskbar = (): void => { taskbarHeld.value = true; };
+const releaseTaskbar = (): void => { taskbarHeld.value = false; };
+
+/** The card goes on the side of the taskbar that faces the middle of the display. */
+const TASKBAR_CARD_SIDE: Record<string, FtueSide> = { bottom: "top", top: "bottom", left: "right", right: "left" };
 
 // A stage with no overlay plugins locks at launch. A locked stage takes no input, so this prompt waits for the hotkey.
 // It keeps the game clear, because the user may be playing.
@@ -82,12 +90,22 @@ const STEPS: StageStep[] = [
     // Ctrl+L from interactive goes to calibrate, and the next step then moves on by itself.
     states: ["interactive", "locked", "calibrate"],
   },
+  // Calibrate hides the taskbar, so this step comes while the stage is out of calibrate. Without the taskbar the card centers.
+  {
+    key: "apps",
+    target: "stage-taskbar",
+    sideFor: () => TASKBAR_CARD_SIDE[launcher.edge] ?? "top",
+    modeSwitch: true,
+    states: ["interactive", "locked", "calibrate"],
+    before: holdTaskbar,
+  },
   {
     key: "leave",
     modeSwitch: true,
     noBack: true,
     states: ["interactive", "locked", "calibrate"],
     advanceWhen: () => hostState.value === "calibrate",
+    before: releaseTaskbar,
   },
   { key: "help", target: "stage-help", side: "top", align: "end", noBack: true },
 ];
@@ -169,11 +187,16 @@ function removeDemo(): void {
 let activeSteps: StageStep[] = [];
 
 function build(steps: StageStep[], t: (key: string, params?: Record<string, string>) => string): FtueTour {
-  const keys = { lock: formatCombo(hostHotkeys.lock), interactive: formatCombo(hostHotkeys.interactive) };
+  const keys = {
+    lock: formatCombo(hostHotkeys.lock),
+    interactive: formatCombo(hostHotkeys.interactive),
+    console: formatCombo(hostHotkeys.console),
+  };
   return {
     id: "stage-intro",
-    steps: steps.map(({ key, states: _states, demo, modeSwitch: _modeSwitch, ...step }) => ({
+    steps: steps.map(({ key, states: _states, demo, modeSwitch: _modeSwitch, sideFor, ...step }) => ({
       ...step,
+      side: sideFor?.() ?? step.side,
       title: t(`stagetour.${key}.title`, keys),
       body: t(`stagetour.${key}.body`, keys),
       sample: demo,
@@ -204,6 +227,7 @@ async function runStageTour(): Promise<void> {
     if (stageSettings.tour) awaitingSeen.value = true;
     sendStageTourDone();
   } finally {
+    releaseTaskbar();
     running.value = false;
   }
 }

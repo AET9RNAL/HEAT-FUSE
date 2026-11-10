@@ -65,7 +65,13 @@ export interface RuntimeBridge {
   /** Plugin roster for the stage's plugin list. */
   pluginListForStage(): Array<Record<string, unknown>>;
   /** Host shortcut combos after user overrides, for on-screen hints. */
-  hostHotkeys(): { lock: string; interactive: string };
+  hostHotkeys(): { lock: string; interactive: string; console: string };
+  /** A stage message about apps, windows, the console or hotkey capture. */
+  onAppsMessage(msg: Record<string, unknown>): void;
+  /** Open windows for a newly-connected stage or OBS view, plus the app list and launcher settings for the stage. */
+  appsHydration(stage: boolean): Array<Record<string, unknown>>;
+  /** The App's `app.*` and `launcher.settings` calls. */
+  rpcApps(method: string, params: Record<string, unknown>): Promise<Record<string, unknown>>;
   /** A stage window dragged an overlay - persist + propagate. */
   onOverlayTransform(overlayId: string, rect: Record<string, number>): void;
   /** An interactive overlay emitted an action (button/input) - route to plugin. */
@@ -294,6 +300,8 @@ export class WsServer {
       send(ws, { type: "audio:master", ...audio.master });
       if (audio.preload.length) send(ws, { type: "audio:preload", urls: audio.preload });
       if (role === "stage") send(ws, { type: "stage:settings", ...this.bridge.stageSettings() });
+      // OBS views show the app windows, read-only. The launcher and the console are stage-only.
+      for (const m of this.bridge.appsHydration(role === "stage")) send(ws, m);
       const hs = this.bridge.hostState();
       send(ws, { type: "host:state_changed", state: hs.state, calib_stage: hs.calib_stage });
     }
@@ -340,6 +348,10 @@ export class WsServer {
     }
     if (role === "stage" && msg.type === "stage:tour_done") {
       this.bridge.onStageTourDone();
+      return;
+    }
+    if (role === "stage" && isAppsMessage(msg.type)) {
+      this.bridge.onAppsMessage(msg);
       return;
     }
     if (role === "stage" && msg.type === "permissions:review") {
@@ -394,6 +406,14 @@ export class WsServer {
         case "app.setGameConfig":
           result = this.bridge.rpcAppSetGameConfig(params);
           break;
+        case "app.list":
+        case "app.launch":
+        case "app.configure":
+        case "app.favorite":
+        case "app.pin":
+        case "launcher.settings":
+          result = await this.bridge.rpcApps(method, params);
+          break;
         default:
           send(ws, {
             jsonrpc: "2.0",
@@ -440,6 +460,25 @@ export class WsServer {
     this.broadcastControl(payload);
     this.broadcastOverlay(payload);
   }
+}
+
+const APPS_MESSAGES = new Set([
+  "app:launch",
+  "app:favorite",
+  "app:pin",
+  "app:configure",
+  "app:quit",
+  "app:open_settings",
+  "console:closed",
+  "console:toggle",
+  "hotkeys:capture",
+  "window:command",
+  "window:rect",
+  "window:action",
+]);
+
+function isAppsMessage(type: unknown): boolean {
+  return typeof type === "string" && APPS_MESSAGES.has(type);
 }
 
 function send(ws: WebSocket, obj: Record<string, unknown>): void {

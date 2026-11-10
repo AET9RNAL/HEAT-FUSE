@@ -14,6 +14,7 @@ import { GAME_REPLAYS_DIR, PLUGIN_FILES_DIR } from "../utils/paths.js";
 import { ConfigManager, PluginConfig } from "./config.js";
 import { EventBus } from "./EventBus.js";
 import { OverlayHub } from "./OverlayManager.js";
+import { AppHub } from "./AppHub.js";
 import { NotificationHub } from "./NotificationHub.js";
 import { AudioHub } from "./AudioHub.js";
 import { PermissionManager } from "./permissions.js";
@@ -38,11 +39,15 @@ import type { HostState, TeardownReason } from "../sdk/plugin.js";
 import { HotkeyInput, type MouseCallback } from "../input/hotkeys.js";
 import type { PluginHydration, RuntimeBridge, WsServer } from "../server/WsServer.js";
 
-export const HOST_VERSION = "5.0.0";
+/** 5.1.0: manifest `apps` and `lifecycle`, `ctx.apps`. */
+export const HOST_VERSION = "5.1.0";
 const HOST_CONFIG_FILENAME = "fuse_host.json";
 // Also the action names the app's keybind settings and hotkey_overrides use.
 const LOCK_HOTKEY_LABEL = "Toggle Calibrate/Lock";
 const INTERACTIVE_HOTKEY_LABEL = "Toggle Interactive";
+const CONSOLE_HOTKEY_LABEL = "Open Console";
+/** A stage that records a combo and then goes silent does not keep the hotkeys off. */
+const CAPTURE_TIMEOUT_MS = 30_000;
 /** Unexpected exits allowed within CRASH_WINDOW_MS before a plugin is left stopped. */
 const MAX_RESTARTS = 3;
 const CRASH_WINDOW_MS = 120_000;
@@ -109,6 +114,8 @@ interface HostConfigState {
   hotkey_overrides: Record<string, Record<string, string>>;
   /** Plugin -> its picked override preset, or null for none. Key order is pick order. */
   override_picks?: Record<string, string | null>;
+  /** Taskbar, console, favorites and window places (AppHub). */
+  apps?: unknown;
   [key: string]: unknown;
 }
 
@@ -192,6 +199,7 @@ export class FuseHost implements RuntimeBridge {
   private gameProbe: GameProbe;
   private sendToElectron: ((msg: Record<string, unknown>) => void) | null;
   private overlayHub: OverlayHub;
+  private appHub!: AppHub;
   private notificationHub: NotificationHub;
   private audioHub: AudioHub;
   private server: WsServer;
@@ -215,6 +223,9 @@ export class FuseHost implements RuntimeBridge {
   private lastTick = performance.now() / 1000;
   private quitting = false;
   private capturingRebind = false;
+  private captureTimer: NodeJS.Timeout | null = null;
+  /** The stage window has the keyboard (Electron main reports focus and blur). */
+  private stageFocused = false;
   private networkNoticeShown = false;
 
   private mouseSubscribers: MouseCallback[] = [];
@@ -305,6 +316,30 @@ export class FuseHost implements RuntimeBridge {
       onChange: (id) => this.onOverridesChanged(id),
     });
 
+    this.appHub = new AppHub({
+      plugins: () => this.discovered.values(),
+      pluginState: (id) => this.pluginStates.get(id),
+      isRunning: (id) => this.procs.has(id),
+      ensureRunning: (id) => this.ensureAppRunning(id),
+      stopApp: (id) => this.stopAppPlugin(id),
+      sendToPlugin: (id, msg) => this.procs.get(id)?.deliver(msg),
+      broadcastStage: (msg) => this.server.broadcastStage(msg),
+      broadcastOverlay: (msg) => this.server.broadcastOverlay(msg),
+      broadcastControl: (msg) => this.server.broadcastControl(msg),
+      noteUserAction: (id) => this.permissions.noteUserAction(id),
+      setHotkeyCapture: (on) => this.setHotkeyCapture(on),
+      notifyError: (title, message) =>
+        this.notificationHub.notify("host", { id: `app-error-${title}`, type: "error", title, message, duration: 8000 }),
+      hostState: () => this._state,
+      consoleHotkey: () => this.hostHotkeys().console,
+      hotkeys: this.hotkeys,
+      loadState: () => this.hostCfgState.apps,
+      saveState: (state) => {
+        this.hostCfgState.apps = state;
+        this.hostConfig.save(this.hostCfgState as unknown as Record<string, unknown>);
+      },
+    });
+
     this.registerGlobalHotkeys();
     this.applyHotkeyOverrides("host");
 
@@ -375,6 +410,7 @@ export class FuseHost implements RuntimeBridge {
     }
     this.setupPending = [...ordered];
     this.publishFrames();
+    this.appHub.sync();
   }
 
   /** The sites enabled plugins declared in `frames`. Electron lets the stage show only these in an iframe. */
@@ -403,6 +439,7 @@ export class FuseHost implements RuntimeBridge {
         node: this.pluginNode,
         config: cfg,
         overlays,
+        apps: this.appHub.scoped(spec.pluginId),
         hotkeys: this.hotkeys,
         hotkeyOverride: (label, action) => {
           const saved = this.hostCfgState.hotkey_overrides?.[spec.pluginId] ?? {};
@@ -447,6 +484,50 @@ export class FuseHost implements RuntimeBridge {
     this.procs.set(spec.pluginId, proc);
     pluginLogger.info(`Loaded v${spec.version} in process ${proc.pid ?? "?"}${proc.sandboxed ? "" : " (not sandboxed)"}`);
     this.notifyPluginRegistered(spec, PluginState.ACTIVE);
+    this.appHub.onPluginStarted(spec.pluginId);
+  }
+
+  /** Start the process of a plugin for one of its app windows. */
+  private async ensureAppRunning(pluginId: string): Promise<void> {
+    if (this.procs.has(pluginId)) return;
+    const spec = this.discovered.get(pluginId);
+    const state = this.pluginStates.get(pluginId);
+    if (!spec) throw new Error(`there is no plugin '${pluginId}'`);
+    if (state === PluginState.DISABLED || state === PluginState.SKIPPED) throw new Error(`${spec.name} is off`);
+    if (state === PluginState.PENDING || state === PluginState.LOADING) throw new Error(`${spec.name} is still starting`);
+    // A user launch gets a fresh restart budget.
+    this.crashes.delete(pluginId);
+    await this.permissions.ensureConsent(pluginId);
+    await this.instantiate(spec);
+    const proc = this.procs.get(pluginId);
+    if (!proc) throw new Error(`${spec.name} did not start`);
+    this.enterCurrentState(proc);
+    this.notifyPluginStatusChanged(pluginId, PluginState.ACTIVE);
+  }
+
+  /** The last window of an app-only plugin closed: its process stops, and it waits for the next launch. */
+  private async stopAppPlugin(pluginId: string): Promise<void> {
+    const proc = this.procs.get(pluginId);
+    if (!proc || this.discovered.get(pluginId)?.lifecycle !== "app") return;
+    this.procs.delete(pluginId);
+    await proc.teardown("app_closed");
+    this.releasePlugin(pluginId);
+    // A disable during the teardown wins.
+    if (this.pluginStates.get(pluginId) === PluginState.ACTIVE) this.pluginStates.set(pluginId, PluginState.IDLE);
+    this.notifyPluginStatusChanged(pluginId, this.pluginStates.get(pluginId) ?? PluginState.IDLE);
+    logger.info(`Plugin '${pluginId}' stopped: its last app window closed.`);
+  }
+
+  /** An app-only plugin waits for its first window with no process. */
+  private idleAppPlugin(spec: DiscoveredPlugin): void {
+    this.pluginStates.set(spec.pluginId, PluginState.IDLE);
+    logger.info(`App plugin ${spec.name} [${spec.pluginId}] v${spec.version} waits for its first window`);
+    this.notifyPluginRegistered(spec, PluginState.IDLE);
+    this.appHub.sync();
+    // A reload keeps the open windows: their plugin starts again.
+    if (this.appHub.windowCount(spec.pluginId)) {
+      this.ensureAppRunning(spec.pluginId).catch((e) => logger.warning(`${spec.pluginId}: did not restart for its windows: ${String(e)}`));
+    }
   }
 
   /** `ctx.audio` for one plugin, refused unless it declared the `audio` scope. */
@@ -489,6 +570,11 @@ export class FuseHost implements RuntimeBridge {
     }
     if (msg.type === "overrides:recheck") {
       void this.overrides.recompute();
+      return;
+    }
+    if (msg.type === "stage:focus") {
+      this.stageFocused = msg.focused === true;
+      if (!this.stageFocused) this.setHotkeyCapture(false);
       return;
     }
     if (msg.type === "links:callback") {
@@ -647,6 +733,7 @@ export class FuseHost implements RuntimeBridge {
     for (const proc of procs) {
       await proc.teardown(reason);
       this.releasePlugin(proc.pluginId);
+      this.appHub.onPluginStopped(proc.pluginId, false);
     }
   }
 
@@ -678,6 +765,12 @@ export class FuseHost implements RuntimeBridge {
     }
 
     const spec = this.setupPending.shift()!;
+    if (spec.lifecycle === "app") {
+      // No process and no consent until its first window.
+      this.idleAppPlugin(spec);
+      setImmediate(() => void this.dequeueNextPlugin());
+      return;
+    }
     this._state = this.autoLockQueue ? "locked" : "calibrate";
     await this.permissions.ensureConsent(spec.pluginId);
     if (!spec.hasRuntime) {
@@ -756,6 +849,8 @@ export class FuseHost implements RuntimeBridge {
       this.hostConfig.save(this.hostCfgState as unknown as Record<string, unknown>);
     }
     this.pluginStates.set(pluginId, PluginState.DISABLED);
+    this.appHub.onPluginDisabled(pluginId);
+    this.appHub.sync();
     this.notifyPluginStatusChanged(pluginId, PluginState.DISABLED);
     this.publishFrames();
     // A plugin that is off keeps nothing in the game files.
@@ -785,6 +880,13 @@ export class FuseHost implements RuntimeBridge {
       return;
     }
     this.crashes.delete(pluginId);
+    if (spec.lifecycle === "app") {
+      if (this.pluginStates.get(pluginId) === PluginState.IDLE) return;
+      this.idleAppPlugin(spec);
+      this.publishFrames();
+      this.notifyPluginStatusChanged(pluginId, PluginState.IDLE);
+      return;
+    }
     await this.permissions.ensureConsent(pluginId);
     if (!spec.hasRuntime) {
       this.activateOverrideOnly(spec);
@@ -794,6 +896,7 @@ export class FuseHost implements RuntimeBridge {
     }
     await this.instantiate(spec);
     this.publishFrames();
+    this.appHub.sync();
     void this.overrides.recompute();
     const proc = this.procs.get(pluginId);
     if (!proc) return;
@@ -829,12 +932,24 @@ export class FuseHost implements RuntimeBridge {
     this.procs.delete(pluginId);
     this.releasePlugin(pluginId);
     this.pluginStates.set(pluginId, PluginState.ERROR);
+    this.appHub.onPluginStopped(pluginId, true);
     this.notifyPluginStatusChanged(pluginId, PluginState.ERROR);
     if (this.setupActive?.pluginId === pluginId) {
       this.setupActive = null;
       setImmediate(() => void this.dequeueNextPlugin());
     }
     if (this.quitting) return;
+    // An app-only plugin restarts from its window's Restart button, not on its own.
+    if (spec.lifecycle === "app") {
+      this.notificationHub.notify("host", {
+        id: `plugin-restart-${pluginId}`,
+        type: "warning",
+        title: `${spec.name} stopped unexpectedly`,
+        message: `Its windows can restart it (${detail}).`,
+        duration: 6000,
+      });
+      return;
+    }
 
     const now = Date.now();
     const recent = (this.crashes.get(pluginId) ?? []).filter((t) => now - t < CRASH_WINDOW_MS);
@@ -893,6 +1008,7 @@ export class FuseHost implements RuntimeBridge {
     this.procs.delete(proc.pluginId);
     await proc.teardown("restart");
     this.releasePlugin(proc.pluginId);
+    this.appHub.onPluginStopped(proc.pluginId, false);
     await this.restartPlugin(proc.pluginId);
   }
 
@@ -1010,6 +1126,17 @@ export class FuseHost implements RuntimeBridge {
     this.hotkeys.register("ctrl+i", () => this.toggleInteractive(), INTERACTIVE_HOTKEY_LABEL, "host");
     this.hotkeys.register("ctrl+p", () => void this.quit(), "Quit FUSE", "host");
     this.hotkeys.register("ctrl+r", () => void this.reloadPlugins(), "Hot-Reload Plugins", "host");
+    this.hotkeys.register("ctrl+space", () => this.appHub.toggleConsole(), CONSOLE_HOTKEY_LABEL, "host");
+  }
+
+  /** The stage records a combo: no hotkey fires until it stops, or until the timeout. */
+  private setHotkeyCapture(on: boolean): void {
+    if (this.captureTimer) {
+      clearTimeout(this.captureTimer);
+      this.captureTimer = null;
+    }
+    this.capturingRebind = on;
+    if (on) this.captureTimer = setTimeout(() => this.setHotkeyCapture(false), CAPTURE_TIMEOUT_MS);
   }
 
   subscribeMouse(cb: MouseCallback): void {
@@ -1022,6 +1149,7 @@ export class FuseHost implements RuntimeBridge {
       return;
     }
     if (this.capturingRebind) return;
+    if (this.stageFocused && !HotkeyRegistry.firesWhileTyping([...mods])) return;
     this.hotkeys.dispatch([...mods], key);
   }
 
@@ -1332,11 +1460,25 @@ export class FuseHost implements RuntimeBridge {
   }
 
   /** Host shortcut combos as bound right now, overrides included - the source for on-screen hints. */
-  hostHotkeys(): { lock: string; interactive: string } {
+  hostHotkeys(): { lock: string; interactive: string; console: string } {
     const bindings = this.hotkeys.listBindings("host");
     const combo = (label: string, fallback: string): string =>
       bindings.find((b) => b.label === label)?.combo ?? fallback;
-    return { lock: combo(LOCK_HOTKEY_LABEL, "ctrl+l"), interactive: combo(INTERACTIVE_HOTKEY_LABEL, "ctrl+i") };
+    return {
+      lock: combo(LOCK_HOTKEY_LABEL, "ctrl+l"),
+      interactive: combo(INTERACTIVE_HOTKEY_LABEL, "ctrl+i"),
+      console: combo(CONSOLE_HOTKEY_LABEL, "ctrl+space"),
+    };
+  }
+
+  onAppsMessage(msg: Record<string, unknown>): void {
+    this.appHub.onStageMessage(msg);
+  }
+  appsHydration(stage: boolean): Array<Record<string, unknown>> {
+    return this.appHub.hydration(stage);
+  }
+  rpcApps(method: string, params: Record<string, unknown>): Promise<Record<string, unknown>> {
+    return this.appHub.rpc(method, params);
   }
 
   private broadcastHostHotkeys(): void {
@@ -1445,7 +1587,10 @@ export class FuseHost implements RuntimeBridge {
     this.hostConfig.save(this.hostCfgState as unknown as Record<string, unknown>);
 
     this.server.broadcastControl({ type: "hotkey:rebound", plugin_id: pluginId, action, combo: newCombo });
-    if (pluginId === "host") this.broadcastHostHotkeys();
+    if (pluginId === "host") {
+      this.broadcastHostHotkeys();
+      this.appHub.broadcastLauncher();
+    }
     return { ok: true };
   }
 

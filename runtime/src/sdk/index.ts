@@ -22,6 +22,7 @@ export type {
   Size,
 } from "./overlay.js";
 export { OVERLAY_FILES_DIR } from "./overlay.js";
+export type { AppManager, AppWindow, AppWindowState, AppWindowCommand, AppHandlers } from "./apps.js";
 export type {
   OverlayInspector,
   InspectorSection,

@@ -1,7 +1,7 @@
 {
   "name": "fuse",
   "private": true,
-  "version": "2.3.0",
+  "version": "3.0.0",
   "description": "FUSE modding runtime for WoT HEAT",
   "author": "AET3RNAL",
   "license": "GPL-3.0-only",
@@ -11,6 +11,7 @@
     "build": "vue-tsc && npm run build:runtime && npm run pack:plugins && vite build && electron-builder",
     "build:linux": "vue-tsc && npm run build:runtime && npm run pack:plugins && vite build && electron-builder --linux",
     "preview": "vite preview",
+    "test": "node --test \"test/*.test.ts\"",
     "build:runtime": "node scripts/build-runtime.cjs",
     "pack:plugins": "node scripts/pack-node-plugins.cjs",
     "release": "dotenv -e .env -- cross-env vue-tsc && npm run build:runtime && vite build && dotenv -e .env -- electron-builder --publish always",
@@ -26,6 +27,7 @@
     "dompurify": "^3.2.0",
     "electron-updater": "^6.8.9",
     "fflate": "^0.8.3",
+    "koffi": "^3.3.7",
     "lottie-web": "^5.13.0",
     "marked": "^15.0.0",
     "mitt": "^3.0.1",
@@ -81,7 +83,9 @@
       {
         "from": "build/node",
         "to": "node",
-        "filter": ["node.exe"]
+        "filter": [
+          "node.exe"
+        ]
       },
       {
         "from": "../../backend/fuse/manifest.json",

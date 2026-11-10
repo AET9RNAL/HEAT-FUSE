@@ -14,14 +14,19 @@ import { computed, reactive, ref, toRaw } from "vue";
 import mitt from "mitt";
 import { playAudio, preloadAudio, setAudioMaster, stopAllAudio, stopAudio } from "./audio";
 
-/** This page is an OBS browser source rather than the Electron stage window. */
-let obsMode = false;
+/** This page is an OBS browser source rather than the Electron stage window. Known at load, before any component mounts. */
+let obsMode =
+  typeof (window as unknown as { __FUSE_OVERLAY_PARAMS_URL__?: string }).__FUSE_OVERLAY_PARAMS_URL__ === "string" ||
+  new URLSearchParams(location.search).has("paramsUrl");
 import type { OverlayInput } from "./rive";
 import type { InputPhase, InspectorSchema } from "./inspector/types";
 import { clearNotifications, pushNotification, removeNotification, type StageNotification } from "./notifications";
 import { displays, stageOffset, viewport, type DisplayArea } from "./screens";
 export { primaryDisplay, viewport } from "./screens";
 import type { HostState, OverlayDescriptor, OverlayRect, PluginMetrics, StageMetrics, StagePlugin } from "./types";
+import { applyAppsMessage, clearApps, onFocusRequest } from "./apps/appsState";
+import type { WindowCommand } from "./apps/types";
+import type { Rect } from "./apps/windowGeometry";
 
 type DataEvents = Record<string, Record<string, OverlayInput>>;
 export const overlayBus = mitt<DataEvents>();
@@ -52,7 +57,7 @@ export const stageSettings = reactive({ perfWidget: false, tour: false });
 /** The stage renderer's and GPU process's resources, once a second while the widget is on. */
 export const stageMetrics = ref<StageMetrics | null>(null);
 /** Host shortcuts as currently bound (user-rebindable), for on-stage hints. */
-export const hostHotkeys = reactive({ lock: "ctrl+l", interactive: "ctrl+i" });
+export const hostHotkeys = reactive({ lock: "ctrl+l", interactive: "ctrl+i", console: "ctrl+space" });
 
 /** "ctrl+shift+f5" -> "Ctrl+Shift+F5" */
 export function formatCombo(combo: string): string {
@@ -77,6 +82,10 @@ type StageApi = {
   stageAPI?: {
     setIgnore(ignore: boolean): void;
     setFocusable(focusable: boolean): void;
+    /** Takes the keyboard from the game with no click. Electron main only can do it. */
+    takeFocus?(): void;
+    /** Gives the keyboard back to the window that had it before `takeFocus`. */
+    releaseFocus?(keepFocusable: boolean): void;
     connection(): Promise<FuseOverlayParams | null>;
     layout(): Promise<StageLayout | null>;
     onLayout(cb: (layout: StageLayout) => void): void;
@@ -115,6 +124,28 @@ export function setWindowIgnore(ignore: boolean): void {
 export function setWindowFocusable(focusable: boolean): void {
   (window as unknown as StageApi).stageAPI?.setFocusable(focusable);
 }
+
+/** A click in an app window: the click is user input, so Windows lets the stage take the keyboard. */
+export function focusStageForClick(): void {
+  setWindowFocusable(true);
+}
+
+/** The keyboard for a window the user opened with a key (console, launch hotkey). */
+export function takeStageFocus(): void {
+  const api = (window as unknown as StageApi).stageAPI;
+  if (api?.takeFocus) api.takeFocus();
+}
+
+/** Esc in the console: the game gets the keyboard back. */
+export function releaseStageFocus(): void {
+  const api = (window as unknown as StageApi).stageAPI;
+  // Interactive and calibrate states keep the stage focusable for overlay inputs.
+  const keep = hostState.value !== "locked";
+  if (api?.releaseFocus) api.releaseFocus(keep);
+  else if (!keep) setWindowFocusable(false);
+}
+
+onFocusRequest(() => takeStageFocus());
 
 let ws: WebSocket | null = null;
 let base = "";
@@ -221,6 +252,7 @@ function openSocket(params: FuseOverlayParams): void {
     stageMetrics.value = null;
     stageSettings.perfWidget = false;
     stageSettings.tour = false;
+    clearApps();
     clearNotifications();
     stopAllAudio();
     setTimeout(connectOverlay, RECONNECT_MS); // simple auto-reconnect
@@ -229,6 +261,7 @@ function openSocket(params: FuseOverlayParams): void {
 }
 
 function handle(m: Record<string, unknown>): void {
+  if (applyAppsMessage(m)) return;
   switch (m.type) {
     case "auth:ok":
       connected.value = true;
@@ -328,6 +361,7 @@ function handle(m: Record<string, unknown>): void {
     case "host:hotkeys":
       if (typeof m.lock === "string") hostHotkeys.lock = m.lock;
       if (typeof m.interactive === "string") hostHotkeys.interactive = m.interactive;
+      if (typeof m.console === "string") hostHotkeys.console = m.console;
       break;
     case "stage:notify": {
       const n = m.notification as Omit<StageNotification, "rev"> | undefined;
@@ -422,6 +456,33 @@ export function sendStageTourDone(): void {
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify({ type: "stage:tour_done" }));
   }
+}
+
+function sendStage(msg: Record<string, unknown>): void {
+  if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
+}
+
+export function sendWindowCommand(windowId: string, command: WindowCommand): void {
+  sendStage({ type: "window:command", windowId, command });
+}
+
+/** A window moved or resized: sent at the end of the gesture. */
+export function sendWindowRect(windowId: string, rect: Rect): void {
+  sendStage({ type: "window:rect", windowId, rect });
+}
+
+/** An app view's `emitAction`, to the plugin that owns the window. */
+export function sendWindowAction(windowId: string, action: string, payload?: unknown): void {
+  sendStage({ type: "window:action", windowId, action, payload });
+}
+
+export function sendAppLaunch(appKey: string, opts: { view?: string; newWindow?: boolean } = {}): void {
+  sendStage({ type: "app:launch", appKey, ...opts });
+}
+
+/** Apps messages with no special fields: app:favorite, app:pin, app:configure, app:quit, app:open_settings, console:closed, hotkeys:capture. */
+export function sendAppsMessage(type: string, fields: Record<string, unknown> = {}): void {
+  sendStage({ ...fields, type });
 }
 
 /** True when this page is an OBS browser source, not the Electron stage. */
