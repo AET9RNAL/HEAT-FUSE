@@ -34,6 +34,7 @@ const community: CommunityCredit[] = [
     { name: 'IAmEdWards',     roles: ['appabout.creditFeedback'] },
     { name: 'Forever',     roles: ['appabout.creditTesting'] },
     { name: 'Tact91',     roles: ['appabout.creditRequests'] },
+    { name: 'GUGUREKASU',     roles: ['appabout.creditFeedback'] },
 
     
 ].sort((a, b) => a.name.localeCompare(b.name, 'en', { sensitivity: 'base', numeric: true }))

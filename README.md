@@ -1291,6 +1291,7 @@ UI/UX, branding and development by AETERNAL. These community members helped shap
 | Darkburrow | Feedback & bug reports |
 | Felix852 | Feedback & bug reports |
 | Forever | Feature testing |
+| GUGUREKASU | Feedback & bug reports |
 | IAmEdWards | Feedback & bug reports |
 | IntergalaktycznyCygan | Feature testing |
 | LigManBruh | Feature testing |
