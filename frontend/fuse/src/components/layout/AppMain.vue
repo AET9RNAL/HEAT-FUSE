@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { motion, AnimatePresence } from 'motion-v'
+import AppCredits from './AppCredits.vue'
 import AppSidebar from './AppSidebar.vue'
 import AppTab from './AppTab.vue'
 </script>
@@ -14,8 +15,11 @@ import AppTab from './AppTab.vue'
         :animate="{ '--dot-radius': '150%', filter: 'blur(0px) brightness(1) saturate(1)' }"
         :transition="{ duration: 1, ease: 'easeOut' }"
       >
-        <AppSidebar />
-        <AppTab />
+        <div class="app-body">
+          <AppSidebar />
+          <AppTab />
+        </div>
+        <AppCredits />
       </motion.div>
     </AnimatePresence>
   </div>
@@ -36,7 +40,7 @@ import AppTab from './AppTab.vue'
   top: 0;
   left: 0;
   display: flex;
-  flex-direction: row;
+  flex-direction: column;
   width: 100%;
   height: 100%;
   --glow-size: 40%;
@@ -47,5 +51,12 @@ import AppTab from './AppTab.vue'
   mask-repeat: repeat;
   -webkit-mask-repeat: repeat;
   background-color: var(--glass-surfaces-base-1000);
+}
+
+.app-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: row;
 }
 </style>

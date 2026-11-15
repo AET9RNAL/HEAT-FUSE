@@ -13,7 +13,8 @@ import { appsUiShown } from "./apps/appsState";
 initStageTour();
 initHiddenOverlayNotice();
 
-const APPS_UI = ".fuse-window, .fuse-taskbar, .fuse-console, .fuse-actions";
+// A frame takes the mouse only on its `fuse-hit` parts. Its clear areas stay click-through.
+const APPS_UI = ".fuse-window, .fuse-frame .fuse-hit, .fuse-taskbar, .fuse-console, .fuse-actions";
 
 let lastIgnore = true;
 

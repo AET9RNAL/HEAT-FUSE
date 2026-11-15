@@ -89,6 +89,12 @@ interface PluginReg {
   config: PluginConfig;
 }
 
+/** Where a discovered plugin's files live. Assets resolve from this even while the plugin's process is off - an app icon in the launcher must load before the app starts. */
+interface PackageRoots {
+  assetsRoot: string;
+  packageRoot: string;
+}
+
 interface InspectorReg {
   sections: InspectorSection[];
   byId: Map<string, InspectorControl>;
@@ -113,6 +119,7 @@ export class OverlayHub {
   private server: WsServer;
   private hotkeys: HotkeyBridge | null = null;
   private plugins = new Map<string, PluginReg>();
+  private packages = new Map<string, PackageRoots>();
   private descriptors = new Map<string, Descriptor>();
   private pending = new Map<string, Map<string, InputValue>>();
   /** Latest value per path per overlay - replayed to late-joining stage clients. */
@@ -145,8 +152,19 @@ export class OverlayHub {
     }
   }
 
+  /** Register a discovered plugin's file roots so its assets resolve before its process runs. Called per eligible spec at load. */
+  registerPackage(pluginId: string, assetsRoot: string, packageRoot: string): void {
+    this.packages.set(pluginId, { assetsRoot, packageRoot });
+  }
+
+  /** Drop every package root - the next load re-registers the plugins that are still on. */
+  clearPackages(): void {
+    this.packages.clear();
+  }
+
   registerPlugin(pluginId: string, assetsRoot: string, packageRoot: string, config: PluginConfig): OverlayManager {
     this.plugins.set(pluginId, { pluginId, assetsRoot, packageRoot, config });
+    this.registerPackage(pluginId, assetsRoot, packageRoot);
     return new ScopedOverlayManager(this, pluginId);
   }
 
@@ -165,14 +183,14 @@ export class OverlayHub {
   // --- WsServer bridge hooks ----------------------------------------------
 
   resolveAsset(pluginId: string, relPath: string): string | null {
-    const reg = this.plugins.get(pluginId);
-    if (!reg) return null;
+    const pkg = this.packages.get(pluginId);
+    if (!pkg) return null;
     // Dev override: read live sources from `plugins-src/<id>`
     const dev = this.resolveDevAsset(pluginId, relPath);
     if (dev) return dev;
-    const fromAssets = path.join(reg.assetsRoot, relPath);
+    const fromAssets = path.join(pkg.assetsRoot, relPath);
     if (fs.existsSync(fromAssets)) return fromAssets;
-    return path.join(reg.packageRoot, relPath);
+    return path.join(pkg.packageRoot, relPath);
   }
 
   /**

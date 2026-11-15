@@ -19,17 +19,6 @@ import { eventBus } from '../../events/eventBus'
 import { requestSettingAttention } from '../../composables/useSettingAttention'
 
 const { t } = useI18n()
-// import Compositor from '../effects/Compositor.vue'
-// import type { FilterStage, CSSLayerConfig } from '../../compositing/types'
-// import {
-//     createTurbulenceNoise,
-//     createLensMap,
-//     buildLensMapUri,
-//     createLensDisplacement,
-//     createSpecularLight,
-//     createChromaticAberration,
-//     createAntiAlias,
-// } from '../../compositing/filterPrimitives'
 const store = usePluginsStore()
 const appStore = useAppStore()
 const navStore = useNavigationStore()
@@ -120,35 +109,6 @@ onUnmounted(() => {
   store.unwatchHostConfig()
 })
 
-// const effects: FilterStage[] = [
-//     // Sources
-//     ...createLensMap({ mapUri: buildLensMapUri() }),
-//     ...createTurbulenceNoise({
-//         baseFrequency: '0.00425 0.00425', // splay=25 → 0.005 + 0.75*0.035
-//     }),
-//     ...createSpecularLight({
-//         surfaceScale: 1.5,  // depth 15 × 0.1
-//         exponent: 100,      // 20 + lightIntensity 100 × 0.8
-//         x: 212.13,          // -300 × cos(135°)
-//         y: -212.13,         // -300 × sin(135°)
-//     }),
-//     // Processors (chained in order)
-//     ...createLensDisplacement({ scale: 30 }),          // depth 15 × 2
-//     ...createChromaticAberration({
-//         scaleR: 2.5,  // refraction 5×2 − dispersion 50×0.15
-//         scaleG: 10,   // refraction 5×2
-//         scaleB: 17.5, // refraction 5×2 + dispersion 50×0.15
-//     }),
-//     ...createAntiAlias({ stdDeviation: 2 }),         // antiAlias 10 × 0.15
-// ]
-
-// const layers: Partial<CSSLayerConfig> = {
-//     frostBlur: 1,                                     // frost 25 × 0.1
-//     // tint: { color: 'white', alpha: 0.125 },             // 0.05 + 25×0.003
-//     // shine: { alpha: 0.6 },                              // 0.1 + 100×0.005
-//     depthShadow: '0 1.5px 3px rgba(0,0,0,0.13), 0 0 0.9px rgba(0,0,0,0.1)',
-//     glow: { shadow: '0 0 3px 0.75px rgba(100,160,255,0.4)' },
-// }
 </script>
 
 <template>

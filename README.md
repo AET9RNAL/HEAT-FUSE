@@ -86,6 +86,12 @@ Get In Touch
 
 ---
 
+## Credits
+
+- [Community Credits](#community-credits)
+
+---
+
 # For Players
 
 FUSE runs alongside WoT:HEAT and displays real-time HUD overlays driven by live game data: energy bars, stat cards, cooldown trackers, and more. Plugins are distributed as single `.fuse` files and managed from the FUSE launcher.
@@ -974,7 +980,7 @@ An app is a Vue view that opens in a FUSE window on the stage. The window has a 
 | `title` | no | The window title. Default: the name. |
 | `icon` | no | An svg, png, webp or jpg file inside the package. Without it, the console and the taskbar show the first letter of the name. |
 | `keywords` | no | Up to 16 more search words for the console. |
-| `window` | no | `size` (default 480 x 360), `minSize` (default 240 x 160), `maxSize`, `resizable` (default `true`). `instances`: `"single"` (default) focuses the open window on a second launch, `"multi"` opens a new window. Sizes are DIPs from 120 to 7680. |
+| `window` | no | `size` (default 480 x 360), `minSize` (default 240 x 160), `maxSize`, `resizable` (default `true`). `instances`: `"single"` (default) focuses the open window on a second launch, `"multi"` opens a new window. `frame: true` makes a [frame window](#frame-windows). Sizes are DIPs from 120 to 7680. |
 | `views` | no | More views, for example tool windows, that the plugin opens with `ctx.apps.open(appId, key)`. Each view takes `view`, `title`, `size`, `minSize`, `maxSize` and `resizable`. |
 | `hotkey` | no | The default launch hotkey. A hotkey that the user sets in the console replaces it. |
 
@@ -1032,7 +1038,14 @@ The stage mounts a view with the [Vue overlay](#vue-overlays) props and one more
 {
   data, state, emitAction, assetBase,   // as for a Vue overlay
   interactive: true,                    // always true in a window
-  window: { id: string, focused: boolean, maximized: boolean, size: { w: number, h: number } },
+  window: {
+    id: string,
+    focused: boolean,
+    maximized: boolean,
+    frame: boolean,
+    size: { w: number, h: number },
+    command: (cmd: "focus" | "minimize" | "close") => void,
+  },
 }
 ```
 
@@ -1040,6 +1053,21 @@ The stage mounts a view with the [Vue overlay](#vue-overlays) props and one more
 - The view gets keys only while its window has the keyboard. While the stage has the keyboard, only plugin hotkeys with `Ctrl` or `Alt` fire.
 - A minimized window takes no input. OBS views show the windows, read-only.
 - The same import rules as for Vue overlays apply.
+
+### Frame Windows
+
+A frame is a window with no FUSE chrome: no title bar, no fill and no resize edges. It fills the work area of the main display, and the view draws all of it. Use a frame for a tool that puts panels around the game view.
+
+```json
+"window": { "frame": true }
+```
+
+- Only elements with the class `fuse-hit` take the mouse. All other parts of the frame pass the mouse to the game.
+- The view can add or remove `fuse-hit` at any time
+- A frame has one window at most. It does not move or resize, and FUSE does not save its place.
+- Frames stay below the normal windows.
+- The view draws its own buttons, and `window.command()` minimizes or closes the window.
+- While the plugin starts or after a crash, FUSE shows a small panel with Restart and Close in the middle of the frame.
 
 ---
 
@@ -1250,3 +1278,32 @@ The data folder (`FUSE_DATA_DIR`) is the user data folder in production and `bac
 | `plugin-files/<plugin_id>/` | `ctx.filesDir` |
 | `storage/<plugin_id>.db` | `ctx.storage` |
 | `permissions.bin`, `secrets.bin` | Permission decisions and secrets, encrypted by Electron main |
+
+---
+
+# Community Credits
+
+UI/UX, branding and development by AETERNAL. These community members helped shape FUSE:
+
+| Name | Contribution |
+|---|---|
+| _VEN0M | Feature testing, Feedback & bug reports |
+| Darkburrow | Feedback & bug reports |
+| Felix852 | Feedback & bug reports |
+| Forever | Feature testing |
+| IAmEdWards | Feedback & bug reports |
+| IntergalaktycznyCygan | Feature testing |
+| LigManBruh | Feature testing |
+| montainary | Feedback & bug reports |
+| OxCone | Inspiration & ideas |
+| Pigeon_Pie | Feedback & bug reports, Feature requests & ideas |
+| seabass | Feature testing |
+| SINEWAVE | Special thanks |
+| Sorrydough | Feedback & bug reports |
+| Speed | Feedback & bug reports, Feature requests & ideas |
+| Tact91 | Feature requests & ideas |
+| The_Roman_Hammer | Feature testing, Feedback & bug reports |
+| thiextar | Feedback & bug reports, Feature requests & ideas |
+| Thomas A. Heinous | Feedback & bug reports |
+| Tmc_338 | Feedback & bug reports |
+| xm8_jaeger | Feedback & bug reports |

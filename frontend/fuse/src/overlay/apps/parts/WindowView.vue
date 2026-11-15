@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref } from "vue";
-import { assetBase, hostState, sendWindowAction } from "../../overlayClient";
+import { assetBase, hostState, sendWindowAction, sendWindowCommand } from "../../overlayClient";
 import { useSfcComponent, withRev } from "../../composables/useSfcComponent";
 import { useI18n } from "../../../composables/useI18n";
 import { windowBus } from "../appsState";
@@ -19,12 +19,19 @@ const { comp, loadError } = useSfcComponent(url);
 // The folder of the view file, so the view builds image URLs as an overlay does.
 const assetBaseUrl = computed(() => assetBase() + props.descriptor.viewUrl.replace(/\/[^/]*$/, ""));
 
+/** A view can work its own window. A frame has no FUSE buttons, so it draws its own. */
+function command(cmd: "focus" | "minimize" | "close"): void {
+  sendWindowCommand(props.descriptor.windowId, cmd);
+}
+
 /** What a view knows about its window, beside the overlay props. */
 const windowProp = computed(() => ({
   id: props.descriptor.windowId,
   focused: props.focused,
   maximized: props.descriptor.maximized,
+  frame: props.descriptor.frame,
   size: props.size,
+  command,
 }));
 
 function emitAction(action: string, payload?: unknown): void {

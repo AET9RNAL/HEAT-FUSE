@@ -53,6 +53,7 @@ const letter = computed(() => props.name.trim().charAt(0).toUpperCase() || "?");
   border: 1px solid var(--base-600);
   corner-shape: bevel;
   border-radius: 4px 0 4px 0;
+  overflow: hidden;
 }
 
 .app-icon.large {
@@ -62,16 +63,11 @@ const letter = computed(() => props.name.trim().charAt(0).toUpperCase() || "?");
 }
 
 .glyph {
-  width: 12px;
-  height: 12px;
-  object-fit: contain;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
   pointer-events: none;
   user-select: none;
-}
-
-.large .glyph {
-  width: 16px;
-  height: 16px;
 }
 
 .letter {

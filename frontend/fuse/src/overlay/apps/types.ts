@@ -45,6 +45,8 @@ export interface WindowDescriptor {
   minSize: Size;
   maxSize: Size | null;
   resizable: boolean;
+  /** A frame: no FUSE chrome, it fills the work area of the main display, and only its `fuse-hit` parts take the mouse. */
+  frame: boolean;
   maximized: boolean;
   minimized: boolean;
   focused: boolean;

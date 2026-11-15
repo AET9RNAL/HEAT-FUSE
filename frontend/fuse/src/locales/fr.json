@@ -206,7 +206,15 @@
     "statPlugins": "PLUGINS PUBLIÉS",
     "statDownloads": "TÉLÉCHARGEMENTS DU MARCHÉ",
     "builtWith": "CONÇU AVEC",
-    "credits": "UI/UX, identité visuelle et développement par AETERNAL"
+    "credits": "UI/UX, identité visuelle et développement par AETERNAL",
+    "communityCredits": "CRÉDITS DE LA COMMUNAUTÉ",
+    "creditTesting": "Tests de fonctionnalités",
+    "creditTranslation": "Traduction",
+    "creditPlugins": "Développement de plugins",
+    "creditFeedback": "Retours et signalements de bugs",
+    "creditRequests": "Demandes de fonctionnalités et idées",
+    "creditInspirations": "Inspiration et idées",
+    "creditSpecial": "Remerciements spéciaux"
   },
   "appdiscover": {
     "browse": "Parcourir",

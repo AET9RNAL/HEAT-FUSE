@@ -206,7 +206,16 @@
     "statPlugins": "PUBLISHED PLUGINS",
     "statDownloads": "MARKETPLACE DOWNLOADS",
     "builtWith": "BUILT WITH",
-    "credits": "UI/UX, Branding & Development by AETERNAL"
+    "credits": "UI/UX, Branding & Development by AETERNAL",
+    "communityCredits": "COMMUNITY CREDITS",
+    "creditTesting": "Feature testing",
+    "creditTranslation": "Translation",
+    "creditPlugins": "Plugin development",
+    "creditFeedback": "Feedback & bug reports",
+    "creditRequests": "Feature requests & ideas",
+    "creditInspirations": "Inspiration & ideas",
+    "creditSpecial": "Special thanks"
+
   },
   "appdiscover": {
     "browse": "Browse",

@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted } from "vue";
 import { AnimatePresence, motion } from "motion-v";
 import StageWindow from "./StageWindow.vue";
+import StageFrame from "./StageFrame.vue";
 import { hostState, isObsMode, setWindowFocusable } from "../overlayClient";
 import { overlayShift } from "../screens";
 import { snapPreview, stageKeyboard, windowOrder, windows } from "./appsState";
@@ -58,12 +59,13 @@ onBeforeUnmount(() => {
       />
     </AnimatePresence>
     <AnimatePresence>
-      <StageWindow
+      <component
+        :is="w.frame ? StageFrame : StageWindow"
         v-for="w in list"
         :key="w.windowId"
         :descriptor="w"
         :z="zOf(w.windowId)"
-        :cascade="cascadeOf(w.windowId)"
+        v-bind="w.frame ? {} : { cascade: cascadeOf(w.windowId) }"
       />
     </AnimatePresence>
   </div>

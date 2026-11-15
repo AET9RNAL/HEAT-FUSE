@@ -206,7 +206,15 @@
     "statPlugins": "ОПУБЛИКОВАНО ПЛАГИНОВ",
     "statDownloads": "ЗАГРУЗОК С МАРКЕТА",
     "builtWith": "СОЗДАНО С ПОМОЩЬЮ",
-    "credits": "UI/UX, брендинг и разработка - AETERNAL"
+    "credits": "UI/UX, брендинг и разработка - AETERNAL",
+    "communityCredits": "БЛАГОДАРНОСТИ СООБЩЕСТВУ",
+    "creditTesting": "Тестирование функций",
+    "creditTranslation": "Перевод",
+    "creditPlugins": "Разработка плагинов",
+    "creditFeedback": "Отзывы и баг-репорты",
+    "creditRequests": "Запросы функций и идеи",
+    "creditInspirations": "Вдохновение и идеи",
+    "creditSpecial": "Особая благодарность"
   },
   "appdiscover": {
     "browse": "Обзор",

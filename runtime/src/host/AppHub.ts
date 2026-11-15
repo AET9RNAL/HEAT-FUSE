@@ -346,7 +346,7 @@ export class AppHub {
       this.countUse(appKey);
       this.host.noteUserAction(app.pluginId);
     }
-    const reuse = !(opts.newWindow && app.instances === "multi");
+    const reuse = app.views[viewKey]!.frame || !(opts.newWindow && app.instances === "multi");
     const open = reuse ? this.topWindowOf(appKey, viewKey) : undefined;
     if (open) {
       this.command(open, "focus");
@@ -385,7 +385,7 @@ export class AppHub {
         return;
       }
       case "maximize":
-        if (w.maximized) return;
+        if (w.maximized || w.view.frame) return;
         w.maximized = true;
         this.saveView(w);
         this.broadcastState(w);
@@ -528,7 +528,8 @@ export class AppHub {
 
   private createWindow(app: AppSpec, view: AppViewSpec): WindowRecord {
     const id = `${app.key}:${view.key}#${++this.seq}`;
-    const saved = this.state.windows[`${app.key}:${view.key}`];
+    // A frame always fills the main display: no saved place.
+    const saved = view.frame ? undefined : this.state.windows[`${app.key}:${view.key}`];
     const rect = saved ? { ...saved.rect } : null;
     if (rect) {
       for (let i = 0; i < MAX_CASCADE && [...this.windows.values()].some((o) => o.rect?.x === rect.x && o.rect?.y === rect.y); i++) {
@@ -549,7 +550,7 @@ export class AppHub {
     };
     const prev = this.activeId ? this.windows.get(this.activeId) : undefined;
     this.windows.set(id, w);
-    this.order.push(id);
+    this.order = this.framesFirst([...this.order, id]);
     this.activeId = id;
     this.host.broadcastOverlay({ type: "window:opened", ...this.openedPayload(w, true) });
     if (prev) this.broadcastState(prev);
@@ -559,13 +560,20 @@ export class AppHub {
 
   private focus(w: WindowRecord): void {
     const prev = this.activeId && this.activeId !== w.id ? this.windows.get(this.activeId) : undefined;
-    const moved = this.order[this.order.length - 1] !== w.id;
     w.minimized = false;
-    this.order = [...this.order.filter((id) => id !== w.id), w.id];
+    const next = this.framesFirst([...this.order.filter((id) => id !== w.id), w.id]);
+    const moved = next.some((id, i) => id !== this.order[i]);
+    this.order = next;
     this.activeId = w.id;
     this.broadcastState(w);
     if (prev) this.broadcastState(prev);
     if (moved) this.host.broadcastOverlay({ type: "window:order", order: [...this.order] });
+  }
+
+  /** Frames stay below the normal windows. The order inside each group stays. */
+  private framesFirst(order: string[]): string[] {
+    const isFrame = (id: string): boolean => this.windows.get(id)?.view.frame === true;
+    return [...order.filter(isFrame), ...order.filter((id) => !isFrame(id))];
   }
 
   private closeWindow(id: string, notifyPlugin: boolean): void {
@@ -594,7 +602,7 @@ export class AppHub {
 
   private setRect(windowId: string, raw: Record<string, unknown> | null): void {
     const w = this.windows.get(windowId);
-    if (!w || !raw) return;
+    if (!w || !raw || w.view.frame) return;
     const prev = w.rect ?? { x: 0, y: 0, w: w.view.size.w, h: w.view.size.h };
     const r = sanitizeWindowRect(raw, prev);
     r.w = Math.max(r.w, w.view.minSize.w);
@@ -606,7 +614,7 @@ export class AppHub {
   }
 
   private saveView(w: WindowRecord): void {
-    if (!w.rect) return;
+    if (!w.rect || w.view.frame) return;
     this.state.windows[viewKeyOf(w)] = { rect: { ...w.rect }, maximized: w.maximized };
     this.persist();
   }
@@ -838,6 +846,7 @@ export class AppHub {
       minSize: w.view.minSize,
       maxSize: w.view.maxSize,
       resizable: w.view.resizable,
+      frame: w.view.frame,
       ...this.stateFields(w),
       inputs,
       focus,

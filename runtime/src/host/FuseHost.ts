@@ -408,6 +408,10 @@ export class FuseHost implements RuntimeBridge {
     for (const spec of eligible) {
       if (!orderedIds.has(spec.pluginId)) this.pluginStates.set(spec.pluginId, PluginState.SKIPPED);
     }
+    // Asset roots are known at discovery: the launcher needs them before an app
+    // plugin's first window starts its process.
+    this.overlayHub.clearPackages();
+    for (const spec of ordered) this.overlayHub.registerPackage(spec.pluginId, `${spec.packageRoot}/assets`, spec.packageRoot);
     this.setupPending = [...ordered];
     this.publishFrames();
     this.appHub.sync();

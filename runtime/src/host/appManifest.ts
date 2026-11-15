@@ -26,6 +26,8 @@ export interface AppViewSpec {
   minSize: Size;
   maxSize: Size | null;
   resizable: boolean;
+  /** A frame: no FUSE chrome, it fills the main display, and only its `fuse-hit` parts take the mouse. One window at most. */
+  frame: boolean;
 }
 
 export interface AppSpec {
@@ -82,6 +84,7 @@ function viewSpec(
   if (!view || !view.endsWith(".vue")) throw new Error(`${where}: 'view' must be a .vue file inside the package`);
   if (!fileExists(view)) throw new Error(`${where}: view '${view}' is not in the package`);
   const win = record(raw.window) ?? raw;
+  const frame = win.frame === true;
   const sz = size(win.size, DEFAULT_SIZE);
   const min = size(win.minSize, DEFAULT_MIN_SIZE);
   const max = record(win.maxSize) ? size(win.maxSize, sz) : null;
@@ -98,7 +101,8 @@ function viewSpec(
     size: sz,
     minSize: min,
     maxSize: max,
-    resizable: win.resizable !== false,
+    resizable: !frame && win.resizable !== false,
+    frame,
   };
 }
 

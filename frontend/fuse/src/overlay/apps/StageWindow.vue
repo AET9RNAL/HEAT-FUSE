@@ -2,10 +2,10 @@
 import { computed, onMounted, ref } from "vue";
 import { motion } from "motion-v";
 import StagePanel from "../components/StagePanel.vue";
-import StageButton from "../inspector/controls/StageButton.vue";
 import WindowTitleBar from "./parts/WindowTitleBar.vue";
 import WindowResizeEdges from "./parts/WindowResizeEdges.vue";
 import WindowView from "./parts/WindowView.vue";
+import WindowStatus from "./parts/WindowStatus.vue";
 import { focusStageForClick, isObsMode, sendWindowCommand, sendWindowRect } from "../overlayClient";
 import { mainOverlayArea, overlayAreas, overlayShift } from "../screens";
 import { useWindowDrag } from "../composables/useWindowDrag";
@@ -23,11 +23,8 @@ import {
 } from "./windowGeometry";
 import type { WindowDescriptor } from "./types";
 import { Dynamics } from "../../composables/useMotion";
-import { useI18n } from "../../composables/useI18n";
 
 const props = defineProps<{ descriptor: WindowDescriptor; z: number; cascade: number }>();
-
-const { t } = useI18n();
 
 /** An OBS view shows the window and its data, and takes no input. */
 const viewOnly = isObsMode();
@@ -167,16 +164,7 @@ onMounted(() => {
       />
       <div class="body">
         <WindowView v-show="descriptor.status === 'open'" :descriptor="descriptor" :size="bodySize" :focused="focused" />
-        <div v-if="descriptor.status === 'waiting'" class="status">
-          <span class="status-title">{{ t("stageapps.window.starting") }}</span>
-        </div>
-        <div v-else-if="descriptor.status === 'crashed'" class="status">
-          <span class="status-title crashed">{{ t("stageapps.window.stoppedTitle") }}</span>
-          <span class="status-note">{{ t("stageapps.window.stoppedNote", { plugin: descriptor.pluginId }) }}</span>
-          <div class="status-action">
-            <StageButton :text="t('stageapps.window.restart')" variant="accent" @click="command('restart')" />
-          </div>
-        </div>
+        <WindowStatus :status="descriptor.status" :plugin-id="descriptor.pluginId" @restart="command('restart')" />
       </div>
     </StagePanel>
     <WindowResizeEdges v-if="!viewOnly && descriptor.resizable && !descriptor.maximized" @start="resize.start" />
@@ -222,40 +210,5 @@ onMounted(() => {
   overflow: auto;
   scrollbar-width: thin;
   scrollbar-color: var(--black-3) transparent;
-}
-
-.status {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-2);
-  padding: var(--space-4);
-  text-align: center;
-}
-
-.status-title {
-  font-family: var(--font-microcopy);
-  font-size: var(--main-font-size-4);
-  font-weight: var(--font-weight-2);
-  letter-spacing: 0.04em;
-  color: var(--text-muted);
-}
-
-.status-title.crashed {
-  color: var(--error-highlight);
-}
-
-.status-note {
-  font-family: var(--font-microcopy);
-  font-size: var(--main-font-size-5);
-  color: var(--text-muted);
-}
-
-.status-action {
-  width: 120px;
-  margin-top: var(--space-1);
 }
 </style>

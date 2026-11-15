@@ -206,7 +206,15 @@
     "statPlugins": "ОПУБЛІКОВАНО ПЛАГІНІВ",
     "statDownloads": "ЗАВАНТАЖЕНЬ З МАРКЕТУ",
     "builtWith": "СТВОРЕНО ЗА ДОПОМОГОЮ",
-    "credits": "UI/UX, брендинг і розробка - AETERNAL"
+    "credits": "UI/UX, брендинг і розробка - AETERNAL",
+    "communityCredits": "ПОДЯКИ СПІЛЬНОТІ",
+    "creditTesting": "Тестування функцій",
+    "creditTranslation": "Переклад",
+    "creditPlugins": "Розробка плагінів",
+    "creditFeedback": "Відгуки та звіти про помилки",
+    "creditRequests": "Запити функцій та ідеї",
+    "creditInspirations": "Натхнення та ідеї",
+    "creditSpecial": "Особлива подяка"
   },
   "appdiscover": {
     "browse": "Огляд",

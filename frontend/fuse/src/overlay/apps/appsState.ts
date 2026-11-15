@@ -45,13 +45,16 @@ export function onFocusRequest(cb: (windowId: string) => void): void {
   focusRequest = cb;
 }
 
-function moveToTop(id: string): void {
-  windowOrder.value = [...windowOrder.value.filter((x) => x !== id), id];
+/** Frames stay below the normal windows, as in the runtime (`AppHub.framesFirst`). */
+function framesFirst(order: string[]): string[] {
+  const isFrame = (id: string): boolean => windows.get(id)?.frame === true;
+  return [...order.filter(isFrame), ...order.filter((id) => !isFrame(id))];
 }
 
 /** Optimistic focus on pointer down, before the runtime answers. */
 export function raiseWindow(id: string): void {
-  if (windowOrder.value[windowOrder.value.length - 1] !== id) moveToTop(id);
+  const next = framesFirst([...windowOrder.value.filter((x) => x !== id), id]);
+  if (next.some((x, i) => x !== windowOrder.value[i])) windowOrder.value = next;
   for (const w of windows.values()) w.focused = w.windowId === id;
 }
 
@@ -68,8 +71,8 @@ export function applyAppsMessage(m: Record<string, unknown>): boolean {
       return true;
     case "window:opened": {
       const d = m as unknown as WindowDescriptor & { focus?: boolean };
-      windows.set(d.windowId, { ...d, inputs: d.inputs ?? {} });
-      if (!windowOrder.value.includes(d.windowId)) windowOrder.value = [...windowOrder.value, d.windowId];
+      windows.set(d.windowId, { ...d, frame: d.frame === true, inputs: d.inputs ?? {} });
+      if (!windowOrder.value.includes(d.windowId)) windowOrder.value = framesFirst([...windowOrder.value, d.windowId]);
       if (d.focused) raiseWindow(d.windowId);
       if (d.focus) focusRequest(d.windowId);
       return true;
