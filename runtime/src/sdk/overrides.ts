@@ -4,6 +4,9 @@
  */
 export type OverrideState = "off" | "pending" | "applied" | "outdated" | "failed";
 
+/** What a preset changes: a hangar scene, a world, or a prefab. */
+export type OverridePresetKind = "hangar" | "world" | "prefab";
+
 export interface OverridePresetInfo {
   id: string;
   name: string;
@@ -11,6 +14,10 @@ export interface OverridePresetInfo {
   preview: string | null;
   /** Why FUSE cannot apply this preset, for example a damaged package. Null when it can. */
   problem: string | null;
+  /** Null when the manifest gives no known kind. */
+  kind: OverridePresetKind | null;
+  /** The manifest default: FUSE uses it until the user picks a preset. */
+  isDefault: boolean;
 }
 
 export interface OverrideStatus {

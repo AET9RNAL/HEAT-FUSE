@@ -22,12 +22,18 @@ export interface PluginHotkey {
  */
 export type OverrideState = 'off' | 'pending' | 'applied' | 'outdated' | 'failed'
 
+export type OverridePresetKind = 'hangar' | 'world' | 'prefab'
+
 export interface OverridePreset {
     id: string
     name: string
     /** A path inside the package, or null. */
     preview: string | null
     problem: string | null
+    /** Null for a package without a known kind. */
+    kind: OverridePresetKind | null
+    /** The manifest default: FUSE uses it until the user picks a preset. */
+    isDefault: boolean
 }
 
 export interface OverrideStatus {
@@ -59,17 +65,29 @@ export interface PluginRecord {
     /** False for a plugin with only an override part. */
     hasRuntime?: boolean
     overrides?: PluginOverrides | null
+    /** The manifest game_versions. */
+    gameVersions?: string[]
+    /** The manifest min_host_version. */
+    minHostVersion?: string | null
 }
 
 /** Incoming schemas may be sections or legacy categories; they're normalised on the way in. */
-export type PluginUpsert = Partial<Omit<PluginRecord, 'configSchema'>> & { plugin_id: string; configSchema?: unknown; has_runtime?: boolean }
+export type PluginUpsert = Partial<Omit<PluginRecord, 'configSchema'>> & {
+    plugin_id: string
+    configSchema?: unknown
+    has_runtime?: boolean
+    game_versions?: string[]
+    min_host_version?: string | null
+}
 
 export const usePluginsStore = defineStore('plugins', () => {
     const plugins = ref<PluginRecord[]>([])
 
     function upsert(data: PluginUpsert) {
-        const { configSchema: rawSchema, has_runtime, ...rest } = data
+        const { configSchema: rawSchema, has_runtime, game_versions, min_host_version, ...rest } = data
         if (has_runtime !== undefined) rest.hasRuntime = has_runtime
+        if (game_versions !== undefined) rest.gameVersions = game_versions
+        if (min_host_version !== undefined) rest.minHostVersion = min_host_version
         const schema = rawSchema !== undefined ? normalizeConfigSchema(rawSchema) : undefined
         const idx = plugins.value.findIndex(p => p.plugin_id === data.plugin_id)
         if (idx >= 0) {
@@ -93,6 +111,8 @@ export const usePluginsStore = defineStore('plugins', () => {
                 checksum: data.checksum,
                 hasRuntime: rest.hasRuntime,
                 overrides: data.overrides ?? null,
+                gameVersions: rest.gameVersions ?? [],
+                minHostVersion: rest.minHostVersion ?? null,
             })
         }
     }

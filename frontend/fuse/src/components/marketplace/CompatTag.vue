@@ -17,7 +17,9 @@ const props = withDefaults(defineProps<{
     fuse?: string | null
     /** Runtime, override or hybrid. Null hides the type item. */
     pluginType?: PluginType | null
-}>(), { game: () => [], fuse: null, pluginType: null })
+    /** The player's game version is not in `game`. */
+    mismatch?: boolean
+}>(), { game: () => [], fuse: null, pluginType: null, mismatch: false })
 
 const { t } = useI18n()
 
@@ -42,7 +44,7 @@ const fuseTip = computed(() => props.fuse
     <span class="ct">
         <span v-tip="gameTip" class="ct-item">
             <span class="ct-mark"><Icons kind="heatLogo" size="small" /></span>
-            <span class="ct-ver">{{ gameText }}</span>
+            <span class="ct-ver" :class="{ 'ct-bad': mismatch }">{{ gameText }}</span>
         </span>
         <span class="ct-notch" aria-hidden="true" />
         <span v-tip="fuseTip" class="ct-item">
@@ -104,6 +106,10 @@ const fuseTip = computed(() => props.fuse
     color: var(--text-main);
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
+}
+
+.ct-ver.ct-bad {
+    color: var(--error-highlight);
 }
 
 .ct-notch {

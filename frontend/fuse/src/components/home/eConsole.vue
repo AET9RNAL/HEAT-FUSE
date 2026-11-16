@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ref, computed, watch, nextTick } from 'vue'
+import { ref, computed, watch, nextTick, onUnmounted } from 'vue'
 import { useFuseLogs } from '../../composables/useFuseLogs'
 import { useI18n } from '../../composables/useI18n'
+import { eventBus } from '../../events/eventBus'
 
 const { t } = useI18n()
 
@@ -33,6 +34,26 @@ watch(filtered, async () => {
 function formatTime(ts: number) {
   return new Date(ts).toTimeString().slice(0, 8)
 }
+
+const copied = ref(false)
+let copiedTimer: ReturnType<typeof setTimeout> | null = null
+
+async function copyLogs() {
+  const lines = filtered.value
+  if (!lines.length) return
+  const text = lines.map(e => `${formatTime(e.timestamp)} ${e.level.toUpperCase().padEnd(5)} ${e.text}`).join('\n')
+  try {
+    await navigator.clipboard.writeText(text)
+  } catch {
+    return
+  }
+  copied.value = true
+  eventBus.emit('notification', { message: t('components.console.copiedMessage', { count: lines.length }), type: 'success' })
+  if (copiedTimer) clearTimeout(copiedTimer)
+  copiedTimer = setTimeout(() => { copied.value = false; copiedTimer = null }, 1500)
+}
+
+onUnmounted(() => { if (copiedTimer) clearTimeout(copiedTimer) })
 </script>
 
 <template>
@@ -57,6 +78,13 @@ function formatTime(ts: number) {
             @click="activeFilter = f"
           >{{ t(`components.console.filters.${f}`) }}</button>
         </div>
+        <button
+          v-tip="t('components.console.copyTip')"
+          class="clear-btn"
+          :class="{ done: copied }"
+          :disabled="!filtered.length"
+          @click="copyLogs"
+        >{{ copied ? t('components.console.copied') : t('components.console.copy') }}</button>
         <button class="clear-btn" @click="clear">{{ t('components.console.clear') }}</button>
       </div>
 
@@ -81,6 +109,10 @@ function formatTime(ts: number) {
 
 <style scoped>
 .e-console-glow {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
   width: 100%;
 }
 
@@ -90,6 +122,7 @@ function formatTime(ts: number) {
   width: 100%;
   display: flex;
   flex-direction: column;
+  flex: 1;
   min-height: 200px;
   corner-shape: bevel;
   border-radius: 10px 0 10px 0;
@@ -160,8 +193,19 @@ function formatTime(ts: number) {
 }
 .clear-btn:hover { color: var(--text-main); }
 
+.clear-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.clear-btn.done {
+  color: var(--accent-200);
+  border-color: var(--accent-200);
+}
+
 .log-body {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding: var(--space-2) var(--space-3);
   display: flex;
@@ -204,7 +248,22 @@ function formatTime(ts: number) {
   margin: auto;
 }
 
-.log-body::-webkit-scrollbar { width: 4px; }
-.log-body::-webkit-scrollbar-track { background: transparent; }
-.log-body::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
+.log-body::-webkit-scrollbar {
+  width: 6px;
+}
+
+.log-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.log-body::-webkit-scrollbar-thumb {
+  background-color: hsla(0, 0%, 100%, 0.15);
+  border-radius: 4px;
+  border-left: 4px solid transparent;
+  background-clip: padding-box;
+}
+
+.log-body::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(255, 255, 255, 0.25);
+}
 </style>

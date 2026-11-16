@@ -40,7 +40,7 @@ import { HotkeyInput, type MouseCallback } from "../input/hotkeys.js";
 import type { PluginHydration, RuntimeBridge, WsServer } from "../server/WsServer.js";
 
 /** 5.1.0: manifest `apps` and `lifecycle`, `ctx.apps`. */
-export const HOST_VERSION = "5.1.0";
+export const HOST_VERSION = "5.1.1";
 const HOST_CONFIG_FILENAME = "fuse_host.json";
 // Also the action names the app's keybind settings and hotkey_overrides use.
 const LOCK_HOTKEY_LABEL = "Toggle Calibrate/Lock";
@@ -1222,6 +1222,8 @@ export class FuseHost implements RuntimeBridge {
         status: (this.pluginStates.get(pluginId) ?? PluginState.PENDING).valueOf(),
         has_runtime: spec.hasRuntime,
         overrides: this.overrides.has(pluginId) ? this.overrides.snapshot(pluginId) : null,
+        game_versions: spec.manifest.game_versions ?? [],
+        min_host_version: spec.manifest.min_host_version ?? null,
       });
     }
     return result;
@@ -1697,6 +1699,8 @@ export class FuseHost implements RuntimeBridge {
       hotkeys: this.hotkeysFor(spec.pluginId),
       has_runtime: spec.hasRuntime,
       overrides: this.overrides.has(spec.pluginId) ? this.overrides.snapshot(spec.pluginId) : null,
+      game_versions: spec.manifest.game_versions ?? [],
+      min_host_version: spec.manifest.min_host_version ?? null,
     });
     this.installConfigWatchers(spec.pluginId);
     this.broadcastPluginList();

@@ -128,9 +128,15 @@ interface Window {
       hotkeys: unknown[]
       /** The manifest presets. `active` is null: only the runtime knows the state. */
       overrides: {
-        presets: Array<{ id: string; name: string; preview: string | null; problem: string | null }>
+        presets: Array<{
+          id: string; name: string; preview: string | null; problem: string | null
+          kind: 'hangar' | 'world' | 'prefab' | null; isDefault: boolean
+        }>
         active: null
       } | null
+      /** The manifest game_versions and min_host_version. */
+      gameVersions: string[]
+      minHostVersion: string | null
       filePath: string
       checksum: string
     }>>

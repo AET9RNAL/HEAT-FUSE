@@ -18,6 +18,7 @@ async function packOne(id) {
   const srcDir = path.join(SRC_ROOT, id);
   const manifest = JSON.parse(fs.readFileSync(path.join(srcDir, "manifest.json"), "utf-8"));
   const pluginId = manifest.plugin_id ?? id;
+  if (manifest.override) checkPresets(id, manifest.override);
   // A plugin with only an override part has no code to bundle.
   const overrideOnly = !manifest.entry && !!manifest.override;
   const files = {};
@@ -85,6 +86,19 @@ async function packOne(id) {
   const outPath = path.join(OUT_DIR, outName);
   fs.writeFileSync(outPath, zipped);
   console.log(`packed ${id} → plugins-dist/${outName} (${Object.keys(files).length} files, ${zipped.length} bytes)`);
+}
+
+const PRESET_KINDS = ["hangar", "world", "prefab"];
+
+/** Each preset names its kind. At most one preset is the default. */
+function checkPresets(id, override) {
+  const presets = Array.isArray(override.presets) ? override.presets : [];
+  for (const p of presets) {
+    if (!PRESET_KINDS.includes(p?.kind)) throw new Error(`${id}: override preset '${p?.id}' needs "kind": ${PRESET_KINDS.join(" | ")}`);
+    if (p.default !== undefined && typeof p.default !== "boolean") throw new Error(`${id}: override preset '${p.id}' "default" must be true or false`);
+  }
+  if (presets.filter((p) => p.default === true).length > 1) throw new Error(`${id}: more than one override preset has "default": true`);
+  if ("default" in override) throw new Error(`${id}: "override.default" moved: put "default": true on the preset`);
 }
 
 /** Libraries plugins may import, declared in plugins-src/package.json. */

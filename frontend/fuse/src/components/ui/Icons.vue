@@ -108,6 +108,9 @@ export type IconKind =
   | 'pin'
   | 'favorite'
   | 'search'
+  | 'hangar'
+  | 'world'
+  | 'prefab'
 </script>
 
 <script setup lang="ts">

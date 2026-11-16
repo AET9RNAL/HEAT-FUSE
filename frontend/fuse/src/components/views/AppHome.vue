@@ -7,7 +7,10 @@ import ePluginList from '../plugins/ePluginList.vue'
 import eFiles from '../home/eFiles.vue'
 import eConsole from '../home/eConsole.vue'
 import eGameChanges from '../home/eGameChanges.vue'
+import eGamePresetsWindow from '../home/eGamePresetsWindow.vue'
+import { AnimatePresence } from 'motion-v'
 import { useGameChanges } from '../../composables/useGameChanges'
+import { useGamePresets } from '../../composables/useGamePresets'
 import eMaterialButton from '../inputs/eMaterialButton.vue'
 import eListSelector from '../inputs/eListSelector.vue'
 import Icons from '../ui/Icons.vue'
@@ -28,13 +31,19 @@ const { relevant: gameChangesRelevant } = useGameChanges()
 // Game Changes shows only when a plugin has presets or FUSE still holds changes.
 const tabOptions = computed<eSwitchOption[]>(() => [
   { icon: 'content',  value: 'content' },
-  ...(gameChangesRelevant.value ? [{ icon: 'file' as const, value: 'gameChanges' }] : []),
+  ...(gameChangesRelevant.value ? [{ icon: 'pluginOverride' as const, value: 'gameChanges' }] : []),
   { icon: 'folder',   value: 'files' },
   { icon: 'console',  value: 'console' },
 ])
 watch(gameChangesRelevant, (shown) => {
   if (!shown && activeTab.value === 'gameChanges') activeTab.value = 'content'
 })
+
+const { open: gamePresetsOpen, close: closeGamePresets } = useGamePresets()
+watch(activeTab, (tab) => {
+  if (tab !== 'gameChanges') closeGamePresets()
+})
+onUnmounted(closeGamePresets)
 
 const searchQuery = ref('')
 const filterMode = ref('all')
@@ -112,7 +121,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="app-home">
+  <div class="app-home" :class="{ fill: activeTab === 'gameChanges' || activeTab === 'console' }">
     <eLaunchPanel v-ftue="'home-launch'" @launch="handleLaunch" />
     <div v-ftue="'home-views'" class="tab-bar">
       <eSwitch v-model="activeTab" :options="tabOptions" />
@@ -157,16 +166,26 @@ onUnmounted(() => {
       <eFiles v-else-if="activeTab === 'files'" />
       <eConsole v-else-if="activeTab === 'console'" />
     <!-- </Compositor> -->
+
+    <AnimatePresence>
+      <eGamePresetsWindow v-if="gamePresetsOpen" key="game-presets" />
+    </AnimatePresence>
   </div>
 </template>
 
 <style scoped>
 .app-home {
+  position: relative;
   flex: 1;
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
   padding: var(--space-4);
+}
+
+.app-home.fill {
+  box-sizing: border-box;
+  height: 100%;
 }
 
 .tab-bar {

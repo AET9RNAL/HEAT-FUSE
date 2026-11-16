@@ -1,8 +1,10 @@
 /**
  * Override parts of plugins: prebuilt game file packs (presets) and the project edits they need.
  *
- * The hub keeps each plugin's pick, checks the picked preset against the game files, and refuses exact
- * collisions between plugins (the same pack entry or the same project key). It sends the wanted state to
+ * A pack entry replaces a game file (apply.json `originals` holds the size and SHA-256 it was built against) or adds
+ * a new asset (apply.json `added`: the game must not have that entry). The hub keeps each plugin's pick, checks the
+ * picked preset against the game files, and refuses exact collisions between plugins (the same pack entry or the
+ * same project key). It sends the wanted state to
  * Electron main, the only writer of game files. Main applies the state while the game is closed and answers
  * with a status for each plugin.
  */
@@ -10,11 +12,12 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { logger } from "../log.js";
-import type { OverridePresetInfo, OverrideState, OverrideStatus, OverridesSnapshot } from "../sdk/overrides.js";
+import type { OverridePresetInfo, OverridePresetKind, OverrideState, OverrideStatus, OverridesSnapshot } from "../sdk/overrides.js";
 import type { DiscoveredPlugin } from "./types.js";
 
 const APPLY_FORMAT = "fuse-override/1";
 const PRESET_ID_RE = /^[A-Za-z0-9_-]{1,48}$/;
+const PRESET_KINDS: readonly OverridePresetKind[] = ["hangar", "world", "prefab"];
 const ENTRY_RE = /^\.assets\/output\/[^/\\]+$/;
 const SHA256_RE = /^[0-9a-f]{64}$/;
 
@@ -27,11 +30,15 @@ interface Preset {
   name: string;
   preview: string | null;
   problem: string | null;
+  kind: OverridePresetKind | null;
+  isDefault: boolean;
   /** The pack inside the plugin's package. */
   zip: string;
   entries: string[];
-  /** Size and SHA-256 of the game's own stored entry that each pack entry replaces. */
+  /** Size and SHA-256 of the game's own stored entry that each replacing pack entry replaces. */
   originals: Record<string, { size: number; sha256: string }>;
+  /** Pack entries that are new assets: the game has no file of that name, so there is no original. */
+  added: string[];
   project: ProjectOp[];
 }
 
@@ -166,14 +173,17 @@ class GameIndex {
     return index;
   }
 
-  /** The first replaced entry whose game original differs from the one the preset was built against, or null. */
+  /**
+   * The first entry that no longer fits the game files, or null: a replaced entry whose game original differs from
+   * the one the preset was built against, or an added entry that the game now has (the pack would replace it blind).
+   */
   mismatch(preset: Preset): string | null {
-    for (const entry of preset.entries) {
-      const want = preset.originals[entry]!;
+    for (const [entry, want] of Object.entries(preset.originals)) {
       const got = this.entries.get(entry);
       if (!got) return `${baseName(entry)} is not in the game files`;
       if (got.size !== want.size || this.sha256(entry, got) !== want.sha256) return `${baseName(entry)} differs`;
     }
+    for (const entry of preset.added) if (this.entries.has(entry)) return `the game now has ${baseName(entry)}`;
     return null;
   }
 
@@ -250,6 +260,8 @@ export class OverrideHub {
       name: p.name,
       preview: p.preview,
       problem: p.problem,
+      kind: p.kind,
+      isDefault: p.isDefault,
     }));
     return { presets, active: { ...(this.status.get(pluginId) ?? { preset: null, state: "off" as OverrideState }) } };
   }
@@ -404,7 +416,8 @@ export class OverrideHub {
       }
       const inPatch = preset.entries.find((e) => patched.has(e));
       if (inPatch) {
-        set("failed", `the game's content patch holds ${baseName(inPatch)}, so a pack cannot replace it`);
+        const what = preset.added.includes(inPatch) ? "add" : "replace";
+        set("failed", `the game's content patch holds ${baseName(inPatch)}, so a pack cannot ${what} it`);
         continue;
       }
       const changed = index.mismatch(preset);
@@ -472,21 +485,36 @@ export class OverrideHub {
         continue;
       }
       seen.add(id);
-      presets.push(this.readPreset(spec, raw ?? {}, id, m.format));
+      const kind = PRESET_KINDS.find((k) => k === raw?.kind) ?? null;
+      if (raw?.kind !== undefined && !kind) logger.warning(`${spec.pluginId}: override preset '${id}' has an unknown kind '${String(raw.kind)}'`);
+      // The first preset marked default wins.
+      const isDefault = raw?.default === true && !presets.some((p) => p.isDefault);
+      if (raw?.default === true && !isDefault) logger.warning(`${spec.pluginId}: override preset '${id}' is a second default - ignored`);
+      presets.push(this.readPreset(spec, raw ?? {}, id, m.format, kind, isDefault));
     }
-    const def = typeof m.default === "string" && presets.some((p) => p.id === m.default) ? m.default : null;
+    const def = presets.find((p) => p.isDefault)?.id ?? null;
     return { pluginId: spec.pluginId, name: spec.name, presets, defaultPreset: def };
   }
 
-  private readPreset(spec: DiscoveredPlugin, raw: { name?: string; dir?: string; preview?: string }, id: string, format: unknown): Preset {
+  private readPreset(
+    spec: DiscoveredPlugin,
+    raw: { name?: string; dir?: string; preview?: string },
+    id: string,
+    format: unknown,
+    kind: OverridePresetKind | null,
+    isDefault: boolean,
+  ): Preset {
     const preset: Preset = {
       id,
       name: String(raw.name ?? id).slice(0, 64),
       preview: null,
       problem: null,
+      kind,
+      isDefault,
       zip: "",
       entries: [],
       originals: {},
+      added: [],
       project: [],
     };
     const fail = (problem: string): Preset => {
@@ -517,9 +545,18 @@ export class OverrideHub {
       return fail("apply.json 'entries' must list the packed entry names (.assets/output/...)");
     }
     preset.entries = [...new Set(entries as string[])];
+    const added = apply.added ?? [];
+    if (!Array.isArray(added) || !added.every((e) => typeof e === "string" && preset.entries.includes(e))) {
+      return fail("apply.json 'added' must list entries from 'entries'");
+    }
+    preset.added = [...new Set(added as string[])];
     const originals = (apply.originals ?? {}) as Record<string, { size?: unknown; sha256?: unknown }>;
     for (const e of preset.entries) {
       const o = originals[e];
+      if (preset.added.includes(e)) {
+        if (o !== undefined) return fail(`apply.json lists ${baseName(e)} as added and as replaced`);
+        continue;
+      }
       if (!o || typeof o.size !== "number" || typeof o.sha256 !== "string" || !SHA256_RE.test(o.sha256)) {
         return fail(`apply.json has no original size and SHA-256 for ${baseName(e)}`);
       }

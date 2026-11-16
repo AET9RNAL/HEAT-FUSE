@@ -10,9 +10,8 @@ export type DependencySpec = string[] | Record<string, string>;
 /** The override part of a manifest: prebuilt game file packs that FUSE puts into the game. */
 export interface OverrideManifest {
   format?: number;
-  presets?: Array<{ id?: string; name?: string; dir?: string; preview?: string }>;
-  /** The preset to use before the user picks one, or null for none. */
-  default?: string | null;
+  /** `kind`: what the preset changes. `default: true` on one preset: FUSE uses it before the user picks one. */
+  presets?: Array<{ id?: string; name?: string; dir?: string; preview?: string; kind?: string; default?: boolean }>;
 }
 
 export interface Manifest {

@@ -74,12 +74,17 @@ interface PluginManifest {
   /** Action name -> default combo. */
   hotkeys?: Record<string, string>
   core?: boolean
-  override?: { presets?: Array<{ id?: unknown; name?: unknown; dir?: unknown; preview?: unknown }> }
+  min_host_version?: unknown
+  game_versions?: unknown
+  override?: { presets?: Array<{ id?: unknown; name?: unknown; dir?: unknown; preview?: unknown; kind?: unknown; default?: unknown }> }
 }
+
+const PRESET_KINDS = ['hangar', 'world', 'prefab'] as const
 
 /** The presets as the runtime lists them, without a state: only the runtime knows the state. */
 function manifestOverrides(m: PluginManifest) {
   if (!m.override || !Array.isArray(m.override.presets)) return null
+  let hasDefault = false
   const presets = m.override.presets.map((p) => {
     const id = String(p?.id ?? '')
     let preview: string | null = null
@@ -87,7 +92,11 @@ function manifestOverrides(m: PluginManifest) {
       const rel = path.posix.normalize(path.posix.join(p.dir.replace(/\\/g, '/'), p.preview.replace(/\\/g, '/')))
       if (!rel.startsWith('../') && !path.posix.isAbsolute(rel)) preview = rel
     }
-    return { id, name: String(p?.name ?? id).slice(0, 64), preview, problem: null }
+    const kind = PRESET_KINDS.find((k) => k === p?.kind) ?? null
+    // The first preset marked default wins, the same rule as the runtime.
+    const isDefault = p?.default === true && !hasDefault
+    if (isDefault) hasDefault = true
+    return { id, name: String(p?.name ?? id).slice(0, 64), preview, problem: null, kind, isDefault }
   }).filter((p) => p.id)
   return { presets, active: null }
 }
@@ -263,6 +272,8 @@ async function scanPluginsDir(dir: string) {
         hotkeys:      manifestHotkeys(m.hotkeys, saved?.[pluginId]),
         core:         m.core         ?? false,
         overrides:    manifestOverrides(m),
+        gameVersions: Array.isArray(m.game_versions) ? m.game_versions.filter((v): v is string => typeof v === 'string') : [],
+        minHostVersion: typeof m.min_host_version === 'string' ? m.min_host_version : null,
         filePath,
         checksum,
       }
