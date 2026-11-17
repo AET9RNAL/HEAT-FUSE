@@ -484,7 +484,8 @@
       "color": "Couleur. Saisissez une valeur hexadécimale après le clic.",
       "underline": "Souligné",
       "strike": "Barré",
-      "center": "Centré"
+      "center": "Centré",
+      "image": "Image. Mettez des images sur une même ligne pour les afficher côte à côte. Chaque nouvelle ligne commence une rangée."
     },
     "gameVersions": {
       "add": "Ajouter une version",

@@ -48,6 +48,7 @@ const ELEMENTS: Element[] = [
   ["hide_perk_bars", "Skill XP Bars", [HUD.PERKS]],
   ["hide_xp_score", "Battle Score Number", [HUD.NUMBER_BIG]],
   ["hide_reticle", "Aim Circle", [HUD.AIM_SWITCHER, HUD.FRONT_SIGHT]],
+  ["hide_center_dot", "Center Dot", [HUD.CROSSHAIR_MARK]],
   ["hide_drop_calc", "Scope / Rangefinder", [HUD.RETICLE]],
   ["hide_target_dist", "Rangefinder Distance", [HUD.TARGET_DISTANCE]],
   ["hide_action_hints", "Action Hints (Fire)", [HUD.TARGETING_HINTS]],
@@ -157,6 +158,7 @@ const PANEL_GROUPS: [label: string, toggles: [key: string, label: string][]][] =
   ]],
   ["Crosshair", [
     ["hide_reticle", "Aim Circle"],
+    ["hide_center_dot", "Center Dot"],
     ["hide_drop_calc", "Scope / Rangefinder"],
     ["hide_target_dist", "Rangefinder Distance"],
     ["hide_action_hints", "Action Hints (Fire)"],

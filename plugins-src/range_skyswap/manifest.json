@@ -1,0 +1,22 @@
+{
+  "plugin_id": "range_skyswap",
+  "name": "Range Skyswap",
+  "version": "1.0.0",
+  "author": "AETERNAL",
+  "description": "Swap Firing Range skybox to anything less depressing.",
+  "min_host_version": "5.1.1",
+  "game_versions": ["1.2.2"],
+  "permissions": {
+    "game_overrides": { "reason": "Swaps the skybox for Firing Range." }
+  },
+  "override": {
+    "format": 1,
+    "presets": [
+      { "id": "light", "name": "Light Theme", "kind": "world", "dir": "overrides/light", "preview": "preview.webp" },
+      { "id": "moonshot", "name": "Moonshot Theme", "kind": "world", "dir": "overrides/moonshot", "preview": "preview.webp" },
+      { "id": "project_phoenix", "name": "Project Phoenix Theme", "kind": "world", "dir": "overrides/project_phoenix", "preview": "preview.webp" },
+      { "id": "sunstroke", "name": "Sunstroke Theme", "kind": "world", "dir": "overrides/sunstroke", "preview": "preview.webp" },
+      { "id": "vietnam", "name": "Vietnam Theme", "kind": "world", "dir": "overrides/vietnam", "preview": "preview.webp" }
+    ]
+  }
+}

@@ -485,7 +485,8 @@
       "color": "Color. Type a hex value after the click.",
       "underline": "Underline",
       "strike": "Strikethrough",
-      "center": "Center"
+      "center": "Center",
+      "image": "Image. Put images on one line to show them side by side. Each new line starts a row."
     },
     "gameVersions": {
       "add": "Add version",

@@ -1,0 +1,22 @@
+{
+  "format": "fuse-override/1",
+  "name": "Project Phoenix",
+  "created": "2026-11-17T03:08:55.166Z",
+  "pack": "aa_override.zip",
+  "entries": [
+    ".assets/output/firing_rangee3659e0427023fbeffe68c2a1ee3dcca.client.scene"
+  ],
+  "originals": {
+    ".assets/output/firing_rangee3659e0427023fbeffe68c2a1ee3dcca.client.scene": {
+      "size": 114928,
+      "sha256": "8aba3b655b14857786b92c7016cd48437b24dd70eadc9d7b9e2a763bc553af09"
+    }
+  },
+  "project": [],
+  "origin": {
+    "out": "omwk4355x",
+    "sources": [
+      "firing_range · Project Phoenix"
+    ]
+  }
+}

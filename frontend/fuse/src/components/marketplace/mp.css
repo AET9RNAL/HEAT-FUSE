@@ -329,6 +329,53 @@
     vertical-align: middle;
 }
 
+/* A paragraph of images only. Each source line is one row. */
+.mp-markdown :deep(.md-grid) {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+}
+
+/* A short row stays centered under the full rows. */
+.mp-markdown :deep(.md-row) {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: flex-start;
+    gap: var(--space-2);
+}
+
+/* A cell is at most 1/N of the row. An image smaller than that keeps its own size. */
+.mp-markdown :deep(.md-cell) {
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: calc((100% - (var(--md-cols) - 1) * var(--space-2)) / var(--md-cols));
+}
+
+.mp-markdown :deep(.md-cell img) {
+    display: block;
+}
+
+.mp-markdown :deep(.md-cols-2) {
+    --md-cols: 2;
+}
+
+.mp-markdown :deep(.md-cols-3) {
+    --md-cols: 3;
+}
+
+.mp-markdown :deep(.md-cols-4) {
+    --md-cols: 4;
+}
+
+.mp-markdown :deep(.md-cols-5) {
+    --md-cols: 5;
+}
+
+.mp-markdown :deep(.md-cols-6) {
+    --md-cols: 6;
+}
+
 .mp-breadcrumb {
         user-select: none;
     -webkit-user-select: none;

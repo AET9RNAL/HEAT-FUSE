@@ -17,6 +17,7 @@ type Action =
     | { kind: 'wrap'; before: string; after: string }
     | { kind: 'code' }
     | { kind: 'color' }
+    | { kind: 'image' }
     | { kind: 'prefix'; prefix: (line: number) => string; match: RegExp }
 
 interface Tool { id: string; hint: () => string; key?: string; action: Action }
@@ -26,7 +27,10 @@ const TOOLS: Tool[] = [
     { id: 'italic', key: 'i', hint: () => `_${t('registry.md.italic')}_`, action: { kind: 'wrap', before: '_', after: '_' } },
     { id: 'code', key: 'e', hint: () => `\`${t('registry.md.code')}\``, action: { kind: 'code' } },
     { id: 'list', hint: () => `- ${t('registry.md.list')}`, action: { kind: 'prefix', prefix: () => '- ', match: /^[-*+] / } },
+    { id: 'image', hint: () => '![](url)', action: { kind: 'image' } },
 ]
+
+const URL_PLACEHOLDER = 'https://'
 
 // The sanitizer keeps span and p with color, text-decoration and text-align styles. Tag names alone (u, s, center) are removed.
 const HTML_TOOLS: Tool[] = [
@@ -93,6 +97,12 @@ function apply(tool: Tool) {
         // The hex value is selected after the wrap, so the next keys type the color.
         const hex = s + COLOR_OPEN.indexOf('#')
         return replace(s, e, `${COLOR_OPEN}${inner}</span>`, hex, hex + 7)
+    }
+    if (a.kind === 'image') {
+        // A selected URL becomes the source and the caret goes to the alt text. Other text becomes the alt text and the URL is selected.
+        if (/^https?:\/\/\S+$/.test(inner)) return replace(s, e, `![](${inner})`, s + 2, s + 2)
+        const url = s + inner.length + 4
+        return replace(s, e, `![${inner}](${URL_PLACEHOLDER})`, url, url + URL_PLACEHOLDER.length)
     }
     // Code: several lines become a fenced block. One line stays inline code.
     return inner.includes('\n') ? wrap('```\n', '\n```') : wrap('`', '`')

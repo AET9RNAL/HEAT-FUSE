@@ -1,4 +1,4 @@
-import { marked } from 'marked'
+import { Marked, type Token } from 'marked'
 import DOMPurify from 'dompurify'
 
 const ALLOWED_TAGS = [
@@ -21,6 +21,9 @@ const ALLOWED_CSS_PROPS = new Set([
 ])
 
 const UNSAFE_CSS_VALUE = /expression|javascript|url\(|-moz-binding|@import|behavior/i
+
+// mp.css has a .md-cols-N class for each count up to this one.
+const MAX_GRID_COLS = 6
 
 DOMPurify.addHook('uponSanitizeAttribute', (_node, data) => {
     if (data.attrName !== 'style') return
@@ -46,8 +49,43 @@ DOMPurify.addHook('uponSanitizeAttribute', (_node, data) => {
     }
 })
 
+function isImage(tok: Token): boolean {
+    if (tok.type === 'image') return true
+    return tok.type === 'link' && tok.tokens?.length === 1 && tok.tokens[0].type === 'image'
+}
+
+/** Splits a paragraph of images into rows, one row per source line. Null when the paragraph holds anything else. */
+function imageRows(tokens: Token[]): Token[][] | null {
+    const rows: Token[][] = [[]]
+    for (const tok of tokens) {
+        if (isImage(tok)) {
+            rows[rows.length - 1].push(tok)
+        } else if (tok.type === 'br' || (tok.type === 'text' && !tok.raw.trim())) {
+            if (tok.type === 'br' || tok.raw.includes('\n')) rows.push([])
+        } else {
+            return null
+        }
+    }
+    return rows.filter(row => row.length)
+}
+
+const md = new Marked({
+    renderer: {
+        paragraph({ tokens }) {
+            const rows = imageRows(tokens)
+            if (!rows) return false
+            const cols = Math.max(0, ...rows.map(row => row.length))
+            if (cols < 2) return false
+            const body = rows
+                .map(row => `<span class="md-row">${row.map(cell => `<span class="md-cell">${this.parser.parseInline([cell])}</span>`).join('')}</span>`)
+                .join('')
+            return `<p class="md-grid md-cols-${Math.min(cols, MAX_GRID_COLS)}">${body}</p>\n`
+        },
+    },
+})
+
 export function renderMarkdown(src: string): string {
     if (!src) return ''
-    const html = marked.parse(src, { async: false }) as string
+    const html = md.parse(src, { async: false }) as string
     return DOMPurify.sanitize(html, { ALLOWED_TAGS, ALLOWED_ATTR })
 }
