@@ -1,7 +1,7 @@
 {
   "format": "fuse-override/1",
   "name": "Light",
-  "created": "2026-11-17T00:14:49.237Z",
+  "created": "2026-11-17T07:28:39.951Z",
   "pack": "aa_override.zip",
   "entries": [
     ".assets/output/firing_rangee3659e0427023fbeffe68c2a1ee3dcca.client.scene"
@@ -16,7 +16,7 @@
   "origin": {
     "out": "omwjxp9ic",
     "sources": [
-      "firing_range"
+      "firing_range · Light"
     ]
   }
 }
