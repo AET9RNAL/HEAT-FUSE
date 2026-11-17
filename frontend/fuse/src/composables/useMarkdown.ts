@@ -4,7 +4,7 @@ import DOMPurify from 'dompurify'
 const ALLOWED_TAGS = [
     'p', 'br', 'strong', 'em', 'h1', 'h2', 'h3', 'h4', 'h5',
     'ul', 'ol', 'li', 'code', 'pre', 'blockquote', 'a', 'img',
-    'hr', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'span',
+    'hr', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'span', 'video',
 ]
 
 const ALLOWED_ATTR = ['href', 'src', 'alt', 'class', 'target', 'rel', 'style']
@@ -24,6 +24,20 @@ const UNSAFE_CSS_VALUE = /expression|javascript|url\(|-moz-binding|@import|behav
 
 // mp.css has a .md-cols-N class for each count up to this one.
 const MAX_GRID_COLS = 6
+
+const VIDEO_EXT = /\.(webm|mp4)$/i
+
+// Set after the attribute filter, so an author cannot add controls or sound.
+const VIDEO_FLAGS = ['autoplay', 'loop', 'muted', 'playsinline']
+
+DOMPurify.addHook('afterSanitizeAttributes', node => {
+    if (node.nodeName !== 'VIDEO') return
+    for (const flag of VIDEO_FLAGS) node.setAttribute(flag, '')
+})
+
+function escapeAttr(value: string): string {
+    return value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
 
 DOMPurify.addHook('uponSanitizeAttribute', (_node, data) => {
     if (data.attrName !== 'style') return
@@ -80,6 +94,10 @@ const md = new Marked({
                 .map(row => `<span class="md-row">${row.map(cell => `<span class="md-cell">${this.parser.parseInline([cell])}</span>`).join('')}</span>`)
                 .join('')
             return `<p class="md-grid md-cols-${Math.min(cols, MAX_GRID_COLS)}">${body}</p>\n`
+        },
+        image({ href, text }) {
+            if (!VIDEO_EXT.test(href.split(/[?#]/)[0])) return false
+            return `<video src="${escapeAttr(href)}" aria-label="${escapeAttr(text)}"></video>`
         },
     },
 })

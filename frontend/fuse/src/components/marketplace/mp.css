@@ -323,7 +323,8 @@
     margin: var(--space-2) 0;
 }
 
-.mp-markdown :deep(img) {
+.mp-markdown :deep(img),
+.mp-markdown :deep(video) {
     max-width: 100%;
     height: auto;
     vertical-align: middle;
@@ -352,7 +353,8 @@
     max-width: calc((100% - (var(--md-cols) - 1) * var(--space-2)) / var(--md-cols));
 }
 
-.mp-markdown :deep(.md-cell img) {
+.mp-markdown :deep(.md-cell img),
+.mp-markdown :deep(.md-cell video) {
     display: block;
 }
 

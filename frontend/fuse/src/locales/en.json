@@ -486,7 +486,7 @@
       "underline": "Underline",
       "strike": "Strikethrough",
       "center": "Center",
-      "image": "Image. Put images on one line to show them side by side. Each new line starts a row."
+      "image": "Image or clip (.webm, .mp4). Put them on one line to show them side by side. Each new line starts a row. Clips play muted in a loop."
     },
     "gameVersions": {
       "add": "Add version",

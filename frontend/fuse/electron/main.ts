@@ -919,7 +919,7 @@ function createWindow() {
           " script-src 'self' 'wasm-unsafe-eval' https://us-assets.i.posthog.com;" +
           " style-src 'self' 'unsafe-inline';" +
           " img-src 'self' data: https:;" +
-          " media-src 'self' blob: data:;" +
+          " media-src 'self' blob: data: https:;" +
           " font-src 'self';" +
           " connect-src 'self' http://127.0.0.1:* ws://127.0.0.1:*" +
           " https://*.supabase.co wss://*.supabase.co" +

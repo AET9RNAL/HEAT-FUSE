@@ -135,7 +135,7 @@ function onKeydown(event: KeyboardEvent) {
             @input="emit('update:modelValue', ($event.target as HTMLTextAreaElement).value)"
             @keydown="onKeydown"
         />
-        <div v-else class="md-preview mp-markdown mp-scroll" v-html="html" />
+        <div v-else v-markdown-media="html" class="md-preview mp-markdown mp-scroll" v-html="html" />
         <div class="md-foot mp-label">
             <span class="md-hints">
                 <span v-for="(group, g) in [TOOLS, HTML_TOOLS]" :key="g">

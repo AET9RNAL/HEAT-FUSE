@@ -6,6 +6,7 @@ import posthog from 'posthog-js'
 import './style.css'
 import App from './App.vue'
 import vTruncateTitle from './directives/vTruncateTitle'
+import vMarkdownMedia from './directives/vMarkdownMedia'
 import { vTip } from './directives/vTip'
 import { vFtue } from './directives/vFtue'
 
@@ -27,5 +28,6 @@ app.use(pinia)
 app.directive('truncate-title', vTruncateTitle)
 app.directive('tip', vTip)
 app.directive('ftue', vFtue)
+app.directive('markdown-media', vMarkdownMedia)
 
 app.mount('#app')

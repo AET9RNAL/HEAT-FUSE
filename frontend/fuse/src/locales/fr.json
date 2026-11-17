@@ -485,7 +485,7 @@
       "underline": "Souligné",
       "strike": "Barré",
       "center": "Centré",
-      "image": "Image. Mettez des images sur une même ligne pour les afficher côte à côte. Chaque nouvelle ligne commence une rangée."
+      "image": "Image ou clip (.webm, .mp4). Mettez-les sur une même ligne pour les afficher côte à côte. Chaque nouvelle ligne commence une rangée. Les clips tournent en boucle, sans le son."
     },
     "gameVersions": {
       "add": "Ajouter une version",

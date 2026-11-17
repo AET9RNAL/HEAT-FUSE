@@ -124,7 +124,7 @@ function openDep(d: RegistryDependency) { void registry.openProject(d.project_id
                         <span class="mp-band-title">{{ t('registry.listing.description') }}</span>
                     </div>
                     <div class="mp-frame-body pp-desc">
-                        <div v-if="project.description" class="mp-markdown" v-html="descHtml" />
+                        <div v-if="project.description" v-markdown-media="descHtml" class="mp-markdown" v-html="descHtml" />
                         <p v-else class="mp-text">{{ t('registry.page.noDescription') }}</p>
                     </div>
                 </HudFrame>
