@@ -405,9 +405,9 @@ const portDescription = computed(() =>
                         modelValue="secondary"
                         :label="t('appsettings.apps.autoHide')"
                         :description="t('appsettings.apps.autoHideDesc')"
-                        :value="appsStore.launcher.autoHide"
+                        :value="appsStore.launcher.hidden"
                         :disabled="!fuseRunning"
-                        @update:value="appsStore.saveLauncher({ autoHide: $event as boolean })"
+                        @update:value="appsStore.saveLauncher({ hidden: $event as boolean })"
                     />
                     <eKeybind
                         :label="CONSOLE_ACTION"

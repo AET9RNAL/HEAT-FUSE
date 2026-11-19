@@ -1,0 +1,22 @@
+{
+  "format": "fuse-override/1",
+  "name": "Default",
+  "created": "2026-11-18T20:28:26.544Z",
+  "pack": "aa_override.zip",
+  "entries": [
+    ".assets/output/base_tank718fb9500940b0655ce24dc84abd90e5.client.scene"
+  ],
+  "originals": {
+    ".assets/output/base_tank718fb9500940b0655ce24dc84abd90e5.client.scene": {
+      "size": 8357,
+      "sha256": "066b136b90cf4774235060e077a45ab78cb00e18bb523765ed524da36897f1c1"
+    }
+  },
+  "project": [],
+  "origin": {
+    "out": "omwmk5v12",
+    "sources": [
+      "base_tank"
+    ]
+  }
+}

@@ -21,6 +21,10 @@ if (SURFACE === 'stage') {
     },
     /** Picks the displays the stage covers. False when no listed display exists. */
     selectDisplays: (ids: string[]): Promise<boolean> => ipcRenderer.invoke('overlay:select-displays', ids),
+    /** The game hides or clips the cursor. Main keeps the stage click-through meanwhile. */
+    onCursorHeld: (cb: (held: boolean) => void): void => {
+      ipcRenderer.on('stage:cursor-held', (_e, held) => cb(!!held))
+    },
   })
 }
 

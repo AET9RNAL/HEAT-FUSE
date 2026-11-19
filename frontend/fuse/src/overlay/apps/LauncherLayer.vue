@@ -3,30 +3,28 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { AnimatePresence, motion } from "motion-v";
 import StageTaskbar from "./StageTaskbar.vue";
 import StageConsole from "./StageConsole.vue";
-import { hostState } from "../overlayClient";
+import { gameCursorHeld, hostState } from "../overlayClient";
 import { mainScreen } from "../screens";
-import { consoleOpen, launcher, taskbarHeld, taskbarMenuOpen, taskbarShown } from "./appsState";
+import { consoleOpen, launcher, taskbarFull, taskbarHeld, taskbarMenuOpen, taskbarSettled } from "./appsState";
 import { TASKBAR_GAP, TASKBAR_SIZE } from "./windowGeometry";
 import { Dynamics } from "../../composables/useMotion";
 
-/** The cursor must stay this close to the edge or the bar, this long, to reveal the taskbar. */
+/** The cursor must stay this close to the edge or on the dim bar, this long, to reveal the taskbar. */
 const REVEAL_PX = 2;
 const DWELL_MS = 150;
 const HIDE_MS = 600;
-const HIDDEN_OPACITY = 0.5;
-const HIDDEN_SLIDE_PX = TASKBAR_GAP;
+const DIM_OPACITY = 0.5;
+const DIM_SLIDE_PX = TASKBAR_GAP;
 const SLIDE_PX = 16;
 
 const revealed = ref(false);
 const calibrating = computed(() => hostState.value === "calibrate");
-const full = computed(
-  () => !launcher.autoHide || revealed.value || taskbarMenuOpen.value || consoleOpen.value || taskbarHeld.value,
-);
+const full = computed(() => revealed.value || taskbarMenuOpen.value || consoleOpen.value || taskbarHeld.value);
 
 watch(
-  calibrating,
-  (c) => {
-    taskbarShown.value = !c;
+  () => full.value && !calibrating.value,
+  (f) => {
+    taskbarFull.value = f;
   },
   { immediate: true },
 );
@@ -72,11 +70,16 @@ function towardEdge(px: number): { x: number; y: number } {
   }
 }
 
-/** Calibration */
+/** Calibration, and the hidden taskbar. */
 const away = computed(() => ({ ...towardEdge(SLIDE_PX), opacity: 0 }));
-const pose = computed(() =>
-  full.value ? { x: 0, y: 0, opacity: 1 } : { ...towardEdge(HIDDEN_SLIDE_PX), opacity: HIDDEN_OPACITY },
-);
+const pose = computed(() => {
+  if (full.value) return { x: 0, y: 0, opacity: 1 };
+  return launcher.hidden ? away.value : { ...towardEdge(DIM_SLIDE_PX), opacity: DIM_OPACITY };
+});
+
+function onSettled(): void {
+  taskbarSettled.value++;
+}
 
 let dwellTimer: number | null = null;
 let hideTimer: number | null = null;
@@ -106,21 +109,22 @@ function atEdge(x: number, y: number): boolean {
   }
 }
 
-function nearBar(x: number, y: number): boolean {
+function nearBar(x: number, y: number, m: number): boolean {
   const r = barEl.value?.getBoundingClientRect();
   if (!r) return false;
-  const m = TASKBAR_GAP * 2;
   return x >= r.left - m && x <= r.right + m && y >= r.top - m && y <= r.bottom + m;
 }
 
+/** try not to reveal when cursor is held by other process */
+const hoverOff = computed(() => calibrating.value || launcher.hidden || gameCursorHeld.value);
+
 // Forwarded mouse moves reach the page while the stage is click-through.
 function onMouseMove(e: MouseEvent): void {
-  if (!launcher.autoHide || calibrating.value) return;
+  if (hoverOff.value) return;
   const x = e.clientX;
   const y = e.clientY;
-  // The same zone reveals the bar and keeps it revealed: the whole edge, and the dim bar itself.
-  const inZone = atEdge(x, y) || nearBar(x, y);
   if (!revealed.value) {
+    const inZone = atEdge(x, y) || nearBar(x, y, 0);
     if (!inZone) {
       clearDwell();
       return;
@@ -131,7 +135,8 @@ function onMouseMove(e: MouseEvent): void {
     }, DWELL_MS);
     return;
   }
-  if (inZone || taskbarMenuOpen.value) {
+  // The margin covers the gap between the bar and its edge, so the bar stays out on the way between them.
+  if (atEdge(x, y) || nearBar(x, y, TASKBAR_GAP * 2) || taskbarMenuOpen.value) {
     clearHide();
     return;
   }
@@ -141,8 +146,8 @@ function onMouseMove(e: MouseEvent): void {
   }, HIDE_MS);
 }
 
-watch(calibrating, (c) => {
-  if (!c) return;
+watch(hoverOff, (off) => {
+  if (!off) return;
   revealed.value = false;
   clearDwell();
   clearHide();
@@ -154,7 +159,7 @@ onBeforeUnmount(() => {
   window.removeEventListener("mousemove", onMouseMove);
   clearDwell();
   clearHide();
-  taskbarShown.value = false;
+  taskbarFull.value = false;
 });
 </script>
 
@@ -166,10 +171,12 @@ onBeforeUnmount(() => {
           v-if="!calibrating"
           key="taskbar"
           class="taskbar-slot"
+          :class="{ full }"
           :initial="away"
           :animate="pose"
           :exit="away"
           :transition="Dynamics.snappy"
+          @animation-complete="onSettled"
         >
           <div ref="barEl" v-ftue="'stage-taskbar'" class="taskbar-box">
             <StageTaskbar :edge="launcher.edge" />
@@ -204,12 +211,17 @@ onBeforeUnmount(() => {
   flex-direction: column;
 }
 
+/* Dim or hidden, the bar lets clicks through to the game. */
 .taskbar-slot {
   display: flex;
   max-width: 100%;
   max-height: 100%;
-  pointer-events: auto;
+  pointer-events: none;
   color: var(--text-main);
+}
+
+.taskbar-slot.full {
+  pointer-events: auto;
 }
 
 .taskbar-box {

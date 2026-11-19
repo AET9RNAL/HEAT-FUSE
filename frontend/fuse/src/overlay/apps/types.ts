@@ -57,6 +57,6 @@ export interface WindowDescriptor {
 
 export interface LauncherSettings {
   edge: TaskbarEdge;
-  autoHide: boolean;
+  hidden: boolean;
   consoleHotkey: string;
 }

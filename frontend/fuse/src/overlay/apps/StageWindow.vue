@@ -36,9 +36,9 @@ function sameArea(a: Rect, b: Rect): boolean {
   return a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h;
 }
 
-/** The display minus the taskbar strip. The taskbar sits on the main display only, and takes room only when it stays. */
+/** The display minus the taskbar strip. The taskbar sits on the main display only, and takes room only when it is not hidden. */
 function workAreaFor(display: Rect): Rect {
-  const reserve = !launcher.autoHide && sameArea(display, mainOverlayArea()) ? TASKBAR_STRIP : 0;
+  const reserve = !launcher.hidden && sameArea(display, mainOverlayArea()) ? TASKBAR_STRIP : 0;
   return workArea(display, launcher.edge, reserve);
 }
 

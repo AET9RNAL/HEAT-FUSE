@@ -15,6 +15,7 @@ import {
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { leaveForeground, noteForeground, releaseForeground, takeForeground } from './foreground'
+import { canReadCursor, gameHoldsCursor } from './gameCursor'
 
 declare const __RELEASE__: boolean
 
@@ -53,6 +54,10 @@ let inputOverride: boolean | null = null
 let requestedIgnore = true
 /** Last state sent to the window, so frequent requests don't repeat it. */
 let appliedIgnore: boolean | null = null
+/** The game hides or clips the cursor: the player aims and cannot see where it is. */
+let cursorHeld = false
+let cursorTimer: ReturnType<typeof setInterval> | null = null
+const CURSOR_POLL_MS = 50
 let env: StageEnv | null = null
 /** What the enabled plugins declared in `frames`: `https://site.net` or `https://*.site.net`. */
 let frameSources: string[] = []
@@ -232,10 +237,38 @@ function scheduleFit(delay = FIT_DELAY_MS): void {
   }, delay)
 }
 
-function applyIgnore(ignore: boolean, win: BrowserWindow | null = getStageWindow()): void {
-  if (!win || win.isDestroyed() || appliedIgnore === ignore) return
+/**
+ * Click-through when the stage page asks, and while the game holds the cursor and the keyboard.
+ * The consent card overrides both.
+ */
+function syncIgnore(win: BrowserWindow | null = getStageWindow()): void {
+  if (!win || win.isDestroyed()) return
+  const ignore = inputOverride !== null ? !inputOverride : requestedIgnore || (cursorHeld && !win.isFocused())
+  if (appliedIgnore === ignore) return
   appliedIgnore = ignore
   win.setIgnoreMouseEvents(ignore, { forward: true })
+}
+
+function sendCursorHeld(win: BrowserWindow): void {
+  if (!win.isDestroyed() && !win.webContents.isDestroyed()) win.webContents.send('stage:cursor-held', cursorHeld)
+}
+
+function stopCursorWatch(): void {
+  if (cursorTimer) clearInterval(cursorTimer)
+  cursorTimer = null
+  cursorHeld = false
+}
+
+function startCursorWatch(win: BrowserWindow): void {
+  stopCursorWatch()
+  if (!canReadCursor()) return
+  cursorTimer = setInterval(() => {
+    const held = gameHoldsCursor()
+    if (held === cursorHeld) return
+    cursorHeld = held
+    syncIgnore(win)
+    sendCursorHeld(win)
+  }, CURSOR_POLL_MS)
 }
 
 function stageLayout(win: BrowserWindow): StageLayout {
@@ -314,7 +347,9 @@ function createStageWindow(): void {
   // Click-through by default; the renderer flips this while hovering an overlay.
   requestedIgnore = true
   appliedIgnore = null
-  applyIgnore(inputOverride === null ? true : !inputOverride, win)
+  syncIgnore(win)
+  startCursorWatch(win)
+  win.webContents.on('did-finish-load', () => sendCursorHeld(win))
 
   // Plugin overlays run in this page: no popups, and no navigating it anywhere else.
   // A new-window link inside an allowed frame opens in the browser. The referrer is the only clue to the opener.
@@ -359,10 +394,19 @@ function createStageWindow(): void {
     setTimeout(() => fitToStage(win), 1500)
     if (env?.devServerUrl) win.webContents.openDevTools({ mode: 'detach' })
   })
-  win.on('focus', () => env?.onStageFocus?.(true))
-  win.on('blur', () => env?.onStageFocus?.(false))
+  win.on('focus', () => {
+    syncIgnore(win)
+    env?.onStageFocus?.(true)
+  })
+  win.on('blur', () => {
+    syncIgnore(win)
+    env?.onStageFocus?.(false)
+  })
   win.on('closed', () => {
-    if (stageWindow === win) stageWindow = null
+    if (stageWindow === win) {
+      stageWindow = null
+      stopCursorWatch()
+    }
     env?.onStageFocus?.(false)
   })
   stageWindow = win
@@ -425,7 +469,7 @@ export function initOverlayStage(stageEnv: StageEnv): void {
 
   onIpc('overlay:set-ignore', (_e, ignore: boolean) => {
     requestedIgnore = !!ignore
-    if (inputOverride === null) applyIgnore(requestedIgnore)
+    syncIgnore()
   })
 
   // Interactive state only: allow the stage to take keyboard focus so Vue
@@ -481,6 +525,7 @@ export function stopOverlayStage(): void {
   }
   stageWindow = null
   stageParams = null
+  stopCursorWatch()
 }
 
 export function getStageWindow(): BrowserWindow | null {
@@ -493,5 +538,5 @@ export function getStageWindow(): BrowserWindow | null {
  */
 export function setStageInputOverride(takeClicks: boolean | null): void {
   inputOverride = takeClicks
-  applyIgnore(takeClicks === null ? requestedIgnore : !takeClicks)
+  syncIgnore()
 }

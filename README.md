@@ -142,10 +142,10 @@ Positions, rotation, and opacity persist per plugin and are restored on the next
 Some plugins are apps: tools that open in a window on the stage. An app window takes clicks at any time. It does not need interactive mode.
 
 - **Console**: press `Ctrl+Space`. Type the name or the alias of an app, then press `Enter`. `Esc` closes the console and gives the keyboard back to the game.
-- **Taskbar**: a bar on one edge of the main display. It has Start (opens the console), the pinned and open apps, and Show desktop. A hidden taskbar stays at 50% opacity. Move the cursor to its edge or onto it to show it.
+- **Taskbar**: a bar on one edge of the main display. It has Start (opens the console), the pinned and open apps, and Show desktop. When the cursor leaves the taskbar, it dims and lets clicks through to the game. Move the cursor to its edge or onto it to show it. With **Hide The Taskbar**, it shows only while the console is open. While the game hides the cursor (aiming), the taskbar and app windows never take the mouse.
 - **Windows**: drag the title bar to move a window, and drag an edge to resize it. Double-click the title bar to maximize or restore the window. Drag a window to the top edge to maximize it, or to a side edge to fill that half of the display.
 - **Actions**: right-click an app in the console, or select it and press `Ctrl+K`. The actions are favorite, pin to the taskbar, close all windows and quit. **Configure Command** sets an alias or a launch hotkey.
-- **Settings > Apps** in the launcher sets the taskbar edge, the auto-hide and the console hotkey.
+- **Settings > Apps** in the launcher sets the taskbar edge, Hide The Taskbar and the console hotkey.
 
 | Console key | Action |
 |---|---|

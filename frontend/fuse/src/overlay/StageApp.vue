@@ -8,7 +8,7 @@ import { hideTip } from "./inspector/tooltip";
 import { visibleNotifications } from "./notifications";
 import { initStageTour } from "./stageTour";
 import { initHiddenOverlayNotice } from "./hiddenOverlays";
-import { appsUiShown } from "./apps/appsState";
+import { appsUiShown, taskbarFull, taskbarSettled } from "./apps/appsState";
 
 initStageTour();
 initHiddenOverlayNotice();
@@ -17,19 +17,25 @@ initHiddenOverlayNotice();
 const APPS_UI = ".fuse-window, .fuse-frame .fuse-hit, .fuse-taskbar, .fuse-console, .fuse-actions";
 
 let lastIgnore = true;
+let lastPointer: { x: number; y: number } | null = null;
 
 function appsUiLive(): boolean {
   return hostState.value !== "calibrate" && appsUiShown.value;
 }
 
 function onMouseMove(e: MouseEvent): void {
+  lastPointer = { x: e.clientX, y: e.clientY };
+  updateIgnore(e.clientX, e.clientY);
+}
+
+function updateIgnore(x: number, y: number): void {
   if (dragging.value) return;
   // Calibrate (drag) and interactive (click) open the whole editor surface;
   // notifications stay hoverable and closable in every state, locked included.
   const editing = hostState.value === "calibrate" || hostState.value === "interactive";
   const apps = appsUiLive();
   if (!editing && !apps && visibleNotifications.value.length === 0) return;
-  const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
+  const el = document.elementFromPoint(x, y) as HTMLElement | null;
   const targets = [editing ? ".overlay-wrapper, .stage-ui" : "", ".stage-notice", apps ? APPS_UI : ""].filter(Boolean).join(", ");
   const ignore = !el?.closest(targets);
   if (ignore !== lastIgnore) {
@@ -47,6 +53,16 @@ watch(
       setWindowIgnore(true);
     }
   },
+);
+
+// The taskbar can come up under a still cursor. A click there must reach the bar, not the game.
+// After the render: the hit test reads the new pointer-events of the bar.
+watch(
+  [taskbarFull, taskbarSettled],
+  () => {
+    if (lastPointer) updateIgnore(lastPointer.x, lastPointer.y);
+  },
+  { flush: "post" },
 );
 
 function onKeydown(e: KeyboardEvent): void {

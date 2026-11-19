@@ -27,7 +27,7 @@ export interface AppEntry {
 
 export interface LauncherSettings {
     edge: TaskbarEdge
-    autoHide: boolean
+    hidden: boolean
     consoleHotkey: string
 }
 
@@ -36,7 +36,7 @@ type Reply = { ok?: boolean; error?: string } & Record<string, unknown>
 /** The apps on the stage, from the runtime. Empty while FUSE is off: only the runtime knows them. */
 export const useAppsStore = defineStore('apps', () => {
     const apps = ref<AppEntry[]>([])
-    const launcher = ref<LauncherSettings>({ edge: 'bottom', autoHide: true, consoleHotkey: 'ctrl+space' })
+    const launcher = ref<LauncherSettings>({ edge: 'bottom', hidden: false, consoleHotkey: 'ctrl+space' })
 
     function setList(list: unknown) {
         apps.value = Array.isArray(list) ? (list as AppEntry[]) : []
@@ -45,7 +45,7 @@ export const useAppsStore = defineStore('apps', () => {
     function setLauncher(raw: Record<string, unknown>) {
         const next = { ...launcher.value }
         if (raw.edge === 'bottom' || raw.edge === 'top' || raw.edge === 'left' || raw.edge === 'right') next.edge = raw.edge
-        if (typeof raw.autoHide === 'boolean') next.autoHide = raw.autoHide
+        if (typeof raw.hidden === 'boolean') next.hidden = raw.hidden
         if (typeof raw.consoleHotkey === 'string') next.consoleHotkey = raw.consoleHotkey
         launcher.value = next
     }
@@ -69,7 +69,7 @@ export const useAppsStore = defineStore('apps', () => {
         if (result.launcher) setLauncher(result.launcher as Record<string, unknown>)
     }
 
-    async function saveLauncher(fields: Partial<Pick<LauncherSettings, 'edge' | 'autoHide'>>) {
+    async function saveLauncher(fields: Partial<Pick<LauncherSettings, 'edge' | 'hidden'>>) {
         const result = await call('launcher.settings', fields)
         if (result.ok) setLauncher(result)
         return result

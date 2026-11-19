@@ -11,14 +11,16 @@ export const apps = ref<AppEntry[]>([]);
 export const windows = reactive(new Map<string, WindowDescriptor>());
 /** Window ids, bottom to top. */
 export const windowOrder = ref<string[]>([]);
-export const launcher = reactive<LauncherSettings>({ edge: "bottom", autoHide: true, consoleHotkey: "ctrl+space" });
+export const launcher = reactive<LauncherSettings>({ edge: "bottom", hidden: false, consoleHotkey: "ctrl+space" });
 export const consoleOpen = ref(false);
 /** Live data per window, so one window updates without a stage render. */
 export const windowBus = mitt<Record<string, Record<string, OverlayInput>>>();
 /** The snap a window drag would make now, for the preview. */
 export const snapPreview = ref<{ rect: Rect; zone: Exclude<SnapZone, null> } | null>(null);
-/** The taskbar is on the stage, dim or full. The stage takes the mouse over it. */
-export const taskbarShown = ref(false);
+/** The taskbar is at full opacity and takes the mouse. Dim or hidden, it lets clicks through. */
+export const taskbarFull = ref(false);
+/** Goes up when the taskbar ends a move: it can come under a still cursor, with no mouse move. */
+export const taskbarSettled = ref(0);
 /** A taskbar context menu is open: the taskbar stays out. */
 export const taskbarMenuOpen = ref(false);
 /** The stage tour shows the taskbar: it stays out. */
@@ -34,7 +36,7 @@ export const orderedWindows = computed(() =>
 
 export const visibleWindows = computed(() => orderedWindows.value.filter((w) => !w.minimized));
 
-export const appsUiShown = computed(() => visibleWindows.value.length > 0 || consoleOpen.value || taskbarShown.value);
+export const appsUiShown = computed(() => visibleWindows.value.length > 0 || consoleOpen.value || taskbarFull.value);
 
 export const focusedWindowId = computed(() => orderedWindows.value.find((w) => w.focused)?.windowId ?? null);
 
@@ -66,7 +68,7 @@ export function applyAppsMessage(m: Record<string, unknown>): boolean {
       return true;
     case "launcher:settings":
       if (m.edge === "bottom" || m.edge === "top" || m.edge === "left" || m.edge === "right") launcher.edge = m.edge;
-      if (typeof m.autoHide === "boolean") launcher.autoHide = m.autoHide;
+      if (typeof m.hidden === "boolean") launcher.hidden = m.hidden;
       if (typeof m.consoleHotkey === "string") launcher.consoleHotkey = m.consoleHotkey;
       return true;
     case "window:opened": {

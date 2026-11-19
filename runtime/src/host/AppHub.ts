@@ -26,7 +26,7 @@ const MAX_CASCADE = 20;
 const MAX_TITLE = 120;
 
 export interface AppsState {
-  taskbar: { edge: TaskbarEdge; autoHide: boolean };
+  taskbar: { edge: TaskbarEdge; hidden: boolean };
   pinned: string[];
   favorites: string[];
   /** The user's settings per app key. `hotkey: null` removes the manifest hotkey. */
@@ -37,7 +37,7 @@ export interface AppsState {
 }
 
 export function defaultAppsState(): AppsState {
-  return { taskbar: { edge: "bottom", autoHide: true }, pinned: [], favorites: [], commands: {}, usage: {}, windows: {} };
+  return { taskbar: { edge: "bottom", hidden: false }, pinned: [], favorites: [], commands: {}, usage: {}, windows: {} };
 }
 
 function record(v: unknown): Record<string, unknown> | null {
@@ -70,7 +70,7 @@ export function normalizeAppsState(raw: unknown): AppsState {
   const taskbar = record(r.taskbar);
   if (taskbar) {
     if (EDGES.includes(taskbar.edge as TaskbarEdge)) out.taskbar.edge = taskbar.edge as TaskbarEdge;
-    if (typeof taskbar.autoHide === "boolean") out.taskbar.autoHide = taskbar.autoHide;
+    if (typeof taskbar.hidden === "boolean") out.taskbar.hidden = taskbar.hidden;
   }
   out.pinned = strings(r.pinned);
   out.favorites = strings(r.favorites);
@@ -317,7 +317,7 @@ export class AppHub {
     throw new Error(`Method not found: ${method}`);
   }
 
-  launcherSettings(): { edge: TaskbarEdge; autoHide: boolean; consoleHotkey: string } {
+  launcherSettings(): { edge: TaskbarEdge; hidden: boolean; consoleHotkey: string } {
     return { ...this.state.taskbar, consoleHotkey: this.host.consoleHotkey() };
   }
 
@@ -697,7 +697,7 @@ export class AppHub {
 
   private setLauncher(raw: Record<string, unknown>): void {
     if (EDGES.includes(raw.edge as TaskbarEdge)) this.state.taskbar.edge = raw.edge as TaskbarEdge;
-    if (typeof raw.autoHide === "boolean") this.state.taskbar.autoHide = raw.autoHide;
+    if (typeof raw.hidden === "boolean") this.state.taskbar.hidden = raw.hidden;
     this.persist();
     this.broadcastLauncher();
   }

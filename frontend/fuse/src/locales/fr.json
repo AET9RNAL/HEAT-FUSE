@@ -137,7 +137,7 @@
       "edgeLeft": "Gauche",
       "edgeRight": "Droite",
       "autoHide": "Masquer la barre des tâches",
-      "autoHideDesc": "Masquée, elle reste à 50 % d'opacité. Elle passe à pleine opacité quand le curseur reste sur son bord ou sur elle. Si elle n'est pas masquée, les fenêtres agrandies lui laissent la place",
+      "autoHideDesc": "Masquée, elle n'apparaît que lorsque la console est ouverte. Si elle n'est pas masquée, elle s'atténue quand le curseur la quitte, et les fenêtres agrandies lui laissent la place",
       "offline": "Démarrez {brandName} pour modifier la barre des tâches"
     },
     "language": {
@@ -1208,7 +1208,7 @@
     },
     "apps": {
       "title": "Applications",
-      "body": "Certains plugins sont des applications : des outils qui s'ouvrent dans des fenêtres et reçoivent vos clics sans le mode interactif. La barre des tâches montre vos applications épinglées et ouvertes, et son premier bouton ouvre la console. Masquée, elle reste atténuée sur son bord. Appuyez sur {console} pour ouvrir la console de partout."
+      "body": "Certains plugins sont des applications : des outils qui s'ouvrent dans des fenêtres et reçoivent vos clics sans le mode interactif. La barre des tâches montre vos applications épinglées et ouvertes, et son premier bouton ouvre la console. Elle s'atténue quand le curseur la quitte, et laisse passer vos clics vers le jeu. Appuyez sur {console} pour ouvrir la console de partout."
     },
     "leave": {
       "title": "Retour au jeu",

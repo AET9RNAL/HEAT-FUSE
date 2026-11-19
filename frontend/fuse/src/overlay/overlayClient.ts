@@ -68,6 +68,7 @@ export function formatCombo(combo: string): string {
 }
 /** True while an overlay is being dragged (suppresses hover click-through toggling). */
 export const dragging = ref(false);
+export const gameCursorHeld = ref(false);
 
 /**
  * Dev source revision, bumped when the runtime's watcher reports an edit under
@@ -90,6 +91,7 @@ type StageApi = {
     layout(): Promise<StageLayout | null>;
     onLayout(cb: (layout: StageLayout) => void): void;
     selectDisplays(ids: string[]): Promise<boolean>;
+    onCursorHeld?(cb: (held: boolean) => void): void;
   };
 };
 
@@ -114,6 +116,9 @@ function watchLayout(): void {
   layoutWatched = true;
   api.onLayout(applyLayout);
   void api.layout().then(applyLayout).catch(() => {});
+  api.onCursorHeld?.((held) => {
+    gameCursorHeld.value = held;
+  });
 }
 
 /** Ask Electron main to make the stage window click-through (true) or interactive (false). */

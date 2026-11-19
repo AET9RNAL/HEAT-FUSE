@@ -137,7 +137,7 @@
       "edgeLeft": "Left",
       "edgeRight": "Right",
       "autoHide": "Hide The Taskbar",
-      "autoHideDesc": "A hidden taskbar stays at 50% opacity. It goes to full opacity when the cursor stays at its edge or on it. When it is not hidden, maximized windows leave room for it",
+      "autoHideDesc": "A hidden taskbar shows only while the console is open. When it is not hidden, it dims when the cursor leaves it, and maximized windows leave room for it",
       "offline": "Start {brandName} to change the taskbar"
     },
     "language": {
@@ -1209,7 +1209,7 @@
     },
     "apps": {
       "title": "Apps",
-      "body": "Some plugins are apps: tools that open in windows and take your clicks with no interactive mode. The taskbar shows your pinned and open apps, and its first button opens the console. A hidden taskbar stays dim at its edge. Press {console} to open the console from anywhere."
+      "body": "Some plugins are apps: tools that open in windows and take your clicks with no interactive mode. The taskbar shows your pinned and open apps, and its first button opens the console. The taskbar dims when the cursor leaves it, and lets your clicks through to the game. Press {console} to open the console from anywhere."
     },
     "leave": {
       "title": "Back to the game",

@@ -16,8 +16,8 @@ const props = defineProps<{ descriptor: WindowDescriptor; z: number }>();
 /** An OBS view shows the frame and its data, and takes no input. */
 const viewOnly = isObsMode();
 
-/** The work area of the main display. The taskbar strip stays free while the taskbar stays out. */
-const area = computed<Rect>(() => workArea(mainOverlayArea(), launcher.edge, launcher.autoHide ? 0 : TASKBAR_STRIP));
+/** The work area of the main display. The taskbar strip stays free while the taskbar is not hidden. */
+const area = computed<Rect>(() => workArea(mainOverlayArea(), launcher.edge, launcher.hidden ? 0 : TASKBAR_STRIP));
 
 const style = computed(() => {
   const r = area.value;
