@@ -47,6 +47,8 @@ export interface WindowDescriptor {
   resizable: boolean;
   /** A frame: no FUSE chrome, it fills the work area of the main display, and only its `fuse-hit` parts take the mouse. */
   frame: boolean;
+  /** False: no FUSE title bar or panel. The view draws all of the window, and its `fuse-drag` parts move it. */
+  titleBar: boolean;
   maximized: boolean;
   minimized: boolean;
   focused: boolean;

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref } from "vue";
+import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { assetBase, hostState, sendWindowAction, sendWindowCommand } from "../../overlayClient";
 import { useSfcComponent, withRev } from "../../composables/useSfcComponent";
 import { useI18n } from "../../../composables/useI18n";
@@ -9,6 +9,7 @@ import type { OverlayInput } from "../../rive";
 import type { Size } from "../windowGeometry";
 
 const props = defineProps<{ descriptor: WindowDescriptor; size: Size; focused: boolean }>();
+const emit = defineEmits<{ ready: [ready: boolean] }>();
 
 const { t } = useI18n();
 
@@ -16,11 +17,18 @@ const data = ref<Record<string, unknown>>({});
 const url = computed(() => withRev(assetBase() + props.descriptor.viewUrl));
 const { comp, loadError } = useSfcComponent(url);
 
+watch(comp, (c) => emit("ready", c !== null), { immediate: true });
+
 // The folder of the view file, so the view builds image URLs as an overlay does.
 const assetBaseUrl = computed(() => assetBase() + props.descriptor.viewUrl.replace(/\/[^/]*$/, ""));
 
-/** A view can work its own window. A frame has no FUSE buttons, so it draws its own. */
-function command(cmd: "focus" | "minimize" | "close"): void {
+type ViewCommand = "focus" | "minimize" | "maximize" | "restore" | "close";
+const VIEW_COMMANDS: readonly string[] = ["focus", "minimize", "maximize", "restore", "close"];
+
+/** A view can work its own window. A frame or a window with no title bar draws its own buttons. */
+function command(cmd: ViewCommand): void {
+  if (!VIEW_COMMANDS.includes(cmd)) return;
+  if (cmd === "maximize" && !props.descriptor.resizable) return;
   sendWindowCommand(props.descriptor.windowId, cmd);
 }
 
@@ -29,6 +37,7 @@ const windowProp = computed(() => ({
   id: props.descriptor.windowId,
   focused: props.focused,
   maximized: props.descriptor.maximized,
+  resizable: props.descriptor.resizable,
   frame: props.descriptor.frame,
   size: props.size,
   command,

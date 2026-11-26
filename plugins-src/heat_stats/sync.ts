@@ -9,8 +9,6 @@ const REGISTRY: ReadonlyArray<{ key: string; column: string; fallback: unknown }
   { key: "locale", column: "hs_locale", fallback: "" },
   { key: "player_name", column: "hs_player_name", fallback: "" },
   { key: "streak_length", column: "hs_streak_length", fallback: 75 },
-  { key: "hide_in_battle", column: "hs_hide_in_battle", fallback: false },
-  { key: "window_open", column: "hs_window_open", fallback: true },
 ];
 
 /** The columns the mirror keeps. A new match_sessions column reaches the window only after you add it here. */

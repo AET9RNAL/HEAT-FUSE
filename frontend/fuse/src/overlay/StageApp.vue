@@ -14,7 +14,8 @@ initStageTour();
 initHiddenOverlayNotice();
 
 // A frame takes the mouse only on its `fuse-hit` parts. Its clear areas stay click-through.
-const APPS_UI = ".fuse-window, .fuse-frame .fuse-hit, .fuse-taskbar, .fuse-console, .fuse-actions";
+// `body > .stage-ui`: a menu or a tooltip that a view teleports to the page body, such as the fuse_ui select menu.
+const APPS_UI = ".fuse-window, .fuse-frame .fuse-hit, .fuse-taskbar, .fuse-console, .fuse-actions, body > .stage-ui";
 
 let lastIgnore = true;
 let lastPointer: { x: number; y: number } | null = null;

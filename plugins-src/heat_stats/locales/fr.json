@@ -299,6 +299,9 @@
     "nowApi": "API publique, si vous le souhaitez"
   },
   "window": {
+    "minimize": "Réduire",
+    "maximize": "Agrandir",
+    "restore": "Restaurer",
     "close": "Fermer"
   },
   "config": {
@@ -306,10 +309,6 @@
     "language": "Langue",
     "languageTip": "Langue de HEAT Stats. Automatique suit l'application FUSE.",
     "languageAuto": "Automatique",
-    "showWindow": "Afficher la fenêtre",
-    "showWindowTip": "Affiche la fenêtre HEAT Stats. Son bouton de fermeture désactive ce réglage.",
-    "hangarOnly": "Hangar uniquement",
-    "hangarOnlyTip": "Masque la fenêtre pendant les batailles.",
     "streakLength": "Longueur de la série",
     "streakLengthTip": "Nombre de batailles récentes affichées dans la bande de série.",
     "player": "Joueur",
@@ -340,9 +339,6 @@
     "resume": "Reprendre la file sans risque",
     "override": "Appuyez de nouveau sur JOUER pour lancer quand même.",
     "waiting": "La file démarre quand ils lancent une partie ou se déconnectent."
-  },
-  "hotkeys": {
-    "toggleWindow": "Afficher ou masquer la fenêtre HEAT Stats"
   },
   "charts": {
     "empty": "Aucune bataille enregistrée. Les graphiques apparaissent dès que vous jouez.",

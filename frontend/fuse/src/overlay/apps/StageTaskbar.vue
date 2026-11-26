@@ -92,6 +92,15 @@ const menuItems = computed<StageMenuItem[]>(() => {
     { id: "open", label: a.windows.length ? t("stageapps.taskbar.show") : t("stageapps.taskbar.open"), icon: "launch" },
   ];
   if (a.instances === "multi" && a.windows.length) items.push({ id: "new", label: t("stageapps.taskbar.newWindow"), icon: "launch" });
+  const topId = topWindowOf(a);
+  const w = topId ? windows.get(topId) : undefined;
+  if (w) {
+    const windowItems: StageMenuItem[] = [];
+    if (!w.minimized) windowItems.push({ id: "minimize", label: t("stageapps.window.minimize"), icon: "minimize" });
+    if (w.maximized) windowItems.push({ id: "restore", label: t("stageapps.window.restore"), icon: "restore" });
+    else if (w.resizable) windowItems.push({ id: "maximize", label: t("stageapps.window.maximize"), icon: "maximize" });
+    if (windowItems.length) items.push({ id: "windowGroup", divider: true }, ...windowItems);
+  }
   items.push({ id: "groups", divider: true });
   items.push({ id: "pin", label: a.pinned ? t("stageapps.taskbar.unpin") : t("stageapps.taskbar.pin"), icon: "pin" });
   if (a.windows.length) items.push({ id: "closeAll", label: t("stageapps.taskbar.closeAll"), icon: "cross" });
@@ -103,7 +112,18 @@ function onMenuSelect(id: string): void {
   const a = menuApp.value;
   menu.value = null;
   if (!a) return;
+  const top = topWindowOf(a);
   switch (id) {
+    case "minimize":
+      if (top) sendWindowCommand(top, "minimize");
+      return;
+    case "maximize":
+    case "restore":
+      // A minimized window comes back first, so the command applies to a window on show.
+      if (!top) return;
+      focusWindow(top);
+      sendWindowCommand(top, id);
+      return;
     case "open":
       openApp(a);
       return;

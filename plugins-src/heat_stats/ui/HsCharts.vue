@@ -545,7 +545,6 @@ const sessionChart = computed(() => {
   <!-- One focus for the whole page: whatever the pointer is on, everything else stands down. -->
   <div v-else class="charts" :class="{ focusing: !!focus }">
     <header class="rail">
-      <span class="seal" aria-hidden="true"><i class="wedge flip" /><i class="wedge" /></span>
       <h2 class="rail-title">{{ t("charts.railTitle") }}</h2>
       <span class="rail-lead">{{ t("charts.railLead") }}</span>
       <span class="rail-hint">{{ t("charts.railHint") }}</span>

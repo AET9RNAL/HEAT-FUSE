@@ -215,7 +215,6 @@ function pick(player: TaggedPlayer, id: string): void {
         <header class="module-head">
           <div class="module-head-surface" />
           <span class="head-copy">
-            <span class="seal" aria-hidden="true"><i class="wedge flip" /><i class="wedge" /></span>
             <h3 class="module-title">{{ t("tags.groups") }}</h3>
           </span>
           <span class="module-note rule">{{ t("tags.drawnNote", { count: MARK_SLOTS }) }}</span>
@@ -290,7 +289,6 @@ function pick(player: TaggedPlayer, id: string): void {
         </div>
 
         <div class="readout">
-          <span class="readout-mark" aria-hidden="true"><i class="wedge flip" /><i class="wedge" /></span>
           <AnimatePresence :initial="false" mode="wait">
             <motion.span
               :key="filter || 'all'"
@@ -316,7 +314,6 @@ function pick(player: TaggedPlayer, id: string): void {
           <div class="module-head-surface" />
           <span class="head-copy">
             <span class="seal" :style="{ '--ico': filter ? marks.color(filter) : 'var(--base-600)' }" aria-hidden="true">
-              <i class="wedge flip" /><i class="wedge" />
             </span>
             <AnimatePresence :initial="false" mode="wait">
               <motion.h3
@@ -441,7 +438,6 @@ function pick(player: TaggedPlayer, id: string): void {
                 >
                   <span class="picker-inner">
                     <span class="picker-head">
-                      <span class="seal" aria-hidden="true"><i class="wedge flip" /><i class="wedge" /></span>
                       <span class="picker-slot">{{ slotLabel(p) }}</span>
                     </span>
                     <span class="options">

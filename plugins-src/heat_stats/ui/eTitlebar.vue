@@ -2,6 +2,8 @@
 import { computed } from "vue";
 import Icons from "fuse_ui/ui/Icons.vue";
 import eSelect from "fuse_ui/ui/eSelect.vue";
+// fuse_ui has no restore icon, so it comes from this plugin's assets/icons.
+import LocalIcons from "../Icons.vue";
 import eTabBrowser from "./eTabBrowser.vue";
 import eStatus from "./eStatus.vue";
 import { useAssets } from "./assets.mjs";
@@ -15,9 +17,17 @@ const props = defineProps<{
   connection: string;
   locale: string;
   locales: string[];
+  maximized: boolean;
+  resizable: boolean;
 }>();
 
-const emit = defineEmits<{ section: [value: string]; locale: [value: string]; close: [] }>();
+const emit = defineEmits<{
+  section: [value: string];
+  locale: [value: string];
+  minimize: [];
+  toggleMax: [];
+  close: [];
+}>();
 
 const { t } = useI18n();
 const assets = useAssets();
@@ -27,7 +37,7 @@ const languages = computed(() => props.locales.map((code) => ({ value: code, lab
 </script>
 
 <template>
-  <div class="titlebar">
+  <div class="titlebar fuse-drag">
     <div class="surface" />
 
     <div class="brand">
@@ -46,15 +56,30 @@ const languages = computed(() => props.locales.map((code) => ({ value: code, lab
           <eStatus :state="connection" :label="t(`connection.${connection}`)" />
           <eStatus :state="status" :label="t(`status.${status}`)" />
           <eSelect
-            class="lang"
+            class="lang fuse-no-drag"
             :model-value="locale"
             :options="languages"
             @update:model-value="emit('locale', String($event))"
           />
         </div>
-        <button type="button" class="close" :aria-label="t('window.close')" @click="emit('close')">
-          <Icons kind="cross" />
-        </button>
+        <div class="window-buttons">
+          <button type="button" class="win-btn" :aria-label="t('window.minimize')" @click="emit('minimize')">
+            <Icons kind="minimize" size="small" />
+          </button>
+          <button
+            v-if="resizable"
+            type="button"
+            class="win-btn"
+            :aria-label="maximized ? t('window.restore') : t('window.maximize')"
+            @click="emit('toggleMax')"
+          >
+            <LocalIcons v-if="maximized" kind="restore" size="small" />
+            <Icons v-else kind="maximize" size="small" />
+          </button>
+          <button type="button" class="win-btn" :aria-label="t('window.close')" @click="emit('close')">
+            <Icons kind="cross" size="small" />
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -112,7 +137,7 @@ const languages = computed(() => props.locales.map((code) => ({ value: code, lab
   padding: 0 var(--space-1);
   background: color-mix(in srgb, var(--accent-200) 20%, transparent);
   font-family: var(--font-primary);
-  font-size: var(--main-font-size-1);
+  font-size: var(--main-font-size-2);
   font-weight: var(--font-weight-2);
   line-height: normal;
   color: var(--text-main);
@@ -126,7 +151,7 @@ const languages = computed(() => props.locales.map((code) => ({ value: code, lab
   background: color-mix(in srgb, var(--base-50) 20%, transparent);
   border-left: 1px solid var(--base-600);
   font-family: var(--font-microcopy);
-  font-size: var(--secondary-font-size-3);
+  font-size: var(--secondary-font-size-4);
   font-weight: var(--font-weight-3);
   line-height: normal;
   color: var(--text-main);
@@ -193,7 +218,13 @@ const languages = computed(() => props.locales.map((code) => ({ value: code, lab
   gap: var(--space-3);
 }
 
-.close {
+.window-buttons {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.win-btn {
   display: flex;
   margin: 0;
   padding: 0;

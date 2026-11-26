@@ -40,7 +40,7 @@ import { HotkeyInput, type MouseCallback } from "../input/hotkeys.js";
 import type { PluginHydration, RuntimeBridge, WsServer } from "../server/WsServer.js";
 
 /** 5.1.0: manifest `apps` and `lifecycle`, `ctx.apps`. */
-export const HOST_VERSION = "5.1.1";
+export const HOST_VERSION = "5.2.0";
 const HOST_CONFIG_FILENAME = "fuse_host.json";
 // Also the action names the app's keybind settings and hotkey_overrides use.
 const LOCK_HOTKEY_LABEL = "Toggle Calibrate/Lock";

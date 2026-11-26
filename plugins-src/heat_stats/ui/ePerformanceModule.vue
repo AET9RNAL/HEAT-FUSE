@@ -41,7 +41,6 @@ const sorted = computed(() => {
     <header class="header">
       <div class="header-surface" />
       <h3 class="title">
-        <span class="seal" aria-hidden="true"><i class="wedge flip" /><i class="wedge" /></span>
         {{ title }}
         <span class="tracked">{{ t("performance.tracked", { count: n(rows.length, { maximumFractionDigits: 0 }) }) }}</span>
       </h3>

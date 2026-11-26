@@ -28,6 +28,8 @@ export interface AppViewSpec {
   resizable: boolean;
   /** A frame: no FUSE chrome, it fills the main display, and only its `fuse-hit` parts take the mouse. One window at most. */
   frame: boolean;
+  /** False: no FUSE title bar or panel. The view draws all of the window, and its `fuse-drag` parts move it. */
+  titleBar: boolean;
 }
 
 export interface AppSpec {
@@ -103,6 +105,7 @@ function viewSpec(
     maxSize: max,
     resizable: !frame && win.resizable !== false,
     frame,
+    titleBar: !frame && win.titleBar !== false,
   };
 }
 

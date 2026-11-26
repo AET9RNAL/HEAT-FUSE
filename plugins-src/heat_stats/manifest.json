@@ -1,13 +1,30 @@
 {
   "plugin_id": "heat_stats",
   "name": "HEATStats",
-  "version": "5.0.0",
+  "version": "5.1.0",
   "author": "AETERNAL",
   "description": "Records per-match performance data.",
   "entry": "plugin:HeatStatsPlugin",
   "runtime": "node",
   "dependencies": { "accessors": ">=5.0.0", "fuse_ui": ">=2.0.0", "canvas_ui": ">=2.0.0" },
-  "min_host_version": "5.0.0",
+  "min_host_version": "5.2.0",
+  "apps": [
+    {
+      "id": "stats",
+      "name": "HEAT Stats",
+      "icon": "assets/HSLogo.svg",
+      "keywords": ["stats", "matches", "battles", "replays", "charts", "tags", "account"],
+      "view": "HeatStatsApp.vue",
+      "window": {
+        "size": { "w": 1280, "h": 760 },
+        "minSize": { "w": 720, "h": 520 },
+        "resizable": true,
+        "instances": "single",
+        "titleBar": false
+      },
+      "hotkey": "ctrl+alt+s"
+    }
+  ],
   "provides": {
     "heat_stats.tags": {
       "description": "Player tags, keyed by nickname, for any plugin that draws players."
@@ -24,17 +41,11 @@
     "processes": { "reason": "Starts the game to play a replay you pick." }
   },
   "frames": ["https://heatlabs.net", "https://*.heatlabs.net"],
-  "hotkeys": {
-    "toggle_window": "ctrl+alt+s"
-  },
   "default_config": {
     "summarize_hold_s": 5.0,
     "player_name": "",
-    "hide_in_battle": false,
     "streak_length": 75,
     "locale": "",
-    "window_open": true,
-    "window_rect": null,
     "widgets": [],
     "widget_show_in": ["alive", "dead"],
     "widget_dpm_rect": null,

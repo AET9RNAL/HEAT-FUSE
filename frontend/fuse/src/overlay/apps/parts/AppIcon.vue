@@ -23,12 +23,14 @@ watch(
 );
 
 const src = computed(() => (props.iconUrl ? assetBase() + props.iconUrl : ""));
+const showImage = computed(() => !!src.value && !failed.value);
 const letter = computed(() => props.name.trim().charAt(0).toUpperCase() || "?");
 </script>
 
 <template>
-  <span class="app-icon" :class="size">
-    <img v-if="src && !failed" class="glyph" :src="src" alt="" draggable="false" @error="failed = true" />
+  <!-- The frame is for the letter only. An app's own icon shows with no frame. -->
+  <span class="app-icon" :class="[size, { framed: !showImage }]">
+    <img v-if="showImage" class="glyph" :src="src" alt="" draggable="false" @error="failed = true" />
     <span v-else class="letter">{{ letter }}</span>
     <motion.span
       class="running"
@@ -49,23 +51,29 @@ const letter = computed(() => props.name.trim().charAt(0).toUpperCase() || "?");
   width: 20px;
   height: 20px;
   box-sizing: border-box;
-  background: var(--black-3-a);
-  border: 1px solid var(--base-600);
-  corner-shape: bevel;
-  border-radius: 4px 0 4px 0;
   overflow: hidden;
 }
 
 .app-icon.large {
   width: 28px;
   height: 28px;
+}
+
+.app-icon.framed {
+  background: var(--black-3-a);
+  border: 1px solid var(--base-600);
+  corner-shape: bevel;
+  border-radius: 4px 0 4px 0;
+}
+
+.app-icon.large.framed {
   border-radius: 6px 0 6px 0;
 }
 
 .glyph {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   pointer-events: none;
   user-select: none;
 }
@@ -83,8 +91,8 @@ const letter = computed(() => props.name.trim().charAt(0).toUpperCase() || "?");
 
 .running {
   position: absolute;
-  right: -1px;
-  bottom: -1px;
+  right: 0;
+  bottom: 0;
   width: 3px;
   height: 3px;
   background: var(--accent-200);
@@ -95,5 +103,11 @@ const letter = computed(() => props.name.trim().charAt(0).toUpperCase() || "?");
 .large .running {
   width: 5px;
   height: 5px;
+}
+
+/* On the frame's corner, over the border. */
+.framed .running {
+  right: -1px;
+  bottom: -1px;
 }
 </style>

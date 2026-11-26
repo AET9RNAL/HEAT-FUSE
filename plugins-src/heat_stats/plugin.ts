@@ -1,5 +1,6 @@
 import {
   FusePlugin,
+  type AppWindow,
   type FuseContext,
   type InspectorSection,
   type LanguageService,
@@ -38,6 +39,7 @@ import {
   TAG_COLOR_DEFAULT,
   tagColorKey,
 } from "./tags.js";
+import { ViewFeed } from "./viewFeed.js";
 import { RATE_WIDGETS, RESET_MODES } from "./widgets.js";
 
 const TAG_SWATCHES = [TAG_COLOR_DEFAULT, "#FFF87A", "#FF7A7A", "#7ABFDF", "#F2F2F2", "#C9A7FF"];
@@ -55,11 +57,10 @@ interface Accessors {
 const REFETCH_AFTER_SUBMIT_MS = 15_000;
 /** Between attempts at the part catalog while the hangar is up but not ready. */
 const CATALOG_RETRY_MS = 30_000;
-/** Starting size only. The window's layout follows the size the stage gives the overlay. */
-const WINDOW_SIZE = { w: 1990, h: 760 };
 /** The recorder widget: one line of status, wide enough for the longest of them. */
 const RECORDER_SIZE = { w: 260, h: 28 };
-const TOGGLE_WINDOW_HOTKEY = "ctrl+alt+s";
+/** The manifest `apps` id of the HEAT Stats window. */
+const APP_ID = "stats";
 
 export class HeatStatsPlugin extends FusePlugin {
   static override requiresCalibration = true;
@@ -71,7 +72,8 @@ export class HeatStatsPlugin extends FusePlugin {
   /** Last value seen on the language service, which reads empty without the permission. */
   private appLanguage: string | undefined;
   private ov: OverlayHandle | undefined;
-  private vueOv: OverlayHandle | undefined;
+  /** The data of the app window. */
+  private readonly view = new ViewFeed();
   private recorder!: MatchRecorder;
   private widgets!: RateWidgets;
   private stats!: StatsClient;
@@ -90,9 +92,6 @@ export class HeatStatsPlugin extends FusePlugin {
 
   private locale = "en";
   private t: Translate = translator("en");
-  private toggleCombo = TOGGLE_WINDOW_HOTKEY;
-  private hostVisible = true;
-  private lastVueVisible: boolean | null = null;
   private lastConnection: string | null = null;
 
   private catalog: LoadoutCatalog | null = null;
@@ -117,20 +116,6 @@ export class HeatStatsPlugin extends FusePlugin {
               ...LOCALES.map((code) => ({ value: code, label: code.toUpperCase() })),
             ],
             tooltip: t("config.languageTip"),
-          },
-          {
-            type: "switch",
-            id: "window_open",
-            key: "window_open",
-            label: t("config.showWindow"),
-            tooltip: t("config.showWindowTip"),
-          },
-          {
-            type: "switch",
-            id: "hide_in_battle",
-            key: "hide_in_battle",
-            label: t("config.hangarOnly"),
-            tooltip: t("config.hangarOnlyTip"),
           },
           {
             type: "segmented",
@@ -291,12 +276,9 @@ export class HeatStatsPlugin extends FusePlugin {
         summarize_hold_s: 5.0,
         overlay_pos: null,
         player_name: "",
-        hide_in_battle: false,
         streak_length: DEFAULT_STREAK_LENGTH,
         // Empty follows the App's language.
         locale: "",
-        window_open: true,
-        window_rect: null,
         widgets: [],
         widget_show_in: DEFAULT_WIDGET_SCENES,
         ...Object.fromEntries(RATE_WIDGETS.map((w) => [widgetRectKey(w.id), null])),
@@ -371,7 +353,7 @@ export class HeatStatsPlugin extends FusePlugin {
       this.store,
       () => String(ctx.config.get("player_name", "")) || String(this.acc?.read("player_name") ?? ""),
       (overview, sessions) => {
-        this.vueOv?.setJson("overview", overview);
+        this.view.set("overview", overview);
         this.battleRows = sessions ? toBattleRows(sessions) : null;
         this.pushBattles();
         this.pushCharts();
@@ -382,7 +364,7 @@ export class HeatStatsPlugin extends FusePlugin {
     this.replays = new ReplayLibrary(ctx, () => this.pushReplays());
     this.samples = new SamplesCache(
       (id) => this.stats.samples(id),
-      (open) => this.vueOv?.setJson("samples", open),
+      (open) => this.view.set("samples", open),
     );
 
     this.appLanguage = this.language?.language;
@@ -409,17 +391,14 @@ export class HeatStatsPlugin extends FusePlugin {
     });
     this.ov.setBool("isSetupComplete", false);
 
-    this.vueOv = ctx.overlays.declare({
-      id: "heatStatsVue",
-      kind: "vue",
-      asset: "HeatStatsOverlay.vue",
-      size: WINDOW_SIZE,
-      positionConfigKey: "window_rect",
-      interactive: true,
+    this.view.set("version", (this.constructor as typeof HeatStatsPlugin).version);
+    ctx.apps.handle(APP_ID, {
+      open: (win: AppWindow) => {
+        win.onAction((action, payload) => this.onWindowAction(action, payload));
+        this.view.attach(win);
+      },
+      close: (win: AppWindow) => this.view.detach(win),
     });
-    this.vueOv.setBool("isSetupComplete", false);
-    this.vueOv.setString("version", (this.constructor as typeof HeatStatsPlugin).version);
-    this.vueOv.onAction((action, payload) => this.onWindowAction(action, payload));
 
     this.declareSchema();
     this.pushLocale();
@@ -428,9 +407,6 @@ export class HeatStatsPlugin extends FusePlugin {
     this.pushCharts();
     this.pushConnection();
     this.widgets.sync();
-
-    this.toggleCombo = ctx.hotkeyFor("toggle_window", TOGGLE_WINDOW_HOTKEY);
-    ctx.hotkeys.register(this.toggleCombo, () => this.toggleWindow(), this.t("hotkeys.toggleWindow"));
 
     void this.stats.refresh();
     void this.replays.scan();
@@ -446,7 +422,7 @@ export class HeatStatsPlugin extends FusePlugin {
     const [counts, cloud] = await Promise.all([this.store.counts(), this.store.cloudCount()]);
     // The profile is held by the sync engine, so this costs no request.
     const profile = view.state === "signedIn" ? this.sync.profile : null;
-    this.vueOv?.setJson("account", { ...view, counts, cloud, profile, sync: this.sync.progress });
+    this.view.set("account", { ...view, counts, cloud, profile, sync: this.sync.progress });
     this.pushConnection();
   }
 
@@ -462,15 +438,14 @@ export class HeatStatsPlugin extends FusePlugin {
             : "syncing";
     if (connection === this.lastConnection) return;
     this.lastConnection = connection;
-    this.vueOv?.setString("connection", connection);
+    this.view.set("connection", connection);
   }
 
-  /** One declaration for every surface: the App panel and both overlays' inspectors, in the current language. */
+  /** One declaration for every surface: the App panel and the overlay inspectors, in the current language. */
   private declareSchema(): void {
     const sections = this.sections();
     this.ctx.config.schema(sections);
     this.ov?.inspector.sections(sections);
-    this.vueOv?.inspector.sections(sections);
     this.widgets.setSections(sections);
   }
 
@@ -501,9 +476,9 @@ export class HeatStatsPlugin extends FusePlugin {
 
   private pushLocale(): void {
     const messages = messagesFor(this.locale);
-    this.vueOv?.setString("locale", this.locale);
-    this.vueOv?.setJson("locales", LOCALES);
-    this.vueOv?.setJson("messages", messages);
+    this.view.set("locale", this.locale);
+    this.view.set("locales", LOCALES);
+    this.view.set("messages", messages);
     // The recorder widget also shows text, so it gets the same messages.
     this.ov?.setString("locale", this.locale);
     this.ov?.setJson("messages", messages);
@@ -512,13 +487,13 @@ export class HeatStatsPlugin extends FusePlugin {
 
   private pushStreakLength(): void {
     const length = Number(this.ctx.config.get("streak_length", DEFAULT_STREAK_LENGTH));
-    this.vueOv?.set("streakLength", STREAK_LENGTHS.includes(length) ? length : DEFAULT_STREAK_LENGTH);
+    this.view.set("streakLength", STREAK_LENGTHS.includes(length) ? length : DEFAULT_STREAK_LENGTH);
   }
 
   private pushBattles(): void {
     // Nothing to list only when there is neither an account nor a local match.
     const hasSource = this.stats.source !== "none";
-    this.vueOv?.setJson("battles", queryBattles(this.battleRows, this.battleQuery, hasSource));
+    this.view.set("battles", queryBattles(this.battleRows, this.battleQuery, hasSource));
   }
 
   /**
@@ -567,12 +542,12 @@ export class HeatStatsPlugin extends FusePlugin {
   private pushReplays(): void {
     // Called from the stats callback, which can run before the library exists.
     if (!this.replays) return;
-    this.vueOv?.setJson("replays", this.replays.view(this.battleRows));
+    this.view.set("replays", this.replays.view(this.battleRows));
   }
 
   /** The Charts tab's data. Computed here, so only the plotted points cross the bridge, not the battle list. */
   private pushCharts(): void {
-    this.vueOv?.setJson("charts", buildCharts(this.battleRows));
+    this.view.set("charts", buildCharts(this.battleRows));
   }
 
   /**
@@ -588,7 +563,7 @@ export class HeatStatsPlugin extends FusePlugin {
         }
       }
     }
-    this.vueOv?.setJson("tags", {
+    this.view.set("tags", {
       groups: TAG_GROUPS,
       colors: this.tagColors(),
       players: this.tags.list().map((r) => ({
@@ -607,8 +582,6 @@ export class HeatStatsPlugin extends FusePlugin {
     if (action === "setLocale" && typeof payload === "string" && LOCALES.includes(payload)) {
       this.ctx.config.set("locale", payload);
       this.applyLocale();
-    } else if (action === "close") {
-      this.ctx.config.set("window_open", false);
     } else if (action === "battles") {
       this.battleQuery = normalizeQuery(payload);
       this.pushBattles();
@@ -709,10 +682,6 @@ export class HeatStatsPlugin extends FusePlugin {
     }
   }
 
-  private toggleWindow(): void {
-    this.ctx.config.set("window_open", !this.ctx.config.get("window_open", true));
-  }
-
   private pushPhase(): void {
     const phase = this.recorder.phase;
     if (!this.ov || phase === this.lastPhase) return;
@@ -720,48 +689,28 @@ export class HeatStatsPlugin extends FusePlugin {
     this.ov.setString("phase", phase);
     // The window's recorder status: waiting for a match counts as idle.
     const status = phase === "recording" ? "recording" : phase === "summarizing" || phase === "finalizing" ? "submitting" : "idle";
-    this.vueOv?.setString("status", status);
+    this.view.set("status", status);
   }
 
   override enterCalibrate(_stage = 1): void {
     this.ov?.setBool("isSetupComplete", false);
-    this.vueOv?.setBool("isSetupComplete", false);
     this.widgets.resend();
   }
   override enterLocked(): void {
     this.ov?.setBool("isSetupComplete", true);
-    this.vueOv?.setBool("isSetupComplete", true);
     this.widgets.resend();
     void this.stats.refresh();
   }
   override setOverlayVisible(visible: boolean): void {
-    this.hostVisible = visible;
     this.widgets.setHostVisible(visible);
     if (this.ctx.state === "calibrate") return;
     this.ov?.setVisible(visible);
-    this.applyVueVisibility();
-  }
-
-  /** battle_hud exists only during a battle. */
-  private get inBattle(): boolean {
-    return !!this.acc?.connected;
-  }
-
-  private applyVueVisibility(): void {
-    if (this.ctx.state === "calibrate") return;
-    const open = Boolean(this.ctx.config.get("window_open", true));
-    const hideInBattle = Boolean(this.ctx.config.get("hide_in_battle", false));
-    const visible = this.hostVisible && open && !(hideInBattle && this.inBattle);
-    if (visible === this.lastVueVisible) return;
-    this.lastVueVisible = visible;
-    this.vueOv?.setVisible(visible);
   }
 
   override tick(dt: number): void {
     this.ctx.config.checkReload();
     this.followAppLanguage();
     this.pushPhase();
-    this.applyVueVisibility();
     // It limits its own rate and does nothing once loaded, so each tick can call it.
     this.loadCatalog();
     // Its own CDP socket, so tagging works whether or not a battle is recording.
@@ -782,9 +731,7 @@ export class HeatStatsPlugin extends FusePlugin {
     this.widgets.teardown();
     this.stats.dispose();
     this.sync.stop();
-    this.ctx.hotkeys.unregister(this.toggleCombo);
     this.ov?.remove();
-    this.vueOv?.remove();
   }
 
   private onConnected(): void {

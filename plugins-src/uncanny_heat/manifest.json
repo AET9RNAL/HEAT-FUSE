@@ -1,0 +1,18 @@
+{
+  "plugin_id": "uncanny_heat",
+  "name": "Uncanny HEAT",
+  "version": "1.0.0",
+  "author": "AETERNAL",
+  "description": "",
+  "min_host_version": "5.1.1",
+  "game_versions": ["1.2.2"],
+  "permissions": {
+    "game_overrides": { "reason": "Applies the chosen preset to HEAT" }
+  },
+  "override": {
+    "format": 1,
+    "presets": [
+      { "id": "uncanny_default", "name": "Default", "kind": "prefab", "dir": "overrides/uncanny_default", "preview": "preview.webp", "default": true }
+    ]
+  }
+}

@@ -66,7 +66,6 @@ async function packOne(id) {
     const dir = path.join(srcDir, sub);
     if (fs.existsSync(dir)) addDir(dir, `${pluginId}/${sub}`, files);
   }
-  // A feature folder (such as atgm_preview/cam) keeps its overlay files next to its code: only the overlay files ship.
   for (const entry of fs.readdirSync(srcDir, { withFileTypes: true })) {
     if (entry.isDirectory() && !PACKED.includes(entry.name) && !NOT_PACKED.has(entry.name)) {
       addDir(path.join(srcDir, entry.name), `${pluginId}/${entry.name}`, files, OVERLAY_FILE);

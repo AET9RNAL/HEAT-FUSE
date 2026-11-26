@@ -847,6 +847,7 @@ export class AppHub {
       maxSize: w.view.maxSize,
       resizable: w.view.resizable,
       frame: w.view.frame,
+      titleBar: w.view.titleBar,
       ...this.stateFields(w),
       inputs,
       focus,

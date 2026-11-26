@@ -171,7 +171,6 @@ const hatch = computed(() => ({ backgroundImage: `url('${assets.logo()}')` }));
 <template>
   <section class="loadout">
     <header class="head">
-      <span class="seal" aria-hidden="true"><i class="wedge flip" /><i class="wedge" /></span>
       <h4 class="title">{{ t("battles.loadout") }}</h4>
       <span v-if="!loadouts?.length" class="note">{{ t("battles.loadoutMissing") }}</span>
       <template v-else-if="single">

@@ -10,7 +10,6 @@ defineProps<{
 <template>
   <section class="section">
     <header class="head">
-      <span class="seal" aria-hidden="true"><i class="wedge flip" /><i class="wedge" /></span>
       <h4 class="title">{{ title }}</h4>
       <span class="rule" />
     </header>

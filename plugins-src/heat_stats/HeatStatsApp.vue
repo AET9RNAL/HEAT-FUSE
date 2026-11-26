@@ -16,12 +16,29 @@ import { ASSETS, createAssets } from "./ui/assets.mjs";
 import { I18N, createI18n } from "./ui/i18n.mjs";
 import { TAGS, tagIndex } from "./ui/tags.mjs";
 
+type WindowCommand = "focus" | "minimize" | "maximize" | "restore" | "close";
+
 const props = defineProps<{
   data: Record<string, unknown>;
   assetBase?: string;
-  interactive?: boolean;
   emitAction?: (action: string, payload?: unknown) => void;
+  window?: { maximized?: boolean; resizable?: boolean; command: (cmd: WindowCommand) => void };
 }>();
+
+const maximized = computed(() => props.window?.maximized === true);
+const resizable = computed(() => props.window?.resizable !== false);
+
+function minimizeWindow(): void {
+  props.window?.command("minimize");
+}
+
+function toggleMaximize(): void {
+  props.window?.command(maximized.value ? "restore" : "maximize");
+}
+
+function closeWindow(): void {
+  props.window?.command("close");
+}
 
 const str = (key: string, fallback: string): string => {
   const v = props.data?.[key];
@@ -142,9 +159,13 @@ watch([section, tab], ([s, t]: [string, string]) => {
       :connection="connection"
       :locale="locale"
       :locales="locales"
+      :maximized="maximized"
+      :resizable="resizable"
       @section="section = $event"
       @locale="emitAction?.('setLocale', $event)"
-      @close="emitAction?.('close')"
+      @minimize="minimizeWindow"
+      @toggle-max="toggleMaximize"
+      @close="closeWindow"
     />
     <template v-if="section === 'home'">
       <eSubNav v-model="tab" />

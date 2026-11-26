@@ -136,7 +136,6 @@ const sides = computed(() => [
 <template>
   <section class="roster">
     <header class="head">
-      <span class="seal" aria-hidden="true"><i class="wedge flip" /><i class="wedge" /></span>
       <h4 class="title">{{ t("battles.roster") }}</h4>
       <span class="rule" />
     </header>

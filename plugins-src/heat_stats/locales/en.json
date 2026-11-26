@@ -298,6 +298,9 @@
     "nowApi": "Public API, if you want it"
   },
   "window": {
+    "minimize": "Minimize",
+    "maximize": "Maximize",
+    "restore": "Restore",
     "close": "Close"
   },
   "config": {
@@ -305,10 +308,6 @@
     "language": "Language",
     "languageTip": "Language for HEAT Stats. Automatic follows the FUSE App.",
     "languageAuto": "Automatic",
-    "showWindow": "Show window",
-    "showWindowTip": "Show the HEAT Stats window. Its close button turns this off.",
-    "hangarOnly": "Hangar only",
-    "hangarOnlyTip": "Hide the window during battle.",
     "streakLength": "Streak length",
     "streakLengthTip": "How many recent battles the win streak strip shows.",
     "player": "Player",
@@ -339,9 +338,6 @@
     "resume": "Resume queue when safe",
     "override": "Press PLAY again to queue anyway.",
     "waiting": "The queue starts when they start a match or go offline."
-  },
-  "hotkeys": {
-    "toggleWindow": "Toggle HEAT Stats window"
   },
   "charts": {
     "empty": "No battles recorded yet. Charts appear once you have played.",

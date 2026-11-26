@@ -1,0 +1,353 @@
+{
+  "format": "fuse-override/1",
+  "name": "Default",
+  "created": "2026-11-26T18:59:10.283Z",
+  "pack": "aa_override.zip",
+  "entries": [
+    ".assets/output/canny_cat7eefe4e2b047fa63f2073f59aec24ed2.dds",
+    ".assets/output/uncanny_catf363f577084617cf2deb6b1208abe6b3.dds",
+    ".assets/output/canny_cat_idx9db6ee0c05d402ba4eb56557fa69195c.dds",
+    ".assets/output/canny_cat_pal629523d2cb111e24927d32f394e6e8ac.dds",
+    ".assets/output/uncanny_cat_idx6f7b8f48a3c91296868c519fe70484d3.dds",
+    ".assets/output/uncanny_cat_pal6b45b478e823fa8d044ab4b8483618aa.dds",
+    ".assets/output/uncanny_pair02a3e7f7f52a2a6fcdc0bc0ba000ddaa.client.scene",
+    ".assets/output/decal_full_rtab22bc941cc334f4e41b23b366a4c1956.dds",
+    ".assets/output/tv_missile_body83d17c3db88ce3b0c569ac565851f3f4.client.scene",
+    ".assets/output/grand_slam_bomb_shell_projectile9f669eac95edfdc0d4e5d3279f746820.client.scene",
+    ".assets/output/grand_slam_explosion_initd51151d5d94e5a460a0e39bc17f7d522.client.scene",
+    ".assets/output/fire_spot_01a34f24b78cacb70d05080fa1cbbefc5d.client.scene",
+    ".assets/output/napalm_fire_spot_01dd5e83f030fee2dedd5d9f7d2b7ac2cf.client.scene",
+    ".assets/output/e_grease_base_world_effectb384344db283a1b81429b13fdb4b6db1.client.scene",
+    ".assets/output/puddle_canny_cat731fde65c997e2445979ea4e2f893b4e.material",
+    ".assets/output/puddle_uncanny_cat62cf082a5b48c1bed6a9af95d8ec5ecb.material",
+    ".assets/output/system_hack_laser_beam_on_tank_fx8b4e02d1d55618d0aca7280f01777c86.client.scene",
+    ".assets/output/contracts_strike_projectilef7f9c7a5639e7731ef91cf02a410f812.client.scene",
+    ".assets/output/155mm_he_artillery_shell_projectile5c14325a6bf573dfb6088c3fb7291103.client.scene",
+    ".assets/output/203mm_he_artillery_shell_projectilee11e5fb4f78468cfac31f2abceb1a093.client.scene",
+    ".assets/output/emp_ball446d00a952e2602a38450f41d98c7cd5.client.scene",
+    ".assets/output/e_tesla_discs_placeable_effect7e768646deea47464901f85bbc4ced52.client.scene",
+    ".assets/output/bastion_softcover3f6a96f80f133693af583300de7fd212.client.scene",
+    ".assets/output/top_missile_attack_effectf612b284e16b9f1c76b9b7cad2b5dfad.client.scene",
+    ".assets/output/airburst_he_missile_projectile94e3125638b3fe3dcd907a89534772c5.client.scene",
+    ".assets/output/mgm_51a_projectile96b70f7b123b9d55927eba9cba451191.client.scene",
+    ".assets/output/emp_trap9bd3db6254fd5af1b8584695186d1ff0.client.scene",
+    ".assets/output/tow_atgm_missile_projectile57a32c81689b38ea87d000df1414d443.client.scene",
+    ".assets/output/tow_atgm_he_missile_projectile99559d5b1a67d9e88ec10aa17237d536.client.scene",
+    ".assets/output/suppression_strike_he_missile_projectile32a28642b8035c8fc8dd407b22872340.client.scene",
+    ".assets/output/e_smart_mine_effect4fc81f5dab42e4f10ed09a9ca97b6db5.client.scene",
+    ".assets/output/e_recon_probe_effect2d080ff892ebc97ec1cec9425bec21ab.client.scene"
+  ],
+  "originals": {
+    ".assets/output/tv_missile_body83d17c3db88ce3b0c569ac565851f3f4.client.scene": {
+      "size": 2866,
+      "sha256": "d1627f5b8ca244d64e7eed24b77f258ce186ecaadb501c90fc8fc542fdad290b"
+    },
+    ".assets/output/grand_slam_bomb_shell_projectile9f669eac95edfdc0d4e5d3279f746820.client.scene": {
+      "size": 1704,
+      "sha256": "13b01ef24b540179b18853937c80f03fa8e9e4fa9f049b04f6f7c2ca3ab153e7"
+    },
+    ".assets/output/grand_slam_explosion_initd51151d5d94e5a460a0e39bc17f7d522.client.scene": {
+      "size": 4821,
+      "sha256": "9192359c6e371d1399e064301d80f02fceb9e8d1f278ec416034c991e25aa5af"
+    },
+    ".assets/output/fire_spot_01a34f24b78cacb70d05080fa1cbbefc5d.client.scene": {
+      "size": 5632,
+      "sha256": "b832b6673bbae064669a3905d8d05f74a00b240e039420c96120904ad676000b"
+    },
+    ".assets/output/napalm_fire_spot_01dd5e83f030fee2dedd5d9f7d2b7ac2cf.client.scene": {
+      "size": 6356,
+      "sha256": "9c2c2c79ebcaa301de5413f710ef4c9df65d47d5d79bd92b28f6d5cfa6e8e60b"
+    },
+    ".assets/output/e_grease_base_world_effectb384344db283a1b81429b13fdb4b6db1.client.scene": {
+      "size": 3743,
+      "sha256": "b608c3450cb973d145e1d31b2ca7edfd17332f0271f52b0dc7757d820d591f41"
+    },
+    ".assets/output/system_hack_laser_beam_on_tank_fx8b4e02d1d55618d0aca7280f01777c86.client.scene": {
+      "size": 7576,
+      "sha256": "bc5703859456083c242d8f20bd444267570739be858f158ae830073d4c561675"
+    },
+    ".assets/output/contracts_strike_projectilef7f9c7a5639e7731ef91cf02a410f812.client.scene": {
+      "size": 676,
+      "sha256": "66034105e0f769900609e4a8d2811e363430069c32161d60d101e4bf288bd55e"
+    },
+    ".assets/output/155mm_he_artillery_shell_projectile5c14325a6bf573dfb6088c3fb7291103.client.scene": {
+      "size": 775,
+      "sha256": "66c6d8f4ed2d74ddbb8f3c5cb660c48dfd9d6d5ce9fb3c9fad0d0eb681fdd0ad"
+    },
+    ".assets/output/203mm_he_artillery_shell_projectilee11e5fb4f78468cfac31f2abceb1a093.client.scene": {
+      "size": 913,
+      "sha256": "e92d46c3c35220dfbc58a373875d575401e549741f690fe21f55560f5a7f8c3b"
+    },
+    ".assets/output/emp_ball446d00a952e2602a38450f41d98c7cd5.client.scene": {
+      "size": 1182,
+      "sha256": "a304d754b34e309b9129210859482960533d9741d8136c809d897d68d4cb01f1"
+    },
+    ".assets/output/e_tesla_discs_placeable_effect7e768646deea47464901f85bbc4ced52.client.scene": {
+      "size": 5439,
+      "sha256": "7e3ba46710f6bacc81578d11c3ff01bf2b7ae612ec9649a6a4cf5086611d0c6c"
+    },
+    ".assets/output/bastion_softcover3f6a96f80f133693af583300de7fd212.client.scene": {
+      "size": 2967,
+      "sha256": "01ff45c6a1b76f49a336005f4f2843c844431e1ef545839da51fcc911456a81e"
+    },
+    ".assets/output/top_missile_attack_effectf612b284e16b9f1c76b9b7cad2b5dfad.client.scene": {
+      "size": 1732,
+      "sha256": "177512c8da5430c755e4fae7e9420efb42663a010539c5655d7153c498f98bb6"
+    },
+    ".assets/output/airburst_he_missile_projectile94e3125638b3fe3dcd907a89534772c5.client.scene": {
+      "size": 1952,
+      "sha256": "fd28deed7de5705d6c15b7c34c869849b56edb2f20aa4fb9240556805590d041"
+    },
+    ".assets/output/mgm_51a_projectile96b70f7b123b9d55927eba9cba451191.client.scene": {
+      "size": 350,
+      "sha256": "0a72c836b578b2ce9f6a4ec3aeeccbfc46beb98177df707dd9d4fe1d6f44acbd"
+    },
+    ".assets/output/emp_trap9bd3db6254fd5af1b8584695186d1ff0.client.scene": {
+      "size": 4174,
+      "sha256": "4afee4f69b98726dad907d652b36b90379c797f5008c2d4a6662c0c8b554d8dd"
+    },
+    ".assets/output/tow_atgm_missile_projectile57a32c81689b38ea87d000df1414d443.client.scene": {
+      "size": 1183,
+      "sha256": "01ba1c36ef32ee3443608b957ab3604ec59ae875b1f65a89231d739f0ab17542"
+    },
+    ".assets/output/tow_atgm_he_missile_projectile99559d5b1a67d9e88ec10aa17237d536.client.scene": {
+      "size": 329,
+      "sha256": "ea08ebdfaaa8e1d55b067472389a6e580907e846b3e89383249a57ff74b9f98b"
+    },
+    ".assets/output/suppression_strike_he_missile_projectile32a28642b8035c8fc8dd407b22872340.client.scene": {
+      "size": 393,
+      "sha256": "518547ff63c94028ab8789c396ae40799af13fdd533ac480e928179eba38ca7c"
+    },
+    ".assets/output/e_smart_mine_effect4fc81f5dab42e4f10ed09a9ca97b6db5.client.scene": {
+      "size": 4854,
+      "sha256": "c4585bcf7ca842368d869d85ac68364bf8c0f7fbe1df603ba589afac77e18cc8"
+    },
+    ".assets/output/e_recon_probe_effect2d080ff892ebc97ec1cec9425bec21ab.client.scene": {
+      "size": 2082,
+      "sha256": "78bb7f6e68c6a06911d165f376775d372f706b9ee1bff3745e8440d8b6a6fa0b"
+    }
+  },
+  "added": [
+    ".assets/output/canny_cat7eefe4e2b047fa63f2073f59aec24ed2.dds",
+    ".assets/output/uncanny_catf363f577084617cf2deb6b1208abe6b3.dds",
+    ".assets/output/canny_cat_idx9db6ee0c05d402ba4eb56557fa69195c.dds",
+    ".assets/output/canny_cat_pal629523d2cb111e24927d32f394e6e8ac.dds",
+    ".assets/output/uncanny_cat_idx6f7b8f48a3c91296868c519fe70484d3.dds",
+    ".assets/output/uncanny_cat_pal6b45b478e823fa8d044ab4b8483618aa.dds",
+    ".assets/output/uncanny_pair02a3e7f7f52a2a6fcdc0bc0ba000ddaa.client.scene",
+    ".assets/output/decal_full_rtab22bc941cc334f4e41b23b366a4c1956.dds",
+    ".assets/output/puddle_canny_cat731fde65c997e2445979ea4e2f893b4e.material",
+    ".assets/output/puddle_uncanny_cat62cf082a5b48c1bed6a9af95d8ec5ecb.material"
+  ],
+  "project": [
+    {
+      "op": "dependencies",
+      "asset": "/fuse/uncanny_set/textures/canny_cat.png",
+      "dependencies": []
+    },
+    {
+      "op": "dependencies",
+      "asset": "/fuse/uncanny_set/textures/uncanny_cat.png",
+      "dependencies": []
+    },
+    {
+      "op": "dependencies",
+      "asset": "/fuse/uncanny_set/textures/canny_cat_idx.png",
+      "dependencies": []
+    },
+    {
+      "op": "dependencies",
+      "asset": "/fuse/uncanny_set/luts/canny_cat_pal.png",
+      "dependencies": []
+    },
+    {
+      "op": "dependencies",
+      "asset": "/fuse/uncanny_set/textures/uncanny_cat_idx.png",
+      "dependencies": []
+    },
+    {
+      "op": "dependencies",
+      "asset": "/fuse/uncanny_set/luts/uncanny_cat_pal.png",
+      "dependencies": []
+    },
+    {
+      "op": "dependencies",
+      "asset": "/fuse/uncanny_set/prefabs/uncanny_pair.prefab",
+      "dependencies": [
+        "/effects/buildings/burstdust2.prefab",
+        "/fuse/uncanny_set/luts/canny_cat_pal.png",
+        "/fuse/uncanny_set/luts/uncanny_cat_pal.png",
+        "/fuse/uncanny_set/textures/canny_cat_idx.png",
+        "/fuse/uncanny_set/textures/uncanny_cat_idx.png"
+      ]
+    },
+    {
+      "op": "dependencies",
+      "asset": "/fuse/uncanny_set/textures/decal_full_rta.png",
+      "dependencies": []
+    },
+    {
+      "op": "dependencies",
+      "asset": "/game_prefabs/abilities/frontman/hound/hunting_time_ability/content/tv_missile_body.prefab",
+      "dependencies": [
+        "/fuse/uncanny_set/prefabs/uncanny_pair.prefab"
+      ]
+    },
+    {
+      "op": "dependencies",
+      "asset": "/game_prefabs/abilities/frontman/ember/grand_slam_ability/model/ammo/grand_slam_bomb_shell_projectile.prefab",
+      "dependencies": [
+        "/fuse/uncanny_set/prefabs/uncanny_pair.prefab"
+      ]
+    },
+    {
+      "op": "dependencies",
+      "asset": "/effects/effects_proto/prefabs/abilities/hero_abilities/grandslam/grand_slam_explosion_init.prefab",
+      "dependencies": [
+        "/fuse/uncanny_set/prefabs/uncanny_pair.prefab"
+      ]
+    },
+    {
+      "op": "dependencies",
+      "asset": "/effects/effects_proto/prefabs/abilities/hero_abilities/system_hack/system_hack_laser_beam_on_tank_fx.prefab",
+      "dependencies": [
+        "/fuse/uncanny_set/prefabs/uncanny_pair.prefab"
+      ]
+    },
+    {
+      "op": "dependencies",
+      "asset": "/game_prefabs/abilities/frontman/kent/contracted_strike_ability/guns/ammo/contracts_strike_projectile.prefab",
+      "dependencies": [
+        "/fuse/uncanny_set/prefabs/uncanny_pair.prefab"
+      ]
+    },
+    {
+      "op": "dependencies",
+      "asset": "/game_prefabs/abilities/frontman/chopper/creeping_barrage/model/ammo/155mm_he_artillery_shell_projectile.prefab",
+      "dependencies": [
+        "/fuse/uncanny_set/prefabs/uncanny_pair.prefab"
+      ]
+    },
+    {
+      "op": "dependencies",
+      "asset": "/game_prefabs/abilities/frontman/chopper/creeping_barrage/model/ammo/203mm_he_artillery_shell_projectile.prefab",
+      "dependencies": [
+        "/fuse/uncanny_set/prefabs/uncanny_pair.prefab"
+      ]
+    },
+    {
+      "op": "dependencies",
+      "asset": "/game_prefabs/abilities/frontman/twister/pulse_generator_ability/content/emp_ball.prefab",
+      "dependencies": [
+        "/fuse/uncanny_set/prefabs/uncanny_pair.prefab"
+      ]
+    },
+    {
+      "op": "dependencies",
+      "asset": "/game_prefabs/abilities/vehicle/r02_t_72a/tesla_discs/gun/shells/e_tesla_discs_placeable_effect.prefab",
+      "dependencies": [
+        "/fuse/uncanny_set/prefabs/uncanny_pair.prefab"
+      ]
+    },
+    {
+      "op": "dependencies",
+      "asset": "/game_prefabs/abilities/vehicle/gb01_challenger/bastion/content/bastion_softcover.prefab",
+      "dependencies": [
+        "/fuse/uncanny_set/prefabs/uncanny_pair.prefab"
+      ]
+    },
+    {
+      "op": "dependencies",
+      "asset": "/effects/effects_proto/prefabs/abilities/hero_abilities/top_missile_attack/top_missile_attack_effect.prefab",
+      "dependencies": [
+        "/fuse/uncanny_set/prefabs/uncanny_pair.prefab"
+      ]
+    },
+    {
+      "op": "dependencies",
+      "asset": "/game_prefabs/abilities/vehicle/a20_m60a2/airburst/gun/ammo/airburst_he_missile_projectile.prefab",
+      "dependencies": [
+        "/fuse/uncanny_set/prefabs/uncanny_pair.prefab"
+      ]
+    },
+    {
+      "op": "dependencies",
+      "asset": "/vehicles/german/g06_leopard2fk_atgm/ammo/primary_shell/mgm_51a_projectile.prefab",
+      "dependencies": [
+        "/fuse/uncanny_set/prefabs/uncanny_pair.prefab"
+      ]
+    },
+    {
+      "op": "dependencies",
+      "asset": "/game_prefabs/abilities/vehicle/g11_leopard2k_st/emp_trap_ability/content/emp_trap.prefab",
+      "dependencies": [
+        "/fuse/uncanny_set/prefabs/uncanny_pair.prefab"
+      ]
+    },
+    {
+      "op": "dependencies",
+      "asset": "/game_prefabs/abilities/vehicle/a08_m3_bradley/tow_atgm_ability/gun/ammo/tow_atgm_missile_projectile.prefab",
+      "dependencies": [
+        "/fuse/uncanny_set/prefabs/uncanny_pair.prefab"
+      ]
+    },
+    {
+      "op": "dependencies",
+      "asset": "/game_prefabs/abilities/vehicle/a08_m3_bradley/tow_atgm_ability/progression/atgm_he_all_status/ammo/tow_atgm_he_missile_projectile.prefab",
+      "dependencies": [
+        "/fuse/uncanny_set/prefabs/uncanny_pair.prefab"
+      ]
+    },
+    {
+      "op": "dependencies",
+      "asset": "/game_prefabs/abilities/vehicle/g07_marder1a3/suppression_strike/gun/ammo/suppression_strike_he_missile_projectile.prefab",
+      "dependencies": [
+        "/fuse/uncanny_set/prefabs/uncanny_pair.prefab"
+      ]
+    },
+    {
+      "op": "dependencies",
+      "asset": "/game_prefabs/abilities/vehicle/g07_marder1a3/smart_mines/effects/e_smart_mine_effect.prefab",
+      "dependencies": [
+        "/fuse/uncanny_set/prefabs/uncanny_pair.prefab"
+      ]
+    },
+    {
+      "op": "dependencies",
+      "asset": "/game_prefabs/abilities/vehicle/a07_hstv_l/recon_probe_ability/effects/e_recon_probe_effect.prefab",
+      "dependencies": [
+        "/fuse/uncanny_set/prefabs/uncanny_pair.prefab"
+      ]
+    }
+  ],
+  "origin": {
+    "plugin": "uncanny_heat",
+    "preset": "uncanny_default",
+    "sources": [
+      "Uncanny Set",
+      "tv_missile_body · Uncanny",
+      "grand_slam_bomb_shell_projectile · Uncanny",
+      "grand_slam_explosion_init · Uncanny",
+      "fire_spot_01 · Uncanny",
+      "napalm_fire_spot_01 · Uncanny",
+      "e_grease_base_world_effect · Uncanny",
+      "Uncanny decals",
+      "system_hack_laser_beam_on_tank_fx · Uncanny",
+      "contracts_strike_projectile · Uncanny",
+      "155mm_he_artillery_shell_projectile · Uncanny",
+      "203mm_he_artillery_shell_projectile · Uncanny",
+      "emp_ball · Uncanny",
+      "e_tesla_discs_placeable_effect · Uncanny",
+      "bastion_softcover · Uncanny",
+      "top_missile_attack_effect · Uncanny",
+      "airburst_he_missile_projectile · Uncanny",
+      "mgm_51a_projectile · Uncanny",
+      "emp_trap · Uncanny",
+      "tow_atgm_missile_projectile · Uncanny",
+      "tow_atgm_he_missile_projectile · Uncanny",
+      "suppression_strike_he_missile_projectile · Uncanny",
+      "e_smart_mine_effect · Uncanny",
+      "e_recon_probe_effect · Uncanny"
+    ]
+  }
+}

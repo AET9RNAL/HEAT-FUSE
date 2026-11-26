@@ -21,7 +21,6 @@ function home(): void {
 <template>
   <div class="labs">
     <header class="bar">
-      <span class="seal" aria-hidden="true"><i class="wedge flip" /><i class="wedge" /></span>
       <h3 class="title">{{ t("labs.title") }}</h3>
       <span class="note">{{ loading ? t("labs.loading") : "heatlabs.net" }}</span>
       <button type="button" class="home" :aria-label="t('labs.home')" :title="t('labs.home')" @click="home">

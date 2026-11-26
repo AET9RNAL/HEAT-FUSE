@@ -57,7 +57,6 @@ const message = computed(() => {
       <header class="module-head">
         <div class="module-head-surface" />
         <span class="head-copy">
-          <span class="seal" aria-hidden="true"><i class="wedge flip" /><i class="wedge" /></span>
           <h3 class="module-title">{{ t("replays.title") }}</h3>
         </span>
         <span class="head-aside">

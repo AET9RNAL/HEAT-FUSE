@@ -1,9 +1,9 @@
 {
   "plugin_id": "team_colored_world_effects",
   "name": "Team Colored World Effects",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "author": "AETERNAL",
-  "description": "Changes the color of world effects based on team.",
+  "description": "",
   "min_host_version": "5.1.1",
   "game_versions": ["1.2.2"],
   "permissions": {
@@ -12,7 +12,8 @@
   "override": {
     "format": 1,
     "presets": [
-      { "id": "default", "name": "Default", "kind": "prefab", "dir": "overrides/default", "preview": "preview.webp", "default": true }
+      { "id": "default", "name": "Default", "kind": "prefab", "dir": "overrides/default", "default": true },
+      { "id": "alternate", "name": "Alternate", "kind": "prefab", "dir": "overrides/alternate" }
     ]
   }
 }

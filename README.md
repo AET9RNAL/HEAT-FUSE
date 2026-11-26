@@ -47,7 +47,7 @@ Violations of these terms automatically terminate your rights under GPLv3 with r
 ![Logo](https://img.shields.io/badge/-VUE-f3f2f4?style=for-the-badge&logo=vue.js&logoColor=f3f2f4&labelColor=1D1D1D&color=1D1D1D)
 
 
-![Static Badge](https://img.shields.io/badge/RUNTIME_VERSION-5.1.0-1D1D1D?style=for-the-badge&labelColor=1D1D1D&color=434343)
+![Static Badge](https://img.shields.io/badge/RUNTIME_VERSION-5.2.0-1D1D1D?style=for-the-badge&labelColor=1D1D1D&color=434343)
 ![Static Badge](https://img.shields.io/badge/LAUNCHER_VERSION-3.0.0-1D1D1D?style=for-the-badge&labelColor=1D1D1D&color=434343)
 
 Get In Touch
@@ -226,7 +226,7 @@ The URL is static. It does not change when you restart FUSE, restart the game, o
 | Plugin | What it does |
 |--------|--------------|
 | **EnergyBar** | Animated Rive energy bar tracking vehicle energy. Separate 3rd-person and 1st-person positions, switches automatically on zoom. |
-| **HEATStats** | Per-match performance tracking with an in-game stats card: win rate, K/D, total kills, recent battle streak. |
+| **HEATStats** | Per-match performance tracking. The HEAT Stats app window (`Ctrl+Alt+S`) shows the overview, battles, replays, charts, tags and account. A recorder strip and rate widgets show in battle. |
 | **Combat Reboot Plus** | Tracks the XM1-90's PDU-1546S module status with a segmented charge bar. |
 | **Cruise Control** | Simple cruise control functionality. |
 | **No UI** | Hides individual game UI elements. |
@@ -385,7 +385,7 @@ Each plugin ships a `manifest.json` at the package root:
 | `description` | no | Short summary. |
 | `homepage`, `tags` | no | Sent to the App with the plugin list. |
 | `core` | no | `true` marks a core plugin. Core plugins load before user plugins and get dangerous scopes without a prompt. |
-| `min_host_version` | yes, with `override` | Lowest runtime version (current: `5.1.0`, which added apps). The runtime skips an incompatible plugin. |
+| `min_host_version` | yes, with `override` | Lowest runtime version (current: `5.2.0`, which added custom title bars. `5.1.0` added apps). The runtime skips an incompatible plugin. |
 | `game_versions` | yes, with `override` | The game versions the plugin fits, as X.Y.Z values: `["1.2.2"]`. The upload form takes them from the manifest. |
 | `dependencies` | no | Required plugin ids: a list, or `{ "id": ">=1.0" }` with `>=`, `<=`, `==`, `>`, `<` or `*`. Providers load before consumers. |
 | `optional_dependencies` | no | Soft load-order hints. A missing plugin does not block loading. |
@@ -980,8 +980,8 @@ An app is a Vue view that opens in a FUSE window on the stage. The window has a 
 | `title` | no | The window title. Default: the name. |
 | `icon` | no | An svg, png, webp or jpg file inside the package. Without it, the console and the taskbar show the first letter of the name. |
 | `keywords` | no | Up to 16 more search words for the console. |
-| `window` | no | `size` (default 480 x 360), `minSize` (default 240 x 160), `maxSize`, `resizable` (default `true`). `instances`: `"single"` (default) focuses the open window on a second launch, `"multi"` opens a new window. `frame: true` makes a [frame window](#frame-windows). Sizes are DIPs from 120 to 7680. |
-| `views` | no | More views, for example tool windows, that the plugin opens with `ctx.apps.open(appId, key)`. Each view takes `view`, `title`, `size`, `minSize`, `maxSize` and `resizable`. |
+| `window` | no | `size` (default 480 x 360), `minSize` (default 240 x 160), `maxSize`, `resizable` (default `true`). `instances`: `"single"` (default) focuses the open window on a second launch, `"multi"` opens a new window. `frame: true` makes a [frame window](#frame-windows). `titleBar: false` removes the FUSE title bar and panel (see [Custom Title Bars](#custom-title-bars)). Sizes are DIPs from 120 to 7680. |
+| `views` | no | More views, for example tool windows, that the plugin opens with `ctx.apps.open(appId, key)`. Each view takes `view`, `title`, `size`, `minSize`, `maxSize`, `resizable` and `titleBar`. |
 | `hotkey` | no | The default launch hotkey. A hotkey that the user sets in the console replaces it. |
 
 Lifecycle:
@@ -1042,14 +1042,16 @@ The stage mounts a view with the [Vue overlay](#vue-overlays) props and one more
     id: string,
     focused: boolean,
     maximized: boolean,
+    resizable: boolean,
     frame: boolean,
     size: { w: number, h: number },
-    command: (cmd: "focus" | "minimize" | "close") => void,
+    command: (cmd: "focus" | "minimize" | "maximize" | "restore" | "close") => void,
   },
 }
 ```
 
-- The view fills the window body. Do not draw a frame, a title or a close button: the window has them.
+- The view fills the window body. Do not draw a frame, a title or a close button: the window has them. A window with `titleBar: false` is different, see [Custom Title Bars](#custom-title-bars).
+- `command("maximize")` does nothing in a window that is not resizable.
 - The view gets keys only while its window has the keyboard. While the stage has the keyboard, only plugin hotkeys with `Ctrl` or `Alt` fire.
 - A minimized window takes no input. OBS views show the windows, read-only.
 - The same import rules as for Vue overlays apply.
@@ -1068,6 +1070,21 @@ A frame is a window with no FUSE chrome: no title bar, no fill and no resize edg
 - Frames stay below the normal windows.
 - The view draws its own buttons, and `window.command()` minimizes or closes the window.
 - While the plugin starts or after a crash, FUSE shows a small panel with Restart and Close in the middle of the frame.
+
+### Custom Title Bars
+
+A window with `titleBar: false` has no FUSE title bar, fill, border or bevel. The view draws all of the window, as with Electron `frame: false`. The window still moves, snaps, resizes and saves its place.
+
+```json
+"window": { "size": { "w": 960, "h": 640 }, "titleBar": false }
+```
+
+- A pointer down on an element with the class `fuse-drag` moves the window. A double-click on it maximizes or restores a resizable window.
+- Inside a `fuse-drag` element, buttons, inputs, selects, text areas, links, `[contenteditable]`, `[role="button"]` and elements with the class `fuse-no-drag` take the click and do not move the window. Give other controls the class `fuse-no-drag`.
+- The view draws its own buttons. Use `window.command("minimize" | "maximize" | "restore" | "close")`.
+- The FUSE resize edges stay.
+- While the view loads, after a load error, while the plugin restarts and after a crash, FUSE shows its own title bar, so the user can always move and close the window.
+- Hosts before 5.2.0 ignore `titleBar` and show the FUSE title bar. Set `min_host_version` to `5.2.0`.
 
 ---
 

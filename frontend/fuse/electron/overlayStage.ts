@@ -349,7 +349,16 @@ function createStageWindow(): void {
   appliedIgnore = null
   syncIgnore(win)
   startCursorWatch(win)
-  win.webContents.on('did-finish-load', () => sendCursorHeld(win))
+  win.webContents.on('did-finish-load', () => {
+    // A new page loses the mouse forwarding, so the click-through state is set again even when it did not change.
+    appliedIgnore = null
+    syncIgnore(win)
+    sendCursorHeld(win)
+  })
+  // Ctrl+R is the FUSE plugin reload. Without this, Electron's default menu also reloads the stage page.
+  win.webContents.on('before-input-event', (event, input) => {
+    if (input.type === 'keyDown' && input.control && input.key.toLowerCase() === 'r') event.preventDefault()
+  })
 
   // Plugin overlays run in this page: no popups, and no navigating it anywhere else.
   // A new-window link inside an allowed frame opens in the browser. The referrer is the only clue to the opener.
@@ -373,7 +382,10 @@ function createStageWindow(): void {
   win.on('move', () => scheduleFit())
   win.on('resize', () => scheduleFit())
   win.webContents.on('did-start-navigation', (details) => {
-    if (details.isMainFrame && !details.isSameDocument) connectionTaken = false
+    if (!details.isMainFrame || details.isSameDocument) return
+    connectionTaken = false
+    // The new page starts click-through, as the first page did.
+    requestedIgnore = true
   })
 
   // No token in the URL: the stage app asks for it over IPC before any plugin code loads.

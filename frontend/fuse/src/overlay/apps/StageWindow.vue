@@ -53,7 +53,11 @@ const shown = computed<Rect>(() => live.value ?? maxRect.value ?? baseRect.value
 
 // OBS has no keyboard: it shows the window the runtime has as active.
 const focused = computed(() => props.descriptor.focused && (viewOnly || stageKeyboard.value));
-const bodySize = computed(() => ({ w: shown.value.w, h: Math.max(0, shown.value.h - TITLE_H) }));
+
+const viewReady = ref(false);
+/** The view draws all of the window. Until it loads, and while its plugin is down, the FUSE title bar stays so the window can move and close. */
+const ownChrome = computed(() => !props.descriptor.titleBar && props.descriptor.status === "open" && viewReady.value);
+const bodySize = computed(() => ({ w: shown.value.w, h: Math.max(0, shown.value.h - (ownChrome.value ? 0 : TITLE_H)) }));
 
 const style = computed(() => {
   const r = shown.value;
@@ -123,6 +127,27 @@ const resize = useWindowResize({
   },
 });
 
+/** Controls inside a `fuse-drag` part take the click*/
+const NO_DRAG = "button, input, select, textarea, a[href], [contenteditable], [role='button'], .fuse-no-drag";
+
+function dragHandle(e: Event): HTMLElement | null {
+  if (!ownChrome.value || viewOnly || !(e.target instanceof Element)) return null;
+  const handle = e.target.closest<HTMLElement>(".fuse-drag");
+  if (!handle) return null;
+  const control = e.target.closest(NO_DRAG);
+  return control && handle.contains(control) ? null : handle;
+}
+
+function onBodyPointerDown(e: PointerEvent): void {
+  if (e.button !== 0) return;
+  const handle = dragHandle(e);
+  if (handle) drag.start(e, handle);
+}
+
+function onBodyDouble(e: MouseEvent): void {
+  if (props.descriptor.resizable && dragHandle(e)) toggleMax();
+}
+
 /** A click anywhere in the window: it comes to the top and gets the keyboard. */
 function onPointerDown(): void {
   if (viewOnly || props.descriptor.minimized) return;
@@ -150,8 +175,9 @@ onMounted(() => {
     :transition="Dynamics.quick"
     @pointerdown.capture="onPointerDown"
   >
-    <StagePanel class="window-panel" :class="{ focused }" :cut="18" blur dense>
+    <StagePanel class="window-panel" :class="{ focused, bare: ownChrome }" :cut="ownChrome ? 0 : 18" :blur="!ownChrome" dense>
       <WindowTitleBar
+        v-if="!ownChrome"
         :title="descriptor.title"
         :plugin-id="descriptor.pluginId"
         :focused="focused"
@@ -162,8 +188,14 @@ onMounted(() => {
         @minimize="command('minimize')"
         @close="command('close')"
       />
-      <div class="body">
-        <WindowView v-show="descriptor.status === 'open'" :descriptor="descriptor" :size="bodySize" :focused="focused" />
+      <div class="body" @pointerdown="onBodyPointerDown" @dblclick="onBodyDouble">
+        <WindowView
+          v-show="descriptor.status === 'open'"
+          :descriptor="descriptor"
+          :size="bodySize"
+          :focused="focused"
+          @ready="viewReady = $event"
+        />
         <WindowStatus :status="descriptor.status" :plugin-id="descriptor.pluginId" @restart="command('restart')" />
       </div>
     </StagePanel>
@@ -201,6 +233,11 @@ onMounted(() => {
 
 .fuse-window .window-panel.focused {
   border-color: var(--base-600);
+}
+
+.fuse-window .window-panel.bare {
+  background: none;
+  border: none;
 }
 
 .body {

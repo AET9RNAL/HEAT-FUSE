@@ -20,7 +20,7 @@ export interface WindowDragOptions {
   onEnd(rect: Rect, zone: SnapZone, preview: SnapPreview, fromMaximized: boolean): void;
 }
 
-export function useWindowDrag(opts: WindowDragOptions): { start(e: PointerEvent): void } {
+export function useWindowDrag(opts: WindowDragOptions): { start(e: PointerEvent, handle?: HTMLElement): void } {
   let el: HTMLElement | null = null;
   let startPtr = { x: 0, y: 0 };
   let startRect: Rect = { x: 0, y: 0, w: 0, h: 0 };
@@ -83,9 +83,10 @@ export function useWindowDrag(opts: WindowDragOptions): { start(e: PointerEvent)
     if (wasMoved) opts.onEnd(last, zone, preview, fromMax);
   }
 
-  function start(e: PointerEvent): void {
+  /** `handle` takes the pointer capture. Default: the element whose listener got the event. */
+  function start(e: PointerEvent, handle?: HTMLElement): void {
     stop();
-    el = e.currentTarget as HTMLElement;
+    el = handle ?? (e.currentTarget as HTMLElement);
     startPtr = { x: e.clientX, y: e.clientY };
     startRect = { ...opts.rect() };
     last = startRect;

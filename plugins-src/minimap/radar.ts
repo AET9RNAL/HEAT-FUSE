@@ -1,10 +1,3 @@
-/**
- * Radar geometry, blip tracking and the off-view warning rule. No SDK imports, so tests can load it directly.
- *
- * Frames: radar rem have the origin at the radar's top-left corner, centre (circle, circle), x east, y south.
- * World metres have x east, y north. Bearings are degrees clockwise from north.
- */
-
 export interface RawObject {
   trigger: number;
   type: number;
@@ -46,13 +39,10 @@ export interface RadarRead {
 export const AFF_SELF = 1;
 export const AFF_ALLY = 2;
 export const AFF_ENEMY = 4;
-/** Radar object types of the live HUD (battle_hud e5b3e3bb8701db8b.js, 2026-10-16). Types 2-5 fly. */
 export const TYPE_VEHICLE = 0;
-/** Flair's proxy pet: the HUD draws a role icon that turns with the camera, as for a vehicle. */
 export const TYPE_PROXY = 1;
 export const TYPE_HELI = 2;
 export const TYPE_PLANE = 3;
-/** Live drone tracks flew 45 m/s in a straight line for up to 18 s. */
 export const TYPE_DRONE = 4;
 export const TYPE_MISSILE = 5;
 
@@ -60,10 +50,6 @@ export function isAir(type: number): boolean {
   return type >= TYPE_HELI && type <= TYPE_MISSILE;
 }
 
-/**
- * Travel direction of an air object, degrees clockwise from north. The HUD turns its icon by 180 + rotation.
- * Live 2026-10-16: the move between two scans of a drone matched this within 2° on 7 of 8 steps.
- */
 export function airHeading(rotation: number): number {
   return wrap180(rotation + 180);
 }
@@ -81,7 +67,6 @@ export function onCollisionCourse(from: Vec, heading: number, to: Vec): boolean 
   return off <= Math.max(COURSE_TOL_DEG, (Math.asin(HIT_RADIUS_M / dist) * 180) / Math.PI);
 }
 
-/** Live values on 2026-10-14: 100 m at 70 rem, 200 m at 90 rem, 300 m at 105 rem. */
 export const DEFAULT_BREAKPOINTS: [number, number][] = [
   [100, 70],
   [200, 90],
@@ -114,14 +99,12 @@ function centre(r: RadarRead): number {
   return r.circle > 0 ? r.circle : DEFAULT_CIRCLE;
 }
 
-/** The player's world position. Sunstroke (2026-10-15): pos (560, 722) with map_size 1200 is world (-40, 122). */
 export function worldPos(r: RadarRead): Vec | null {
   if (!r.pos) return null;
   const [sx, sy] = r.map_size ?? [0, 0];
   return { x: r.pos[0] - sx / 2, y: r.pos[1] - sy / 2 };
 }
 
-/** Radar rem from the centre to metres, through the breakpoints. Past the last ring it returns the last distance. */
 export function remToMetres(rem: number, bp: [number, number][]): number {
   let m0 = 0;
   let r0 = 0;

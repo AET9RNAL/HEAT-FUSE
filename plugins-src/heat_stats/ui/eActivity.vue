@@ -105,7 +105,6 @@ const weekdays = computed(() =>
     <div class="surface" />
 
     <header class="head">
-      <span class="seal" aria-hidden="true"><i class="wedge flip" /><i class="wedge" /></span>
       <h3 class="title">{{ t("activity.heading") }}</h3>
       <span class="total">{{ activity ? count(grid.total) : n(null) }}</span>
     </header>

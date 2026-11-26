@@ -3,11 +3,11 @@
   "name": "Hangar Studio",
   "version": "1.0.0",
   "author": "AETERNAL",
-  "description": "Custom hangar scenes. Pick a layout, and FUSE puts it into the game files. You see it at the next game start.",
+  "description": "Custom hangar scenes",
   "min_host_version": "5.0.0",
   "game_versions": ["1.2.2"],
   "permissions": {
-    "game_overrides": { "reason": "Puts the hangar layout you pick into the game files." }
+    "game_overrides": { "reason": "Applies the layout you select" }
   },
   "override": {
     "format": 1,

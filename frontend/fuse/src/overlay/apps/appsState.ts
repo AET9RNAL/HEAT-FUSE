@@ -73,7 +73,7 @@ export function applyAppsMessage(m: Record<string, unknown>): boolean {
       return true;
     case "window:opened": {
       const d = m as unknown as WindowDescriptor & { focus?: boolean };
-      windows.set(d.windowId, { ...d, frame: d.frame === true, inputs: d.inputs ?? {} });
+      windows.set(d.windowId, { ...d, frame: d.frame === true, titleBar: d.titleBar !== false, inputs: d.inputs ?? {} });
       if (!windowOrder.value.includes(d.windowId)) windowOrder.value = framesFirst([...windowOrder.value, d.windowId]);
       if (d.focused) raiseWindow(d.windowId);
       if (d.focus) focusRequest(d.windowId);
