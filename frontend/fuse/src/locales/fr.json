@@ -333,7 +333,6 @@
     "copyTip": "Copier",
     "copied": "{value} copié",
     "updateTo": "Mettre à jour vers {version}",
-    "loadMore": "Afficher plus ({shown} sur {total})",
     "installFailed": "Échec de l'installation",
     "account": {
       "noUsername": "Non défini",
@@ -344,7 +343,8 @@
       "untitled": "Nom du plugin",
       "noSummary": "Une ligne sur le plugin",
       "notMarked": "Non marqué pour {version}",
-      "notMarkedTip": "Le créateur n'a pas marqué ce fichier pour votre version du jeu. Il peut quand même fonctionner."
+      "notMarkedTip": "Le créateur n'a pas marqué ce fichier pour votre version du jeu. Il peut quand même fonctionner.",
+      "new": "Nouveau"
     },
     "install": {
       "install": "Installer",

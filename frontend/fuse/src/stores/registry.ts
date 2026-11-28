@@ -58,7 +58,7 @@ export const useRegistryStore = defineStore('registry', () => {
 
     // ── Browse ──────────────────────────────────────────────────────────────────
 
-    const filters = ref({ search: '', tagIds: [] as number[], sort: 'downloads' as SortKey, kind: null as ProjectKind | null })
+    const filters = ref({ search: '', tagIds: [] as number[], sort: 'updated' as SortKey, kind: null as ProjectKind | null })
     const projects = ref<BrowseItem[]>([])
     const total = ref(0)
     const loading = ref(false)

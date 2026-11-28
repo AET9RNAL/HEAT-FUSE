@@ -334,7 +334,6 @@
     "copyTip": "Copy",
     "copied": "Copied {value}",
     "updateTo": "Update to {version}",
-    "loadMore": "Show more ({shown} of {total})",
     "installFailed": "Install failed",
     "account": {
       "noUsername": "Not set",
@@ -345,7 +344,8 @@
       "untitled": "Plugin name",
       "noSummary": "One line about the plugin",
       "notMarked": "Not marked for {version}",
-      "notMarkedTip": "The creator did not mark this file for your game version. It can still work."
+      "notMarkedTip": "The creator did not mark this file for your game version. It can still work.",
+      "new": "New"
     },
     "install": {
       "install": "Install",

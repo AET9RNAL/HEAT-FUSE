@@ -6,6 +6,7 @@ import { useI18n } from '../../composables/useI18n'
 import { CHANNEL_COLORS, fileType, type RegistryProject, type RegistryTag, type Channel, type PluginType } from '../../utils/registry-api'
 import ProjectIcon from './ProjectIcon.vue'
 import CompatTag from './CompatTag.vue'
+import NewCorner from './NewCorner.vue'
 import eButton from '../inputs/eButton.vue'
 import eBadge from '../ui/eBadge.vue'
 import Icons from '../ui/Icons.vue'
@@ -13,6 +14,7 @@ import Icons from '../ui/Icons.vue'
 const props = withDefaults(defineProps<{
     project: Pick<RegistryProject, 'id' | 'name' | 'summary' | 'icon_key' | 'plugin_id' | 'views' | 'downloads' | 'latest_file'> & {
         owner?: RegistryProject['owner']
+        published_at?: string | null
         tags: RegistryTag[]
         game_compatible?: boolean
     }
@@ -44,6 +46,16 @@ const compatFuse = computed(() => props.preview ? props.previewFuse : props.proj
 const compatType = computed(() => props.preview ? props.previewType : fileType(props.project.latest_file))
 const hasCompat = computed(() => compatGame.value.length > 0 || !!compatFuse.value || !!compatType.value)
 
+// `published_at` is the first approval, so a new version of an old plugin does not count.
+const NEW_MS = 14 * 24 * 60 * 60 * 1000
+const CORNER = 48
+const CORNER_PX = `${CORNER}px`
+
+const isNew = computed(() => {
+    const at = props.project.published_at
+    return !props.preview && !!at && Date.now() - Date.parse(at) < NEW_MS
+})
+
 const label = computed(() => ({
     downloading: t('registry.install.downloading'),
     installed: t('registry.install.installed'),
@@ -69,7 +81,7 @@ function onCreator(e: MouseEvent) {
 <template>
     <motion.div
         class="mp-card"
-        :class="{ 'mp-card--preview': preview }"
+        :class="{ 'mp-card--preview': preview, 'mp-card--new': isNew }"
         :whileHover="preview ? {} : { backgroundColor: 'rgba(255, 255, 255, 0.04)' }"
         :transition="{ duration: 0.15 }"
         @click="!preview && emit('select')"
@@ -114,11 +126,14 @@ function onCreator(e: MouseEvent) {
                 <CompatTag v-if="hasCompat" class="card-compat" :game="compatGame" :fuse="compatFuse" :plugin-type="compatType" />
             </div>
         </div>
+
+        <NewCorner v-if="isNew" :label="t('registry.card.new')" :size="CORNER" />
     </motion.div>
 </template>
 
 <style scoped>
 .mp-card {
+    position: relative;
     display: flex;
     gap: var(--space-3);
     padding: var(--space-3) var(--space-4);
@@ -146,6 +161,11 @@ function onCreator(e: MouseEvent) {
     align-items: center;
     gap: var(--space-2);
     min-width: 0;
+}
+
+/* The corner covers the right end of the top row. */
+.mp-card--new .card-head {
+    padding-right: calc(v-bind(CORNER_PX) - var(--space-3) - var(--space-4) + var(--space-1));
 }
 
 .card-name {

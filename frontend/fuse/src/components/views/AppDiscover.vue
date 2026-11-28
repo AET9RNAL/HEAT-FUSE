@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { AnimatePresence, motion } from 'motion-v'
 import { useRegistryStore } from '../../stores/registry'
 import { useAuthStore } from '../../stores/auth'
@@ -13,7 +13,6 @@ import CreatorPage from '../marketplace/CreatorPage.vue'
 import MyPlugins from '../marketplace/MyPlugins.vue'
 import eInputField from '../inputs/eInputField.vue'
 import eListSelector from '../inputs/eListSelector.vue'
-import eButton from '../inputs/eButton.vue'
 import eTabBrowser, { type BrowserTab } from '../inputs/eTabBrowser.vue'
 import eTagFilter from '../marketplace/eTagFilter.vue'
 
@@ -66,13 +65,61 @@ onMounted(async () => {
     await Promise.all([registry.fetchTags(), registry.search(), registry.refreshInstalled()])
 })
 
-onUnmounted(() => { if (enterTimer) clearTimeout(enterTimer) })
+// The next page loads when the list end is this close below the bottom of the box.
+const PREFETCH_PX = 240
+const TAIL_CARDS = 2
+
+const listEl = ref<HTMLElement | null>(null)
+const listEnd = ref<HTMLElement | null>(null)
+const paging = ref(false)
+
+function nearEnd(): boolean {
+    const box = listEl.value
+    const end = listEnd.value
+    if (!box || !end) return false
+    return end.getBoundingClientRect().top <= box.getBoundingClientRect().bottom + PREFETCH_PX
+}
+
+// A failed page adds no rows, so nothing calls this again until the list end scrolls back into view.
+async function loadMore() {
+    if (paging.value || registry.loading || !registry.hasMore || view.value !== 'grid') return
+    paging.value = true
+    try {
+        await registry.search(true)
+    } finally {
+        paging.value = false
+    }
+}
+
+let endObserver: IntersectionObserver | null = null
+
+watch([listEl, listEnd], ([box, end]) => {
+    endObserver?.disconnect()
+    endObserver = null
+    if (!box || !end) return
+    endObserver = new IntersectionObserver(
+        entries => { if (entries.some(e => e.isIntersecting)) void loadMore() },
+        { root: box, rootMargin: `0px 0px ${PREFETCH_PX}px 0px` },
+    )
+    endObserver.observe(end)
+})
+
+// The observer fires only when the end crosses the edge, so a page too short to fill the box needs this check.
+watch([() => registry.projects, view], async () => {
+    await nextTick()
+    if (nearEnd()) void loadMore()
+})
+
+onUnmounted(() => {
+    if (enterTimer) clearTimeout(enterTimer)
+    endObserver?.disconnect()
+})
 
 watch(activeTab, (tab) => {
     if (tab === 'browse') void registry.refreshInstalled()
 })
 
-const SORT_VALUES: SortKey[] = ['downloads', 'views', 'updated', 'name']
+const SORT_VALUES: SortKey[] = ['updated', 'downloads', 'views', 'name']
 const sortLabels = computed(() => SORT_VALUES.map(v => t(`appdiscover.sort.${v}`)))
 </script>
 
@@ -113,7 +160,7 @@ const sortLabels = computed(() => SORT_VALUES.map(v => t(`appdiscover.sort.${v}`
                 </div>
 
                 <div class="plugin-list-wrap">
-                    <div class="plugin-list">
+                    <div ref="listEl" class="plugin-list">
                         <AnimatePresence mode="wait">
                             <motion.div
                                 v-if="showSkeleton"
@@ -157,15 +204,10 @@ const sortLabels = computed(() => SORT_VALUES.map(v => t(`appdiscover.sort.${v}`
                                         @creator="openCreator"
                                     />
                                 </motion.div>
-                                <div v-if="registry.hasMore" class="more">
-                                    <eButton
-                                        size="half"
-                                        variant="secondary"
-                                        :label="t('registry.loadMore', { shown: registry.projects.length, total: registry.total })"
-                                        :system-state="registry.loading ? 'processing' : 'idle'"
-                                        @click="registry.search(true)"
-                                    />
-                                </div>
+                                <template v-if="paging">
+                                    <RegistryCardSkeleton v-for="n in TAIL_CARDS" :key="`tail-${n}`" :index="n - 1" />
+                                </template>
+                                <div v-if="registry.hasMore" ref="listEnd" class="list-end" aria-hidden="true" />
                             </motion.div>
                         </AnimatePresence>
                     </div>
@@ -313,10 +355,9 @@ const sortLabels = computed(() => SORT_VALUES.map(v => t(`appdiscover.sort.${v}`
     overflow: hidden;
 }
 
-.more {
-    display: flex;
-    justify-content: center;
-    padding: var(--space-2) 0;
+.list-end {
+    flex-shrink: 0;
+    height: 1px;
 }
 
 .empty-state {
