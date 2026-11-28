@@ -3,8 +3,8 @@
   "name": "Hangar Studio",
   "version": "1.0.0",
   "author": "AETERNAL",
-  "description": "Custom hangar scenes",
-  "min_host_version": "5.0.0",
+  "description": "Adds beautiful custom hangar scenes on existing maps",
+  "min_host_version": "5.1.1",
   "game_versions": ["1.2.2"],
   "permissions": {
     "game_overrides": { "reason": "Applies the layout you select" }
@@ -12,21 +12,29 @@
   "override": {
     "format": 1,
     "presets": [
-      { "id": "carrier_dock", "name": "Aircraft Carrier Dock", "kind": "hangar", "default": true, "dir": "overrides/carrier_dock" },
-      { "id": "carrier_airfield", "name": "Aircraft Carrier Airfield", "kind": "hangar", "dir": "overrides/carrier_airfield" },
-      { "id": "carrier_gas_tanks", "name": "Aircraft Carrier Gas Tanks", "kind": "hangar", "dir": "overrides/carrier_gas_tanks" },
-      { "id": "carrier_ship_bow", "name": "Aircraft Carrier Ship Bow", "kind": "hangar", "dir": "overrides/carrier_ship_bow" },
-      { "id": "carrier_ship_containers", "name": "Aircraft Carrier Ship Containers", "kind": "hangar", "dir": "overrides/carrier_ship_containers" },
-      { "id": "carrier_engine_room", "name": "Aircraft Carrier Ship Engine Room", "kind": "hangar", "dir": "overrides/carrier_engine_room" },
-      { "id": "carrier_engine_room_2", "name": "Aircraft Carrier Ship Engine Room 2", "kind": "hangar", "dir": "overrides/carrier_engine_room_2" },
-      { "id": "blossom_monument", "name": "Blossom Monument", "kind": "hangar", "dir": "overrides/blossom_monument" },
-      { "id": "blossom_bridge", "name": "Blossom Bridge", "kind": "hangar", "dir": "overrides/blossom_bridge" },
-      { "id": "blossom_broadcast", "name": "Blossom Broadcast", "kind": "hangar", "dir": "overrides/blossom_broadcast" },
-      { "id": "blossom_cannon", "name": "Blossom Cannon", "kind": "hangar", "dir": "overrides/blossom_cannon" },
-      { "id": "blossom_majesty_hotel_entrance", "name": "Blossom Majesty Hotel Entrance", "kind": "hangar", "dir": "overrides/blossom_majesty_hotel_entrance" },
-      { "id": "blossom_majesty_hotel_rooftop", "name": "Blossom Majesty Hotel Rooftop", "kind": "hangar", "dir": "overrides/blossom_majesty_hotel_rooftop" },
-      { "id": "blossom_parking_lot", "name": "Blossom Parking Lot", "kind": "hangar", "dir": "overrides/blossom_parking_lot" },
-      { "id": "nord_oko_radar", "name": "Nord Oko Radar Dish", "kind": "hangar", "dir": "overrides/nord_oko_radar" }
+      { "id": "blossom_acacias", "name": "Blossom Acacias", "kind": "hangar", "dir": "overrides/blossom_acacias", "preview": "preview.webp" },
+      { "id": "blossom_bridge", "name": "Blossom Bridge", "kind": "hangar", "dir": "overrides/blossom_bridge", "preview": "preview.webp" },
+      { "id": "blossom_cannon", "name": "Blossom Cannon", "kind": "hangar", "dir": "overrides/blossom_cannon", "preview": "preview.webp" },
+      { "id": "blossom_mj_entrance", "name": "Blossom Majesty Hotel Entrance", "kind": "hangar", "dir": "overrides/blossom_mj_entrance", "preview": "preview.webp" },
+      { "id": "blossom_mj_rooftop", "name": "Blossom Majesty Hotel Rooftop", "kind": "hangar", "dir": "overrides/blossom_mj_rooftop", "preview": "preview.webp" },
+      { "id": "blossom_monument", "name": "Blossom Monument", "kind": "hangar", "dir": "overrides/blossom_monument", "preview": "preview.webp" },
+      { "id": "blossom_parking_lot", "name": "Blossom Parking Lot", "kind": "hangar", "dir": "overrides/blossom_parking_lot", "preview": "preview.webp" },
+      { "id": "blossom_uan_long", "name": "Blossom Uan Long", "kind": "hangar", "dir": "overrides/blossom_uan_long", "preview": "preview.webp" },
+      { "id": "ac_crane", "name": "Aircraft Carrier Crane", "kind": "hangar", "dir": "overrides/ac_crane", "preview": "preview.webp" },
+      { "id": "ac_asm", "name": "Aircraft Carrier Ship Assembly", "kind": "hangar", "dir": "overrides/ac_asm", "preview": "preview.webp" },
+      { "id": "ac_bow", "name": "Aircraft Carrier Bow", "kind": "hangar", "dir": "overrides/ac_bow", "preview": "preview.webp" },
+      { "id": "nor_oko_silo", "name": "Nord Oko Radar Silo", "kind": "hangar", "dir": "overrides/nor_oko_silo", "preview": "preview.webp" },
+      { "id": "nord_oko_radar", "name": "Nord Oko Radar Dish", "kind": "hangar", "dir": "overrides/nord_oko_radar", "preview": "preview.webp" },
+      { "id": "moonshot_center_entrance", "name": "Moonshot Center Entrance", "kind": "hangar", "dir": "overrides/moonshot_center_entrance", "preview": "preview.webp" },
+      { "id": "moonshot_site_entrance_1", "name": "Moonshot Site Entrance", "kind": "hangar", "dir": "overrides/moonshot_site_entrance_1", "preview": "preview.webp" },
+      { "id": "moonshot_site_entrance_2", "name": "Moonshot Site Entrance 2", "kind": "hangar", "dir": "overrides/moonshot_site_entrance_2", "preview": "preview.webp" },
+      { "id": "moonshot_radar", "name": "Moonshot Radar", "kind": "hangar", "dir": "overrides/moonshot_radar", "preview": "preview.webp" },
+      { "id": "nexus_dam_poppy_field", "name": "Nexus Dam Poppy Field", "kind": "hangar", "dir": "overrides/nexus_dam_poppy_field", "preview": "preview.webp", "default": true },
+      { "id": "nexus_dam_water_treatment", "name": "Nexus Dam Water Treatment", "kind": "hangar", "dir": "overrides/nexus_dam_water_treatment", "preview": "preview.webp" },
+      { "id": "nexus_dam_hill", "name": "Nexus Dam Hill", "kind": "hangar", "dir": "overrides/nexus_dam_hill", "preview": "preview.webp" },
+      { "id": "nexus_dam_river", "name": "Nexus Dam River", "kind": "hangar", "dir": "overrides/nexus_dam_river", "preview": "preview.webp" },
+      { "id": "nexus_dam_spawn_exit", "name": "Nexus Dam Spawn Exit", "kind": "hangar", "dir": "overrides/nexus_dam_spawn_exit", "preview": "preview.webp" },
+      { "id": "nexus_dam_C_point", "name": "Nexus Dam C Point", "kind": "hangar", "dir": "overrides/nexus_dam_C_point", "preview": "preview.webp" }
     ]
   }
 }

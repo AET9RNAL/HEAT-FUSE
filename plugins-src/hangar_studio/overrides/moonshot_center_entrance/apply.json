@@ -1,0 +1,52 @@
+{
+  "format": "fuse-override/1",
+  "name": "Hangar: Moonshot Center Entrance",
+  "created": "2026-11-28T05:44:28.844Z",
+  "pack": "aa_override.zip",
+  "entries": [
+    ".assets/output/hangar_moonshot_center_entrancecf45239737145eb757814138a55aba7d.client.scene",
+    ".assets/output/workshop_anchors_camerase7752d2a2778f3c0adef230946a914c6.client.scene"
+  ],
+  "originals": {
+    ".assets/output/workshop_anchors_camerase7752d2a2778f3c0adef230946a914c6.client.scene": {
+      "size": 4224,
+      "sha256": "ba899a7d8e94c707dd4a43a6ab3c2719785b40be8cfa397dbaa1e470f4630268"
+    }
+  },
+  "added": [
+    ".assets/output/hangar_moonshot_center_entrancecf45239737145eb757814138a55aba7d.client.scene"
+  ],
+  "project": [
+    {
+      "op": "set",
+      "key": "cw::session::ClientSessionSettings/lobby/path",
+      "value": "/worlds/camps/fuse/hangar_moonshot_center_entrance.world"
+    },
+    {
+      "op": "dependencies",
+      "asset": "/worlds/camps/fuse/hangar_moonshot_center_entrance.world",
+      "dependencies": [
+        "/worlds/camps/00_camp_hybrid/00_camp_hybrid_s002.world",
+        "/worlds/09_moonshot.world"
+      ]
+    }
+  ],
+  "editor": {
+    "asset": "/worlds/camps/00_camp_hybrid/00_camp_hybrid_s002.world",
+    "slot": "/worlds/camps/fuse/hangar_moonshot_center_entrance.world",
+    "hangar": "Moonshot Center Entrance",
+    "treeDebris": 15,
+    "prefabs": [
+      "/vehicles/_template/workshop/workshop_anchors_cameras.prefab"
+    ],
+    "skipped": 0,
+    "notes": [
+      "Own world hangar_moonshot_center_entrance.world: it instances the camp, and the preset points the lobby at it. Only one lobby preset can be in the game.",
+      "Parking rig move goes into its room root · the screen lighting moves with it",
+      "Workshop rig move goes into its room root · the screen lighting moves with it",
+      "console::Module off · the editor and console tools cannot reach this camp while the preset is in the game",
+      "/worlds/09_moonshot.world is a child of the own world, instance 27cb6501-8dc8-4d42-8f6b-d41273fded8d: 1 edited entities, 0 spawns, 15 trees without debris",
+      "Vehicle camera values go by camera name into every vehicle's camera set · a vehicle prefab that sets the same value keeps its own"
+    ]
+  }
+}

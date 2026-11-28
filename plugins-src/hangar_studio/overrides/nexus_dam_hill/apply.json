@@ -1,0 +1,210 @@
+{
+  "format": "fuse-override/1",
+  "name": "Nexus Dam Hill",
+  "created": "2026-11-28T04:43:13.741Z",
+  "pack": "aa_override.zip",
+  "entries": [
+    ".assets/output/fuse_logo_decal_rta8e021d5a97355f48820e3f4f86434cda.dds",
+    ".assets/output/fuse_logo_decal_amfefa347a3b6ad108494fb77e32196451.dds",
+    ".assets/output/fuse_logo232c018fd74205546d92e4614ba0dc1b.mesh",
+    ".assets/output/fuse_logo6ac7758eb6beed11fe59cd38dee0d792.client.scene",
+    ".assets/output/fuse_logo_face_am7414f95f8a4b913dcbe9d52eebf37dfe.dds",
+    ".assets/output/fuse_logo_side_am1fe541bb252fcf35dda2467f788b8cd9.dds",
+    ".assets/output/fuse_logo_decalb528d5206e59582bf9f83159d843392f.client.scene",
+    ".assets/output/fuse_logo_decal_paintb169cbd70a8d75015d58686f86bc3fbc.material",
+    ".assets/output/fuse_logo_face2559f07f11bef96f0d93c76bc42f80a0.material",
+    ".assets/output/fuse_logo_sidea40de0f7233c8d766fea73085da952b8.material",
+    ".assets/output/hl_logo_decal_rta165689931517f6e988cd674313e9b0c8.dds",
+    ".assets/output/hl_logo_decal_amc60ab9cb4efbfe9c649e80311785960f.dds",
+    ".assets/output/hl_logo_white_am553a14fd26da822a2bd3bad398677719.dds",
+    ".assets/output/hl_logo_orange_am36a341b3c4f921355530e7f7a4840441.dds",
+    ".assets/output/hl_logo_side_ambfcbf62e30633094d158404b35aa2a39.dds",
+    ".assets/output/hl_logoae97a32120307ebd0591ceb2b5a4126e.mesh",
+    ".assets/output/hl_logo5b8531f7e9add6833ae326174bb95b9e.client.scene",
+    ".assets/output/hl_logo_decal3cb9c62e3a0d4b29c8b88b8a3d74afc0.client.scene",
+    ".assets/output/hl_logo_black_decal_amfbe857ce5d64fe26385a2b62b24637a2.dds",
+    ".assets/output/hl_logo_black_amfa462064bef6f8a46e63bb8c845faddf.dds",
+    ".assets/output/hl_logo_blackdd6bfd205d70961d1c992e9a80a38b88.client.scene",
+    ".assets/output/hl_logo_black_decal369ce8634f791d344f0db8ee111ec512.client.scene",
+    ".assets/output/hl_logo_decal_paintfe3f7a7a3f5ed058d2739fe5df3df54a.material",
+    ".assets/output/hl_logo_whiteaaaa0279331551f1867a0001be234084.material",
+    ".assets/output/hl_logo_orangeda1743c0b83bcaac45d3391083288c5f.material",
+    ".assets/output/hl_logo_side86f7ccb0bb23933b2327f9154575de94.material",
+    ".assets/output/hl_logo_black_decal_paint9b93a50cc099f64da4d84370651781b8.material",
+    ".assets/output/hl_logo_black0526618219d8d454179401422d82d4c4.material",
+    ".assets/output/hangar_nexus_dam_hill9dac804284c511332c070257f72c1308.client.scene",
+    ".assets/output/workshop_anchors_camerase7752d2a2778f3c0adef230946a914c6.client.scene"
+  ],
+  "originals": {
+    ".assets/output/workshop_anchors_camerase7752d2a2778f3c0adef230946a914c6.client.scene": {
+      "size": 4224,
+      "sha256": "ba899a7d8e94c707dd4a43a6ab3c2719785b40be8cfa397dbaa1e470f4630268"
+    }
+  },
+  "added": [
+    ".assets/output/fuse_logo_decal_rta8e021d5a97355f48820e3f4f86434cda.dds",
+    ".assets/output/fuse_logo_decal_amfefa347a3b6ad108494fb77e32196451.dds",
+    ".assets/output/fuse_logo232c018fd74205546d92e4614ba0dc1b.mesh",
+    ".assets/output/fuse_logo6ac7758eb6beed11fe59cd38dee0d792.client.scene",
+    ".assets/output/fuse_logo_face_am7414f95f8a4b913dcbe9d52eebf37dfe.dds",
+    ".assets/output/fuse_logo_side_am1fe541bb252fcf35dda2467f788b8cd9.dds",
+    ".assets/output/fuse_logo_decalb528d5206e59582bf9f83159d843392f.client.scene",
+    ".assets/output/fuse_logo_decal_paintb169cbd70a8d75015d58686f86bc3fbc.material",
+    ".assets/output/fuse_logo_face2559f07f11bef96f0d93c76bc42f80a0.material",
+    ".assets/output/fuse_logo_sidea40de0f7233c8d766fea73085da952b8.material",
+    ".assets/output/hl_logo_decal_rta165689931517f6e988cd674313e9b0c8.dds",
+    ".assets/output/hl_logo_decal_amc60ab9cb4efbfe9c649e80311785960f.dds",
+    ".assets/output/hl_logo_white_am553a14fd26da822a2bd3bad398677719.dds",
+    ".assets/output/hl_logo_orange_am36a341b3c4f921355530e7f7a4840441.dds",
+    ".assets/output/hl_logo_side_ambfcbf62e30633094d158404b35aa2a39.dds",
+    ".assets/output/hl_logoae97a32120307ebd0591ceb2b5a4126e.mesh",
+    ".assets/output/hl_logo5b8531f7e9add6833ae326174bb95b9e.client.scene",
+    ".assets/output/hl_logo_decal3cb9c62e3a0d4b29c8b88b8a3d74afc0.client.scene",
+    ".assets/output/hl_logo_black_decal_amfbe857ce5d64fe26385a2b62b24637a2.dds",
+    ".assets/output/hl_logo_black_amfa462064bef6f8a46e63bb8c845faddf.dds",
+    ".assets/output/hl_logo_blackdd6bfd205d70961d1c992e9a80a38b88.client.scene",
+    ".assets/output/hl_logo_black_decal369ce8634f791d344f0db8ee111ec512.client.scene",
+    ".assets/output/hl_logo_decal_paintfe3f7a7a3f5ed058d2739fe5df3df54a.material",
+    ".assets/output/hl_logo_whiteaaaa0279331551f1867a0001be234084.material",
+    ".assets/output/hl_logo_orangeda1743c0b83bcaac45d3391083288c5f.material",
+    ".assets/output/hl_logo_side86f7ccb0bb23933b2327f9154575de94.material",
+    ".assets/output/hl_logo_black_decal_paint9b93a50cc099f64da4d84370651781b8.material",
+    ".assets/output/hl_logo_black0526618219d8d454179401422d82d4c4.material",
+    ".assets/output/hangar_nexus_dam_hill9dac804284c511332c070257f72c1308.client.scene"
+  ],
+  "project": [
+    {
+      "op": "set",
+      "key": "cw::session::ClientSessionSettings/lobby/path",
+      "value": "/worlds/camps/fuse/hangar_nexus_dam_hill.world"
+    },
+    {
+      "op": "dependencies",
+      "asset": "/fuse/fuse/textures/fuse_logo_decal_rta.png",
+      "dependencies": []
+    },
+    {
+      "op": "dependencies",
+      "asset": "/fuse/fuse/textures/fuse_logo_decal_am.png",
+      "dependencies": []
+    },
+    {
+      "op": "dependencies",
+      "asset": "/fuse/fuse/models/fuse_logo.fbx",
+      "dependencies": []
+    },
+    {
+      "op": "dependencies",
+      "asset": "/fuse/fuse/prefabs/fuse_logo.prefab",
+      "dependencies": [
+        "/fuse/fuse/models/fuse_logo.fbx"
+      ]
+    },
+    {
+      "op": "dependencies",
+      "asset": "/fuse/fuse/textures/fuse_logo_face_am.png",
+      "dependencies": []
+    },
+    {
+      "op": "dependencies",
+      "asset": "/fuse/fuse/textures/fuse_logo_side_am.png",
+      "dependencies": []
+    },
+    {
+      "op": "dependencies",
+      "asset": "/fuse/fuse/prefabs/fuse_logo_decal.prefab",
+      "dependencies": [
+        "/content_v1/templates/decals/tmp_decal_gb.prefab"
+      ]
+    },
+    {
+      "op": "dependencies",
+      "asset": "/fuse/hl/textures/hl_logo_decal_rta.png",
+      "dependencies": []
+    },
+    {
+      "op": "dependencies",
+      "asset": "/fuse/hl/textures/hl_logo_decal_am.png",
+      "dependencies": []
+    },
+    {
+      "op": "dependencies",
+      "asset": "/fuse/hl/textures/hl_logo_white_am.png",
+      "dependencies": []
+    },
+    {
+      "op": "dependencies",
+      "asset": "/fuse/hl/textures/hl_logo_orange_am.png",
+      "dependencies": []
+    },
+    {
+      "op": "dependencies",
+      "asset": "/fuse/hl/textures/hl_logo_side_am.png",
+      "dependencies": []
+    },
+    {
+      "op": "dependencies",
+      "asset": "/fuse/hl/models/hl_logo.fbx",
+      "dependencies": []
+    },
+    {
+      "op": "dependencies",
+      "asset": "/fuse/hl/prefabs/hl_logo.prefab",
+      "dependencies": [
+        "/fuse/hl/models/hl_logo.fbx"
+      ]
+    },
+    {
+      "op": "dependencies",
+      "asset": "/fuse/hl/prefabs/hl_logo_decal.prefab",
+      "dependencies": [
+        "/content_v1/templates/decals/tmp_decal_gb.prefab"
+      ]
+    },
+    {
+      "op": "dependencies",
+      "asset": "/fuse/hl/textures/hl_logo_black_decal_am.png",
+      "dependencies": []
+    },
+    {
+      "op": "dependencies",
+      "asset": "/fuse/hl/textures/hl_logo_black_am.png",
+      "dependencies": []
+    },
+    {
+      "op": "dependencies",
+      "asset": "/fuse/hl/prefabs/hl_logo_black.prefab",
+      "dependencies": [
+        "/fuse/hl/models/hl_logo.fbx"
+      ]
+    },
+    {
+      "op": "dependencies",
+      "asset": "/fuse/hl/prefabs/hl_logo_black_decal.prefab",
+      "dependencies": [
+        "/content_v1/templates/decals/tmp_decal_gb.prefab"
+      ]
+    },
+    {
+      "op": "dependencies",
+      "asset": "/worlds/camps/fuse/hangar_nexus_dam_hill.world",
+      "dependencies": [
+        "/worlds/camps/00_camp_hybrid/00_camp_hybrid_s002.world",
+        "/worlds/05_friendshipdam.world",
+        "/fuse/fuse/prefabs/fuse_logo.prefab",
+        "/fuse/hl/prefabs/hl_logo.prefab"
+      ]
+    }
+  ],
+  "origin": {
+    "plugin": "hangar_studio",
+    "preset": "nexus_dam_hill",
+    "sources": [
+      "FUSE",
+      "FUSE logo",
+      "HL",
+      "HL logo",
+      "Nexus Dam Hill"
+    ]
+  }
+}
